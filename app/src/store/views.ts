@@ -35,6 +35,11 @@ export interface ColumnConfig {
   toDisplay?: (sqlValue: unknown) => string;
 }
 
+export interface OrderBy {
+  column: string;
+  direction: "asc" | "desc";
+}
+
 export interface ViewConfig {
   key: string;
   label: string;
@@ -42,7 +47,14 @@ export interface ViewConfig {
    * used by the icon-rail Sidebar. */
   icon: string;
   endpoint: string;
-  orderBy: { column: string; direction: "asc" | "desc" }[];
+  /** Default sort, used until the user clicks a sortable column header
+   * (see ViewStore.setSort). Only ever a plain-column ColumnConfig.select
+   * value -- gramps-web-api's order_by validates its column against the
+   * object type's flat secondary columns and never resolves a json_path
+   * reference for it (unlike select/where), so a column backed by a
+   * json_path select (birth_date, place_title, ...) can never appear here
+   * or be passed to setSort. */
+  orderBy: OrderBy[];
   opfsFilename: string;
   columns: ColumnConfig[];
   wherePlaceholder: string;

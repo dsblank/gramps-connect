@@ -14,7 +14,7 @@ import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage } from "./api";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { createTableSql, insertSql, upsertSql, toRowValues } from "./sql";
-import type { ViewConfig } from "./views";
+import type { OrderBy, ViewConfig } from "./views";
 import type { TreeChangeNotification } from "./liveSync";
 
 export type RowState = "unloaded" | "loading" | "loaded";
@@ -24,6 +24,15 @@ export interface ViewSnapshot {
   loadedCount: number;
   totalCount: number;
   whereExpr: string | null;
+  /** Current sort -- always populated (defaults to the view's static
+   * orderBy, see ViewConfig.orderBy's doc comment), and shown in the UI
+   * as such from the very first render, not just after a click. That's
+   * what lets DataTable's header just read this one value: a column
+   * whose two-click round trip (asc -> desc -> asc) happens to land back
+   * on the view's default column+direction is showing the same,
+   * correctly-labeled arrow the whole time, not silently reverting to an
+   * unmarked-looking state. */
+  orderBy: OrderBy;
   status: ViewStatus;
   error: string | null;
   /** Bumped on every emit(), including an in-place live-sync UPDATE that
@@ -33,11 +42,11 @@ export interface ViewSnapshot {
   revision: number;
 }
 
-const EMPTY_SNAPSHOT: ViewSnapshot = {
+const EMPTY_SNAPSHOT_BASE = {
   loadedCount: 0,
   totalCount: 0,
   whereExpr: null,
-  status: "idle",
+  status: "idle" as const,
   error: null,
   revision: 0,
 };
@@ -49,6 +58,14 @@ export class ViewStore {
   private loadedCount = 0;
   private totalCount = 0;
   private whereExpr: string | null = null;
+  /** Current sort actually sent to the server -- defaults to the view's
+   * static default, changed only via setSort(). Kept separate from
+   * view.orderBy (which stays the immutable default to fall back to) so
+   * each view's sort choice is independent per-instance state, same
+   * treatment as whereExpr. An array (fetchPage's order_by is technically
+   * a list) but this app only ever sorts by one column, so index 0 is the
+   * only element and the only one the snapshot bothers exposing. */
+  private orderBy: OrderBy[];
   private status: ViewStatus = "idle";
   private error: string | null = null;
   /** Bumped on every runQuery() call; a stale in-flight background fill
@@ -58,11 +75,13 @@ export class ViewStore {
   private queryGeneration = 0;
   private revision = 0;
   private listeners = new Set<() => void>();
-  private snapshot: ViewSnapshot = EMPTY_SNAPSHOT;
+  private snapshot: ViewSnapshot;
 
   constructor(view: ViewConfig, getSql: () => Promise<SqlJsStatic>) {
     this.view = view;
     this.getSql = getSql;
+    this.orderBy = view.orderBy;
+    this.snapshot = { ...EMPTY_SNAPSHOT_BASE, orderBy: view.orderBy[0] };
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -78,6 +97,7 @@ export class ViewStore {
       loadedCount: this.loadedCount,
       totalCount: this.totalCount,
       whereExpr: this.whereExpr,
+      orderBy: this.orderBy[0],
       status: this.status,
       error: this.error,
       revision: this.revision,
@@ -97,10 +117,22 @@ export class ViewStore {
    * toDisplay themselves. */
   getRows(startIndex: number, count: number): unknown[][] {
     if (!this.db) return [];
-    const orderCol = this.view.orderBy[0]?.column ?? "handle";
+    const orderCol = this.orderBy[0]?.column ?? "handle";
+    // The actual bug behind "sort direction doesn't seem to do anything":
+    // this ORDER BY never carried a direction keyword at all, so SQLite's
+    // implicit default (ASC) applied no matter what this.orderBy said --
+    // clicking a header changed the arrow and what got requested from the
+    // server, but not what got displayed. `handle`'s own direction stays
+    // ASC regardless of the primary column's, matching the server's own
+    // tie-break (effective_order_by in gramps-object-query-language always
+    // appends `OrderBy("handle", "asc")`, independent of the requested
+    // column's direction) -- local reads need to agree with that ordering
+    // for the windowed LIMIT/OFFSET reads to land on the same rows the
+    // server's keyset pagination did.
+    const direction = this.orderBy[0]?.direction === "desc" ? "DESC" : "ASC";
     const res = this.db.exec(
       `SELECT ${this.view.columns.map((c) => c.key).join(", ")} FROM ${this.view.key} ` +
-      `ORDER BY ${orderCol}, handle LIMIT ? OFFSET ?;`,
+      `ORDER BY ${orderCol} ${direction}, handle ASC LIMIT ? OFFSET ?;`,
       [count, startIndex]
     );
     return res[0]?.values ?? [];
@@ -124,6 +156,7 @@ export class ViewStore {
         this.db = db;
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
         this.whereExpr = null;
+        this.orderBy = this.view.orderBy;
         this.status = "ready";
         this.emit();
         return;
@@ -141,6 +174,12 @@ export class ViewStore {
    * result isn't "the dataset", so it shouldn't overwrite that cache. */
   async runQuery(whereExpr: string | null, persist: boolean): Promise<void> {
     const myGeneration = ++this.queryGeneration;
+    // Captured once per call, not read fresh off `this.orderBy` later --
+    // a setSort() during this query's background fill bumps
+    // queryGeneration and starts its own runQuery, so this one's own
+    // fetchPage calls should keep using the orderBy it started with
+    // rather than picking up the newer one mid-flight.
+    const orderBy = this.orderBy;
     this.status = "loading";
     this.error = null;
     this.emit();
@@ -164,7 +203,7 @@ export class ViewStore {
     let after: string | null = null;
     let first;
     try {
-      first = await fetchPage(this.view, token, after, true, whereExpr);
+      first = await fetchPage(this.view, token, after, true, whereExpr, orderBy);
     } catch (err: any) {
       stmt.free();
       if (myGeneration !== this.queryGeneration) return;
@@ -189,7 +228,7 @@ export class ViewStore {
 
     (async () => {
       while (after !== null) {
-        const { page } = await fetchPage(this.view, token, after, false, whereExpr);
+        const { page } = await fetchPage(this.view, token, after, false, whereExpr, orderBy);
         if (myGeneration !== this.queryGeneration) {
           stmt.free();
           return;
@@ -209,6 +248,29 @@ export class ViewStore {
       // caller (runQuery's own awaiters) has already moved on.
       console.error(`[${this.view.label}] background fill error`, err);
     });
+  }
+
+  /** Sorts by `column` (a plain-column ColumnConfig.select value -- see
+   * ViewConfig.orderBy's doc comment on why json_path columns can never
+   * reach here), toggling asc/desc on a repeat click of the same column
+   * -- including the view's own default column, which starts out already
+   * "asc" (see ViewSnapshot.orderBy's doc comment on why the header shows
+   * that from the first render rather than hiding it: the arrow stays
+   * accurate through the whole asc -> desc -> asc round trip, so landing
+   * back on the default's column+direction reads as "still ascending",
+   * not as a mystery revert). Re-runs the current where_expr from scratch
+   * against the new order (keyset pagination is order-dependent, so this
+   * can't just re-sort already-loaded rows -- same "reset and refill"
+   * path a filter change already takes, not a new one, and for the same
+   * reason: DataTable's virtualizer keys off loadedCount/totalCount
+   * either way, so this transition is exactly as jitter-free as applying
+   * a filter already is). */
+  setSort(column: string): Promise<void> {
+    const current = this.orderBy[0];
+    const direction: "asc" | "desc" =
+      current?.column === column && current.direction === "asc" ? "desc" : "asc";
+    this.orderBy = [{ column, direction }];
+    return this.runQuery(this.whereExpr, false);
   }
 
   private insertPage(db: Database, stmt: ReturnType<Database["prepare"]>, items: Parameters<typeof toRowValues>[1][]) {

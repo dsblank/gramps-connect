@@ -4,7 +4,7 @@
 // removed, see git history).
 import { API_BASE } from "../config";
 import { toSelectEntry } from "./sql";
-import type { ViewConfig } from "./views";
+import type { OrderBy, ViewConfig } from "./views";
 
 // Server-side max (see QueryBodyArgs.limit's Range(min=1, max=1000) in
 // gramps-web-api's object_query.py) -- fewer round trips for a fixed
@@ -48,7 +48,8 @@ export async function fetchPage(
   token: string,
   after: string | null,
   wantCount: boolean,
-  whereExpr: string | null
+  whereExpr: string | null,
+  orderBy: OrderBy[] = view.orderBy
 ): Promise<{ page: QueryPage; totalCount: number | null }> {
   const res = await fetch(`${API_BASE}${view.endpoint}`, {
     method: "POST",
@@ -58,7 +59,7 @@ export async function fetchPage(
     },
     body: JSON.stringify({
       select: ["handle", ...view.columns.map(toSelectEntry)],
-      order_by: view.orderBy,
+      order_by: orderBy,
       limit: PAGE_SIZE,
       after: after ?? undefined,
       count: wantCount,
