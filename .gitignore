@@ -1,3 +1,21 @@
 venv/
 __pycache__/
 *.pyc
+node_modules/
+dist/
+
+# Layer 2: generated/fetched, not source
+layer2-local-cache/client/public/
+layer2-local-cache/api-fixture/gramps-home/
+layer2-local-cache/api-fixture/data/
+layer2-local-cache/api-fixture/*.gramps
+layer2-local-cache/api-fixture/indexdir/
+layer2-local-cache/api-fixture/persistent_cache/
+layer2-local-cache/api-fixture/request_cache/
+layer2-local-cache/api-fixture/thumbnail_cache/
+layer2-local-cache/api-fixture-example/gramps-home/
+layer2-local-cache/api-fixture-example/data/
+layer2-local-cache/api-fixture-example/indexdir/
+layer2-local-cache/api-fixture-example/persistent_cache/
+layer2-local-cache/api-fixture-example/request_cache/
+layer2-local-cache/api-fixture-example/thumbnail_cache/
