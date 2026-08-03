@@ -1,8 +1,9 @@
-import { useMemo, useRef, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import type { ViewConfig } from "../store/views";
+import classes from "./DataTable.module.css";
 
 // Virtualized scroll: the scroll container's inner spacer is sized to
 // virtualizer.getTotalSize() (based on snapshot.totalCount), giving the
@@ -21,6 +22,9 @@ export function DataTable({ view }: DataTableProps) {
   const snapshot = useViewStore(view.key);
   const store = getViewStore(view.key);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Visual-only row selection (highlight), no detail panel yet -- see
+  // PLAN.md's roadmap note on the Gramps-desktop-style detail panel.
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const virtualizer = useVirtualizer({
     count: snapshot.totalCount,
@@ -54,13 +58,13 @@ export function DataTable({ view }: DataTableProps) {
   const gridStyle = { "--grid-columns": gridColumns } as CSSProperties;
 
   return (
-    <div className="data-table">
-      <div className="table-header row" style={gridStyle}>
+    <div>
+      <div className={`${classes.row} ${classes.header}`} style={gridStyle}>
         {view.columns.map((col) => (
-          <div key={col.key}>{col.label}</div>
+          <div key={col.key} className={classes.cell}>{col.label}</div>
         ))}
       </div>
-      <div className="table-scroll" ref={scrollRef}>
+      <div className={classes.scroll} ref={scrollRef}>
         <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
           {virtualItems.map((item) => {
             const rawRow = rows.get(item.index);
@@ -68,7 +72,9 @@ export function DataTable({ view }: DataTableProps) {
             return (
               <div
                 key={item.key}
-                className="row"
+                className={classes.row}
+                data-selected={item.index === selectedIndex || undefined}
+                onClick={() => rawRow && setSelectedIndex(item.index)}
                 style={{
                   ...gridStyle,
                   position: "absolute",
@@ -81,12 +87,12 @@ export function DataTable({ view }: DataTableProps) {
               >
                 {rawRow ? (
                   view.columns.map((col, i) => (
-                    <div key={col.key}>
+                    <div key={col.key} className={classes.cell}>
                       {col.toDisplay ? col.toDisplay(rawRow[i]) : rawRow[i] == null ? "" : String(rawRow[i])}
                     </div>
                   ))
                 ) : (
-                  <div className="row-loading">
+                  <div className={classes.loadingRow}>
                     {rowState === "unloaded" ? "loading…" : "loading… (background fill hasn't reached this row yet)"}
                   </div>
                 )}

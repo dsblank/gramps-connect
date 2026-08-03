@@ -1,3 +1,4 @@
+import { Group, Text, Badge, Button } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
 import { clearOpfs } from "../store/opfs";
 import type { ViewConfig } from "../store/views";
@@ -8,6 +9,12 @@ interface StatusBarProps {
   liveSyncStatus: LiveSyncStatus;
 }
 
+const LIVE_SYNC_COLOR: Record<LiveSyncStatus, string> = {
+  connected: "green",
+  connecting: "yellow",
+  disconnected: "red",
+};
+
 export function StatusBar({ view, liveSyncStatus }: StatusBarProps) {
   const snapshot = useViewStore(view.key);
 
@@ -17,19 +24,27 @@ export function StatusBar({ view, liveSyncStatus }: StatusBarProps) {
   }
 
   return (
-    <div className="status-bar">
-      <span className="load-status">
-        {snapshot.totalCount > 0
-          ? `loaded ${snapshot.loadedCount.toLocaleString()} / ${snapshot.totalCount.toLocaleString()}`
-          : snapshot.status === "loading"
-          ? "loading…"
-          : ""}
-      </span>
-      {snapshot.status === "error" && <span className="load-error">{snapshot.error}</span>}
-      <span className={`live-sync-status live-sync-status--${liveSyncStatus}`}>
-        live sync: {liveSyncStatus}
-      </span>
-      <button onClick={handleClearCache}>Clear OPFS cache (force re-fetch)</button>
-    </div>
+    <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+      <Group gap="md" wrap="nowrap">
+        <Text size="xs" c="dimmed">
+          {snapshot.totalCount > 0
+            ? `loaded ${snapshot.loadedCount.toLocaleString()} / ${snapshot.totalCount.toLocaleString()}`
+            : snapshot.status === "loading"
+            ? "loading…"
+            : ""}
+        </Text>
+        {snapshot.status === "error" && (
+          <Text size="xs" c="red">{snapshot.error}</Text>
+        )}
+      </Group>
+      <Group gap="md" wrap="nowrap">
+        <Badge size="sm" variant="dot" color={LIVE_SYNC_COLOR[liveSyncStatus]}>
+          live sync: {liveSyncStatus}
+        </Badge>
+        <Button variant="subtle" size="compact-xs" onClick={handleClearCache}>
+          Clear OPFS cache
+        </Button>
+      </Group>
+    </Group>
   );
 }

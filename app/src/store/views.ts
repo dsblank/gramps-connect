@@ -6,6 +6,16 @@
 // Forked from the original Layer 2/3 spike's views.ts (since removed, see
 // git history) -- this is the production copy now; see PLAN.md.
 import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
+import iconPerson from "../assets/icons/gramps-person.svg";
+import iconFamily from "../assets/icons/gramps-family.svg";
+import iconEvent from "../assets/icons/gramps-event.svg";
+import iconPlace from "../assets/icons/gramps-place.svg";
+import iconRepository from "../assets/icons/gramps-repository.svg";
+import iconSource from "../assets/icons/gramps-source.svg";
+import iconCitation from "../assets/icons/gramps-citation.svg";
+import iconMedia from "../assets/icons/gramps-media.svg";
+import iconNotes from "../assets/icons/gramps-notes.svg";
+import iconTag from "../assets/icons/gramps-tag.svg";
 
 export interface ColumnConfig {
   /** Both the local SQLite column name and the API response key (the
@@ -28,6 +38,9 @@ export interface ColumnConfig {
 export interface ViewConfig {
   key: string;
   label: string;
+  /** Gramps desktop icon (Tango-derived, see assets/icons/ATTRIBUTION.md),
+   * used by the icon-rail Sidebar. */
+  icon: string;
   endpoint: string;
   orderBy: { column: string; direction: "asc" | "desc" }[];
   opfsFilename: string;
@@ -68,6 +81,7 @@ function displayName(json: unknown): string {
 export const PERSON_VIEW: ViewConfig = {
   key: "person",
   label: "People",
+  icon: iconPerson,
   endpoint: "/api/people/query/",
   orderBy: [{ column: "surname", direction: "asc" }],
   opfsFilename: "app-cache-person.sqlite",
@@ -91,6 +105,7 @@ export const PERSON_VIEW: ViewConfig = {
 export const FAMILY_VIEW: ViewConfig = {
   key: "family",
   label: "Family",
+  icon: iconFamily,
   endpoint: "/api/families/query/",
   // Family has no flat "name" column of its own (it's derived from two
   // related Person records) -- gramps_id is the closest thing to a
@@ -115,6 +130,7 @@ export const FAMILY_VIEW: ViewConfig = {
 export const EVENT_VIEW: ViewConfig = {
   key: "event",
   label: "Events",
+  icon: iconEvent,
   endpoint: "/api/events/query/",
   // Events have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
@@ -140,6 +156,7 @@ export const EVENT_VIEW: ViewConfig = {
 export const PLACE_VIEW: ViewConfig = {
   key: "place",
   label: "Places",
+  icon: iconPlace,
   endpoint: "/api/places/query/",
   orderBy: [{ column: "title", direction: "asc" }],
   opfsFilename: "app-cache-place.sqlite",
@@ -156,6 +173,7 @@ export const PLACE_VIEW: ViewConfig = {
 export const REPOSITORY_VIEW: ViewConfig = {
   key: "repository",
   label: "Repositories",
+  icon: iconRepository,
   endpoint: "/api/repositories/query/",
   orderBy: [{ column: "name", direction: "asc" }],
   opfsFilename: "app-cache-repository.sqlite",
@@ -170,6 +188,7 @@ export const REPOSITORY_VIEW: ViewConfig = {
 export const SOURCE_VIEW: ViewConfig = {
   key: "source",
   label: "Sources",
+  icon: iconSource,
   endpoint: "/api/sources/query/",
   orderBy: [{ column: "title", direction: "asc" }],
   opfsFilename: "app-cache-source.sqlite",
@@ -192,6 +211,7 @@ function displayConfidence(value: unknown): string {
 export const CITATION_VIEW: ViewConfig = {
   key: "citation",
   label: "Citations",
+  icon: iconCitation,
   endpoint: "/api/citations/query/",
   // Citations have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
@@ -211,6 +231,7 @@ export const CITATION_VIEW: ViewConfig = {
 export const MEDIA_VIEW: ViewConfig = {
   key: "media",
   label: "Media",
+  icon: iconMedia,
   endpoint: "/api/media/query/",
   // "desc" is a reserved SQL word (Media.desc) -- the server quotes it
   // automatically wherever it's interpolated (select/where/order_by), see
@@ -234,6 +255,7 @@ function truncate(text: string, max: number): string {
 export const NOTE_VIEW: ViewConfig = {
   key: "note",
   label: "Notes",
+  icon: iconNotes,
   endpoint: "/api/notes/query/",
   // Notes have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
@@ -256,6 +278,7 @@ export const NOTE_VIEW: ViewConfig = {
 export const TAG_VIEW: ViewConfig = {
   key: "tag",
   label: "Tags",
+  icon: iconTag,
   endpoint: "/api/tags/query/",
   // Tag is the one type with no gramps_id at all (see gramps/gen/lib/tag.py).
   orderBy: [{ column: "name", direction: "asc" }],

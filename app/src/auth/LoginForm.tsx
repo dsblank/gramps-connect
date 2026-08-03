@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
+import { Center, Paper, Stack, Group, Image, Title, TextInput, PasswordInput, Button, Text } from "@mantine/core";
 import { login } from "./auth";
+import logo from "../assets/icons/gramps-logo.svg";
 
 export function LoginForm() {
   const [username, setUsername] = useState("");
@@ -21,31 +23,30 @@ export function LoginForm() {
   }
 
   return (
-    <div className="login-page">
-      <form className="login-form" onSubmit={handleSubmit}>
-        <h1>Gramps Connect</h1>
-        <label>
-          Username
-          <input
-            type="text"
+    <Center mih="100vh">
+      <Paper component="form" onSubmit={handleSubmit} withBorder shadow="sm" radius="md" p="xl" w={340}>
+        <Stack gap="md">
+          <Group gap="xs" justify="center">
+            <Image src={logo} alt="" w={32} h={32} />
+            <Title order={3}>Gramps Connect</Title>
+          </Group>
+          <TextInput
+            label="Username"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => setUsername(e.currentTarget.value)}
             autoFocus
           />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
+          <PasswordInput
+            label="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.currentTarget.value)}
           />
-        </label>
-        {error && <div className="login-error">{error}</div>}
-        <button type="submit" disabled={submitting || !username || !password}>
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-    </div>
+          {error && <Text size="sm" c="red">{error}</Text>}
+          <Button type="submit" loading={submitting} disabled={!username || !password} fullWidth>
+            Sign in
+          </Button>
+        </Stack>
+      </Paper>
+    </Center>
   );
 }

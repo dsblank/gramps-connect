@@ -1,0 +1,51 @@
+.header {
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+  font-weight: 600;
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-bottom-width: 2px;
+}
+
+.scroll {
+  height: calc(100vh - 260px);
+  min-height: 300px;
+  overflow-y: auto;
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-top: none;
+  position: relative;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: var(--grid-columns, 1fr);
+  box-sizing: border-box;
+  height: 28px;
+  line-height: 28px;
+  border-bottom: 1px solid light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+  cursor: pointer;
+}
+
+.row:nth-child(even) {
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7));
+}
+
+.row:hover {
+  background: light-dark(var(--mantine-color-grampsBlue-0), var(--mantine-color-dark-5));
+}
+
+.row[data-selected] {
+  background: var(--mantine-color-selection-5);
+  color: white;
+}
+
+.cell {
+  padding: 0 0.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loadingRow {
+  grid-column: 1 / -1;
+  color: var(--mantine-color-dimmed);
+  padding: 0 0.6rem;
+}

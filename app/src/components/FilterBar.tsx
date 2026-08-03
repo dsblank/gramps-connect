@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Stack, Group, TextInput, Button, Text } from "@mantine/core";
 import { getViewStore } from "../store/registry";
 import type { ViewConfig } from "../store/views";
 
@@ -37,23 +38,27 @@ export function FilterBar({ view }: FilterBarProps) {
   }
 
   return (
-    <div className="filter-bar">
-      <div className="filter-controls">
-        <label htmlFor="where-expr">where_expr:</label>
-        <input
+    <Stack gap={4} mb="sm">
+      <Group gap="xs" wrap="nowrap">
+        <Text size="sm" ff="monospace" c="dimmed">where_expr:</Text>
+        <TextInput
           id="where-expr"
-          type="text"
+          size="sm"
+          ff="monospace"
+          style={{ flex: 1 }}
           value={input}
           placeholder={view.wherePlaceholder}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => setInput(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") apply(input.trim() || null);
           }}
         />
-        <button disabled={applying} onClick={() => apply(input.trim() || null)}>
+        <Button size="sm" loading={applying} onClick={() => apply(input.trim() || null)}>
           Apply
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
+          variant="default"
           disabled={applying}
           onClick={() => {
             setInput("");
@@ -61,26 +66,27 @@ export function FilterBar({ view }: FilterBarProps) {
           }}
         >
           Clear
-        </button>
-      </div>
+        </Button>
+      </Group>
       {view.key === "person" && (
-        <div className="filter-examples">
-          Examples:
+        <Group gap={6}>
+          <Text size="xs" c="dimmed">Examples:</Text>
           {EVENT_EXAMPLES.map(({ label, expr }) => (
-            <button
+            <Button
               key={expr}
-              type="button"
+              size="compact-xs"
+              variant="light"
               onClick={() => {
                 setInput(expr);
                 apply(expr);
               }}
             >
               {label}
-            </button>
+            </Button>
           ))}
-        </div>
+        </Group>
       )}
-      <div className="filter-error">{error}</div>
-    </div>
+      {error && <Text size="xs" c="red">{error}</Text>}
+    </Stack>
   );
 }

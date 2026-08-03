@@ -1,0 +1,18 @@
+.item {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--mantine-radius-sm);
+  border-left: 3px solid transparent;
+}
+
+.item:hover {
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-5));
+}
+
+.item[data-active] {
+  background: light-dark(var(--mantine-color-grampsBlue-0), var(--mantine-color-dark-5));
+  border-left-color: var(--mantine-color-grampsBlue-6);
+}
