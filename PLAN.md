@@ -53,13 +53,15 @@ Ordered so the biggest, cheapest-to-test unknowns get retired first. Layers 0–
 - Query locally (filter/sort on a couple of fields) and measure — the client-side analog of the discourse thread's benchmark.
 - **Success criteria**: sub-50ms local queries against a few thousand cached records; a clean, repeatable mapping from `to_struct()`-shaped JSON to local relational rows.
 
-### Layer 3 — Sync round-trip (~2-3 days, depends on 0-2)
+### Layer 3 — Sync round-trip (~2-3 days, depends on 0-2) — ✅ done
 
 **Goal**: prove the actual core bet of the whole system, end-to-end.
 
 - Wire Layer 1's WebSocket events into Layer 2's local cache: on notification, patch (or refetch-and-patch, since the NOTIFY payload is intentionally thin) the corresponding local row and re-render a bare list.
 - Two browser tabs side by side; edit a person in one (raw SQL or a minimal API call), watch the other tab's local cache update live without a page refresh.
 - **Success criteria**: this is the demo that proves "see what your fellow family historians are working on" is achievable — however ugly the UI. Also surfaces whether thin NOTIFY payloads are sufficient or a refetch step is required in practice.
+
+**Result** (`layer3-sync/`): a real Postgres (SharedPostgreSQL) instance with Layer 0's trigger installed on its `person` table, Layer 1's relay pointed at it, and Layer 2's client patched with a live-sync handler — refetch-and-patch confirmed necessary and sufficient (thin `{treeid, table, handle, op}` payload, `where_expr: handle == "..."` refetch). Verified end-to-end: a raw Postgres `UPDATE`/`DELETE` shows up in the browser's local cache and re-renders without a page refresh, scoped to the Person view for this first pass.
 
 ### Layer 4 — gramps-web-api filter pushdown fix (~2-4 days, fully independent)
 
