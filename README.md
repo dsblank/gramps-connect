@@ -39,6 +39,9 @@ you're just looking to use Gramps, [gramps-web](https://github.com/gramps-projec
 where you want to be today. If you're curious about where the project
 might be headed, or want to help figure that out, read on.
 
+<img width="1349" height="852" alt="image" src="https://github.com/user-attachments/assets/58242257-a619-44e0-8cb8-3576c50677fe" />
+
+
 ## For Developers
 
 ### Approach
