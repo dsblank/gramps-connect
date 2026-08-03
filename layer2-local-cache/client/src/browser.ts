@@ -19,22 +19,43 @@
 import initSqlJs, { Database } from "sql.js";
 import { VIEWS, type ViewConfig, type ColumnConfig } from "./views";
 
-// ../api-fixture-example (port 5002) -- Gramps' own official example.gramps
-// sample database, not ../api-fixture's gramps-bench-generated data (port
-// 5001): the bench data is all plain, unmodified dates, so it never
-// exercises gramps-date's modifier/quality/range/span handling at all. To
-// switch back to the 100k-person bench dataset, swap these three
-// constants for API_BASE="http://localhost:5001", USERNAME="testuser",
-// PASSWORD="testpass" (see ../api-fixture/setup.sh). Served on a different
-// origin than this static client either way, so CORS_ORIGINS must be set
-// in the target's config.cfg for this to work.
-const API_BASE = "http://localhost:5002";
-const USERNAME = "exampleuser";
-const PASSWORD = "examplepass";
+// ../layer3-sync/api-fixture (port 5003) -- the only one of the three
+// fixtures backed by real Postgres (SharedPostgreSQL) with Layer 0's
+// pg_notify trigger installed on its person table (see
+// ../layer3-sync/triggers.sql) and Layer 1's relay (adapted, see
+// ../layer3-sync/relay.py) rebroadcasting to WS_URL -- this is what
+// LIVE_SYNC_VIEW_KEY's live-patch wiring below actually needs. The other
+// two fixtures (api-fixture, port 5001, gramps-bench data; api-fixture-
+// example, port 5002, example.gramps) are plain SQLite, so live sync
+// silently has nothing to connect to there -- see setupLiveSync's
+// connection-error handling. Swap these three constants (and WS_URL) to
+// point elsewhere; see each fixture's own setup.sh.
+const API_BASE = "http://localhost:5003";
+const USERNAME = "gramps";
+const PASSWORD = "gramps";
 // Server-side max (see QueryBodyArgs.limit's Range(min=1, max=1000) in
 // gramps-web-api's object_query.py) -- fewer round trips for a fixed
 // dataset size than the default limit=50.
 const PAGE_SIZE = 1000;
+
+// Layer 3 live sync -- see the module docstring above and
+// ../layer3-sync/PLAN notes. Scoped to the Person view only for this
+// first pass (see LIVE_SYNC_VIEW_KEY); a notification for any other
+// table is ignored entirely, and live sync is suspended whenever a
+// where_expr filter is active (see ViewState.whereExpr) -- the local
+// cache then holds only a server-filtered subset, and naively
+// patching/inserting into it can't tell whether a changed row still
+// belongs in that subset without re-running the filter, which a single
+// thin {treeid, table, handle, op} notification can't answer on its own.
+const WS_URL = "ws://localhost:8766";
+const LIVE_SYNC_VIEW_KEY = "person";
+// The Postgres-internal integer treeid the trigger payload carries (see
+// triggers.sql) -- *not* the tree's UUID gramps-web-api itself uses in
+// URLs/JWTs, a separate identifier (see layer3-sync's own notes on why
+// these two don't match). Hardcoded because this fixture only ever has
+// the one tree; a real multi-tree client would need to learn this from
+// the server rather than assume it.
+const MY_TREEID = 2;
 
 type QueryItem = Record<string, unknown> & { handle: string };
 
@@ -164,6 +185,16 @@ function insertSql(view: ViewConfig): string {
   return `INSERT INTO ${view.key} (${names.join(", ")}) VALUES (${placeholders});`;
 }
 
+// Used only by applyLiveChange() -- a bulk fetchPage() page never needs
+// REPLACE since it's always inserting into a fresh table, but a live-sync
+// notification can legitimately name a row already in the cache (an
+// UPDATE, or a reconnect that missed an earlier notification for it).
+function upsertSql(view: ViewConfig): string {
+  const names = ["handle", ...view.columns.map((c) => c.key)];
+  const placeholders = names.map(() => "?").join(", ");
+  return `INSERT OR REPLACE INTO ${view.key} (${names.join(", ")}) VALUES (${placeholders});`;
+}
+
 function insertPage(view: ViewConfig, db: Database, stmt: ReturnType<Database["prepare"]>, items: QueryItem[]) {
   db.run("BEGIN TRANSACTION;");
   for (const item of items) {
@@ -188,9 +219,14 @@ interface ViewState {
    * newer query's state once the user has moved on to a different
    * where_expr (or away from this view entirely). */
   queryGeneration: number;
+  /** The where_expr this view's current cache was fetched with (null for
+   * unfiltered). Live sync (see setupLiveSync) only patches an unfiltered
+   * cache -- see WS_URL's docstring for why a filtered one can't be
+   * safely patched from a thin notification alone. */
+  whereExpr: string | null;
 }
 
-const viewStates = new Map<string, ViewState>(VIEWS.map((v) => [v.key, { db: null, loadedCount: 0, totalCount: 0, queryGeneration: 0 }]));
+const viewStates = new Map<string, ViewState>(VIEWS.map((v) => [v.key, { db: null, loadedCount: 0, totalCount: 0, queryGeneration: 0, whereExpr: null }]));
 
 let currentView: ViewConfig = VIEWS[0];
 
@@ -350,6 +386,7 @@ async function runQuery(view: ViewConfig, whereExpr: string | null, persist: boo
 
   s.db = newDb;
   s.totalCount = first.totalCount ?? 0;
+  s.whereExpr = whereExpr;
   insertPage(view, s.db, stmt, first.page.items);
   s.loadedCount = first.page.items.length;
   after = first.page.next_after;
@@ -422,6 +459,104 @@ async function ensureViewLoaded(view: ViewConfig) {
     }
   }
   await runQuery(view, null, true);
+}
+
+interface TreeChangeNotification {
+  treeid: number;
+  table: string;
+  handle: string;
+  op: "INSERT" | "UPDATE" | "DELETE";
+}
+
+/** A single-row equivalent of fetchPage(), used by applyLiveChange() to
+ * refetch exactly the row a notification names. Gramps handles are
+ * server-generated alphanumeric IDs with no quote/escape characters, so
+ * splicing one into a where_expr string like this is safe. */
+async function fetchByHandle(view: ViewConfig, token: string, handle: string): Promise<QueryItem | null> {
+  const { page } = await fetchPage(view, token, null, false, `handle == "${handle}"`);
+  return page.items[0] ?? null;
+}
+
+/** Patches the Person view's already-loaded, unfiltered cache in place for
+ * one live-sync notification (see WS_URL's docstring for the
+ * treeid/table/whereExpr guards this checks first). A DELETE removes the
+ * row locally; INSERT/UPDATE both refetch the row fresh from the server
+ * (the notification itself carries no data, only that *something*
+ * changed) and upsert it -- refetching rather than trusting the
+ * notification also means a client that missed an earlier notification
+ * (e.g. reconnecting after a drop) still ends up with the current row. */
+async function applyLiveChange(notification: TreeChangeNotification) {
+  // LIVE_SYNC_VIEW_KEY ("person") doubles as the SQL table name the
+  // trigger payload carries -- true today because there's only the one
+  // trigger (see ../layer3-sync/triggers.sql), not a general mapping.
+  if (notification.treeid !== MY_TREEID || notification.table !== LIVE_SYNC_VIEW_KEY) return;
+
+  const view = VIEWS.find((v) => v.key === LIVE_SYNC_VIEW_KEY)!;
+  const s = viewStates.get(view.key)!;
+  if (!s.db || s.whereExpr !== null) return;
+
+  const existed = (s.db.exec(`SELECT 1 FROM ${view.key} WHERE handle = ?;`, [notification.handle])[0]?.values.length ?? 0) > 0;
+
+  if (notification.op === "DELETE") {
+    if (!existed) return;
+    s.db.run(`DELETE FROM ${view.key} WHERE handle = ?;`, [notification.handle]);
+    s.loadedCount -= 1;
+    s.totalCount -= 1;
+  } else {
+    const token = await getToken();
+    const item = await fetchByHandle(view, token, notification.handle);
+    if (!item) return; // deleted again before the refetch landed
+    const stmt = s.db.prepare(upsertSql(view));
+    const values = [
+      item.handle,
+      ...view.columns.map((c) => {
+        const raw = item[c.key];
+        return c.toSql ? c.toSql(raw) : (raw as string | number | null | undefined) ?? null;
+      }),
+    ];
+    stmt.run(values);
+    stmt.free();
+    if (!existed) {
+      s.loadedCount += 1;
+      s.totalCount += 1;
+    }
+  }
+
+  log(`[${view.label}] live sync: ${notification.op} ${notification.handle}`);
+  if (currentView.key === view.key) {
+    document.getElementById("scroll-spacer")!.style.height = `${s.totalCount * ROW_HEIGHT}px`;
+    renderStatus();
+    renderVisible(currentFirstVisible());
+  }
+}
+
+/** Opens the Layer 3 relay WebSocket and patches the local cache for each
+ * notification it carries (see applyLiveChange()). Reconnects with a fixed
+ * backoff on drop -- this is a background enhancement (the app is fully
+ * usable without it, just not live) rather than something worth failing
+ * loudly over, and the other two fixtures (plain SQLite, no relay running)
+ * are expected to just sit here retrying forever with nothing on the other
+ * end. */
+function setupLiveSync() {
+  function connect() {
+    const ws = new WebSocket(WS_URL);
+    ws.addEventListener("open", () => log(`live sync: connected (${WS_URL})`));
+    ws.addEventListener("message", (event) => {
+      let notification: TreeChangeNotification;
+      try {
+        notification = JSON.parse(event.data);
+      } catch (err: any) {
+        log(`live sync: malformed message (${err.message ?? err})`);
+        return;
+      }
+      applyLiveChange(notification).catch((err) => log(`live sync ERROR: ${err.stack ?? err}`));
+    });
+    ws.addEventListener("close", () => {
+      log("live sync: disconnected -- retrying in 3s");
+      setTimeout(connect, 3000);
+    });
+  }
+  connect();
 }
 
 function setupFilterControls() {
@@ -512,6 +647,7 @@ async function main() {
   attachScrollListener();
   setupFilterControls();
   setupSidebar();
+  setupLiveSync();
 
   await selectView(VIEWS[0]);
 }

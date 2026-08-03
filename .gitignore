@@ -19,3 +19,11 @@ layer2-local-cache/api-fixture-example/indexdir/
 layer2-local-cache/api-fixture-example/persistent_cache/
 layer2-local-cache/api-fixture-example/request_cache/
 layer2-local-cache/api-fixture-example/thumbnail_cache/
+
+# Layer 3: generated/fetched, not source
+layer3-sync/api-fixture/gramps-home/
+layer3-sync/api-fixture/data/
+layer3-sync/api-fixture/indexdir/
+layer3-sync/api-fixture/persistent_cache/
+layer3-sync/api-fixture/request_cache/
+layer3-sync/api-fixture/thumbnail_cache/
