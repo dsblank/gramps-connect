@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "description": "Production React client -- ports layer2-local-cache/client + layer3-sync's live-sync wiring onto React (see PLAN.md).",
+  "description": "Production React client -- local-first cache + live sync (see PLAN.md).",
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/copy-wasm.mjs",

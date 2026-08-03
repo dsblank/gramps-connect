@@ -3,9 +3,8 @@
 // here; viewStore.ts's fetch/cache engine is generic over whichever one is
 // active, it doesn't know "person" or "family" by name.
 //
-// Forked from layer2-local-cache/client/src/views.ts (the Layer 2/3 spike)
-// -- this is the production copy and evolves independently of that frozen
-// spike; see PLAN.md.
+// Forked from the original Layer 2/3 spike's views.ts (since removed, see
+// git history) -- this is the production copy now; see PLAN.md.
 import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
 
 export interface ColumnConfig {

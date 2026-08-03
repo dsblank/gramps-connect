@@ -55,13 +55,9 @@ curl -s -X POST http://localhost:5001/api/importers/gramps/file \
 
 echo
 echo "API server running as PID $SERVER_PID on :5001 (kill it when done: kill $SERVER_PID)"
-echo "browser.ts logs in as testuser/testpass and fetches live from this"
-echo "server via POST /api/people/query/ -- no fixture dump needed."
+echo "logs in as testuser/testpass and fetches live from this server via"
+echo "POST /api/people/query/ -- no fixture dump needed."
 echo
-echo "to serve the client (must be a *different* origin/port than :5001 to"
-echo "actually exercise CORS_ORIGINS, matching how a real deployment would"
-echo "split API and frontend):"
-echo "  cd ../client && npx esbuild src/browser.ts --bundle --outfile=public/bundle.js"
-echo "  cp index.html public/ && cp node_modules/sql.js/dist/sql-wasm*.wasm public/"
-echo "  python3 -m http.server 8080 --directory public"
-echo "then open http://localhost:8080/"
+echo "to point app/ at this instance instead of dev-fixtures/layer3-sync's"
+echo "(no live sync here, plain SQLite): set VITE_API_BASE=http://localhost:5001"
+echo "in app/.env.local, then 'npm run dev -w app' as usual."

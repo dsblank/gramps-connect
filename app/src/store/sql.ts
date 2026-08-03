@@ -1,7 +1,7 @@
 // Pure SQL-string builders for a ViewConfig's local SQLite mirror table --
 // no sql.js/DOM/network dependency, so these are plain-function testable
-// (see __tests__/sql.test.ts). Ported from
-// layer2-local-cache/client/src/browser.ts.
+// (see __tests__/sql.test.ts). Ported from the original Layer 2/3 spike's
+// browser.ts (since removed, see git history).
 import type { ColumnConfig, ViewConfig } from "./views";
 
 export function toSelectEntry(column: ColumnConfig): string | { json_path: (string | number)[]; as: string } {

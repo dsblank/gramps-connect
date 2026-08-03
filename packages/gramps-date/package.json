@@ -2,7 +2,7 @@
   "name": "@gramps-connect/gramps-date",
   "version": "0.1.0",
   "private": true,
-  "description": "TypeScript port of Gramps' Date model, calendar conversion, and locale-aware date display -- for clients (like layer2-local-cache) that receive raw Gramps Date structs from gramps-web-api and need to render/build them without a slow per-object round trip through Gramps' own Python date displayer.",
+  "description": "TypeScript port of Gramps' Date model, calendar conversion, and locale-aware date display -- for clients (like app/) that receive raw Gramps Date structs from gramps-web-api and need to render/build them without a slow per-object round trip through Gramps' own Python date displayer.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "main": "src/index.ts",

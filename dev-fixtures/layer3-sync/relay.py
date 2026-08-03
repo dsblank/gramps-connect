@@ -1,8 +1,17 @@
-"""Layer 1 spike: relay Postgres NOTIFY events to WebSocket clients.
+"""Layer 3: relay Postgres NOTIFY events to WebSocket clients.
 
-Holds the Layer 0 LISTEN connection (dedicated, non-pooled, per
-PLAN.md) and re-broadcasts each 'tree_changes' notification to every
-connected WebSocket client. No auth yet.
+Identical mechanism to the original layer1-ws-relay spike's relay.py
+(since removed, see git history -- it was pointed at Layer 0's throwaway
+schema) -- this is the same relay pointed at the real SharedPostgreSQL
+"gramps" database and the real trigger installed by triggers.sql, so
+app/'s client can connect to it.
+
+Holds a dedicated, non-pooled LISTEN connection (required for LISTEN) and
+re-broadcasts each 'tree_changes' notification to every connected
+WebSocket client. No auth, no per-tree filtering -- thin/dumb broadcaster
+by design (see PLAN.md); the client decides what a notification means for
+it (which is also why the payload carries treeid/table/handle, not just a
+bare ping).
 """
 import asyncio
 import select
@@ -10,8 +19,8 @@ import select
 import psycopg2
 import websockets
 
-DSN = "host=localhost dbname=gramps_connect user=gramps password=gramps"
-HOST, PORT = "localhost", 8765
+DSN = "host=localhost dbname=gramps user=gramps password=gramps"
+HOST, PORT = "localhost", 8766
 
 clients = set()
 

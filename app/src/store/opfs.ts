@@ -1,5 +1,6 @@
 // OPFS persistence for a view's exported sql.js database -- ported verbatim
-// from layer2-local-cache/client/src/browser.ts.
+// from the original Layer 2/3 spike's browser.ts (since removed, see git
+// history).
 
 export async function loadFromOpfs(filename: string): Promise<Uint8Array | null> {
   try {

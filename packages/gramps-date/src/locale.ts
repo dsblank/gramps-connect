@@ -16,9 +16,9 @@ export type MonthNames = readonly string[];
 export interface DateLocale {
   /** BCP-47-ish tag, e.g. "en". Matched against gramps-web-api's own
    * `locale` request param where this package is driven by the same
-   * value (see layer2-local-cache's ?locale= collation param for the
-   * precedent -- not wired together yet, but the same string should
-   * mean the same locale in both places). */
+   * value (see gramps-web-api's object-query endpoints' `locale` param,
+   * used for collation -- not wired together yet, but the same string
+   * should mean the same locale in both places). */
   code: string;
 
   longMonths: MonthNames;

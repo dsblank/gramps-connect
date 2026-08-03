@@ -1,7 +1,7 @@
 -- Layer 3: pg_notify trigger on the *real* SharedPostgreSQL person table
--- (the "gramps" database, matching Layer 0's schema exactly -- see
--- layer0-notify-spike/schema.sql's own header note that it mirrors this
--- table). Applied after data import finishes, deliberately, so the bulk
+-- (the "gramps" database, matching the original layer0-notify-spike's
+-- schema.sql exactly -- since removed, see git history). Applied after
+-- data import finishes, deliberately, so the bulk
 -- import itself (2157 INSERTs) doesn't generate a burst of notifications
 -- with nothing yet listening -- Person view only for this first pass, per
 -- the scoping decision (see PLAN.md's Layer 3 section once updated).

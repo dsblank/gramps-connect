@@ -1,6 +1,7 @@
 // Talks to gramps-web-api's fast, SQL-pushed-down POST /api/<type>/query/
 // endpoints (keyset-paginated, where_expr filtering, count support) --
-// ported from layer2-local-cache/client/src/browser.ts's fetchPage.
+// ported from the original Layer 2/3 spike's browser.ts (fetchPage; since
+// removed, see git history).
 import { API_BASE } from "../config";
 import { toSelectEntry } from "./sql";
 import type { ViewConfig } from "./views";

@@ -1,9 +1,10 @@
 // One instance per ViewConfig: owns that view's local sql.js cache, its
 // OPFS persistence, background page fill, and live-sync patching. Ported
-// from layer2-local-cache/client/src/browser.ts's module-level
-// viewStates Map + runQuery/ensureViewLoaded/applyLiveChange, restructured
-// as a class exposing subscribe()/getSnapshot() (see ../hooks/useViewStore.ts,
-// a useSyncExternalStore wrapper) instead of imperative DOM updates.
+// from the original Layer 2/3 spike's browser.ts (module-level viewStates
+// Map + runQuery/ensureViewLoaded/applyLiveChange; since removed, see git
+// history), restructured as a class exposing subscribe()/getSnapshot()
+// (see ../hooks/useViewStore.ts, a useSyncExternalStore wrapper) instead
+// of imperative DOM updates.
 //
 // Row data itself is deliberately *not* part of the reactive snapshot --
 // getRows()/getRowState() are called synchronously and imperatively during

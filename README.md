@@ -1,57 +1,139 @@
 # Gramps Connect
 
-A clean-break prototype for a faster, local-first, real-time-collaborative
-Gramps web frontend — built on an extended
-[gramps-web-api](https://github.com/gramps-project/gramps-web-api), as a
-replacement path for [gramps-web](https://github.com/gramps-project/gramps-web).
-See [PLAN.md](PLAN.md) for the full context, the two product bets this is
-de-risking (a local-first cache and live multi-user collaboration), and
-the layered prototype plan.
+An experimental, faster, real-time-collaborative web frontend for
+[Gramps](https://gramps-project.org/), the free genealogy software.
 
-This is a multi-month effort still in its early, disposable-prototype
-phase — nothing here is a committed architecture yet.
+## Overview
 
-## Layout
+[Gramps](https://gramps-project.org/) is free, open-source genealogy
+software for building and researching your family tree.
+[gramps-web](https://github.com/gramps-project/gramps-web) is its
+existing web frontend — it lets you access your tree from a browser,
+share it with family members, and collaborate on research together.
 
-- **`app/`** — the production React client: ports `layer2-local-cache/client`'s
-  local-first cache and `layer3-sync`'s live-sync wiring onto React (React
-  chosen over gramps-web's Lit/Material Web Components approach -- see
-  PLAN.md's roadmap notes). Same feature set as the Layer 2/3 spike (all ten
-  object-type views, `where_expr` filtering, OPFS-persisted WASM SQLite
-  cache, live sync), restructured behind a `useSyncExternalStore`-based
-  store layer (`app/src/store/`) with `@tanstack/react-virtual` replacing
-  the spike's hand-rolled scroll math. Supersedes `layer2-local-cache/client`
-  for UI purposes; the layer directories stay in place as the historical
-  record of the spikes that de-risked this, not deleted.
-- **`layer0-notify-spike/`** — Postgres `LISTEN`/`NOTIFY` change-capture
-  spike: proves trigger → `pg_notify` mechanics.
-- **`layer1-ws-relay/`** — WebSocket relay spike: proves a Postgres
-  notification can reach a browser tab, with fan-out to multiple tabs.
-- **`layer2-local-cache/`** — the local-first cache spike: a plain
-  TS/HTML client that fetches from gramps-web-api's fast, SQL-pushed-down
-  `POST /api/<type>/query/` endpoints (keyset-paginated, `where_expr`
-  filtering, `count_of`/`exists`/`count` Collection support), mirrors the
-  result into a WASM SQLite table per object type, persists it to OPFS,
-  and renders it through a virtualized, scrollable table with a sidebar
-  for switching between object types (People, Family, Events, ...).
-  `api-fixture/` and `api-fixture-example/` are throwaway, isolated
-  gramps-web-api instances used to develop and test the client against —
-  the former loaded with `gramps-bench`-generated synthetic data (scale
-  testing), the latter with Gramps' own official `example.gramps` sample
-  database (real date variety — modifiers, quality, ranges/spans).
+Gramps Connect is an early-stage experiment exploring what a faster,
+more collaborative version of that web frontend could look like. It's
+being built alongside gramps-web, not as a finished replacement — the
+question this project is trying to answer is *whether* two specific
+ideas actually work well in practice, before committing to them:
+
+- **Instant browsing, even on a huge family tree.** Today, searching or
+  filtering a large tree (tens of thousands of people) can mean waiting
+  a long time — one real example took over a minute and a half for a
+  single search. Gramps Connect keeps a smart, local copy of the parts
+  of your tree you're looking at, right in your browser, so browsing,
+  sorting, and filtering feel instant — closer to searching contacts
+  already on your phone than looking someone up over a slow connection.
+- **Watching each other work, live.** Family history is often a group
+  effort — several people editing the same tree. Gramps Connect aims to
+  show you what other researchers are changing as they change it,
+  without needing to refresh the page, the same way collaborative
+  documents show you a co-author's edits appearing in real time.
+
+**This is a research project, not a product yet.** It isn't something
+to move your family tree to today — there's no finished user interface,
+no guarantee any particular part of it will end up in a real release,
+and the whole thing is still being actively built and re-shaped. If
+you're just looking to use Gramps, [gramps-web](https://github.com/gramps-project/gramps-web)
+(or the [desktop application](https://gramps-project.org/download/)) is
+where you want to be today. If you're curious about where the project
+might be headed, or want to help figure that out, read on.
+
+## For Developers
+
+### Approach
+
+Rather than rewriting the frontend in one large effort, this project is
+being de-risked through small, disposable prototypes — proving each hard
+technical question in isolation before committing to it. See
+[PLAN.md](PLAN.md) for the full reasoning, the two product bets above in
+technical detail, and the layered plan each prototype followed.
+
+The two bets translate to two technical mechanisms:
+
+1. **Local-first cache** — a WASM build of SQLite runs inside the
+   browser, mirroring server data (fetched via `gramps-web-api`'s fast,
+   SQL-pushed-down `/api/<type>/query/` endpoints) into local tables and
+   persisting them to [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system)
+   so a repeat visit skips the network entirely.
+2. **Live sync** — Postgres `LISTEN`/`NOTIFY` change-capture triggers
+   feed a WebSocket relay, which pushes thin change notifications
+   (`{treeid, table, handle, op}`) to every connected browser tab, which
+   then refetches and patches just the affected row in its local cache.
+
+### Repo layout
+
+- **`app/`** — the production React client (React was chosen over
+  gramps-web's Lit/Material Web Components approach — see
+  [PLAN.md](PLAN.md)'s roadmap notes for why): all ten object-type views,
+  `where_expr` filtering, an OPFS-persisted WASM SQLite cache, and live
+  sync, behind a `useSyncExternalStore`-based store layer (`app/src/store/`)
+  with `@tanstack/react-virtual` for scrolling. Started as a port of an
+  earlier plain-TS/HTML spike (Layers 0-3 in [PLAN.md](PLAN.md)); that
+  spike code has since been removed now that `app/` fully supersedes it,
+  but the fixtures it's developed and tested against live on in
+  `dev-fixtures/` (below).
+- **`dev-fixtures/`** — real `gramps-web-api` backends to run `app/`
+  against locally (see Getting started below); not part of the product,
+  just what makes local development possible without a hand-configured
+  server of your own.
+  - **`layer2-local-cache/api-fixture/`** and **`api-fixture-example/`** —
+    two plain-SQLite instances (no live sync): the former loaded with
+    `gramps-bench`-generated synthetic data (scale testing), the latter
+    with Gramps' own official `example.gramps` sample database (real date
+    variety — modifiers, quality, ranges/spans).
+  - **`layer3-sync/`** — a real Postgres (`SharedPostgreSQL`)-backed
+    instance with a `pg_notify` change-capture trigger installed
+    (`triggers.sql`) and a WebSocket relay (`relay.py`) rebroadcasting
+    those notifications — the one fixture with live sync actually wired
+    up, and what `app/.env.example`'s defaults point at.
 - **`packages/gramps-date/`** — a TypeScript port of Gramps' `Date`
-  model, calendar conversion, and locale-aware date display, used by both
-  `app/` and the Layer 2 client (and anything else that needs to
-  render/build a Gramps `Date` struct without a slow per-object round trip
-  through Gramps' own Python date displayer). See its own README for scope
-  and provenance. A root-level npm workspace (`packages/*`, `app`) makes
-  this a real workspace dependency for `app/`, rather than the `file:`
-  reference the frozen `layer2-local-cache/client` spike still uses.
+  model, calendar conversion, and locale-aware date display, used by
+  `app/` (and anything else that needs to render/build a Gramps `Date`
+  struct without a slow per-object round trip through Gramps' own Python
+  date displayer). See its own README for scope and provenance.
 
-The fast `/query/` endpoints Layer 2 depends on live in `gramps-web-api`
+A root-level npm workspace (`packages/*`, `app`) ties `app/` and
+`packages/gramps-date` together as real workspace dependencies. The
+fast `/query/` endpoints `app/` depends on live in `gramps-web-api`
 itself (a separate repo, extended in place, backward compatible) via
 [gramps-object-query-language](https://github.com/dsblank/gramps-object-query-language),
 not in this repo.
+
+### Getting started
+
+```sh
+npm install                 # installs the workspace (app/ + packages/gramps-date)
+cp app/.env.example app/.env.local   # points at a running gramps-web-api instance
+npm run dev -w app          # starts the Vite dev server
+```
+
+`app/` needs a real `gramps-web-api` backend to talk to — the quickest
+way to get one locally is `dev-fixtures/layer3-sync/api-fixture/setup.sh`,
+which stands up a Postgres-backed instance with example data and a
+`pg_notify` trigger installed, plus the relay
+(`dev-fixtures/layer3-sync/relay.py`) alongside it; `app/.env.example`'s
+defaults already point at both. **Read the script before running it** —
+it is not idempotent against an already-populated tree.
+
+### Testing
+
+```sh
+npm run test -w app         # Vitest: pure store/sync logic, not full-app rendering
+npm run typecheck -w app    # tsc --noEmit
+npm run test -w packages/gramps-date
+```
+
+### Contributing
+
+This is still a fast-moving, early-stage prototype — expect things to
+be restructured or thrown out as the layered plan in [PLAN.md](PLAN.md)
+teaches us more. Discussion happens on the
+[Gramps Discourse forum](https://gramps.discourse.group/) (see
+[this thread](https://gramps.discourse.group/t/gramps-web-api-list-performance/9007)
+for the performance problem that originally motivated this project);
+issues and pull requests against this repo are welcome, especially ones
+that engage with the reasoning in PLAN.md rather than just the code.
 
 ## License
 

@@ -58,5 +58,7 @@ curl -s -X POST http://localhost:5002/api/importers/gramps/file \
 
 echo
 echo "server running as PID $SERVER_PID on :5002 (kill it when done: kill $SERVER_PID)"
-echo "browser.ts's API_BASE/USERNAME/PASSWORD already point here -- see its own"
-echo "comment for how to switch back to ../api-fixture's 100k-person dataset."
+echo "to point app/ at this instance (example.gramps' varied real dates,"
+echo "vs. ../api-fixture's 100k-person synthetic scale dataset): set"
+echo "VITE_API_BASE=http://localhost:5002 in app/.env.local, then"
+echo "'npm run dev -w app' as usual, logging in as exampleuser/examplepass."

@@ -1,7 +1,8 @@
-// WebSocket connection to layer3-sync's relay (see ../../layer3-sync/relay.py)
-// plus the pure guard logic deciding whether a notification should be
-// applied to a given view's cache -- ported from
-// layer2-local-cache/client/src/browser.ts's setupLiveSync/applyLiveChange.
+// WebSocket connection to dev-fixtures/layer3-sync's relay (see
+// ../../dev-fixtures/layer3-sync/relay.py) plus the pure guard logic
+// deciding whether a notification should be applied to a given view's
+// cache -- ported from the original Layer 2/3 spike's browser.ts
+// (setupLiveSync/applyLiveChange; since removed, see git history).
 export interface TreeChangeNotification {
   treeid: number;
   table: string;
