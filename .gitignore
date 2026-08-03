@@ -27,3 +27,9 @@ layer3-sync/api-fixture/indexdir/
 layer3-sync/api-fixture/persistent_cache/
 layer3-sync/api-fixture/request_cache/
 layer3-sync/api-fixture/thumbnail_cache/
+
+# app: sql.js WASM assets copied in by scripts/copy-wasm.mjs, not source
+app/public/
+
+# app: local dev overrides of .env.example -- machine-specific, not source
+app/.env.local

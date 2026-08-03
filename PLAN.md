@@ -73,9 +73,9 @@ Ordered so the biggest, cheapest-to-test unknowns get retired first. Layers 0–
 
 ## Roadmap after the prototypes (not detailed yet — revisit once Layers 0-4 report back)
 
-- Frontend framework decision, informed by what the Layer 2/3 cache's actual shape/API turned out to need
+- ~~Frontend framework decision~~ — ✅ **React**, chosen over gramps-web's Lit/Material Web Components approach (see `app/`'s own notes): the app's real complexity is client-side state (multiple SQLite caches, scroll position, filter expressions, live-sync patches), which calls for an app framework with real state primitives, and React has the largest contributor/tooling pool for a volunteer open-source project. `app/` ports the Layer 2/3 spike's functionality onto it in full (all ten views, filtering, OPFS-persisted cache, live sync); the layer directories remain as the historical record of the spikes that de-risked this.
 - Presence layer (who's viewing/editing what) — deliberately ephemeral, in-memory/Redis, kept separate from the durable NOTIFY change-capture path
-- Auth/permissions integration with gramps-web-api's existing JWT model
+- Auth/permissions integration with gramps-web-api's existing JWT model — `app/` has a minimal login form (real credentials, no hardcoding) but no refresh-token rotation or expiry handling yet; gramps-web's own `Auth` class (`~/gramps/gramps-web/src/api.js`) is the reference to build against for that
 - Merge/conflict UX for genuinely concurrent edits to the same object — open design question, not yet resolved
 - Full object-model UI redesign, design system, search-as-navigation
 - Multi-server scaling of the relay (Postgres NOTIFY doubles as the cross-instance fanout bus, noted during design discussion)

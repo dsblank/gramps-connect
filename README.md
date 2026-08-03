@@ -13,6 +13,16 @@ phase — nothing here is a committed architecture yet.
 
 ## Layout
 
+- **`app/`** — the production React client: ports `layer2-local-cache/client`'s
+  local-first cache and `layer3-sync`'s live-sync wiring onto React (React
+  chosen over gramps-web's Lit/Material Web Components approach -- see
+  PLAN.md's roadmap notes). Same feature set as the Layer 2/3 spike (all ten
+  object-type views, `where_expr` filtering, OPFS-persisted WASM SQLite
+  cache, live sync), restructured behind a `useSyncExternalStore`-based
+  store layer (`app/src/store/`) with `@tanstack/react-virtual` replacing
+  the spike's hand-rolled scroll math. Supersedes `layer2-local-cache/client`
+  for UI purposes; the layer directories stay in place as the historical
+  record of the spikes that de-risked this, not deleted.
 - **`layer0-notify-spike/`** — Postgres `LISTEN`/`NOTIFY` change-capture
   spike: proves trigger → `pg_notify` mechanics.
 - **`layer1-ws-relay/`** — WebSocket relay spike: proves a Postgres
@@ -30,10 +40,13 @@ phase — nothing here is a committed architecture yet.
   testing), the latter with Gramps' own official `example.gramps` sample
   database (real date variety — modifiers, quality, ranges/spans).
 - **`packages/gramps-date/`** — a TypeScript port of Gramps' `Date`
-  model, calendar conversion, and locale-aware date display, used by the
-  Layer 2 client (and anything else that needs to render/build a Gramps
-  `Date` struct without a slow per-object round trip through Gramps' own
-  Python date displayer). See its own README for scope and provenance.
+  model, calendar conversion, and locale-aware date display, used by both
+  `app/` and the Layer 2 client (and anything else that needs to
+  render/build a Gramps `Date` struct without a slow per-object round trip
+  through Gramps' own Python date displayer). See its own README for scope
+  and provenance. A root-level npm workspace (`packages/*`, `app`) makes
+  this a real workspace dependency for `app/`, rather than the `file:`
+  reference the frozen `layer2-local-cache/client` spike still uses.
 
 The fast `/query/` endpoints Layer 2 depends on live in `gramps-web-api`
 itself (a separate repo, extended in place, backward compatible) via

@@ -1,0 +1,116 @@
+/* Adapted from layer2-local-cache/client/index.html's inline stylesheet. */
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
+
+.app-layout {
+  display: flex;
+  align-items: flex-start;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+  margin: 1.5rem 2rem;
+  max-width: 72rem;
+  min-width: 0;
+}
+
+/* Sidebar: one button per views.ts entry. Sticky so it stays visible next
+   to a scrolled table. */
+.sidebar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.5rem 1rem;
+  background: #f4f4f4;
+  border-right: 1px solid #ccc;
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+}
+
+.sidebar button {
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+}
+
+.sidebar button:hover { background: #e8e8e8; }
+.sidebar button.active { background: #fff; border-color: #ccc; font-weight: bold; }
+
+.filter-controls { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+.filter-controls input { flex: 1; font-family: monospace; padding: 0.4rem; }
+.filter-controls button { padding: 0.4rem 0.8rem; }
+.filter-examples { margin-bottom: 0.5rem; color: #555; }
+.filter-examples button { padding: 0.15rem 0.5rem; font-size: 0.85em; margin-left: 0.35rem; }
+.filter-error { color: #b00020; margin-bottom: 0.5rem; min-height: 1.2em; }
+
+.status-bar { display: flex; gap: 1rem; align-items: center; color: #555; margin-bottom: 0.5rem; }
+.status-bar button { margin-left: auto; padding: 0.3rem 0.6rem; }
+.load-error { color: #b00020; }
+.live-sync-status--connected { color: #1a7f37; }
+.live-sync-status--disconnected { color: #b00020; }
+.live-sync-status--connecting { color: #9a6700; }
+
+/* --grid-columns is set per-view (repeat(N, 1fr) for however many columns
+   that view has) -- header and data rows share it so cells line up
+   regardless of which view is active. */
+.row {
+  display: grid;
+  grid-template-columns: var(--grid-columns, 1fr);
+  box-sizing: border-box;
+  height: 28px;
+  line-height: 28px;
+}
+.row > div { padding: 0 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.table-header { background: #eee; font-weight: bold; border: 1px solid #ccc; border-bottom: none; }
+
+/* The scrollbar here is driven by the virtualizer's total size (based on
+   totalCount * ROW_HEIGHT) -- its thumb size/position reflect the *full
+   server-side* dataset, even though only the visible rows are ever
+   queried/rendered. */
+.table-scroll {
+  height: 600px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  position: relative;
+}
+.table-scroll .row { border-bottom: 1px solid #eee; }
+.table-scroll .row:nth-child(even) { background: #fafafa; }
+.row-loading { grid-column: 1 / -1; color: #888; padding: 0 0.5rem; }
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+}
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 20rem;
+  padding: 2rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+.login-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9em; color: #444; }
+.login-form input { padding: 0.5rem; font: inherit; }
+.login-form button { padding: 0.6rem; font: inherit; cursor: pointer; }
+.login-error { color: #b00020; }
+
+.app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.app-header h1 { margin: 0; font-size: 1.4rem; }
+.app-header button { padding: 0.4rem 0.8rem; cursor: pointer; }
