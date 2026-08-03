@@ -18,7 +18,7 @@ export interface QueryPage {
   next_after: string | null;
 }
 
-export async function login(username: string, password: string): Promise<string> {
+export async function login(username: string, password: string): Promise<{ accessToken: string; refreshToken: string }> {
   const res = await fetch(`${API_BASE}/api/token/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -26,6 +26,22 @@ export async function login(username: string, password: string): Promise<string>
   });
   if (!res.ok) {
     throw new Error(`login failed: ${res.status} ${await res.text()}`);
+  }
+  const { access_token, refresh_token } = await res.json();
+  return { accessToken: access_token as string, refreshToken: refresh_token as string };
+}
+
+/** Exchanges the (long-lived) refresh token for a new access token. Gramps-
+ * web-api rejects this with 401/422 once the refresh token itself is
+ * invalid or revoked -- the caller's only recourse at that point is a
+ * fresh login. */
+export async function refreshAccessToken(refreshToken: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/token/refresh/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${refreshToken}` },
+  });
+  if (!res.ok) {
+    throw new Error(`token refresh failed: ${res.status} ${await res.text()}`);
   }
   const { access_token } = await res.json();
   return access_token as string;

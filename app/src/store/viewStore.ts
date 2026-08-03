@@ -228,7 +228,7 @@ export class ViewStore {
 
     (async () => {
       while (after !== null) {
-        const { page } = await fetchPage(this.view, token, after, false, whereExpr, orderBy);
+        const { page } = await fetchPage(this.view, await getToken(), after, false, whereExpr, orderBy);
         if (myGeneration !== this.queryGeneration) {
           stmt.free();
           return;
