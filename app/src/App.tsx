@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { AppShell, Group, Image, SegmentedControl, Title, Button, useMantineColorScheme, useComputedColorScheme } from "@mantine/core";
 import { VIEWS } from "./store/views";
 import { getViewStore } from "./store/registry";
@@ -7,7 +7,9 @@ import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
 import { FilterBar } from "./components/FilterBar";
 import { DataTable } from "./components/DataTable";
+import { DetailPanel } from "./components/DetailPanel";
 import { StatusBar } from "./components/StatusBar";
+import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import logo from "./assets/icons/gramps-logo.svg";
 
@@ -33,7 +35,7 @@ function ColorSchemeToggle() {
 }
 
 function AuthenticatedApp() {
-  const [activeKey, setActiveKey] = useState(VIEWS[0].key);
+  const { activeKey, setActiveKey } = useHistorySync();
   const liveSyncStatus = useLiveSync();
   const view = VIEWS.find((v) => v.key === activeKey)!;
 
@@ -50,6 +52,7 @@ function AuthenticatedApp() {
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 68, breakpoint: "sm" }}
+      aside={{ width: "50%", breakpoint: "sm" }}
       footer={{ height: 36 }}
       padding="md"
     >
@@ -82,6 +85,10 @@ function AuthenticatedApp() {
         <FilterBar key={`filter-${view.key}`} view={view} />
         <DataTable key={`table-${view.key}`} view={view} />
       </AppShell.Main>
+
+      <AppShell.Aside>
+        <DetailPanel key={`detail-${view.key}`} view={view} />
+      </AppShell.Aside>
 
       <AppShell.Footer>
         <StatusBar view={view} liveSyncStatus={liveSyncStatus} />

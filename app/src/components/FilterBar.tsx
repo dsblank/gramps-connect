@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Stack, Group, TextInput, Button, Text } from "@mantine/core";
+import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import type { ViewConfig } from "../store/views";
 
@@ -21,9 +22,21 @@ const EVENT_EXAMPLES: { label: string; expr: string }[] = [
  * it fresh (clears the input/error, matching the original spike's
  * selectView() resetting #where-expr/#filter-error). */
 export function FilterBar({ view }: FilterBarProps) {
+  const snapshot = useViewStore(view.key);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+
+  // The store's filter can also be cleared from outside this component --
+  // a person link in PersonDetail drops it before jumping to the target
+  // (see ViewStore.navigateToHandle) -- so the input has to follow that,
+  // not just its own Apply/Clear. Only tracks the "cleared" direction:
+  // this component is still the sole source of truth for *applying* a new
+  // expression, so a non-null whereExpr never overwrites the input the
+  // user is mid-typing.
+  useEffect(() => {
+    if (snapshot.whereExpr === null) setInput("");
+  }, [snapshot.whereExpr]);
 
   async function apply(whereExpr: string | null) {
     setError(null);

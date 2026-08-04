@@ -40,6 +40,13 @@ export interface ViewSnapshot {
    * row reads (see DataTable.tsx's useMemo) must key on this too, not just
    * loadedCount, or a same-count row patch silently never re-renders. */
   revision: number;
+  /** The clicked row's index and handle, for DetailPanel -- kept here
+   * (rather than as component-local state in DataTable) so a sibling
+   * component can read the same selection without prop-drilling through
+   * App.tsx. Cleared on a fresh runQuery() (see there) since a new
+   * where_expr/sort means the old index no longer names the same row. */
+  selectedIndex: number | null;
+  selectedHandle: string | null;
 }
 
 const EMPTY_SNAPSHOT_BASE = {
@@ -49,6 +56,8 @@ const EMPTY_SNAPSHOT_BASE = {
   status: "idle" as const,
   error: null,
   revision: 0,
+  selectedIndex: null,
+  selectedHandle: null,
 };
 
 export class ViewStore {
@@ -74,6 +83,11 @@ export class ViewStore {
    * this view entirely). */
   private queryGeneration = 0;
   private revision = 0;
+  private selectedIndex: number | null = null;
+  private selectedHandle: string | null = null;
+  /** See navigateToHandle()'s doc comment -- true only while it's using
+   * runQuery() purely to drop whereExpr, not as a real filter change. */
+  private suppressSelectionClear = false;
   private listeners = new Set<() => void>();
   private snapshot: ViewSnapshot;
 
@@ -101,6 +115,8 @@ export class ViewStore {
       status: this.status,
       error: this.error,
       revision: this.revision,
+      selectedIndex: this.selectedIndex,
+      selectedHandle: this.selectedHandle,
     };
     for (const listener of this.listeners) listener();
   }
@@ -108,6 +124,116 @@ export class ViewStore {
   getRowState(index: number): RowState {
     if (!this.db) return "unloaded";
     return index < this.loadedCount ? "loaded" : "loading";
+  }
+
+  /** Records which row DataTable's click handler landed on, for DetailPanel
+   * to pick up via the snapshot. Looks the handle up with the same
+   * order/direction as getRows() so it names the same row the user
+   * actually clicked, not whatever happens to be at that offset under the
+   * default order. */
+  select(index: number): void {
+    if (!this.db) return;
+    this.selectedIndex = index;
+    this.selectedHandle = this.getHandleAt(index);
+    this.emit();
+  }
+
+  /** Drops the current selection -- used when history navigation (see
+   * useHistorySync.ts) lands on a view-only URL (no handle segment), so
+   * DetailPanel reverts to its "select a row" placeholder instead of still
+   * showing whatever was selected before. */
+  clearSelection(): void {
+    if (this.selectedIndex === null && this.selectedHandle === null) return;
+    this.selectedIndex = null;
+    this.selectedHandle = null;
+    this.emit();
+  }
+
+  /** Selects an (index, handle) pair the caller already knows to be
+   * correct -- unlike select(), doesn't re-derive the handle from the
+   * local cache at that index. Used by navigateToHandle(), which computes
+   * both authoritatively via a server round trip; the local cache may not
+   * have reached that far yet (see its own doc comment). */
+  private selectAt(index: number, handle: string): void {
+    this.selectedIndex = index;
+    this.selectedHandle = handle;
+    this.emit();
+  }
+
+  /** Jumps to `handle`'s row -- e.g. a person link in PersonDetail's
+   * parents/family sections -- regardless of whether the local cache has
+   * loaded that far yet. Drops any active where_expr first: a linked
+   * record isn't guaranteed to match it (and the point of following a
+   * link is to see that record, not to have it silently fail to appear).
+   * Returns false if the handle doesn't resolve to a row at all (a
+   * dangling reference), true once selection has moved to it. */
+  async navigateToHandle(handle: string): Promise<boolean> {
+    if (this.whereExpr !== null) {
+      // runQuery() unconditionally nulls out the selection at its start --
+      // right for its other callers (the user directly typing/clearing a
+      // filter, where "no selection yet in the new results" is a real,
+      // observable state), wrong here: this call is purely an internal
+      // step to get whereExpr out of the way before re-selecting a few
+      // lines down, and that transient null must never be observed
+      // in between -- useHistorySync.ts mirrors selectedHandle into the
+      // URL on every change, so an observed-then-reverted null would
+      // wrongly commit an extra "no selection" entry to browser history.
+      this.suppressSelectionClear = true;
+      try {
+        await this.runQuery(null, false);
+      } finally {
+        this.suppressSelectionClear = false;
+      }
+    }
+    const index = await this.findGlobalIndex(handle);
+    if (index === null) return false;
+    this.selectAt(index, handle);
+    return true;
+  }
+
+  /** The exact 0-based row index `handle` occupies under the view's
+   * current sort, straight from the server -- a single count-only query
+   * for "rows that sort before this one" (X-Total-Count *is* that count).
+   * Deliberately not computed by ranking within the local cache: that only
+   * knows about whatever the background fill has reached so far (see
+   * runQuery), which for a target near the end of a still-filling dataset
+   * would rank it far too early. */
+  private async findGlobalIndex(handle: string): Promise<number | null> {
+    const token = await getToken();
+    const item = await fetchByHandle(this.view, token, handle);
+    if (!item) return null;
+
+    const orderCol = this.orderBy[0]?.column ?? "handle";
+    const desc = this.orderBy[0]?.direction === "desc";
+    const cmp = desc ? ">" : "<";
+    // where_expr is parsed as a Python expression (see
+    // gramps-object-query-language's query_lang.py) -- JSON's string
+    // escaping is a safe subset of Python's, so JSON.stringify doubles as
+    // a correct, injection-safe Python string literal here.
+    const sqlType = this.view.columns.find((c) => c.key === orderCol)?.sqlType;
+    const literal = (value: unknown) =>
+      sqlType === "INTEGER" ? String(value) : JSON.stringify(String(value ?? ""));
+    const orderValue = item[orderCol];
+    // Same tie-break as getRows()/getHandleAt(): the server's own
+    // effective_order_by always appends `OrderBy("handle", "asc")", so
+    // "before" has to mean "before in (orderCol, handle) order", not just
+    // "orderCol is less".
+    const beforeExpr =
+      `(${orderCol} ${cmp} ${literal(orderValue)}) or ` +
+      `(${orderCol} == ${literal(orderValue)} and handle ${cmp} ${JSON.stringify(item.handle)})`;
+    const { totalCount } = await fetchPage(this.view, token, null, true, beforeExpr, this.orderBy, 1);
+    return totalCount;
+  }
+
+  private getHandleAt(index: number): string | null {
+    if (!this.db) return null;
+    const orderCol = this.orderBy[0]?.column ?? "handle";
+    const direction = this.orderBy[0]?.direction === "desc" ? "DESC" : "ASC";
+    const res = this.db.exec(
+      `SELECT handle FROM ${this.view.key} ORDER BY ${orderCol} ${direction}, handle ASC LIMIT 1 OFFSET ?;`,
+      [index]
+    );
+    return (res[0]?.values[0]?.[0] as string | undefined) ?? null;
   }
 
   /** Windowed read against the local cache, mirroring the original
@@ -164,7 +290,22 @@ export class ViewStore {
         await clearOpfs(this.view.opfsFilename);
       }
     }
-    await this.runQuery(null, true);
+    // Establishing the view for the first time this session, under its
+    // default order/no filter -- never a reason to invalidate a selection,
+    // unlike runQuery()'s other callers (see suppressSelectionClear's other
+    // use in navigateToHandle()). Matters when this view hasn't been
+    // activated yet and useHistorySync's applyHash() is jumping straight to
+    // a row in it (e.g. a person link's Event line): its navigateToHandle()
+    // call and App.tsx's ensureLoaded() effect both fire off the activeKey
+    // change, and without this guard, whichever finishes first (usually
+    // navigateToHandle, a couple of lightweight queries vs. a first-page
+    // fetch) gets its selection wiped by the other moments later.
+    this.suppressSelectionClear = true;
+    try {
+      await this.runQuery(null, true);
+    } finally {
+      this.suppressSelectionClear = false;
+    }
   }
 
   /** Fetches a fresh (optionally where_expr-filtered) copy of this view's
@@ -182,6 +323,16 @@ export class ViewStore {
     const orderBy = this.orderBy;
     this.status = "loading";
     this.error = null;
+    // A new where_expr or sort invalidates the old index/handle pairing
+    // (see ViewSnapshot.selectedIndex's doc comment) -- same "reset rather
+    // than carry stale state forward" treatment runQuery already gives
+    // loadedCount/totalCount. Skipped when navigateToHandle() is only using
+    // this call to drop whereExpr on its way to re-selecting -- see its own
+    // doc comment on suppressSelectionClear.
+    if (!this.suppressSelectionClear) {
+      this.selectedIndex = null;
+      this.selectedHandle = null;
+    }
     this.emit();
 
     let token: string;

@@ -24,9 +24,6 @@ export function DataTable({ view }: DataTableProps) {
   const snapshot = useViewStore(view.key);
   const store = getViewStore(view.key);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Visual-only row selection (highlight), no detail panel yet -- see
-  // PLAN.md's roadmap note on the Gramps-desktop-style detail panel.
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   // Column widths are pure display state, reset on view switch (this
   // component is remounted per view, see App.tsx's key={`table-${...}`})
   // -- dragging a handle only ever touches this array, never row height,
@@ -48,6 +45,18 @@ export function DataTable({ view }: DataTableProps) {
   useEffect(() => {
     virtualizer.scrollToOffset(0);
   }, [snapshot.whereExpr, snapshot.orderBy.column, snapshot.orderBy.direction]);
+
+  // Following a person link in the detail panel (see ViewStore's
+  // navigateToHandle) moves selection to a row that's very likely off-
+  // screen -- scroll it into view. "auto" alignment makes this a no-op for
+  // an already-visible row, so this doesn't fight a plain in-view click's
+  // own select() call (which lands here too, since both go through the
+  // same snapshot field).
+  useEffect(() => {
+    if (snapshot.selectedIndex !== null) {
+      virtualizer.scrollToIndex(snapshot.selectedIndex, { align: "auto" });
+    }
+  }, [snapshot.selectedIndex]);
 
   // One windowed SQL query per render pass (mirrors the original's
   // renderVisible(), a single LIMIT/OFFSET query per scroll frame) rather
@@ -130,8 +139,8 @@ export function DataTable({ view }: DataTableProps) {
               <div
                 key={item.key}
                 className={classes.row}
-                data-selected={item.index === selectedIndex || undefined}
-                onClick={() => rawRow && setSelectedIndex(item.index)}
+                data-selected={item.index === snapshot.selectedIndex || undefined}
+                onClick={() => rawRow && store.select(item.index)}
                 style={{
                   ...gridStyle,
                   position: "absolute",

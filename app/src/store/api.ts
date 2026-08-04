@@ -47,7 +47,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
   return access_token as string;
 }
 
-async function parseErrorMessage(res: Response): Promise<string> {
+export async function parseErrorMessage(res: Response): Promise<string> {
   // QueryLangError etc. come back as {"error": {"code", "message"}} --
   // surface .message (e.g. "invalid syntax: ...") rather than the raw
   // envelope, falling back to the raw body if it's not that shape.
@@ -65,7 +65,13 @@ export async function fetchPage(
   after: string | null,
   wantCount: boolean,
   whereExpr: string | null,
-  orderBy: OrderBy[] = view.orderBy
+  orderBy: OrderBy[] = view.orderBy,
+  // Overridable for callers that only want the X-Total-Count header (see
+  // ViewStore.findGlobalIndex(), a count-only "rows before this one" query)
+  // and don't care about `items` itself -- the server still requires
+  // limit >= 1 (QueryBodyArgs.limit's Range(min=1, ...)), so this can't go
+  // to 0, but 1 keeps that response payload minimal.
+  limit: number = PAGE_SIZE
 ): Promise<{ page: QueryPage; totalCount: number | null }> {
   const res = await fetch(`${API_BASE}${view.endpoint}`, {
     method: "POST",
@@ -76,7 +82,7 @@ export async function fetchPage(
     body: JSON.stringify({
       select: ["handle", ...view.columns.map(toSelectEntry)],
       order_by: orderBy,
-      limit: PAGE_SIZE,
+      limit,
       after: after ?? undefined,
       count: wantCount,
       where_expr: whereExpr || undefined,
