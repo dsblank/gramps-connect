@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gramps-connect-sdk"
+description = "Python SDK for gramps-connect / gramps-web-api, authenticated via a personal API key"
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.9"
+dynamic = ["version"]
+dependencies = [
+    "requests>=2.28",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+# Powers the gramps-core-style accessors (Client.get_person(), .iter_people(),
+# ...), which hand back real gramps.gen.lib objects instead of dicts -- see
+# gramps_style.py's module docstring. Not a default dependency: the `gramps`
+# PyPI package unconditionally imports PyGObject even for its plain object
+# model, and PyGObject needs system GTK/girepository dev packages to build
+# (e.g. Debian/Ubuntu: `apt install libgirepository-2.0-dev gir1.2-glib-2.0
+# gobject-introspection`), which most SDK users calling client.people.get()
+# etc. have no reason to need.
+gramps-objects = [
+    # >=6.0 for gramps.gen.lib.json_utils (data_to_object/object_to_dict),
+    # matching the JSON-object-struct storage gramps-web-api serves from
+    # (see PLAN.md's grounding notes on Gramps 6.0's pickle-to-JSON switch).
+    "gramps>=6.0",
+]
+dev = [
+    "pytest>=7.0",
+    "responses>=0.23",
+    "gramps-connect-sdk[gramps-objects]",
+]
+
+[project.urls]
+Homepage = "https://github.com/dsblank/gramps-connect"
+
+[tool.hatch.version]
+path = "src/gramps_connect_sdk/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gramps_connect_sdk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
