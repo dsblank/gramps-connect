@@ -114,7 +114,7 @@ export function DataTable({ view }: DataTableProps) {
           );
         })}
       </div>
-      <div className={classes.scroll} ref={scrollRef}>
+      <div className={classes.scroll} ref={scrollRef} style={{ width: totalWidth }}>
         <div style={{ height: virtualizer.getTotalSize(), width: totalWidth, position: "relative" }}>
           {virtualItems.map((item) => {
             const rawRow = rows.get(item.index);

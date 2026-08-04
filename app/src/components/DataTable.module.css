@@ -7,6 +7,55 @@
   overflow-x: auto;
 }
 
+/* Native scrollbars, just wider -- WCAG 2.5.8 wants a 24px hit target and
+   the browser default (~15-17px, thinner still on some Linux themes) falls
+   short. scrollbar-width only offers auto/thin/none (no px control), so
+   Firefox gets the wider keyword; Chromium/Safari get an explicit size via
+   the (non-standard but universally supported) ::-webkit-scrollbar knobs. */
+.tableWrapper,
+.scroll {
+  scrollbar-width: auto;
+}
+
+.tableWrapper::-webkit-scrollbar,
+.scroll::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+.tableWrapper::-webkit-scrollbar-track,
+.scroll::-webkit-scrollbar-track {
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+}
+
+/* Gray rectangle inset in a white gutter: the border is drawn in the
+   track's own color and background-clip keeps the gray fill out of it, so
+   the border reads as gutter margin rather than a thumb outline. */
+.tableWrapper::-webkit-scrollbar-thumb,
+.scroll::-webkit-scrollbar-thumb {
+  background: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
+  background-clip: padding-box;
+  border: 3px solid light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  border-radius: 3px;
+}
+
+/* min-height/-width keep the thumb grabbable even when it's proportionally
+   tiny -- .scroll's thumb tracks a virtualized list that can be tens of
+   thousands of rows tall, so its unclamped size would be just a few px. */
+.scroll::-webkit-scrollbar-thumb {
+  min-height: 40px;
+}
+
+.tableWrapper::-webkit-scrollbar-thumb {
+  min-width: 40px;
+}
+
+.tableWrapper::-webkit-scrollbar-thumb:hover,
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-2));
+  background-clip: padding-box;
+}
+
 .header {
   background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
   font-weight: 600;
