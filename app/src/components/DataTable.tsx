@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
@@ -41,6 +41,13 @@ export function DataTable({ view }: DataTableProps) {
   });
 
   const virtualItems = virtualizer.getVirtualItems();
+
+  // A new sort or where_expr means the old scroll offset points at
+  // unrelated rows in the new result set -- jump back to the top rather
+  // than leaving the viewport wherever the user happened to be scrolled.
+  useEffect(() => {
+    virtualizer.scrollToOffset(0);
+  }, [snapshot.whereExpr, snapshot.orderBy.column, snapshot.orderBy.direction]);
 
   // One windowed SQL query per render pass (mirrors the original's
   // renderVisible(), a single LIMIT/OFFSET query per scroll frame) rather
