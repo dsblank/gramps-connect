@@ -7,7 +7,7 @@ import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
 import { FilterBar } from "./components/FilterBar";
 import { DataTable } from "./components/DataTable";
-import { DetailPanel } from "./components/DetailPanel";
+import { AsideSplit } from "./components/AsideSplit";
 import { StatusBar } from "./components/StatusBar";
 import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
@@ -87,7 +87,7 @@ function AuthenticatedApp() {
       </AppShell.Main>
 
       <AppShell.Aside>
-        <DetailPanel key={`detail-${view.key}`} view={view} />
+        <AsideSplit key={`detail-${view.key}`} view={view} />
       </AppShell.Aside>
 
       <AppShell.Footer>
