@@ -33,7 +33,7 @@ export function DetailPanel({ view }: DetailPanelProps) {
   }
 
   if (view.key === "person") {
-    return <PersonDetail handle={snapshot.selectedHandle} />;
+    return <PersonDetail handle={snapshot.selectedHandle} revision={snapshot.revision} />;
   }
 
   return (

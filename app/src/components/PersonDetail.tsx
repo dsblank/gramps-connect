@@ -8,6 +8,11 @@ import type { EventProfile, FamilyProfile, PersonProfile } from "../store/person
 
 interface PersonDetailProps {
   handle: string;
+  /** Bumped by ViewStore.applyLiveChange on any live-sync update to the
+   * "person" table -- included so the effect below re-fetches this
+   * person's profile when a poll picks up a change to it, not just when
+   * the user selects a different row. */
+  revision: number;
 }
 
 const SEX_SYMBOL: Record<PersonProfile["sex"], string> = { M: "♂", F: "♀", X: "⚧", U: "" };
@@ -166,10 +171,10 @@ function FamilySection({ person, family }: { person: PersonProfile; family: Fami
 
 /** Person-specific detail view (see DetailPanel.tsx for the generic
  * fallback other object types get) -- fetches the full, display-ready
- * profile fresh on every handle change rather than deriving it from
- * DataTable's cached row, which only carries the flat columns
- * PERSON_VIEW.columns lists. */
-export function PersonDetail({ handle }: PersonDetailProps) {
+ * profile fresh on every handle change (or live-sync revision bump)
+ * rather than deriving it from DataTable's cached row, which only
+ * carries the flat columns PERSON_VIEW.columns lists. */
+export function PersonDetail({ handle, revision }: PersonDetailProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [parentsOpen, setParentsOpen] = useState(false);
 
@@ -189,7 +194,7 @@ export function PersonDetail({ handle }: PersonDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [handle]);
+  }, [handle, revision]);
 
   if (state.status === "loading") {
     return (
