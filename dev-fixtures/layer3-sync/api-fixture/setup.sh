@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Stands up the Layer 3 fixture: a multi-tree gramps-web-api instance
 # backed by real Postgres (SharedPostgreSQL addon), with a fresh tree
-# holding Gramps' own example.gramps sample data, gets Layer 0's
-# pg_notify trigger installed on its person table, and starts the
-# server on :5003 -- see ../relay.py for the WebSocket side and
-# ../triggers.sql for the trigger itself.
+# holding Gramps' own example.gramps sample data, and starts the server
+# on :5003. Live sync (app/src/store/historyPoll.ts) polls this server's
+# GET /api/transactions/history/ endpoint directly -- no trigger or relay
+# process to install here anymore (see git history for the old
+# triggers.sql/relay.py this fixture used to also set up).
 #
 # Requires:
 #  - A reachable Postgres server with the "gramps" database already
@@ -97,17 +98,6 @@ echo "analyzing tables so the query planner has fresh stats..."
 PGPASSWORD="${POSTGRES_PASSWORD:-gramps}" psql -h "${POSTGRES_HOST:-localhost}" \
   -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-gramps}" -d gramps -c "ANALYZE;"
 
-# Applied after import, deliberately -- see triggers.sql's own header
-# note on why the trigger shouldn't be live for the bulk import itself.
-echo "installing the pg_notify trigger..."
-PGPASSWORD="${POSTGRES_PASSWORD:-gramps}" psql -h "${POSTGRES_HOST:-localhost}" \
-  -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-gramps}" -d gramps -f ../triggers.sql
-
 echo
 echo "API server running as PID $SERVER_PID on :5003 (kill it when done: kill $SERVER_PID)"
-echo "start the relay too: python3 ../relay.py (listens on :8766)"
-echo "app/.env.example's VITE_API_BASE/VITE_WS_URL already point here, but"
-echo "app/src/config.ts's MY_TREE_ID constant is Postgres's own serial"
-echo "treeid for this fixture's tree (not the UUID above) -- check it against:"
-echo "  PGPASSWORD=gramps psql -h localhost -U gramps -d gramps -c \"SELECT treeid, uuid FROM trees;\" -- uuid == $TREE_UUID above"
-echo "and update MY_TREE_ID in app/src/config.ts if this is a from-scratch rebuild."
+echo "app/.env.example's VITE_API_BASE already points here."

@@ -65,6 +65,8 @@ Ordered so the biggest, cheapest-to-test unknowns get retired first. Layers 0–
 
 **Since superseded**: the Layer 0-2 spike directories (`layer0-notify-spike/`, `layer1-ws-relay/`, `layer2-local-cache/client/`) were removed once `app/` (see the Frontend framework decision below) fully replaced their functionality — the mechanics they proved live on in `app/`'s real code, not as standalone spikes anymore. `layer2-local-cache`'s and `layer3-sync`'s *fixtures* (the backend instances to develop against, not the spike client code) survive, relocated to `dev-fixtures/layer2-local-cache/` and `dev-fixtures/layer3-sync/` — see the top-level README's Repo layout for current paths.
 
+**Layer 1's mechanism itself, later superseded**: once `app/` existed as a real client with real users to reason about (a browser tab going idle/backgrounded, a dropped connection needing resync), the Postgres `LISTEN`/`NOTIFY` + WebSocket relay design (Layers 0-1) turned out to be solving a harder problem than necessary. gramps-web-api already ships an object-edit audit/undo log (`GET /api/transactions/history/`, keyed by commit timestamp) for an unrelated reason (undo support); polling it on a short interval gets the same live-sync outcome — refetch-and-patch on a real change — without a relay process, without being Postgres-only, and without any resync logic (a cursor-based `after=<timestamp>` poll can't miss an event the way a dropped WebSocket connection can). `app/src/store/historyPoll.ts` is the current implementation; `triggers.sql`/`relay.py` and the schema/trigger portions of Layers 0-1 above are kept as-written for the historical record but no longer reflect what's deployed.
+
 ### Layer 4 — gramps-web-api filter pushdown fix (~2-4 days, fully independent)
 
 **Goal**: validate the discourse-thread performance bug is fixable without a storage rewrite — directly in the existing `gramps-web-api` repo, backward compatible.
@@ -80,7 +82,6 @@ Ordered so the biggest, cheapest-to-test unknowns get retired first. Layers 0–
 - Auth/permissions integration with gramps-web-api's existing JWT model — `app/` has a minimal login form (real credentials, no hardcoding) but no refresh-token rotation or expiry handling yet; gramps-web's own `Auth` class (`~/gramps/gramps-web/src/api.js`) is the reference to build against for that
 - Merge/conflict UX for genuinely concurrent edits to the same object — open design question, not yet resolved
 - Full object-model UI redesign, design system, search-as-navigation
-- Multi-server scaling of the relay (Postgres NOTIFY doubles as the cross-instance fanout bus, noted during design discussion)
 
 ## Verification
 

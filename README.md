@@ -59,10 +59,13 @@ The two bets translate to two technical mechanisms:
    SQL-pushed-down `/api/<type>/query/` endpoints) into local tables and
    persisting them to [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system)
    so a repeat visit skips the network entirely.
-2. **Live sync** — Postgres `LISTEN`/`NOTIFY` change-capture triggers
-   feed a WebSocket relay, which pushes thin change notifications
-   (`{treeid, table, handle, op}`) to every connected browser tab, which
-   then refetches and patches just the affected row in its local cache.
+2. **Live sync** — the client polls `gramps-web-api`'s existing
+   `GET /api/transactions/history/` endpoint (the object-edit audit/undo
+   log it already ships) on a short interval, and for each object it
+   reports as changed, refetches and patches just that row in the local
+   cache. No server changes, persistent connection, or Postgres-specific
+   change capture required — a plain authenticated `GET`, so it works
+   against any backend.
 
 ### Repo layout
 
@@ -81,15 +84,19 @@ The two bets translate to two technical mechanisms:
   just what makes local development possible without a hand-configured
   server of your own.
   - **`layer2-local-cache/api-fixture/`** and **`api-fixture-example/`** —
-    two plain-SQLite instances (no live sync): the former loaded with
+    two plain-SQLite instances: the former loaded with
     `gramps-bench`-generated synthetic data (scale testing), the latter
     with Gramps' own official `example.gramps` sample database (real date
-    variety — modifiers, quality, ranges/spans).
+    variety — modifiers, quality, ranges/spans). Live sync works against
+    either of these too now — it's just a poll against
+    `/api/transactions/history/`, not tied to Postgres.
   - **`layer3-sync/`** — a real Postgres (`SharedPostgreSQL`)-backed
-    instance with a `pg_notify` change-capture trigger installed
-    (`triggers.sql`) and a WebSocket relay (`relay.py`) rebroadcasting
-    those notifications — the one fixture with live sync actually wired
-    up, and what `app/.env.example`'s defaults point at.
+    instance, useful for exercising genuinely concurrent multi-writer
+    edits against the same tree; what `app/.env.example`'s defaults point
+    at. No longer has any Postgres-specific change-capture wiring of its
+    own (the `pg_notify` trigger + WebSocket relay this fixture used to
+    also set up were removed once live sync moved to polling — see
+    PLAN.md's Layer 3 section).
 - **`packages/gramps-date/`** — a TypeScript port of Gramps' `Date`
   model, calendar conversion, and locale-aware date display, used by
   `app/` (and anything else that needs to render/build a Gramps `Date`
@@ -113,11 +120,10 @@ npm run dev -w app          # starts the Vite dev server
 
 `app/` needs a real `gramps-web-api` backend to talk to — the quickest
 way to get one locally is `dev-fixtures/layer3-sync/api-fixture/setup.sh`,
-which stands up a Postgres-backed instance with example data and a
-`pg_notify` trigger installed, plus the relay
-(`dev-fixtures/layer3-sync/relay.py`) alongside it; `app/.env.example`'s
-defaults already point at both. **Read the script before running it** —
-it is not idempotent against an already-populated tree.
+which stands up a Postgres-backed instance with example data;
+`app/.env.example`'s defaults already point at it. **Read the script
+before running it** — it is not idempotent against an already-populated
+tree.
 
 ### Testing
 

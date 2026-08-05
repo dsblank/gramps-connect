@@ -15,7 +15,7 @@ import { fetchByHandle, fetchPage } from "./api";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { createTableSql, insertSql, upsertSql, toRowValues } from "./sql";
 import type { OrderBy, ViewConfig } from "./views";
-import type { TreeChangeNotification } from "./liveSync";
+import type { TreeChangeNotification } from "./historyPoll";
 
 export type RowState = "unloaded" | "loading" | "loaded";
 export type ViewStatus = "idle" | "loading" | "ready" | "error";
@@ -433,11 +433,11 @@ export class ViewStore {
   }
 
   /** Patches this view's already-loaded, unfiltered cache in place for one
-   * live-sync notification. Call only after liveSync.ts's
-   * shouldApplyNotification() guard has passed (treeid/table/whereExpr
-   * checks) -- this method only guards on cache readiness. A DELETE
-   * removes the row locally; INSERT/UPDATE both refetch the row fresh from
-   * the server (the notification itself carries no data) and upsert it. */
+   * live-sync notification. Call only after useLiveSync.ts's own
+   * table/whereExpr guard has passed -- this method only guards on cache
+   * readiness. A DELETE removes the row locally; INSERT/UPDATE both refetch
+   * the row fresh from the server (the notification itself carries no
+   * data) and upsert it. */
   async applyLiveChange(notification: TreeChangeNotification): Promise<void> {
     if (!this.db) return;
 
