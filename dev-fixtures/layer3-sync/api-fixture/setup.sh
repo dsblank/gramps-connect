@@ -35,10 +35,17 @@ export GRAMPS_RESOURCES="$HOME/gramps/gramps/build/share"
 EXAMPLE_GRAMPS="$HOME/gramps/gramps/example/gramps/example.gramps"
 
 rm -rf gramps-home data
-mkdir -p gramps-home/gramps/gramps61/plugins data
+# grampsdb is where WebDbManager._create() os.mkdir()s each new tree's own
+# subdirectory -- os.mkdir() (not os.makedirs()) needs this parent to
+# already exist, and nothing else in this bootstrap creates it.
+mkdir -p gramps-home/gramps/gramps60/plugins gramps-home/gramps/grampsdb data
 
-ln -sfn "$HOME/gramps/addons-source/SharedPostgreSQL" \
-  gramps-home/gramps/gramps61/plugins/SharedPostgreSQL
+# A copy, not a symlink -- Gramps' plugin scanner walks this tree with
+# os.walk()'s default followlinks=False, so a symlinked addon directory is
+# listed but never actually descended into, and its .gpr.py never found.
+# Re-run this script to pick up addon source changes.
+cp -r "$HOME/gramps/addons-source/SharedPostgreSQL" \
+  gramps-home/gramps/gramps60/plugins/SharedPostgreSQL
 
 echo "adding owner user (no tree yet -- multi-tree mode has no auto-create,"
 echo "and tree creation itself needs an authenticated request)..."
@@ -72,7 +79,10 @@ conn.commit()
 "
 
 # A fresh login picks up the now-patched tree claim -- the token above
-# was minted before the UPDATE.
+# was minted before the UPDATE. /api/token/ is rate-limited to 1/second
+# (see token.py's @limiter.limit("1/second")), so back-to-back with the
+# first login above gets a 429 without this.
+sleep 1
 TOKEN=$(curl -sf -X POST http://localhost:5003/api/token/ \
   -H "Content-Type: application/json" \
   -d '{"username": "gramps", "password": "gramps"}' \
