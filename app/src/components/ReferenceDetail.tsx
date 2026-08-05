@@ -3,13 +3,12 @@ import { VIEWS } from "../store/views";
 import type { RefMeta } from "../store/objectDetail";
 import { RelatedPanel } from "./RelatedPanel";
 import { RefMetaRow } from "./related/RefBadges";
-import type { OnNavigate } from "./related/types";
+import { MediaGallery } from "./related/MediaGallery";
+import type { GalleryItem, OnNavigate } from "./related/types";
 
-export interface SubSelection {
-  type: string;
-  handle: string;
-  refMeta?: RefMeta;
-}
+export type SubSelection =
+  | { kind: "object"; type: string; handle: string; refMeta?: RefMeta }
+  | { kind: "gallery"; items: GalleryItem[]; label: string };
 
 interface ReferenceDetailProps {
   subSelection: SubSelection | null;
@@ -19,18 +18,26 @@ interface ReferenceDetailProps {
 }
 
 /** The lower-right pane: whatever was clicked in the upper pane's
- * RelatedPanel. Shows that specific *reference's* own metadata (frel/mrel/
- * role/private/note-and-citation-counts -- the data a plain "jump to this
- * row" link would otherwise discard) above the target object's own
- * RelatedPanel, reused unchanged -- this is not a second renderer, just
- * RelatedPanel mounted again for a different (type, handle) with a
- * different onNavigate wired in. */
+ * RelatedPanel -- either a single object's own reference detail (its
+ * metadata plus its own RelatedPanel, reused unchanged) or, from
+ * MediaSection's "view gallery" link, a grid of every photo attached to a
+ * record too large to expand inline (see MediaSection's doc comment). */
 export function ReferenceDetail({ subSelection, onPromote }: ReferenceDetailProps) {
   if (!subSelection) {
     return (
       <Stack p="md">
         <Text c="dimmed" size="md">Select a related item above to see its details.</Text>
       </Stack>
+    );
+  }
+
+  if (subSelection.kind === "gallery") {
+    return (
+      <MediaGallery
+        items={subSelection.items}
+        label={subSelection.label}
+        onPromote={(type, handle) => onPromote(type, handle)}
+      />
     );
   }
 
@@ -59,7 +66,10 @@ export function ReferenceDetail({ subSelection, onPromote }: ReferenceDetailProp
             main table's own ViewStore -- refetches on (type, handle) change
             only, not on a background live-sync patch to this specific
             record. Acceptable for now; the main pane's own ViewStore-driven
-            revision already covers the common case. */}
+            revision already covers the common case.
+            No onViewGallery here -- see RelatedPanelProps' doc comment on
+            why the bottom pane's own Media sections fall back to a plain
+            count instead. */}
         <RelatedPanel view={view} handle={handle} revision={0} onNavigate={onPromote} />
       </div>
     </Stack>

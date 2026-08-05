@@ -6,6 +6,7 @@ import type { ViewConfig } from "../store/views";
 import { RelatedPanel } from "./RelatedPanel";
 import { ReferenceDetail } from "./ReferenceDetail";
 import type { SubSelection } from "./ReferenceDetail";
+import { CurrentPageContext } from "./related/CurrentPageContext";
 
 interface AsideSplitProps {
   view: ViewConfig;
@@ -39,23 +40,32 @@ export function AsideSplit({ view }: AsideSplitProps) {
   }
 
   return (
-    <Stack h="100%" gap={0}>
-      <Box style={{ flex: 1, minHeight: 0, overflow: "auto", borderBottom: "1px solid var(--mantine-color-default-border)" }}>
-        <RelatedPanel
-          view={view}
-          handle={snapshot.selectedHandle}
-          revision={snapshot.revision}
-          onNavigate={(type, handle, refMeta) => setSubSelection({ type, handle, refMeta })}
-        />
-      </Box>
-      <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        <ReferenceDetail
-          subSelection={subSelection}
-          onPromote={(type, handle) => {
-            window.location.hash = formatHash({ viewKey: type, handle });
-          }}
-        />
-      </Box>
-    </Stack>
+    // Both panes see the same "what's the main table's current selection"
+    // identity -- set once here (the only place that actually knows it)
+    // rather than threading it as a prop through every section component.
+    // See CurrentPageContext's doc comment for why (self-referencing
+    // links, e.g. a family's Children list including the very person
+    // whose page you're already on).
+    <CurrentPageContext.Provider value={{ type: view.key, handle: snapshot.selectedHandle }}>
+      <Stack h="100%" gap={0}>
+        <Box style={{ flex: 1, minHeight: 0, overflow: "auto", borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+          <RelatedPanel
+            view={view}
+            handle={snapshot.selectedHandle}
+            revision={snapshot.revision}
+            onNavigate={(type, handle, refMeta) => setSubSelection({ kind: "object", type, handle, refMeta })}
+            onViewGallery={(items, label) => setSubSelection({ kind: "gallery", items, label })}
+          />
+        </Box>
+        <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          <ReferenceDetail
+            subSelection={subSelection}
+            onPromote={(type, handle) => {
+              window.location.hash = formatHash({ viewKey: type, handle });
+            }}
+          />
+        </Box>
+      </Stack>
+    </CurrentPageContext.Provider>
   );
 }

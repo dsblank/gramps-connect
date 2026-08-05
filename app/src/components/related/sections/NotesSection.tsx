@@ -6,7 +6,7 @@ export function NotesSection({ detail, onNavigate }: SectionProps) {
   const rows = zipHandles(detail.note_list, detail.extended?.notes);
   if (rows.length === 0) return null;
   return (
-    <SectionShell label="Notes" count={rows.length}>
+    <SectionShell label="Notes" count={rows.length} defaultOpen>
       {rows.map(({ handle, target }) => (
         <RefRow key={handle} type="note" handle={handle} obj={target} onNavigate={onNavigate} />
       ))}

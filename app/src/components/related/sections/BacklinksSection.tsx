@@ -21,7 +21,7 @@ export function BacklinksSection({ detail, onNavigate }: SectionProps) {
   if (types.length === 0) return null;
   const total = types.reduce((sum, t) => sum + backlinks[t].length, 0);
   return (
-    <SectionShell label="Referenced by" count={total}>
+    <SectionShell label="Referenced by" count={total} defaultOpen>
       {types.map((type) => (
         <div key={type}>
           <div style={{ fontWeight: 500, fontSize: "var(--mantine-font-size-sm)", opacity: 0.7 }}>

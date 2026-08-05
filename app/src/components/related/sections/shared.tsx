@@ -8,6 +8,7 @@ import { Anchor, Collapse, Group, Image, Stack, Text, Tooltip, UnstyledButton } 
 import { VIEWS } from "../../../store/views";
 import { summaryLine } from "../summary";
 import { RefMetaRow } from "../RefBadges";
+import { isCurrentPage, useCurrentPage } from "../CurrentPageContext";
 import type { RefMeta } from "../../../store/objectDetail";
 import type { OnNavigate } from "../types";
 
@@ -79,20 +80,31 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label }: {
    * both family members). */
   label?: string;
 }) {
+  const currentPage = useCurrentPage();
+  const text = label ?? summaryLine(type, obj);
+
   return (
     <Stack gap={2}>
       <Group gap={4} wrap="nowrap">
         <TypeIcon type={type} />
-        <Anchor
-          component="button"
-          type="button"
-          size="md"
-          underline="hover"
-          style={LINK_STYLE}
-          onClick={() => onNavigate(type, handle, refMeta)}
-        >
-          {label ?? summaryLine(type, obj)}
-        </Anchor>
+        {isCurrentPage(currentPage, type, handle) ? (
+          // Already the record showing in the main table -- a link back to
+          // it would be a pointless round trip, so it's just bold text
+          // (still identifiable as "this is a reference to something",
+          // just not one worth clicking) rather than a dead-end Anchor.
+          <Text size="md" fw={700}>{text}</Text>
+        ) : (
+          <Anchor
+            component="button"
+            type="button"
+            size="md"
+            underline="hover"
+            style={LINK_STYLE}
+            onClick={() => onNavigate(type, handle, refMeta)}
+          >
+            {text}
+          </Anchor>
+        )}
       </Group>
       <RefMetaRow refMeta={refMeta} />
     </Stack>

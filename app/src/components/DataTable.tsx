@@ -103,7 +103,19 @@ export function DataTable({ view }: DataTableProps) {
   }
 
   return (
-    <div className={classes.tableWrapper}>
+    // A single scrolling element owning both axes (rather than the old
+    // split of .tableWrapper for horizontal + a nested .scroll for
+    // vertical) -- that split put the vertical scrollbar at the right edge
+    // of the *full column width*, which sits well past the visible
+    // viewport (and this aside's divider) whenever the columns are wider
+    // than the pane, making it unreachable without scrolling right first.
+    // One container fixes that: its own right edge is the visible
+    // viewport's right edge regardless of horizontal scroll position. The
+    // header row stays pinned during vertical scroll via position:sticky
+    // (classes.header) rather than living outside the scroll container --
+    // it's still a normal in-flow child horizontally, so it tracks the
+    // body's column positions during horizontal scroll for free.
+    <div className={classes.tableWrapper} ref={scrollRef}>
       <div className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: totalWidth }}>
         {view.columns.map((col, index) => {
           // gramps-web-api's order_by only ever accepts a flat, same-table
@@ -130,42 +142,40 @@ export function DataTable({ view }: DataTableProps) {
           );
         })}
       </div>
-      <div className={classes.scroll} ref={scrollRef} style={{ width: totalWidth }}>
-        <div style={{ height: virtualizer.getTotalSize(), width: totalWidth, position: "relative" }}>
-          {virtualItems.map((item) => {
-            const rawRow = rows.get(item.index);
-            const rowState = store.getRowState(item.index);
-            return (
-              <div
-                key={item.key}
-                className={classes.row}
-                data-selected={item.index === snapshot.selectedIndex || undefined}
-                onClick={() => rawRow && store.select(item.index)}
-                style={{
-                  ...gridStyle,
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: totalWidth,
-                  height: item.size,
-                  transform: `translateY(${item.start}px)`,
-                }}
-              >
-                {rawRow ? (
-                  view.columns.map((col, i) => (
-                    <div key={col.key} className={classes.cell}>
-                      {col.toDisplay ? col.toDisplay(rawRow[i]) : rawRow[i] == null ? "" : String(rawRow[i])}
-                    </div>
-                  ))
-                ) : (
-                  <div className={classes.loadingRow}>
-                    {rowState === "unloaded" ? "loading…" : "loading… (background fill hasn't reached this row yet)"}
+      <div style={{ height: virtualizer.getTotalSize(), width: totalWidth, position: "relative" }}>
+        {virtualItems.map((item) => {
+          const rawRow = rows.get(item.index);
+          const rowState = store.getRowState(item.index);
+          return (
+            <div
+              key={item.key}
+              className={classes.row}
+              data-selected={item.index === snapshot.selectedIndex || undefined}
+              onClick={() => rawRow && store.select(item.index)}
+              style={{
+                ...gridStyle,
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: totalWidth,
+                height: item.size,
+                transform: `translateY(${item.start}px)`,
+              }}
+            >
+              {rawRow ? (
+                view.columns.map((col, i) => (
+                  <div key={col.key} className={classes.cell}>
+                    {col.toDisplay ? col.toDisplay(rawRow[i]) : rawRow[i] == null ? "" : String(rawRow[i])}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                ))
+              ) : (
+                <div className={classes.loadingRow}>
+                  {rowState === "unloaded" ? "loading…" : "loading… (background fill hasn't reached this row yet)"}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

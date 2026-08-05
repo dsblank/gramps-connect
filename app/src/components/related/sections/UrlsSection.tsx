@@ -16,7 +16,7 @@ export function UrlsSection({ detail }: SectionProps) {
   const urls = (detail.urls as Url[] | undefined) ?? [];
   if (urls.length === 0) return null;
   return (
-    <SectionShell label="Web links" count={urls.length}>
+    <SectionShell label="Web links" count={urls.length} defaultOpen>
       {urls.map((url, i) => (
         <Group key={i} gap={6}>
           <Anchor href={url.path} target="_blank" rel="noopener noreferrer" size="md">

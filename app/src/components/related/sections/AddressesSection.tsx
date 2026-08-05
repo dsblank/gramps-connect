@@ -24,7 +24,7 @@ export function AddressesSection({ detail }: SectionProps) {
   const addresses = (detail.address_list as Address[] | undefined) ?? [];
   if (addresses.length === 0) return null;
   return (
-    <SectionShell label="Addresses" count={addresses.length}>
+    <SectionShell label="Addresses" count={addresses.length} defaultOpen>
       {addresses.map((addr, i) => (
         <Stack key={i} gap={0}>
           <Text size="md">{formatAddress(addr)}{addr.private ? " 🔒" : ""}</Text>

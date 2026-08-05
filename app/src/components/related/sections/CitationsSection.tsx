@@ -8,7 +8,7 @@ export function CitationsSection({ detail, onNavigate }: SectionProps) {
   const rows = zipHandles(detail.citation_list, detail.extended?.citations);
   if (rows.length === 0) return null;
   return (
-    <SectionShell label="Citations" count={rows.length}>
+    <SectionShell label="Citations" count={rows.length} defaultOpen>
       {rows.map(({ handle, target }) => (
         <RefRow key={handle} type="citation" handle={handle} obj={target} onNavigate={onNavigate} />
       ))}
