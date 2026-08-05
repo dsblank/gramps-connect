@@ -11,14 +11,15 @@ export function toSelectEntry(column: ColumnConfig): string | { json_path: (stri
 
 export function createTableSql(view: ViewConfig): string {
   const cols = view.columns.map((c) => `  ${c.key} ${c.sqlType}`).join(",\n");
-  const orderCol = view.orderBy[0]?.column;
-  const index = orderCol ? `CREATE INDEX ${view.key}_${orderCol} ON ${view.key}(${orderCol});` : "";
+  // No index on the order column -- viewStore.ts's getRows()/getHandleAt()
+  // read back by `rowid` (insertion order, which already matches the
+  // server's own sort) rather than re-sorting locally by this column, so
+  // there's nothing here for an index on it to speed up.
   return `
     CREATE TABLE ${view.key} (
       handle TEXT PRIMARY KEY,
     ${cols}
     );
-    ${index}
   `;
 }
 

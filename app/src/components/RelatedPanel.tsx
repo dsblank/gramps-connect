@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Group, Loader, ScrollArea, Stack, Text, Title, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, zipRefs } from "../store/objectDetail";
 import type { ObjectDetail } from "../store/objectDetail";
 import type { ViewConfig } from "../store/views";
@@ -27,6 +28,12 @@ interface RelatedPanelProps {
    * isn't provided, since there's no third pane to hand a gallery off to
    * from there. */
   onViewGallery?: OnViewGallery;
+  /** True only for the top pane's mounting (see AsideSplit) -- the bottom
+   * pane shows a *preview*, not a navigation, so it must never touch
+   * document.title (browser history should only ever reflect what's
+   * actually in the URL hash, which the bottom pane deliberately doesn't
+   * change). */
+  updateDocumentTitle?: boolean;
 }
 
 type LoadState =
@@ -167,8 +174,14 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
  * pane (mounted for the sub-selected target instead of the main table's
  * selection) -- the only difference between the two mountings is which
  * onNavigate callback AsideSplit wires in. */
-export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery }: RelatedPanelProps) {
+export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery, updateDocumentTitle }: RelatedPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+
+  useDocumentTitle(
+    updateDocumentTitle && state.status === "ready"
+      ? `${summaryLine(view.key, state.detail) || view.label} — Gramps Connect`
+      : undefined
+  );
 
   useEffect(() => {
     let cancelled = false;

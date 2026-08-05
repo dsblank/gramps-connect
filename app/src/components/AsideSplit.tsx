@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Box, Stack, Text } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { formatHash } from "../hash";
 import type { ViewConfig } from "../store/views";
 import { RelatedPanel } from "./RelatedPanel";
@@ -31,6 +32,21 @@ export function AsideSplit({ view }: AsideSplitProps) {
     setSubSelection(null);
   }, [view.key, snapshot.selectedHandle]);
 
+  // A generic, view-level title while nothing's selected (or as a brief
+  // first paint before the selected record's own fetch resolves) --
+  // RelatedPanel below overrides this with the specific record's title
+  // once loaded (see its own updateDocumentTitle prop); undefined here is
+  // a deliberate no-op rather than resetting to this generic title on
+  // every render once RelatedPanel has already set something more
+  // specific (see useDocumentTitle's own doc comment). Checked the same
+  // way as the early return just below (not a derived boolean) so TS's
+  // narrowing of selectedHandle to non-null past that return still holds.
+  useDocumentTitle(
+    snapshot.selectedIndex === null || snapshot.selectedHandle === null
+      ? `${view.label} — Gramps Connect`
+      : undefined
+  );
+
   if (snapshot.selectedIndex === null || snapshot.selectedHandle === null) {
     return (
       <Stack p="md">
@@ -55,6 +71,7 @@ export function AsideSplit({ view }: AsideSplitProps) {
             revision={snapshot.revision}
             onNavigate={(type, handle, refMeta) => setSubSelection({ kind: "object", type, handle, refMeta })}
             onViewGallery={(items, label) => setSubSelection({ kind: "gallery", items, label })}
+            updateDocumentTitle
           />
         </Box>
         <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>

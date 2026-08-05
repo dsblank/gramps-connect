@@ -227,10 +227,8 @@ export class ViewStore {
 
   private getHandleAt(index: number): string | null {
     if (!this.db) return null;
-    const orderCol = this.orderBy[0]?.column ?? "handle";
-    const direction = this.orderBy[0]?.direction === "desc" ? "DESC" : "ASC";
     const res = this.db.exec(
-      `SELECT handle FROM ${this.view.key} ORDER BY ${orderCol} ${direction}, handle ASC LIMIT 1 OFFSET ?;`,
+      `SELECT handle FROM ${this.view.key} ORDER BY rowid LIMIT 1 OFFSET ?;`,
       [index]
     );
     return (res[0]?.values[0]?.[0] as string | undefined) ?? null;
@@ -240,25 +238,37 @@ export class ViewStore {
    * renderVisible()'s single LIMIT/OFFSET query per scroll frame -- one
    * query for the whole visible range rather than one per row. Returns raw
    * column values in view.columns order; callers apply each column's
-   * toDisplay themselves. */
+   * toDisplay themselves.
+   *
+   * Reads back by `rowid` (SQLite's own implicit, insertion-order column)
+   * rather than re-sorting by the order column, on purpose -- a fresh
+   * `ORDER BY <textColumn>` here would re-derive an ordering using
+   * SQLite's own (binary) collation, which doesn't necessarily agree with
+   * the server's (Postgres, locale-aware) collation for the same column.
+   * Two systems independently sorting the same text can disagree on ties
+   * *and* on relative order once non-ASCII values are mixed in with ASCII
+   * ones (found live: a `where` filter landing on the correct server-
+   * computed row *index*, per findGlobalIndex(), but the row actually
+   * rendered at that local offset was a different, similarly-named record
+   * -- e.g. selecting "Gainesville, TX" highlighted "Gainesville, GA"
+   * instead, because the two collations had drifted apart by that point
+   * in the alphabet once titles with Greek characters were interleaved).
+   * `rowid` sidesteps the whole problem: insertPage() below already writes
+   * rows in exactly the order the server's own keyset-paginated query
+   * returned them (that's what pagination *is*), asc or desc alike, so
+   * reading them back by rowid reproduces the server's order exactly, with
+   * no local re-sort -- and no collation to keep in sync -- at all.
+   *
+   * One tradeoff: applyLiveChange()'s `INSERT OR REPLACE` (see
+   * upsertSql()) deletes-and-reinserts a row on an UPDATE, which gives it
+   * a *new*, end-of-table rowid -- a live-patched row can transiently
+   * render out of its correct sort position until the next full reload.
+   * Narrow and self-correcting, unlike the collation drift this replaces. */
   getRows(startIndex: number, count: number): unknown[][] {
     if (!this.db) return [];
-    const orderCol = this.orderBy[0]?.column ?? "handle";
-    // The actual bug behind "sort direction doesn't seem to do anything":
-    // this ORDER BY never carried a direction keyword at all, so SQLite's
-    // implicit default (ASC) applied no matter what this.orderBy said --
-    // clicking a header changed the arrow and what got requested from the
-    // server, but not what got displayed. `handle`'s own direction stays
-    // ASC regardless of the primary column's, matching the server's own
-    // tie-break (effective_order_by in gramps-object-query-language always
-    // appends `OrderBy("handle", "asc")`, independent of the requested
-    // column's direction) -- local reads need to agree with that ordering
-    // for the windowed LIMIT/OFFSET reads to land on the same rows the
-    // server's keyset pagination did.
-    const direction = this.orderBy[0]?.direction === "desc" ? "DESC" : "ASC";
     const res = this.db.exec(
       `SELECT ${this.view.columns.map((c) => c.key).join(", ")} FROM ${this.view.key} ` +
-      `ORDER BY ${orderCol} ${direction}, handle ASC LIMIT ? OFFSET ?;`,
+      `ORDER BY rowid LIMIT ? OFFSET ?;`,
       [count, startIndex]
     );
     return res[0]?.values ?? [];
