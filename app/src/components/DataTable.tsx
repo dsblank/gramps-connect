@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
@@ -24,17 +24,36 @@ export function DataTable({ view }: DataTableProps) {
   const snapshot = useViewStore(view.key);
   const store = getViewStore(view.key);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
   // Column widths are pure display state, reset on view switch (this
   // component is remounted per view, see App.tsx's key={`table-${...}`})
   // -- dragging a handle only ever touches this array, never row height,
   // so it can't affect the virtualizer's vertical math at all.
   const [colWidths, setColWidths] = useState<number[]>(() => view.columns.map(() => DEFAULT_COLUMN_WIDTH));
 
+  // The sticky header is a normal-flow sibling *inside* the same scroll
+  // container as the virtualized rows (see classes.header's doc comment on
+  // why -- it needs to track horizontal scroll). The virtualizer only knows
+  // about scrollRef's raw scrollTop/clientHeight, which include that header
+  // space; without telling it about it (scrollMargin), align: "auto" scrolls
+  // (e.g. the arrow-key handler below, or navigateToHandle's jump-to-row)
+  // undershoot by the header's height, leaving the target row's bottom
+  // edge that far below the visible viewport instead of fully in view.
+  // ROW_HEIGHT is the pre-measurement fallback (the header uses the same
+  // fixed row height as any other row -- see DataTable.module.css's .row),
+  // replaced with the real measured height once the ref is attached.
+  const [headerHeight, setHeaderHeight] = useState(ROW_HEIGHT);
+  useLayoutEffect(() => {
+    const height = headerRef.current?.getBoundingClientRect().height;
+    if (height) setHeaderHeight(height);
+  }, []);
+
   const virtualizer = useVirtualizer({
     count: snapshot.totalCount,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: BUFFER_ROWS,
+    scrollMargin: headerHeight,
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -57,6 +76,27 @@ export function DataTable({ view }: DataTableProps) {
       virtualizer.scrollToIndex(snapshot.selectedIndex, { align: "auto" });
     }
   }, [snapshot.selectedIndex]);
+
+  // Up/down arrows move the selection instead of scrolling the table --
+  // but only once a row is already selected; with nothing selected there's
+  // no "next row" to move to, so the keys fall through to the browser's
+  // normal scroll behavior. Skipped while typing in a form field (e.g.
+  // FilterBar's where_expr box) so arrow keys there keep their usual
+  // text-editing/history meaning instead of jumping the table selection.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (snapshot.selectedIndex === null) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const next = snapshot.selectedIndex + (e.key === "ArrowDown" ? 1 : -1);
+      if (next < 0 || next >= snapshot.totalCount) return;
+      e.preventDefault();
+      store.select(next);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [store, snapshot.selectedIndex, snapshot.totalCount]);
 
   // One windowed SQL query per render pass (mirrors the original's
   // renderVisible(), a single LIMIT/OFFSET query per scroll frame) rather
@@ -128,7 +168,7 @@ export function DataTable({ view }: DataTableProps) {
     // it's still a normal in-flow child horizontally, so it tracks the
     // body's column positions during horizontal scroll for free.
     <div className={classes.tableWrapper} ref={scrollRef}>
-      <div className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: rowWidth }}>
+      <div ref={headerRef} className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: rowWidth }}>
         {view.columns.map((col, index) => {
           // gramps-web-api's order_by only ever accepts a flat, same-table
           // column (see ViewConfig.orderBy's doc comment) -- a column
@@ -171,7 +211,13 @@ export function DataTable({ view }: DataTableProps) {
                 left: 0,
                 width: rowWidth,
                 height: item.size,
-                transform: `translateY(${item.start}px)`,
+                // item.start is in scrollMargin-inclusive (raw scrollTop)
+                // coordinates -- see the scrollMargin comment above -- but
+                // this sizer div itself already sits header-height below
+                // the scroll container's top via normal flow, so it must be
+                // subtracted back out here or the header's height would be
+                // counted twice.
+                transform: `translateY(${item.start - headerHeight}px)`,
               }}
             >
               {rawRow ? (
