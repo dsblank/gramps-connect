@@ -77,26 +77,34 @@ jobs:
           pip install -e gramps --no-deps
           pip install -e gramps-web-api --no-deps
 
-      # Everything gramps-web-api's core (non-optional) code path actually
-      # imports, minus PyGObject (stubbed, see above) and minus every
-      # feature excluded in the .spec (AI chat, semantic search, face
-      # detection, S3, OCR, PDF/video conversion) -- confirmed by reading
-      # each call site earlier this session, not guessed. All of these are
-      # normal published PyPI packages (unlike gramps/gramps-web-api
-      # themselves, which are unreleased/local branches).
+      # Every non-gramps/non-PyGObject entry in gramps-web-api's own
+      # pyproject.toml [project.dependencies] -- copied from there
+      # directly rather than reconstructed from memory, after an earlier
+      # attempt at this list omitted bleach's [css] extra (tinycss2) and
+      # was only caught by actually running a downloaded CI artifact, not
+      # by the build succeeding. gramps[all] is skipped (gramps itself is
+      # supplied via the editable checkout below) and PyGObject is skipped
+      # intentionally (stubbed, see above). pdf2image/ffmpeg-python/boto3/
+      # pytesseract are skipped too -- real pyproject deps, but only for
+      # the optional features excluded in the .spec (PDF/video conversion,
+      # S3 storage, OCR) -- confirmed via each call site earlier, not
+      # guessed. Everything below is a normal published PyPI package
+      # (unlike gramps/gramps-web-api themselves, which are unreleased/
+      # local branches).
       - name: Install remaining Python dependencies
         shell: bash
         run: |
           pip install \
             pyinstaller pyinstaller-hooks-contrib \
-            celery redis waitress \
-            flask-smorest flask-sqlalchemy flask-jwt-extended flask-limiter \
-            flask-caching flask-cors flask-compress \
-            webargs marshmallow orjson bleach jsonschema \
-            sqlalchemy alembic \
-            gramps-object-query-language gramps-ql object-ql gramps-gedcom7 \
-            sifts psycopg2-binary yclade \
-            authlib unidecode Pillow requests
+            orjson Click Flask "Flask-Caching>=2.0.0" Flask-Compress Flask-Cors \
+            "Flask-JWT-Extended!=4.4.0,!=4.4.1" "Flask-Limiter>=2.9.0" Flask-SQLAlchemy \
+            "marshmallow>=3.13.0" waitress webargs "SQLAlchemy>=2.0.0" \
+            "Pillow>=9.1.0,<12.0.0" "bleach[css]>=5.0.0" jsonschema \
+            alembic "celery[redis]" Unidecode \
+            "gramps-object-query-language>=0.3.1" "gramps-ql>=0.4.0" "object-ql>=0.1.3" \
+            "sifts>=1.1.0" requests "yclade>=0.5.0" "Authlib>=1.6.4" gramps-gedcom7 \
+            flask-smorest "typing-extensions>=4.13.0" \
+            psycopg2-binary
 
       - name: Build with PyInstaller
         working-directory: gramps-connect/standalone
