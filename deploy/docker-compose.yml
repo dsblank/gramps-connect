@@ -45,8 +45,8 @@ services:
     environment:
       <<: *app-env
     volumes: *app-volumes
-    ports:
-      - "5000:5000"
+    # No published port here -- caddy is the only entrypoint (see below),
+    # so nothing can reach app directly over plain HTTP bypassing TLS.
     depends_on:
       - postgres
       - redis
@@ -90,6 +90,19 @@ services:
     image: valkey/valkey:alpine
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+    restart: unless-stopped
+
 volumes:
   app-db:
   app-media:
@@ -98,3 +111,7 @@ volumes:
   app-secret:
   app-cache:
   postgres-data:
+  # caddy-data holds the generated local CA / certs -- persisting it means
+  # restarts don't regenerate the CA and re-trigger a browser trust prompt.
+  caddy-data:
+  caddy-config:

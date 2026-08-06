@@ -1,18 +1,18 @@
 # Server deployment
 
 Containerized `app/` (frontend) + `gramps-web-api` (backend), backed by
-Postgres via the `SharedPostgreSQL` addon, for running gramps-connect on a
-real server. This is step 1 of production readiness: real (non-hardcoded)
-config and secrets, running in Docker. **Not covered here**, and tracked as
-separate follow-up work: TLS/reverse-proxy in front of this, and CI
-build/test gating.
+Postgres via the `SharedPostgreSQL` addon, fronted by Caddy for TLS, for
+running gramps-connect on a real server. Real (non-hardcoded) config and
+secrets throughout. **Not covered here**, and tracked as separate
+follow-up work: CI build/test gating.
 
 Frontend and backend share one container/origin (`gramps_webapi` serves the
 built SPA via `STATIC_PATH` and handles `/api/*` in the same process), so
 there's no CORS configuration and no second frontend image.
 
-Services: `app` (gunicorn, serves the frontend + `/api/*`), `worker`
-(Celery, runs import/media/search-reindex jobs), `postgres` (tree data via
+Services: `caddy` (TLS termination, the only published entrypoint), `app`
+(gunicorn, serves the frontend + `/api/*`), `worker` (Celery, runs
+import/media/search-reindex jobs), `postgres` (tree data via
 SharedPostgreSQL), `redis` (Celery broker).
 
 ## Docker commands
@@ -28,7 +28,7 @@ session's environment needed.
 cp deploy/.env.example deploy/.env
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 
-# Status of all four services
+# Status of all five services
 docker compose -f deploy/docker-compose.yml ps
 
 # Logs (add -f to follow, --tail=100 to limit)
@@ -68,12 +68,12 @@ assigned to one**. There's no CLI command for tree creation in multi-tree
 mode, so create the first tree via the API (one-time):
 
 ```sh
-TOKEN=$(curl -s -X POST http://localhost:5000/api/token/ \
+TOKEN=$(curl -sk -X POST https://localhost/api/token/ \
   -H 'Content-Type: application/json' \
   -d '{"username":"<admin>","password":"<admin password>"}' \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 
-TREE_ID=$(curl -s -X POST http://localhost:5000/api/trees/ \
+TREE_ID=$(curl -sk -X POST https://localhost/api/trees/ \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"name":"My Family Tree"}' \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
@@ -87,13 +87,13 @@ tree-scoped user:
 
 ```sh
 # Option A: assign the existing site admin to the tree.
-curl -s -X PUT "http://localhost:5000/api/users/<admin>/" \
+curl -sk -X PUT "https://localhost/api/users/<admin>/" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"tree\":\"$TREE_ID\"}"
 
 # Option B: create a separate regular user tied to the tree instead.
 # email and full_name are required by the schema even if unused.
-curl -s -X POST "http://localhost:5000/api/users/<username>/" \
+curl -sk -X POST "https://localhost/api/users/<username>/" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d "{\"email\":\"<email>\",\"full_name\":\"<full name>\",\"password\":\"<password>\",\"role\":4,\"tree\":\"$TREE_ID\"}"
 ```
@@ -109,14 +109,14 @@ curl -s -X POST "http://localhost:5000/api/users/<username>/" \
 | MEMBER      | 1     | Read access                                          |
 | GUEST       | 0     | Minimal read access                                  |
 
-Then log in at `http://localhost:5000/` as whichever user you just created
+Then log in at `https://localhost/` as whichever user you just created
 — existing tokens issued before a tree assignment won't carry it, so log
 out/in again if you reused an already-open session.
 
 ## Importing data (e.g. `example.gramps`, with media)
 
 ```sh
-TOKEN=$(curl -s -X POST http://localhost:5000/api/token/ \
+TOKEN=$(curl -sk -X POST https://localhost/api/token/ \
   -H 'Content-Type: application/json' \
   -d '{"username":"<owner>","password":"<password>"}' \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
@@ -127,21 +127,21 @@ TOKEN=$(curl -s -X POST http://localhost:5000/api/token/ \
 #    multipart upload silently corrupts the file with boundary/header
 #    bytes, and Gramps' importer then fails with a generic, unhelpful
 #    "Import failed" and no further detail).
-curl -s -X POST http://localhost:5000/api/importers/gramps/file \
+curl -sk -X POST https://localhost/api/importers/gramps/file \
   -H "Authorization: Bearer $TOKEN" --data-binary @example.gramps
 
 # Response is a task handle (import runs on the `worker` service via
 # Celery) -- poll it until "state":"SUCCESS" (or "FAILURE"):
-curl -s http://localhost:5000/api/tasks/<task_id> -H "Authorization: Bearer $TOKEN"
+curl -sk https://localhost/api/tasks/<task_id> -H "Authorization: Bearer $TOKEN"
 
 # 2. Media: zip up the referenced media files (any subset/superset is fine
 #    -- files are matched by checksum, unreferenced ones are ignored) and
 #    upload the archive, again as a raw body:
-curl -s -X POST http://localhost:5000/api/media/archive/upload/zip \
+curl -sk -X POST https://localhost/api/media/archive/upload/zip \
   -H "Authorization: Bearer $TOKEN" --data-binary @media.zip
 
 # 3. Verify: object counts for the logged-in user's tree.
-curl -s http://localhost:5000/api/metadata/ -H "Authorization: Bearer $TOKEN" \
+curl -sk https://localhost/api/metadata/ -H "Authorization: Bearer $TOKEN" \
   | python3 -m json.tool
 ```
 
@@ -156,12 +156,32 @@ task. Uploading media for a tree fails with `Directory
 docker compose -f deploy/docker-compose.yml exec app mkdir -p /app/media/<tree_id>
 ```
 
+## TLS
+
+`caddy` is the only service with published ports (80/443) and terminates
+TLS in front of `app`. With no domain configured, it generates and
+persists its own local CA and issues a self-signed certificate from it
+automatically (`deploy/Caddyfile`'s `tls internal`) — browsers will show a
+trust warning the first time; accept it to proceed (or add the generated
+CA to your system/browser trust store if you want the warning gone without
+a real domain). Port 80 redirects to 443.
+
+**Once a real domain points at this server**, edit `deploy/Caddyfile`:
+replace the `:443 { tls internal ... }` block with `example.com {
+reverse_proxy app:5000 }` and delete the `:80` block — Caddy handles ACME
+issuance, renewal, and the port-80 redirect automatically for a real
+domain, no `tls` directive needed. Also update `PUBLIC_URL` in
+`deploy/.env` to the real `https://` domain, then `docker compose -f
+deploy/docker-compose.yml up -d` to pick up both changes.
+
 ## Notes
 
 - Data persists in named Docker volumes (`app-db`, `app-media`,
-  `app-indexdir`, `app-users`, `app-secret`, `app-cache`, `postgres-data`).
-  `docker compose down` (without `-v`) keeps them; `docker compose down -v`
-  deletes everything.
+  `app-indexdir`, `app-users`, `app-secret`, `app-cache`, `postgres-data`,
+  `caddy-data`, `caddy-config`). `docker compose down` (without `-v`) keeps
+  them; `docker compose down -v` deletes everything (including the
+  generated CA — that's a new browser trust warning next boot, not just
+  data loss).
 - `redis` (Celery broker/result backend) is required for background tasks
   (search indexing, large import/export jobs) — not optional. So is the
   `worker` service: import, media-archive-upload, and search reindexing all

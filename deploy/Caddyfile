@@ -1,0 +1,31 @@
+{
+	auto_https disable_redirects
+}
+
+# No public domain configured yet -- Caddy generates and persists its own
+# local CA, issuing a self-signed cert from it automatically (browsers will
+# show a trust warning, same trade-off as any self-signed cert). Once a
+# real domain points at this server, replace this whole file with:
+#
+#   example.com {
+#       reverse_proxy app:5000
+#   }
+#
+# and delete the :80 block below -- Caddy's automatic HTTPS handles ACME
+# issuance, renewal, and the port-80 redirect on its own for a real domain.
+:443 {
+	# `:443` (no hostname) means Caddy has no name to pre-generate a cert
+	# for -- `on_demand` issues one for whatever SNI is actually requested
+	# (localhost, 127.0.0.1, a LAN IP, ...) at connection time. Safe here
+	# without an `ask` endpoint since issuance is local/free (no ACME rate
+	# limits or external validation involved for an internal-CA cert).
+	tls internal {
+		on_demand
+	}
+
+	reverse_proxy app:5000
+}
+
+:80 {
+	redir https://{host}{uri} permanent
+}
