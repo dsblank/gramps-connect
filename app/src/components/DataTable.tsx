@@ -78,8 +78,20 @@ export function DataTable({ view }: DataTableProps) {
   }, [store, virtualItems, snapshot.loadedCount, snapshot.revision]);
 
   const totalWidth = colWidths.reduce((sum, w) => sum + w, 0);
-  const gridColumns = colWidths.map((w) => `${w}px`).join(" ");
+  // The last column is a minmax track, not a fixed px one, so it absorbs
+  // whatever space is left over between the columns and the scrollbar
+  // instead of leaving it blank -- everyone else stays a fixed px track
+  // (unaffected, still independently resizable). `rowWidth` then has to
+  // stop being a bare pixel number: "at least 100% of the wrapper, or the
+  // fixed column total, whichever is bigger" is what lets the grid actually
+  // have that extra space to give the last track in the first place (a grid
+  // narrower than its own column sum has nothing to distribute), while
+  // still overflowing (triggering horizontal scroll) once resized columns
+  // genuinely don't fit -- CSS max() picks whichever operand is larger, no
+  // ResizeObserver/measurement needed to know the wrapper's own width.
+  const gridColumns = colWidths.map((w, i) => (i === colWidths.length - 1 ? `minmax(${w}px, 1fr)` : `${w}px`)).join(" ");
   const gridStyle = { "--grid-columns": gridColumns } as CSSProperties;
+  const rowWidth = `max(100%, ${totalWidth}px)`;
 
   function startResize(e: ReactPointerEvent<HTMLDivElement>, index: number) {
     e.preventDefault();
@@ -116,7 +128,7 @@ export function DataTable({ view }: DataTableProps) {
     // it's still a normal in-flow child horizontally, so it tracks the
     // body's column positions during horizontal scroll for free.
     <div className={classes.tableWrapper} ref={scrollRef}>
-      <div className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: totalWidth }}>
+      <div className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: rowWidth }}>
         {view.columns.map((col, index) => {
           // gramps-web-api's order_by only ever accepts a flat, same-table
           // column (see ViewConfig.orderBy's doc comment) -- a column
@@ -142,7 +154,7 @@ export function DataTable({ view }: DataTableProps) {
           );
         })}
       </div>
-      <div style={{ height: virtualizer.getTotalSize(), width: totalWidth, position: "relative" }}>
+      <div style={{ height: virtualizer.getTotalSize(), width: rowWidth, position: "relative" }}>
         {virtualItems.map((item) => {
           const rawRow = rows.get(item.index);
           const rowState = store.getRowState(item.index);
@@ -157,7 +169,7 @@ export function DataTable({ view }: DataTableProps) {
                 position: "absolute",
                 top: 0,
                 left: 0,
-                width: totalWidth,
+                width: rowWidth,
                 height: item.size,
                 transform: `translateY(${item.start}px)`,
               }}
