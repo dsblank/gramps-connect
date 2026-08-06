@@ -59,6 +59,12 @@ jobs:
 
       - name: Build app/ frontend
         working-directory: gramps-connect
+        env:
+          # Frontend and API share an origin in this build (see
+          # launcher.py's STATIC_PATH), so requests should be relative --
+          # app/src/config.ts already falls back to "" when this is unset,
+          # but setting it explicitly here documents the intent.
+          VITE_API_BASE: ""
         run: |
           npm install
           npm run build -w app
