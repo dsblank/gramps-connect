@@ -33,7 +33,7 @@ export function SectionShell({ label, count, defaultOpen = false, children }: {
       <UnstyledButton onClick={() => setOpen((v) => !v)} style={{ display: "block", cursor: "pointer" }}>
         <Text size="md" fw={600}>
           {open ? "▾" : "▸"} {label}
-          {count !== undefined ? ` (${count})` : ""}
+          {!open && count !== undefined ? ` (${count})` : ""}
         </Text>
       </UnstyledButton>
       <Collapse in={open}>
