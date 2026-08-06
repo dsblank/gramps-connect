@@ -1,0 +1,110 @@
+name: Build standalone demo
+
+# Manual trigger only -- this is an experimental PyInstaller build (see
+# standalone/), not part of the normal dev workflow, and Windows/macOS
+# runners are the whole point of running it here: PyInstaller can't
+# cross-compile, so producing those binaries requires actually running on
+# those OSes, which no local dev machine in this project has.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out gramps-connect
+        uses: actions/checkout@v4
+        with:
+          path: gramps-connect
+
+      # gramps' core install (install_requires=["orjson"]) never pulls in
+      # PyGObject -- that's GUI-only extras -- so a plain editable install
+      # is enough; standalone/runtime_hooks/rthook_gi_stub.py replaces the
+      # one place gramps-web-api's reachable code path unconditionally
+      # touches `gi` (gen/const.py's XDG-path lookups) with a small stub,
+      # so real PyGObject/GTK -- notoriously painful to bundle with
+      # PyInstaller on every platform, and the reason Gramps' own macOS
+      # build uses a separate jhbuild toolchain instead -- is never needed
+      # at all here.
+      - name: Check out gramps (maintenance/gramps60)
+        uses: actions/checkout@v4
+        with:
+          repository: gramps-project/gramps
+          ref: maintenance/gramps60
+          path: gramps
+
+      # dsblank/gramps-web-api@feat/object-query-endpoints -- matches this
+      # session's locally-tested source exactly (confirmed via `git log`
+      # against the fork remote before writing this workflow).
+      - name: Check out gramps-web-api (feat/object-query-endpoints)
+        uses: actions/checkout@v4
+        with:
+          repository: dsblank/gramps-web-api
+          ref: feat/object-query-endpoints
+          path: gramps-web-api
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build app/ frontend
+        working-directory: gramps-connect
+        run: |
+          npm install
+          npm run build -w app
+
+      - name: Copy frontend + example data into standalone/
+        shell: bash
+        run: |
+          rm -rf gramps-connect/standalone/frontend
+          cp -r gramps-connect/app/dist gramps-connect/standalone/frontend
+          cp gramps/example/gramps/example.gramps gramps-connect/standalone/example.gramps
+
+      - name: Install gramps + gramps-web-api (editable, from source)
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e gramps --no-deps
+          pip install -e gramps-web-api --no-deps
+
+      # Everything gramps-web-api's core (non-optional) code path actually
+      # imports, minus PyGObject (stubbed, see above) and minus every
+      # feature excluded in the .spec (AI chat, semantic search, face
+      # detection, S3, OCR, PDF/video conversion) -- confirmed by reading
+      # each call site earlier this session, not guessed. All of these are
+      # normal published PyPI packages (unlike gramps/gramps-web-api
+      # themselves, which are unreleased/local branches).
+      - name: Install remaining Python dependencies
+        shell: bash
+        run: |
+          pip install \
+            pyinstaller pyinstaller-hooks-contrib \
+            celery redis waitress \
+            flask-smorest flask-sqlalchemy flask-jwt-extended flask-limiter \
+            flask-caching flask-cors flask-compress \
+            webargs marshmallow orjson bleach jsonschema \
+            sqlalchemy alembic \
+            gramps-object-query-language gramps-ql object-ql gramps-gedcom7 \
+            sifts psycopg2-binary yclade \
+            authlib unidecode Pillow requests
+
+      - name: Build with PyInstaller
+        working-directory: gramps-connect/standalone
+        run: pyinstaller gramps-connect-demo.spec --noconfirm
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gramps-connect-demo-${{ matrix.os }}
+          path: gramps-connect/standalone/dist/gramps-connect-demo
+          if-no-files-found: error

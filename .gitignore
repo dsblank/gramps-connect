@@ -32,3 +32,15 @@ app/public/
 
 # app: local dev overrides of .env.example -- machine-specific, not source
 app/.env.local
+
+# standalone: PyInstaller build output + files copied in by the build
+# workflow (app/dist, gramps' example.gramps) -- not source
+standalone/build/
+standalone/frontend/
+standalone/example.gramps
+
+# standalone: gramps-web-api's filesystem caches, written to whatever the
+# server process's cwd was when run locally from standalone/ -- not source
+standalone/persistent_cache/
+standalone/request_cache/
+standalone/thumbnail_cache/
