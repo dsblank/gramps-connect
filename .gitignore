@@ -38,6 +38,7 @@ app/.env.local
 standalone/build/
 standalone/frontend/
 standalone/example.gramps
+standalone/example-media/
 
 # standalone: gramps-web-api's filesystem caches, written to whatever the
 # server process's cwd was when run locally from standalone/ -- not source

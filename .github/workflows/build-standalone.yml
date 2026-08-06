@@ -75,6 +75,8 @@ jobs:
           rm -rf gramps-connect/standalone/frontend
           cp -r gramps-connect/app/dist gramps-connect/standalone/frontend
           cp gramps/example/gramps/example.gramps gramps-connect/standalone/example.gramps
+          rm -rf gramps-connect/standalone/example-media
+          cp -r gramps/example/gramps gramps-connect/standalone/example-media
 
       - name: Install gramps + gramps-web-api (editable, from source)
         shell: bash

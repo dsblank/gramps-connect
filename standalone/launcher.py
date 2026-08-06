@@ -59,6 +59,11 @@ def ensure_gramps_dirs() -> None:
 
 def build_config() -> dict:
     os.makedirs(data_path(), exist_ok=True)
+    # gramps_webapi.api.file.FileHandler raises ValueError if this doesn't
+    # already exist on disk -- unconditional (not just first-run) so a
+    # tester who manually deletes just this subdirectory doesn't get a
+    # 500 on every media/thumbnail request instead of a self-healing dir.
+    os.makedirs(data_path("media"), exist_ok=True)
     return {
         "TREE": TREE_NAME,
         "SECRET_KEY": "gramps-connect-demo-not-a-real-secret",
@@ -71,6 +76,21 @@ def build_config() -> dict:
     }
 
 
+def copy_example_media() -> None:
+    """example.gramps' <file src="..."/> references are plain filenames,
+    resolved by gramps-web-api relative to MEDIA_BASE_DIR -- the actual
+    image files live alongside example.gramps in the gramps source tree
+    (bundled as the "example-media" resource) and need to land there."""
+    import shutil
+
+    media_dir = data_path("media")
+    src_dir = resource_path("example-media")
+    for name in os.listdir(src_dir):
+        if name.endswith((".gramps", ".md")):
+            continue  # example.gramps itself + image_credits.md, not media
+        shutil.copy2(os.path.join(src_dir, name), os.path.join(media_dir, name))
+
+
 def first_run_setup(app) -> None:
     from gramps_webapi.auth import add_user, user_db
     from gramps_webapi.auth.const import ROLE_OWNER
@@ -78,6 +98,8 @@ def first_run_setup(app) -> None:
     from gramps_webapi.api.resources.util import run_import
 
     example_gramps = resource_path("example.gramps")
+
+    copy_example_media()
 
     with app.app_context():
         user_db.create_all()

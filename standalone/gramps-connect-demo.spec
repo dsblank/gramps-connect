@@ -24,6 +24,16 @@ HERE = os.path.abspath(os.path.dirname(os.path.abspath(SPEC)))
 datas = [
     (os.path.join(HERE, "frontend"), "frontend"),
     (os.path.join(HERE, "example.gramps"), "."),
+    # example.gramps' <file src="..."/> media references are plain
+    # filenames, resolved by gramps-web-api relative to MEDIA_BASE_DIR --
+    # the actual image files live alongside example.gramps itself in the
+    # gramps source tree, not inside it, so they need bundling separately.
+    # launcher.py's copy_example_media() copies them into place on first
+    # run. Whole directory (a few harmless extras: example.gramps itself,
+    # image_credits.md -- copy_example_media() skips those) rather than an
+    # explicit file list, so a future gramps update to this fixture's
+    # photo set doesn't need a matching change here.
+    (os.path.join(HERE, "example-media"), "example-media"),
     # Whole plugins tree as real files -- see module docstring.
     (os.path.join(GRAMPS_PKG_DIR, "plugins"), "gramps/plugins"),
     # "installed" resource layout expected by
