@@ -1,5 +1,5 @@
 import { Group, Stack, Text } from "@mantine/core";
-import { DETAIL_FIELDS } from "./detailFields";
+import { DETAIL_FIELDS } from "./detailFieldDefinitions";
 import type { ObjectDetail } from "../../store/objectDetail";
 
 /** Renders whichever of DETAIL_FIELDS' flat facts this type has and this

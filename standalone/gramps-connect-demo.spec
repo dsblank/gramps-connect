@@ -197,21 +197,26 @@ pathex = [
     os.path.dirname(os.path.dirname(gramps_object_query_language.__file__)),
 ]
 
-# PyInstaller's binary-dependency walker paired a mismatched pair here on
-# Linux: the conda env's newer libssl.so.3 (needs symbol version
+# PyInstaller's binary-dependency walker paired a mismatched pair on this
+# dev machine: a conda env's newer libssl.so.3 (needs symbol version
 # OPENSSL_3.3.0) alongside the system's older /lib/x86_64-linux-gnu/
 # libcrypto.so.3 (3.0.13, doesn't have it) -- runtime ImportError on
-# ssl.py. Force both from the same (conda) matched pair explicitly so
-# COLLECT can't mix sources. Linux-specific: Windows/macOS Python builds
-# link OpenSSL differently (or statically), and sys.base_prefix/lib/*.so
-# isn't the right shape on those platforms anyway.
+# ssl.py. Forcing both from the same (conda) matched pair explicitly fixed
+# it there, but that's specific to *this machine's* conda+system OpenSSL
+# split: GitHub's hosted ubuntu-latest runner (actions/setup-python) has
+# no libssl.so.3 at this path at all (confirmed by a CI run failing with
+# "Unable to find ... when adding binary and data files" otherwise), so
+# guard with an existence check rather than assuming the conda layout.
 binaries = []
 if sys.platform.startswith("linux"):
     _conda_lib = os.path.join(sys.base_prefix, "lib")
-    binaries = [
-        (os.path.join(_conda_lib, "libssl.so.3"), "."),
-        (os.path.join(_conda_lib, "libcrypto.so.3"), "."),
-    ]
+    _libssl = os.path.join(_conda_lib, "libssl.so.3")
+    _libcrypto = os.path.join(_conda_lib, "libcrypto.so.3")
+    if os.path.exists(_libssl) and os.path.exists(_libcrypto):
+        binaries = [
+            (_libssl, "."),
+            (_libcrypto, "."),
+        ]
 
 a = Analysis(
     ["launcher.py"],
