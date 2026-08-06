@@ -1,5 +1,6 @@
 import { Badge, Group } from "@mantine/core";
 import { SectionShell, zipHandles } from "./shared";
+import { gtkColorToCss } from "../color";
 import type { SectionProps } from "../types";
 
 /** PrimaryObject.tag_list -- a plain handle list. Tags are simple enough
@@ -17,7 +18,7 @@ export function TagsSection({ detail, onNavigate }: SectionProps) {
             key={handle}
             size="md"
             variant="filled"
-            color={target?.color || "gray"}
+            color={gtkColorToCss(target?.color) || "gray"}
             style={{ cursor: "pointer" }}
             onClick={() => onNavigate("tag", handle)}
           >

@@ -22,6 +22,7 @@ import { AttributesSection } from "./AttributesSection";
 import { AddressesSection } from "./AddressesSection";
 import { UrlsSection } from "./UrlsSection";
 import { TagsSection } from "./TagsSection";
+import { LdsOrdinancesSection } from "./LdsOrdinancesSection";
 import { BacklinksSection } from "./BacklinksSection";
 
 export const SECTION_COMPONENTS: Record<RelatedSection, ComponentType<SectionProps>> = {
@@ -42,5 +43,6 @@ export const SECTION_COMPONENTS: Record<RelatedSection, ComponentType<SectionPro
   addresses: AddressesSection,
   urls: UrlsSection,
   tags: TagsSection,
+  ldsOrdinances: LdsOrdinancesSection,
   backlinks: BacklinksSection,
 };

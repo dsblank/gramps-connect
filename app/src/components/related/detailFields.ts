@@ -58,4 +58,10 @@ export const DETAIL_FIELDS: Record<string, DetailField[]> = {
     { label: "Path", value: (d) => (d.path as string | undefined) ?? "" },
     { label: "MIME type", value: (d) => (d.mime as string | undefined) ?? "" },
   ],
+  // Tag's color already gets its own swatch next to the title (see
+  // RelatedPanel's TagSwatch) -- priority is the one field with nowhere
+  // else to live.
+  tag: [
+    { label: "Priority", value: (d) => (typeof d.priority === "number" ? String(d.priority) : "") },
+  ],
 };

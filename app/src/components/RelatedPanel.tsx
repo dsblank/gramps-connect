@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Alert, Group, Loader, ScrollArea, Stack, Text, Title, UnstyledButton } from "@mantine/core";
+import { Alert, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, zipRefs } from "../store/objectDetail";
@@ -10,6 +10,7 @@ import { DetailFields } from "./related/DetailFields";
 import { MediaThumbnail } from "./related/MediaThumbnail";
 import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
+import { gtkColorToCss } from "./related/color";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
 
@@ -42,6 +43,40 @@ type LoadState =
   | { status: "ready"; detail: ObjectDetail };
 
 const SEX_SYMBOL: Record<string, string> = { M: "♂", F: "♀", X: "⚧", U: "" };
+
+/** This *record's own* private flag -- distinct from RefBadges' private
+ * indicator, which is about a *reference's* private flag (a ChildRef,
+ * EventRef, ...). Every primary object type has one; shown next to the ID
+ * line in every PanelHeader branch since it applies uniformly. */
+function PrivateIndicator({ detail }: { detail: ObjectDetail }) {
+  if (!detail.private) return null;
+  return (
+    <Tooltip label="Marked private" withArrow>
+      <Text component="span" size="sm">🔒</Text>
+    </Tooltip>
+  );
+}
+
+/** Tag.color as an actual swatch (not just the hex text DetailFields would
+ * show) -- the same color every TagsSection badge elsewhere already
+ * renders with, just bigger, next to the tag's own name when it's the
+ * type being viewed rather than referenced from another record. */
+function TagSwatch({ color }: { color: string | undefined }) {
+  const css = gtkColorToCss(color);
+  if (!css) return null;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: 14,
+        height: 14,
+        borderRadius: "50%",
+        background: css,
+        border: "1px solid var(--mantine-color-default-border)",
+      }}
+    />
+  );
+}
 
 /** The first *image* (not video/PDF -- those make poor static avatars)
  * among this object's own attached media, if any -- MediaSection already
@@ -116,7 +151,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
           <ClickableTitle onClick={navigateToSelf}>{summaryLine(view.key, detail) || view.label}</ClickableTitle>
         </div>
         {typeof detail.gramps_id === "string" && (
-          <Text size="sm" c="dimmed">ID: {detail.gramps_id}</Text>
+          <Text size="sm" c="dimmed">ID: {detail.gramps_id} <PrivateIndicator detail={detail} /></Text>
         )}
       </div>
     );
@@ -127,7 +162,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     return (
       <div>
         <Text size="sm" c="dimmed" fw={600}>
-          {view.label}{typeof detail.gramps_id === "string" ? ` — ${detail.gramps_id}` : ""}
+          {view.label}{typeof detail.gramps_id === "string" ? ` — ${detail.gramps_id}` : ""} <PrivateIndicator detail={detail} />
         </Text>
         {isSelf ? (
           <Text fw={700} style={{ whiteSpace: "pre-wrap" }}>{text || "(empty note)"}</Text>
@@ -155,12 +190,17 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
         </UnstyledButton>
       )}
       <div>
-        <ClickableTitle onClick={navigateToSelf}>
-          {summaryLine(view.key, detail) || view.label}
-          {sex && SEX_SYMBOL[sex] ? ` ${SEX_SYMBOL[sex]}` : ""}
-        </ClickableTitle>
-        {typeof detail.gramps_id === "string" && (
-          <Text size="sm" c="dimmed">ID: {detail.gramps_id}</Text>
+        <Group gap={6} align="center">
+          {view.key === "tag" && <TagSwatch color={detail.color as string | undefined} />}
+          <ClickableTitle onClick={navigateToSelf}>
+            {summaryLine(view.key, detail) || view.label}
+            {sex && SEX_SYMBOL[sex] ? ` ${SEX_SYMBOL[sex]}` : ""}
+          </ClickableTitle>
+        </Group>
+        {typeof detail.gramps_id === "string" ? (
+          <Text size="sm" c="dimmed">ID: {detail.gramps_id} <PrivateIndicator detail={detail} /></Text>
+        ) : (
+          <PrivateIndicator detail={detail} />
         )}
       </div>
     </Group>

@@ -26,11 +26,12 @@ export type RelatedSection =
   | "addresses"
   | "urls"
   | "tags"
+  | "ldsOrdinances"
   | "backlinks";
 
 export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
-  person: ["parents", "families", "associations", "events", "citations", "notes", "media", "attributes", "addresses", "urls", "tags", "backlinks"],
-  family: ["parents", "children", "events", "citations", "notes", "media", "attributes", "tags", "backlinks"],
+  person: ["parents", "families", "associations", "events", "citations", "notes", "media", "attributes", "addresses", "urls", "tags", "ldsOrdinances", "backlinks"],
+  family: ["parents", "children", "events", "citations", "notes", "media", "attributes", "tags", "ldsOrdinances", "backlinks"],
   event: ["place", "participants", "citations", "notes", "media", "attributes", "tags", "backlinks"],
   place: ["parentPlaces", "citations", "notes", "media", "urls", "tags", "backlinks"],
   repository: ["addresses", "urls", "notes", "tags", "backlinks"],
