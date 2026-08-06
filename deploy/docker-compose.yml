@@ -1,0 +1,100 @@
+x-app-image: &app-image
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+
+x-app-env: &app-env
+  # Multi-tree mode, required for the SharedPostgreSQL backend.
+  GRAMPSWEB_TREE: "*"
+  GRAMPSWEB_NEW_DB_BACKEND: sharedpostgresql
+  GRAMPSWEB_POSTGRES_HOST: postgres
+  GRAMPSWEB_POSTGRES_PORT: "5432"
+  GRAMPSWEB_POSTGRES_USER: ${POSTGRES_USER}
+  GRAMPSWEB_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  # Required in multi-tree mode: without this, media files are not
+  # scoped per tree and are exposed across trees (gramps-web-api warns
+  # loudly about this at startup if left False).
+  GRAMPSWEB_MEDIA_PREFIX_TREE: "True"
+  # Leave GRAMPSWEB_SECRET_KEY unset in .env to have the entrypoint
+  # generate and persist one on first boot instead.
+  GRAMPSWEB_SECRET_KEY: ${GRAMPSWEB_SECRET_KEY:-}
+  GRAMPSWEB_ADMIN_USER: ${GRAMPSWEB_ADMIN_USER}
+  GRAMPSWEB_ADMIN_PASSWORD: ${GRAMPSWEB_ADMIN_PASSWORD}
+  GRAMPSWEB_CELERY_CONFIG__broker_url: redis://redis:6379/0
+  GRAMPSWEB_CELERY_CONFIG__result_backend: redis://redis:6379/0
+  # Flask-Limiter defaults to in-memory rate-limit storage, which is
+  # per-process and resets on restart -- point it at redis instead.
+  GRAMPSWEB_RATELIMIT_STORAGE_URI: redis://redis:6379/2
+  GRAMPSWEB_BASE_URL: ${PUBLIC_URL}
+  GRAMPSWEB_DISABLE_TELEMETRY: "True"
+
+x-app-volumes: &app-volumes
+  - app-db:/app/db
+  - app-media:/app/media
+  - app-indexdir:/app/indexdir
+  - app-users:/app/users
+  - app-secret:/app/secret
+  # Import/export/media-archive-upload write a temp file here from the app
+  # container's request handler, then a Celery task on the worker container
+  # reads it back -- must be shared, or the worker gets "No such file".
+  - app-cache:/app/cache
+
+services:
+  app:
+    <<: *app-image
+    environment:
+      <<: *app-env
+    volumes: *app-volumes
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  # Import, media-archive-upload, search-indexing, etc. all dispatch through
+  # Celery (GRAMPSWEB_CELERY_CONFIG__* above) instead of running inline --
+  # without a worker consuming that queue, those requests return a task ID
+  # that never completes.
+  worker:
+    <<: *app-image
+    environment:
+      <<: *app-env
+      # The app service owns migrations/admin-seeding on startup; running
+      # both concurrently against the same sqlite USER_DB_URI volume risks
+      # "database is locked" (see deploy/docker-entrypoint.sh).
+      SKIP_MIGRATE_AND_SEED: "1"
+    volumes: *app-volumes
+    depends_on:
+      - postgres
+      - redis
+    # --pool=solo: avoid celery's default prefork pool. Suspected cause of
+    # "Import failed" with no real error (see investigation notes) --
+    # Gramps' plugin registration lazily touches real GTK/GObject state
+    # (gtk_icon_theme_get_for_screen fires on first plugin load), which
+    # doesn't appear to survive celery forking a child process cleanly.
+    command: celery -A gramps_webapi.celery worker --loglevel=info --pool=solo
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: valkey/valkey:alpine
+    restart: unless-stopped
+
+volumes:
+  app-db:
+  app-media:
+  app-indexdir:
+  app-users:
+  app-secret:
+  app-cache:
+  postgres-data:

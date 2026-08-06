@@ -45,3 +45,6 @@ standalone/example-media/
 standalone/persistent_cache/
 standalone/request_cache/
 standalone/thumbnail_cache/
+
+# deploy: real secrets/config, machine- and deployment-specific -- not source
+deploy/.env

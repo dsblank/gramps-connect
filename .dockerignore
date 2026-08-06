@@ -1,0 +1,10 @@
+.git
+node_modules
+dev-fixtures
+standalone
+sdk
+app/node_modules
+app/dist
+app/public
+**/__pycache__
+*.pyc
