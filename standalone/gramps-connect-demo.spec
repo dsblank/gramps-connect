@@ -184,15 +184,28 @@ excludes = [
 import gramps_webapi
 import gramps_object_query_language
 
-# gramps itself is editable-installed via a plain sys.path-appending .pth
-# (PyInstaller's modulegraph resolves it fine), but gramps_webapi and
-# gramps_object_query_language use the newer PEP 660 finder-based editable
-# install (a MetaPathFinder mapping package name -> real dir, installed via
-# a .pth that runs `<finder>.install()`) -- modulegraph does its own
-# directory-based lookup across sys.path and can't see through that finder,
-# so every gramps_webapi.* hidden import above silently resolved to
-# "not found" until their real source directories are added to pathex here.
+# gramps_webapi and gramps_object_query_language use the newer PEP 660
+# finder-based editable install (a MetaPathFinder mapping package name ->
+# real dir, installed via a .pth that runs `<finder>.install()`) --
+# modulegraph does its own directory-based lookup across sys.path and
+# can't see through that finder, so every gramps_webapi.* hidden import
+# above silently resolved to "not found" until their real source
+# directories were added to pathex here.
+#
+# gramps itself is *usually* editable-installed via a plain
+# sys.path-appending .pth (which modulegraph resolves fine without any
+# help) -- true on this dev machine, but NOT in CI, where a newer
+# setuptools/pip on the hosted runner used the same finder-based mechanism
+# instead, silently dropping every gramps.gen.*/gramps.cli.* hidden import
+# ("ERROR: Hidden import 'gramps.gen' not found" -- non-fatal to the
+# *build*, which still exits 0, but fatal at runtime: "ModuleNotFoundError:
+# No module named 'gramps.gen'"). Confirmed by comparing this dev machine's
+# successful local run against a downloaded, actually-run CI artifact that
+# crashed on launch despite PyInstaller reporting success. Adding gramps'
+# own directory here too costs nothing when the plain-.pth case holds (an
+# extra, redundant search path) and fixes the finder case when it doesn't.
 pathex = [
+    GRAMPS_ROOT,
     os.path.dirname(os.path.dirname(gramps_webapi.__file__)),
     os.path.dirname(os.path.dirname(gramps_object_query_language.__file__)),
 ]
