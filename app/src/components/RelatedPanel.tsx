@@ -8,6 +8,7 @@ import type { ViewConfig } from "../store/views";
 import { RELATED_CONFIG } from "./related/config";
 import { DetailFields } from "./related/DetailFields";
 import { MediaThumbnail } from "./related/MediaThumbnail";
+import { NoteText } from "./related/NoteText";
 import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
@@ -158,22 +159,30 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
   }
 
   if (view.key === "note") {
-    const text = (detail.text as { string?: string } | undefined)?.string ?? "";
+    const text = (detail.text as { string: string; tags?: { name: string; ranges: [number, number][]; value: string }[] } | undefined) ?? { string: "" };
     return (
       <div>
         <Text size="sm" c="dimmed" fw={600}>
           {view.label}{typeof detail.gramps_id === "string" ? ` — ${detail.gramps_id}` : ""} <PrivateIndicator detail={detail} />
         </Text>
         {isSelf ? (
-          <Text fw={700} style={{ whiteSpace: "pre-wrap" }}>{text || "(empty note)"}</Text>
+          <Text fw={700}>{text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}</Text>
         ) : (
+          // A plain div, not component="button" -- NoteText's embedded
+          // gramps://... links render as real <button>s (via Anchor), and
+          // a <button> can't legally nest inside another <button> (the
+          // browser would silently break the DOM/click handling). Their
+          // own onClick already stops propagation, so a click that lands
+          // on a link fires only that link's onNavigate, not this div's.
           <Text
-            component="button"
-            type="button"
+            component="div"
+            role="button"
+            tabIndex={0}
             onClick={navigateToSelf}
-            style={{ whiteSpace: "pre-wrap", cursor: "pointer", background: "none", border: "none", padding: 0, textAlign: "left", display: "block" }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigateToSelf?.(); }}
+            style={{ cursor: "pointer" }}
           >
-            {text || "(empty note)"}
+            {text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}
           </Text>
         )}
       </div>
