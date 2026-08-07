@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
+import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
 import { getViewStore } from "../store/registry";
 import type { ViewConfig } from "../store/views";
 import classes from "./DataTable.module.css";
@@ -25,11 +26,15 @@ export function DataTable({ view }: DataTableProps) {
   const store = getViewStore(view.key);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
-  // Column widths are pure display state, reset on view switch (this
-  // component is remounted per view, see App.tsx's key={`table-${...}`})
-  // -- dragging a handle only ever touches this array, never row height,
-  // so it can't affect the virtualizer's vertical math at all.
-  const [colWidths, setColWidths] = useState<number[]>(() => view.columns.map(() => DEFAULT_COLUMN_WIDTH));
+  // Column widths are pure display state, so nothing here affects the
+  // virtualizer's vertical math -- but this component is remounted per view
+  // (see App.tsx's key={`table-${...}`}), so the initial value is read back
+  // from localStorage (see columnWidths.ts) rather than always starting at
+  // DEFAULT_COLUMN_WIDTH, and startResize's onUp below writes it back out.
+  const [colWidths, setColWidths] = useState<number[]>(() => {
+    const saved = getColumnWidths(view.key);
+    return view.columns.map((col) => saved?.[col.key] ?? DEFAULT_COLUMN_WIDTH);
+  });
 
   // The sticky header is a normal-flow sibling *inside* the same scroll
   // container as the virtualized rows (see classes.header's doc comment on
@@ -138,17 +143,25 @@ export function DataTable({ view }: DataTableProps) {
     e.stopPropagation();
     const startX = e.clientX;
     const startWidth = colWidths[index];
+    let finalWidth = startWidth;
     const handle = e.currentTarget;
     handle.setPointerCapture(e.pointerId);
 
     function onMove(ev: PointerEvent) {
-      const next = Math.max(MIN_COLUMN_WIDTH, startWidth + (ev.clientX - startX));
-      setColWidths((prev) => (prev[index] === next ? prev : prev.map((w, i) => (i === index ? next : w))));
+      finalWidth = Math.max(MIN_COLUMN_WIDTH, startWidth + (ev.clientX - startX));
+      setColWidths((prev) => (prev[index] === finalWidth ? prev : prev.map((w, i) => (i === index ? finalWidth : w))));
     }
     function onUp(ev: PointerEvent) {
       handle.releasePointerCapture(ev.pointerId);
       handle.removeEventListener("pointermove", onMove);
       handle.removeEventListener("pointerup", onUp);
+      // Persist on drag end, not per onMove frame, mirroring gramps-web's
+      // immediate-but-not-per-frame settings writes.
+      const widths = colWidths.map((w, i) => (i === index ? finalWidth : w));
+      saveColumnWidths(
+        view.key,
+        Object.fromEntries(view.columns.map((col, i) => [col.key, widths[i]])),
+      );
     }
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onUp);
