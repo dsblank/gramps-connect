@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTableSql, insertSql, toRowValues, toSelectEntry, upsertSql } from "../sql";
+import { createTableSql, insertSql, toRowValues, toSelectEntry, toUpdateRowValues, updateSql } from "../sql";
 import { MEDIA_VIEW, PERSON_VIEW, TAG_VIEW } from "../views";
 
 describe("toSelectEntry", () => {
@@ -36,16 +36,22 @@ describe("createTableSql", () => {
   });
 });
 
-describe("insertSql / upsertSql", () => {
-  it("insertSql uses a plain INSERT, upsertSql uses INSERT OR REPLACE, same column order", () => {
+describe("insertSql / updateSql", () => {
+  it("insertSql uses a plain INSERT; updateSql uses UPDATE ... WHERE handle, preserving rowid", () => {
     const insert = insertSql(PERSON_VIEW);
-    const upsert = upsertSql(PERSON_VIEW);
+    const update = updateSql(PERSON_VIEW);
     expect(insert).toMatch(/^INSERT INTO person /);
-    expect(upsert).toMatch(/^INSERT OR REPLACE INTO person /);
+    expect(update).toMatch(/^UPDATE person SET /);
+    expect(update).toMatch(/WHERE handle = \?;$/);
 
-    const insertCols = insert.match(/\(([^)]+)\)/)![1];
-    const upsertCols = upsert.match(/\(([^)]+)\)/)![1];
-    expect(upsertCols).toBe(insertCols);
+    const insertCols = insert.match(/\(([^)]+)\)/)![1].split(", ");
+    // updateSql's SET clause lists every column insertSql does, except
+    // handle -- that's the WHERE key, not something to overwrite.
+    for (const col of insertCols) {
+      if (col === "handle") continue;
+      expect(update).toContain(`${col} = ?`);
+    }
+    expect(update).not.toMatch(/handle = \?,/); // not also in the SET list
   });
 });
 
@@ -64,5 +70,15 @@ describe("toRowValues", () => {
     const givenIndex = 1 + PERSON_VIEW.columns.findIndex((c) => c.key === "given_name");
     expect(values[surnameIndex]).toBe("Ancestor");
     expect(values[givenIndex]).toBeNull();
+  });
+});
+
+describe("toUpdateRowValues", () => {
+  it("moves handle to the end, matching updateSql's SET-columns-then-WHERE placeholder order", () => {
+    const item = { handle: "H003", surname: "Ancestor" };
+    const insertValues = toRowValues(PERSON_VIEW, item);
+    const updateValues = toUpdateRowValues(PERSON_VIEW, item);
+    expect(updateValues).toEqual([...insertValues.slice(1), insertValues[0]]);
+    expect(updateValues[updateValues.length - 1]).toBe("H003");
   });
 });

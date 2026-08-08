@@ -13,7 +13,7 @@ import type { Database, SqlJsStatic } from "sql.js";
 import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage } from "./api";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
-import { createTableSql, insertSql, upsertSql, toRowValues } from "./sql";
+import { createTableSql, insertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
 import type { OrderBy, ViewConfig } from "./views";
 import type { TreeChangeNotification } from "./historyPoll";
 
@@ -212,7 +212,24 @@ export class ViewStore {
     const token = await getToken();
     const item = await fetchByHandle(this.view, token, handle);
     if (!item) return null;
+    return this.globalRankOfItem(item, token);
+  }
 
+  /** The 0-based rank `item` occupies among every row on the server under
+   * the view's current sort (X-Total-Count of a "rows that sort before
+   * this one" count-only query *is* that rank) -- the authoritative
+   * position applyLiveChange() places a live-synced row at locally.
+   * Deliberately never computed by comparing column values in SQLite
+   * itself: this app's local cache and the server (Postgres) use
+   * different collations, which can disagree on ties *and* on relative
+   * order once non-ASCII text is involved (found live: "Gainesville, TX"
+   * sorting differently from "Gainesville, GA" once Greek-lettered titles
+   * were interleaved) -- only the server's own comparison is trustworthy
+   * for real placement, not just an index lookup. Takes an already-fetched
+   * item (rather than a handle) so applyLiveChange() -- which has already
+   * called fetchByHandle() to get the row's fresh post-edit data -- isn't
+   * forced into a second, redundant fetch just to re-derive it. */
+  private async globalRankOfItem(item: Record<string, unknown> & { handle: string }, token: string): Promise<number> {
     const orderCol = this.orderBy[0]?.column ?? "handle";
     const desc = this.orderBy[0]?.direction === "desc";
     const cmp = desc ? ">" : "<";
@@ -227,12 +244,13 @@ export class ViewStore {
     // Same tie-break as getRows()/getHandleAt(): the server's own
     // effective_order_by always appends `OrderBy("handle", "asc")", so
     // "before" has to mean "before in (orderCol, handle) order", not just
-    // "orderCol is less".
+    // "orderCol is less". item's own row (same handle) never counts as
+    // "before itself" under this tie-break, so this correctly excludes it.
     const beforeExpr =
       `(${orderCol} ${cmp} ${literal(orderValue)}) or ` +
       `(${orderCol} == ${literal(orderValue)} and handle ${cmp} ${JSON.stringify(item.handle)})`;
     const { totalCount } = await fetchPage(this.view, token, null, true, beforeExpr, this.orderBy, 1);
-    return totalCount;
+    return totalCount ?? 0;
   }
 
   private getHandleAt(index: number): string | null {
@@ -269,11 +287,15 @@ export class ViewStore {
    * reading them back by rowid reproduces the server's order exactly, with
    * no local re-sort -- and no collation to keep in sync -- at all.
    *
-   * One tradeoff: applyLiveChange()'s `INSERT OR REPLACE` (see
-   * upsertSql()) deletes-and-reinserts a row on an UPDATE, which gives it
-   * a *new*, end-of-table rowid -- a live-patched row can transiently
-   * render out of its correct sort position until the next full reload.
-   * Narrow and self-correcting, unlike the collation drift this replaces. */
+   * A live-synced INSERT or UPDATE doesn't just patch a row's data in
+   * place, then: applyLiveChange() also asks the server for that row's
+   * authoritative rank (globalRankOfItem() -- same server-collation
+   * reasoning as above, since comparing the new value locally would
+   * reintroduce exactly the drift this rowid scheme exists to avoid) and
+   * moves it (repositionRow()) to that exact local slot, so a
+   * sort-affecting edit is reflected correctly immediately, not just
+   * "eventually, on the next full reload". selectedIndex is kept in sync
+   * with whatever moves by reconcileSelection(), for the same reason. */
   getRows(startIndex: number, count: number): unknown[][] {
     if (!this.db) return [];
     const res = this.db.exec(
@@ -457,7 +479,19 @@ export class ViewStore {
    * table/whereExpr guard has passed -- this method only guards on cache
    * readiness. A DELETE removes the row locally; INSERT/UPDATE both refetch
    * the row fresh from the server (the notification itself carries no
-   * data) and upsert it. */
+   * data), place it (INSERT a genuinely new row, or UPDATE an existing one
+   * in place -- see updateSql()'s doc comment on why UPDATE, not upsert),
+   * then reposition it to its authoritative server rank (globalRankOfItem()
+   * / repositionRow()) so local sort order is correct immediately, not
+   * just once the row happens to get reloaded.
+   *
+   * A rank that falls outside the currently-loaded prefix (only possible
+   * while runQuery()'s background fill is still in flight -- it always
+   * finishes loading every row shortly after the view opens) means this
+   * row doesn't belong in the local cache at all right now: it's evicted
+   * (existing row) or simply not inserted (new row) rather than rendered
+   * at a wrong position, and background fill picks it up correctly, in
+   * its right place, once it reaches that far. */
   async applyLiveChange(notification: TreeChangeNotification): Promise<void> {
     if (!this.db) return;
 
@@ -472,11 +506,33 @@ export class ViewStore {
       const token = await getToken();
       const item = await fetchByHandle(this.view, token, notification.handle);
       if (!item) return; // deleted again before the refetch landed
-      const stmt = this.db.prepare(upsertSql(this.view));
-      stmt.run(toRowValues(this.view, item));
-      stmt.free();
-      if (!existed) {
+      const rank = await this.globalRankOfItem(item, token);
+
+      if (existed) {
+        if (rank < this.loadedCount) {
+          const stmt = this.db.prepare(updateSql(this.view));
+          stmt.run(toUpdateRowValues(this.view, item));
+          stmt.free();
+          this.repositionRow(notification.handle, rank);
+        } else {
+          // The edit moved this row's true rank past what's currently
+          // loaded -- evict it. totalCount is unaffected (an edit, not
+          // an add/remove).
+          this.db.run(`DELETE FROM ${this.view.key} WHERE handle = ?;`, [notification.handle]);
+          this.loadedCount -= 1;
+        }
+      } else if (rank <= this.loadedCount) {
+        const stmt = this.db.prepare(insertSql(this.view));
+        stmt.run(toRowValues(this.view, item));
+        stmt.free();
+        this.repositionRow(notification.handle, rank);
         this.loadedCount += 1;
+        this.totalCount += 1;
+      } else {
+        // Belongs further down than what's loaded so far -- same
+        // reasoning as the eviction branch above, minus the eviction (it
+        // was never inserted locally to begin with). totalCount still
+        // grows: the row is real, just not locally cached yet.
         this.totalCount += 1;
       }
     }
@@ -484,6 +540,70 @@ export class ViewStore {
     if (notification.handle === this.selectedHandle) {
       this.selectedRevision += 1;
     }
+    this.reconcileSelection();
     this.emit();
+  }
+
+  /** Moves `handle`'s row to local index `targetIndex`, preserving every
+   * other row's relative order -- the only way to place a row correctly
+   * without re-sorting locally by column value (see getRows()'s doc
+   * comment on why that's unsafe: SQLite's collation can disagree with
+   * the server's). Renumbers rowids via a disjoint negative staging range
+   * first, rather than assigning straight to final values one row at a
+   * time: rowid acts as a de-facto unique key here, so writing a row's
+   * final value while another row still holds it would collide mid-loop. */
+  private repositionRow(handle: string, targetIndex: number): void {
+    if (!this.db) return;
+    const res = this.db.exec(`SELECT handle FROM ${this.view.key} ORDER BY rowid;`);
+    const handles = (res[0]?.values ?? []).map((row) => row[0] as string);
+    const rest = handles.filter((h) => h !== handle);
+    const index = Math.max(0, Math.min(targetIndex, rest.length));
+    rest.splice(index, 0, handle);
+
+    this.db.run("BEGIN TRANSACTION;");
+    const toStaging = this.db.prepare(`UPDATE ${this.view.key} SET rowid = ? WHERE handle = ?;`);
+    rest.forEach((h, i) => toStaging.run([-(i + 1), h]));
+    toStaging.free();
+    const toFinal = this.db.prepare(`UPDATE ${this.view.key} SET rowid = ? WHERE rowid = ?;`);
+    rest.forEach((_, i) => toFinal.run([i, -(i + 1)]));
+    toFinal.free();
+    this.db.run("COMMIT;");
+  }
+
+  /** The local 0-based index `handle` currently occupies, or null if it's
+   * not in the cache at all -- the reverse of getHandleAt(), ranked the
+   * same way ("how many rows sort before this one" by rowid), so it stays
+   * correct not just when `handle`'s own rowid has moved but also when an
+   * unrelated row's INSERT/DELETE/reposition has shifted everything after
+   * it by one. */
+  private getIndexForHandle(handle: string): number | null {
+    if (!this.db) return null;
+    const rowidRes = this.db.exec(`SELECT rowid FROM ${this.view.key} WHERE handle = ?;`, [handle]);
+    const rowid = rowidRes[0]?.values[0]?.[0];
+    if (rowid === undefined) return null;
+    const countRes = this.db.exec(`SELECT COUNT(*) FROM ${this.view.key} WHERE rowid < ?;`, [rowid]);
+    return Number(countRes[0]?.values[0]?.[0] ?? 0);
+  }
+
+  /** Re-derives selectedIndex from selectedHandle against the current
+   * cache -- call after every local mutation that could have moved rows
+   * around (an edit repositioning itself via repositionRow(), an
+   * unrelated row's INSERT/DELETE/reposition shifting everyone after it,
+   * ...). DataTable.tsx highlights/scrolls/arrow-navigates by
+   * selectedIndex alone, so a stale one left over from before a live-sync
+   * patch can silently point at a different row than the one actually
+   * selected. Drops the selection to "none" if the handle no longer
+   * exists in the cache at all -- e.g. the selected row itself was just
+   * live-deleted, or its own edit moved it beyond what's currently loaded
+   * (applyLiveChange()'s eviction branch). */
+  private reconcileSelection(): void {
+    if (this.selectedHandle === null) return;
+    const index = this.getIndexForHandle(this.selectedHandle);
+    if (index === null) {
+      this.selectedIndex = null;
+      this.selectedHandle = null;
+    } else {
+      this.selectedIndex = index;
+    }
   }
 }

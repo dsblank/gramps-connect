@@ -29,19 +29,19 @@ export function insertSql(view: ViewConfig): string {
   return `INSERT INTO ${view.key} (${names.join(", ")}) VALUES (${placeholders});`;
 }
 
-// Used only for a live-sync patch (see viewStore.ts's applyLiveChange) -- a
-// bulk page fetch never needs REPLACE since it's always inserting into a
-// fresh table, but a live-sync notification can legitimately name a row
-// already in the cache (an UPDATE, or a reconnect that missed an earlier
-// notification for it).
-export function upsertSql(view: ViewConfig): string {
-  const names = ["handle", ...view.columns.map((c) => c.key)];
-  const placeholders = names.map(() => "?").join(", ");
-  return `INSERT OR REPLACE INTO ${view.key} (${names.join(", ")}) VALUES (${placeholders});`;
+// Used only for a live-sync patch to a row already in the cache (see
+// viewStore.ts's applyLiveChange) -- a real UPDATE rather than the
+// INSERT-OR-REPLACE this used to be, so the row keeps its existing rowid
+// (and thus its local sort position/index) instead of being deleted and
+// reinserted at the end of the table. See ViewStore.reconcileSelection()'s
+// doc comment for why that matters.
+export function updateSql(view: ViewConfig): string {
+  const setClause = view.columns.map((c) => `${c.key} = ?`).join(", ");
+  return `UPDATE ${view.key} SET ${setClause} WHERE handle = ?;`;
 }
 
 /** Maps a query-result item's raw values into the ordered value list a
- * prepared insert/upsert statement expects, applying each column's toSql
+ * prepared insert statement expects, applying each column's toSql
  * converter where present. */
 export function toRowValues(view: ViewConfig, item: Record<string, unknown> & { handle: string }): (string | number | null)[] {
   return [
@@ -51,4 +51,12 @@ export function toRowValues(view: ViewConfig, item: Record<string, unknown> & { 
       return c.toSql ? c.toSql(raw) : (raw as string | number | null | undefined) ?? null;
     }),
   ];
+}
+
+/** Same values as toRowValues, reordered for updateSql()'s placeholder
+ * order -- SET columns first, handle last (the WHERE clause), instead of
+ * handle first (an INSERT's column order). */
+export function toUpdateRowValues(view: ViewConfig, item: Record<string, unknown> & { handle: string }): (string | number | null)[] {
+  const [handle, ...rest] = toRowValues(view, item);
+  return [...rest, handle];
 }

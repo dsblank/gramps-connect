@@ -67,8 +67,8 @@ export async function fetchPage(
   whereExpr: string | null,
   orderBy: OrderBy[] = view.orderBy,
   // Overridable for callers that only want the X-Total-Count header (see
-  // ViewStore.findGlobalIndex(), a count-only "rows before this one" query)
-  // and don't care about `items` itself -- the server still requires
+  // ViewStore.globalRankOfItem(), a count-only "rows before this one"
+  // query) and don't care about `items` itself -- the server still requires
   // limit >= 1 (QueryBodyArgs.limit's Range(min=1, ...)), so this can't go
   // to 0, but 1 keeps that response payload minimal.
   limit: number = PAGE_SIZE
