@@ -124,4 +124,32 @@ describe("ViewStore.applyLiveChange", () => {
 
     expect(store.getSnapshot().revision).toBe(revisionAfterLoad + 1);
   });
+
+  it("bumps selectedRevision when the change matches the currently selected handle", async () => {
+    const store = await loadedStore([tagRow("H1")]);
+    store.select(0); // H1, the only row -- see getHandleAt()'s rowid ordering
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+    const selectedRevisionAfterSelect = store.getSnapshot().selectedRevision;
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1", { color: "#00ff00" }));
+
+    await store.applyLiveChange(notification("H1", "UPDATE"));
+
+    expect(store.getSnapshot().selectedRevision).toBe(selectedRevisionAfterSelect + 1);
+  });
+
+  it("leaves selectedRevision unchanged when the change is to a different, unselected row -- RelatedPanel must not refetch for it", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.select(0); // H1
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+    const selectedRevisionAfterSelect = store.getSnapshot().selectedRevision;
+    const revisionAfterSelect = store.getSnapshot().revision;
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H2", { color: "#00ff00" }));
+
+    await store.applyLiveChange(notification("H2", "UPDATE"));
+
+    // The table-wide revision still bumps (DataTable needs to re-render H2's row) ...
+    expect(store.getSnapshot().revision).toBe(revisionAfterSelect + 1);
+    // ... but selectedRevision, which only H1's own detail panel watches, must not.
+    expect(store.getSnapshot().selectedRevision).toBe(selectedRevisionAfterSelect);
+  });
 });

@@ -47,6 +47,13 @@ export interface ViewSnapshot {
    * where_expr/sort means the old index no longer names the same row. */
   selectedIndex: number | null;
   selectedHandle: string | null;
+  /** Bumped only when a live-sync notification's handle matches
+   * selectedHandle -- unlike `revision` (bumped for any row in this
+   * view), this lets a detail panel refetch when *its own* record
+   * changes without also refetching every time some other, unrelated row
+   * in the table is live-patched. See RelatedPanel.tsx's `revision`
+   * prop, which is fed this instead of the table-wide `revision`. */
+  selectedRevision: number;
 }
 
 const EMPTY_SNAPSHOT_BASE = {
@@ -58,6 +65,7 @@ const EMPTY_SNAPSHOT_BASE = {
   revision: 0,
   selectedIndex: null,
   selectedHandle: null,
+  selectedRevision: 0,
 };
 
 export class ViewStore {
@@ -85,6 +93,7 @@ export class ViewStore {
   private revision = 0;
   private selectedIndex: number | null = null;
   private selectedHandle: string | null = null;
+  private selectedRevision = 0;
   /** See navigateToHandle()'s doc comment -- true only while it's using
    * runQuery() purely to drop whereExpr, not as a real filter change. */
   private suppressSelectionClear = false;
@@ -117,6 +126,7 @@ export class ViewStore {
       revision: this.revision,
       selectedIndex: this.selectedIndex,
       selectedHandle: this.selectedHandle,
+      selectedRevision: this.selectedRevision,
     };
     for (const listener of this.listeners) listener();
   }
@@ -471,6 +481,9 @@ export class ViewStore {
       }
     }
 
+    if (notification.handle === this.selectedHandle) {
+      this.selectedRevision += 1;
+    }
     this.emit();
   }
 }

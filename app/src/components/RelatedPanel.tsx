@@ -18,11 +18,12 @@ import type { OnNavigate, OnViewGallery } from "./related/types";
 interface RelatedPanelProps {
   view: ViewConfig;
   handle: string;
-  /** Bumped by ViewStore.applyLiveChange on any live-sync update to this
-   * view's table -- included so the effect below re-fetches when a poll
-   * picks up a change to the selected row, not just when the user selects
-   * a different one (same treatment PersonDetail.tsx's `revision` prop
-   * already had). */
+  /** ViewStore's selectedRevision -- bumped only when a live-sync
+   * notification's handle matches this exact `handle`, so the effect
+   * below re-fetches when a poll picks up a change to *this* row, not
+   * every time any other row in the table gets live-patched (that used
+   * to be table-wide `revision`, which fired the loading-flash below for
+   * unrelated rows too). */
   revision: number;
   onNavigate: OnNavigate;
   /** Omitted entirely for the bottom pane's own nested RelatedPanel (see

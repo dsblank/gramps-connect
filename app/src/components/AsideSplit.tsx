@@ -68,7 +68,7 @@ export function AsideSplit({ view }: AsideSplitProps) {
           <RelatedPanel
             view={view}
             handle={snapshot.selectedHandle}
-            revision={snapshot.revision}
+            revision={snapshot.selectedRevision}
             onNavigate={(type, handle, refMeta) => setSubSelection({ kind: "object", type, handle, refMeta })}
             onViewGallery={(items, label) => setSubSelection({ kind: "gallery", items, label })}
             updateDocumentTitle
