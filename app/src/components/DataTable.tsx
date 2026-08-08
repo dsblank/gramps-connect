@@ -59,6 +59,15 @@ export function DataTable({ view }: DataTableProps) {
     estimateSize: () => ROW_HEIGHT,
     overscan: BUFFER_ROWS,
     scrollMargin: headerHeight,
+    // scrollMargin above already bakes headerHeight into item.start (so a
+    // row's own translateY draws it in the right place below the sticky
+    // header) -- but align:"auto"/"start" scrolls (e.g. a live-sync
+    // reposition, or navigateToHandle, moving selection to a row above the
+    // current view) compute their target scrollTop as item.start minus
+    // this, defaulting to 0. Without it, that target lands headerHeight
+    // px too high: exactly the header's own sticky position, so the row
+    // scrolls to directly underneath it -- selected but invisible.
+    scrollPaddingStart: headerHeight,
   });
 
   const virtualItems = virtualizer.getVirtualItems();
