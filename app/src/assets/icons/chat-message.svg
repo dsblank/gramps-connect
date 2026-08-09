@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <path
+    d="M8 10a4 4 0 0 1 4-4h24a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H20l-9 8v-8h-3a4 4 0 0 1-4-4Z"
+    fill="#2777d3"
+  />
+  <circle cx="16" cy="19" r="2.4" fill="#ffffff" />
+  <circle cx="24" cy="19" r="2.4" fill="#ffffff" />
+  <circle cx="32" cy="19" r="2.4" fill="#ffffff" />
+</svg>

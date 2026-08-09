@@ -9,3 +9,7 @@ Per Gramps' own `images/LICENSE`: most of this artwork is from the
 [Tango Project](http://tango.freedesktop.org/) or derived from it, released
 under the [Creative Commons Attribution-ShareAlike 2.5](
 https://creativecommons.org/licenses/by-sa/2.5/) license.
+
+`chat-message.svg` is original artwork for this project (Messages view) --
+Gramps' own icon theme has no chat/message glyph to source from, so it
+doesn't follow the `gramps-*.svg` naming or Tango style of the icons above.

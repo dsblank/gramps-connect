@@ -46,5 +46,6 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   // sections as the ordinary Media view.
   generated: ["citations", "notes", "attributes", "tags", "backlinks"],
   note: ["tags", "backlinks"],
+  team_note: ["tags", "backlinks"],
   tag: ["backlinks"],
 };

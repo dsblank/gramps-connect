@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pollHistory, type TreeChangeNotification } from "../store/historyPoll";
 import { getViewStoresForTable } from "../store/registry";
+import { getCurrentUsername } from "../auth/auth";
 
 export type LiveSyncStatus = "connecting" | "connected" | "disconnected";
 
@@ -12,12 +13,27 @@ export type LiveSyncStatus = "connecting" | "connected" | "disconnected";
  * "media" and "generated" both watch Media), so a notification isn't routed
  * to just one. Every view is live-synced this way, not just one hardcoded
  * table, since /api/transactions/history/ already reports every object type
- * that changed in one response. */
-export function useLiveSync(): LiveSyncStatus {
+ * that changed in one response.
+ *
+ * `onRemoteNoteChange`, if given, fires for Notes-table changes made by
+ * someone other than the current user (v1 scope: Notes only, not every
+ * table -- a blanket any-table toast would be noisy on an active tree).
+ * Held in a ref rather than the effect's own deps so a new callback
+ * identity each render doesn't restart the poll loop. */
+export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotification) => void): LiveSyncStatus {
   const [status, setStatus] = useState<LiveSyncStatus>("connecting");
+  const onRemoteNoteChangeRef = useRef(onRemoteNoteChange);
+  onRemoteNoteChangeRef.current = onRemoteNoteChange;
 
   useEffect(() => {
     function onNotification(notification: TreeChangeNotification) {
+      if (
+        notification.table === "note" &&
+        notification.changedBy &&
+        notification.changedBy !== getCurrentUsername()
+      ) {
+        onRemoteNoteChangeRef.current?.(notification);
+      }
       for (const store of getViewStoresForTable(notification.table)) {
         // A view with a fixed baseFilter (e.g. Output) can't be
         // incrementally patched by applyLiveChange -- a single thin

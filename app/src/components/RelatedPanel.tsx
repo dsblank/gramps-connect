@@ -13,6 +13,7 @@ import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
+import { TeamNoteActions } from "./related/TeamNoteActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
 
@@ -160,7 +161,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     );
   }
 
-  if (view.key === "note") {
+  if (view.key === "note" || view.key === "team_note") {
     const text = (detail.text as { string: string; tags?: { name: string; ranges: [number, number][]; value: string }[] } | undefined) ?? { string: "" };
     return (
       <div>
@@ -227,6 +228,13 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
  * onNavigate callback AsideSplit wires in. */
 export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery, updateDocumentTitle }: RelatedPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  // Bumped by TeamNoteActions after a Mark done/Reopen toggle -- that write
+  // goes through notesApi.ts directly, not through anything that changes
+  // `handle` or waits on `revision` (only bumped by a *live-sync*
+  // notification matching this handle, which could be up to
+  // POLL_INTERVAL_MS away), so without this, the just-toggled tag stays
+  // stale in both this panel's title/button and the Tags section below it.
+  const [refetchNonce, setRefetchNonce] = useState(0);
 
   useDocumentTitle(
     updateDocumentTitle && state.status === "ready"
@@ -249,7 +257,7 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
     return () => {
       cancelled = true;
     };
-  }, [view, handle, revision]);
+  }, [view, handle, revision, refetchNonce]);
 
   if (state.status === "loading") {
     return (
@@ -274,6 +282,9 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
       <Stack gap="md" p="md">
         <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
         {view.key === "generated" && <GeneratedItemActions detail={detail} />}
+        {view.key === "team_note" && (
+          <TeamNoteActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
+        )}
         <DetailFields type={view.key} detail={detail} />
         {sections.map((section) => {
           const Section = SECTION_COMPONENTS[section];

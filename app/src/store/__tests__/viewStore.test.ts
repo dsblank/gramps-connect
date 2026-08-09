@@ -27,7 +27,7 @@ function tagRow(handle: string, overrides: Partial<Record<string, unknown>> = {}
 }
 
 function notification(handle: string, op: TreeChangeNotification["op"]): TreeChangeNotification {
-  return { table: "tag", handle, op };
+  return { table: "tag", handle, op, changedBy: null };
 }
 
 /** Queues the next fetchPage() call's response for globalRankOfItem()'s

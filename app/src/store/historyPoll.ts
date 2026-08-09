@@ -18,6 +18,12 @@ export interface TreeChangeNotification {
   table: string;
   handle: string;
   op: TreeChangeOp;
+  /** The acting user's username, or null if the transaction carried none
+   * (e.g. a system-driven change). Sourced from the transaction's own
+   * `connection.user.name` -- gramps-web-api's history.py already resolves
+   * this server-side (fix_transaction_user), it's just not read here until
+   * now. */
+  changedBy: string | null;
 }
 
 interface HistoryChange {
@@ -29,6 +35,7 @@ interface HistoryChange {
 interface HistoryTransaction {
   timestamp: number;
   changes: HistoryChange[];
+  connection?: { user?: { name: string | null } | null };
 }
 
 const TRANS_TYPE_TO_OP: Record<number, TreeChangeOp> = { 0: "INSERT", 1: "UPDATE", 2: "DELETE" };
@@ -49,17 +56,19 @@ const POLL_INTERVAL_MS = 5000;
  * from pollHistory() so this mapping/collapsing logic is directly
  * testable without mocking fetch/timers. */
 export function transactionsToNotifications(transactions: HistoryTransaction[]): TreeChangeNotification[] {
-  const net = new Map<string, HistoryChange>();
+  const net = new Map<string, { change: HistoryChange; changedBy: string | null }>();
   for (const tx of transactions) {
+    const changedBy = tx.connection?.user?.name ?? null;
     for (const change of tx.changes) {
       if (change.obj_class === REFERENCE_OBJ_CLASS) continue;
-      net.set(`${change.obj_class}:${change.obj_handle}`, change);
+      net.set(`${change.obj_class}:${change.obj_handle}`, { change, changedBy });
     }
   }
-  return Array.from(net.values()).map((change) => ({
+  return Array.from(net.values()).map(({ change, changedBy }) => ({
     table: change.obj_class.toLowerCase(),
     handle: change.obj_handle,
     op: TRANS_TYPE_TO_OP[change.trans_type],
+    changedBy,
   }));
 }
 

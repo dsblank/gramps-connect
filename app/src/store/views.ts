@@ -6,6 +6,7 @@
 // Forked from the original Layer 2/3 spike's views.ts (since removed, see
 // git history) -- this is the production copy now; see PLAN.md.
 import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
+import { splitAuthorMessage } from "./authoredText";
 import iconPerson from "../assets/icons/gramps-person.svg";
 import iconFamily from "../assets/icons/gramps-family.svg";
 import iconEvent from "../assets/icons/gramps-event.svg";
@@ -17,6 +18,7 @@ import iconMedia from "../assets/icons/gramps-media.svg";
 import iconNotes from "../assets/icons/gramps-notes.svg";
 import iconTag from "../assets/icons/gramps-tag.svg";
 import iconReports from "../assets/icons/gramps-reports.svg";
+import iconChat from "../assets/icons/chat-message.svg";
 
 export interface ColumnConfig {
   /** Both the local SQLite column name and the API response key (the
@@ -322,6 +324,56 @@ function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+// Gramps Connect messages: standalone Notes (never attached to another
+// object's note_list) tagged "team-note" at creation -- same trick
+// GENERATED_VIEW uses for report/export, applied to Note instead of Media.
+// Completion state is a second tag pair ("todo-open"/"todo-done", see
+// notesApi.ts) rather than its own column, for the same reason
+// GENERATED_VIEW doesn't have a report-vs-export column: cheaper than
+// resolving tag names into the local SQLite cache just for one derived
+// field -- confirmed empirically (see authoredText.ts) that a *collection*
+// relationship like "tags" can't back a select column at all, only a
+// singular one (a Person's "father"/"birth") can. `table: "note"` (key
+// differs) puts this store in the same live-sync bucket as NOTE_VIEW, so
+// both get notified off one getViewStoresForTable("note") lookup.
+export const TEAM_NOTES_VIEW: ViewConfig = {
+  // Underscore, not hyphen: viewStore.ts splices view.key directly into
+  // raw SQL as the local cache's table name (unquoted -- see e.g.
+  // `SELECT ... FROM ${this.view.key}`), and "team-note" there parses as
+  // `team MINUS note`. Every other view.key happens to have no hyphen, so
+  // this was latent until this view.
+  key: "team_note",
+  label: "Messages",
+  icon: iconChat,
+  table: "note",
+  endpoint: "/api/notes/query/",
+  baseFilter: "exists(tags, name == 'team-note')",
+  searchable: false,
+  // No separator of its own -- GENERATED_VIEW's divider already opens this
+  // "not an ordinary object type" group in the sidebar; Messages just
+  // continues it rather than starting a second one.
+  orderBy: [{ column: "change", direction: "desc" }],
+  opfsFilename: "app-cache-team-note.sqlite",
+  wherePlaceholder: "",
+  columns: [
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    // "By" and "Message" both read the exact same text.string json_path --
+    // sent to the server twice under two aliases (a short string, trivial
+    // cost) rather than once, since a ColumnConfig's toDisplay only ever
+    // transforms its own single stored value, and each needs a different
+    // half of the "author: message" split (see authoredText.ts).
+    {
+      key: "author", label: "By", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
+      toDisplay: (v) => splitAuthorMessage((v as string | null) ?? "").author ?? "",
+    },
+    {
+      key: "text", label: "Message", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
+      toDisplay: (v) => truncate(splitAuthorMessage((v as string | null) ?? "").message, 80),
+    },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+  ],
+};
+
 export const NOTE_VIEW: ViewConfig = {
   key: "note",
   label: "Notes",
@@ -365,4 +417,5 @@ export const TAG_VIEW: ViewConfig = {
 export const VIEWS: ViewConfig[] = [
   PERSON_VIEW, FAMILY_VIEW, EVENT_VIEW, PLACE_VIEW, REPOSITORY_VIEW,
   SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW, GENERATED_VIEW,
+  TEAM_NOTES_VIEW,
 ];

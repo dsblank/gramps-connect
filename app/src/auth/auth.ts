@@ -8,6 +8,7 @@ import { login as apiLogin, refreshAccessToken as apiRefreshAccessToken } from "
 
 const STORAGE_KEY = "gramps-connect.token";
 const REFRESH_STORAGE_KEY = "gramps-connect.refreshToken";
+const USERNAME_STORAGE_KEY = "gramps-connect.username";
 
 // Refresh a little before the server would actually reject the token, so a
 // request that starts just under the wire doesn't lose the race. Matches
@@ -33,6 +34,7 @@ function writeStored(key: string, value: string) {
 
 let cachedToken: string | null = readStored(STORAGE_KEY);
 let cachedRefreshToken: string | null = readStored(REFRESH_STORAGE_KEY);
+let cachedUsername: string | null = readStored(USERNAME_STORAGE_KEY);
 // Concurrent callers (runQuery's foreground fetch + background fill,
 // several views polling at once) share one in-flight refresh instead of
 // each racing the server with their own.
@@ -57,21 +59,36 @@ export async function login(username: string, password: string): Promise<void> {
   const { accessToken, refreshToken } = await apiLogin(username, password);
   cachedToken = accessToken;
   cachedRefreshToken = refreshToken;
+  cachedUsername = username;
   writeStored(STORAGE_KEY, accessToken);
   writeStored(REFRESH_STORAGE_KEY, refreshToken);
+  writeStored(USERNAME_STORAGE_KEY, username);
   emit();
 }
 
 export function logout(): void {
   cachedToken = null;
   cachedRefreshToken = null;
+  cachedUsername = null;
   try {
     sessionStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(REFRESH_STORAGE_KEY);
+    sessionStorage.removeItem(USERNAME_STORAGE_KEY);
   } catch {
     // nothing to clear
   }
   emit();
+}
+
+/** The username entered at login, for comparing against a live-sync
+ * notification's `changedBy` (see historyPoll.ts) to tell "I made this
+ * change" from "someone else did". Not derived from the JWT: the token's
+ * `sub` claim is the user's id (gramps-web-api's token.py:91 does
+ * `identity=str(user_id)`), not their username, and carries no username
+ * claim to fall back on either -- the server only resolves id -> username
+ * when building the history response (history.py's get_user_dict()). */
+export function getCurrentUsername(): string | null {
+  return cachedUsername;
 }
 
 /** Decodes a JWT's `exp` claim (seconds since epoch, per the spec) without

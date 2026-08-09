@@ -7,11 +7,13 @@ import { getAuthSnapshot, subscribe as subscribeAuth, logout } from "./auth/auth
 import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
 import { FilterBar } from "./components/FilterBar";
+import { TeamNoteComposer } from "./components/TeamNoteComposer";
 import { DataTable } from "./components/DataTable";
 import { AsideSplit } from "./components/AsideSplit";
 import { StatusBar } from "./components/StatusBar";
 import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
+import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep, type JobsPollCallbacks } from "./store/jobsPoll";
 import {
   disableBrowserNotifications,
@@ -83,9 +85,26 @@ const jobsPollCallbacks: JobsPollCallbacks = {
   },
 };
 
+/** Toast for a Notes-table change by someone else, per useLiveSync's
+ * onRemoteNoteChange -- same notifications.show + notifyBrowser shape as
+ * jobsPollCallbacks above. changedBy is non-null whenever this fires (see
+ * useLiveSync's own guard). */
+const NOTE_OP_VERB: Record<TreeChangeNotification["op"], string> = {
+  INSERT: "made",
+  UPDATE: "made",
+  DELETE: "deleted",
+};
+
+function onRemoteNoteChange(notification: TreeChangeNotification) {
+  const title = "Gramps Connect message";
+  const message = `User ${notification.changedBy} ${NOTE_OP_VERB[notification.op]} a message`;
+  notifications.show({ color: "blue", title, message });
+  notifyBrowser(title, message);
+}
+
 function AuthenticatedApp() {
   const { activeKey, setActiveKey } = useHistorySync();
-  const liveSyncStatus = useLiveSync();
+  const liveSyncStatus = useLiveSync(onRemoteNoteChange);
   const view = VIEWS.find((v) => v.key === activeKey)!;
 
   // Lazy per-view load, same as the original spike's ensureViewLoaded()
@@ -140,6 +159,7 @@ function AuthenticatedApp() {
             key" warning, and FilterBar instances piling up instead of
             unmounting) caught by an end-to-end smoke test. */}
         <FilterBar key={`filter-${view.key}`} view={view} />
+        {view.key === "team_note" && <TeamNoteComposer key={`compose-${view.key}`} />}
         <DataTable key={`table-${view.key}`} view={view} />
       </AppShell.Main>
 

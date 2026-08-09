@@ -493,14 +493,28 @@ export class ViewStore {
    * has typed a filter). Debounced (short, fixed delay) so a burst of
    * notifications for the same underlying table within one poll tick --
    * several Media rows changing together -- collapses into a single
-   * requery instead of one per row. */
+   * requery instead of one per row.
+   *
+   * Suppresses runQuery()'s usual selection clear and reconciles it against
+   * the freshly reloaded cache instead (same "handle survives, index gets
+   * re-derived" treatment applyLiveChange() gives a selected row) -- a
+   * baseFilter view is exactly the case where an unrelated live change is
+   * expected to arrive *while* a row is open (Team Notes: someone else
+   * adding a note shouldn't silently close the one you're reading). */
   requeryDebounced(): void {
     if (this.requeryTimer) return; // already scheduled
     this.requeryTimer = setTimeout(() => {
       this.requeryTimer = null;
-      this.runQuery(this.whereExpr, false).catch((err) => {
-        console.error(`[${this.view.label}] live-sync requery failed`, err);
-      });
+      this.suppressSelectionClear = true;
+      this.runQuery(this.whereExpr, false)
+        .then(() => this.reconcileSelection())
+        .catch((err) => {
+          console.error(`[${this.view.label}] live-sync requery failed`, err);
+        })
+        .finally(() => {
+          this.suppressSelectionClear = false;
+          this.emit();
+        });
     }, 300);
   }
 
