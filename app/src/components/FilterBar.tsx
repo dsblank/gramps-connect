@@ -40,9 +40,12 @@ export function FilterBar({ view }: FilterBarProps) {
     }
   }
 
-  // A view with a fixed baseFilter (e.g. Output) already defines
-  // its whole dataset -- see ViewConfig.searchable's doc comment -- so
-  // there's no user-editable expression for this box to hold.
+  // Set on a view whose dataset is meant to stay fully fixed, with no
+  // further user-editable expression -- see ViewConfig.searchable's doc
+  // comment. Not automatic just from having a baseFilter: Output and
+  // Messages both have one but stay searchable, since the fixed filter and
+  // the user's search combine (ViewStore.combinedFilter) rather than
+  // compete.
   if (view.searchable === false) return null;
 
   return (

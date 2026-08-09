@@ -59,11 +59,12 @@ export interface ViewConfig {
   table?: string;
   /** A fixed, non-user-editable where_expr always AND-ed into this view's
    * query (see ViewStore's combinedFilter) -- e.g. the Output view's tag
-   * filter. FilterBar hides its search box entirely for a view
-   * with this set (see `searchable`); live-sync reacts to a change by a
-   * full debounced requery rather than incremental patching, since a thin
-   * notification can't tell whether a changed row still matches the fixed
-   * filter (same reasoning as the ordinary whereExpr!==null guard). */
+   * filter. Combined with any user-entered FilterBar search (see
+   * `searchable`), so the search box stays scoped to this view's own
+   * subset no matter what the user types; live-sync reacts to a change by
+   * a full debounced requery rather than incremental patching, since a
+   * thin notification can't tell whether a changed row still matches the
+   * fixed filter (same reasoning as the ordinary whereExpr!==null guard). */
   baseFilter?: string;
   /** False hides FilterBar's search box entirely -- for a view whose
    * dataset is already fully defined by `baseFilter` and isn't meant to be
@@ -303,7 +304,6 @@ export const GENERATED_VIEW: ViewConfig = {
   table: "media",
   endpoint: "/api/media/query/",
   baseFilter: "exists(tags, name == 'report') or exists(tags, name == 'export')",
-  searchable: false,
   // Sidebar.tsx draws a divider above this view -- it's not another
   // user-authored object type like the rest of VIEWS, but a fixed-filter
   // window onto generated reports/exports, so it reads as visually
@@ -311,7 +311,7 @@ export const GENERATED_VIEW: ViewConfig = {
   sidebarSeparatorBefore: true,
   orderBy: [{ column: "change", direction: "desc" }],
   opfsFilename: "app-cache-generated.sqlite",
-  wherePlaceholder: "",
+  wherePlaceholder: 'e.g. like(desc, "%Descendant%")',
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
@@ -348,13 +348,12 @@ export const TEAM_NOTES_VIEW: ViewConfig = {
   table: "note",
   endpoint: "/api/notes/query/",
   baseFilter: "exists(tags, name == 'team-note')",
-  searchable: false,
   // No separator of its own -- GENERATED_VIEW's divider already opens this
   // "not an ordinary object type" group in the sidebar; Messages just
   // continues it rather than starting a second one.
   orderBy: [{ column: "change", direction: "desc" }],
   opfsFilename: "app-cache-team-note.sqlite",
-  wherePlaceholder: "",
+  wherePlaceholder: 'e.g. "urgent" in text.string',
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     // "By" and "Message" both read the exact same text.string json_path --
