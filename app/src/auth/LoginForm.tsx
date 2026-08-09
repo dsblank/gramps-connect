@@ -42,7 +42,7 @@ export function LoginForm() {
             onChange={(e) => setPassword(e.currentTarget.value)}
           />
           {error && <Text size="sm" c="red">{error}</Text>}
-          <Button type="submit" loading={submitting} disabled={!username || !password} fullWidth>
+          <Button type="submit" loading={submitting} fullWidth>
             Sign in
           </Button>
         </Stack>
