@@ -13,6 +13,7 @@ import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
+import { MessageButton } from "./related/MessageButton";
 import { TeamNoteActions } from "./related/TeamNoteActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
@@ -280,7 +281,12 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
   return (
     <ScrollArea h="100%" type="auto">
       <Stack gap="md" p="md">
-        <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
+          </div>
+          <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
+        </Group>
         {view.key === "generated" && <GeneratedItemActions detail={detail} />}
         {view.key === "team_note" && (
           <TeamNoteActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />

@@ -9,6 +9,8 @@ import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { getOrCreateTagHandle } from "./jobsApi";
 import { formatAuthoredText } from "./authoredText";
+import { endpointBaseFor } from "./objectDetail";
+import type { ViewConfig } from "./views";
 
 const TEAM_NOTE_TAG = "team-note";
 const TODO_OPEN_TAG = "todo-open";
@@ -36,6 +38,34 @@ export async function createTeamNote(token: string, author: string, message: str
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return addedHandle(await res.json());
+}
+
+/** Appends `noteHandle` to an arbitrary object's `note_list` -- the
+ * structural way a Note "references" another object in Gramps' own data
+ * model (NotesSection.tsx already renders whatever's in note_list for every
+ * type that has one). Same GET-then-PUT-full-object shape as
+ * jobsApi.ts's tagAndDescribeMedia (Media's tag_list) and this file's own
+ * toggleTeamNoteDone (a Note's tag_list), generalized to any object type
+ * via `view.endpoint` instead of a hardcoded `/api/media/`. */
+export async function attachNoteToObject(
+  token: string,
+  view: ViewConfig,
+  objectHandle: string,
+  noteHandle: string
+): Promise<void> {
+  const base = endpointBaseFor(view);
+  const getRes = await fetch(`${API_BASE}${base}${encodeURIComponent(objectHandle)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!getRes.ok) throw new Error(await parseErrorMessage(getRes));
+  const obj = await getRes.json();
+  obj.note_list = [...((obj.note_list as string[]) ?? []), noteHandle];
+  const putRes = await fetch(`${API_BASE}${base}${encodeURIComponent(objectHandle)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(obj),
+  });
+  if (!putRes.ok) throw new Error(await parseErrorMessage(putRes));
 }
 
 /** Swaps the todo-open/todo-done tag on an existing team note. Generic

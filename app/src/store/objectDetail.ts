@@ -47,13 +47,18 @@ export type ObjectDetail = Record<string, unknown> & {
   profile?: Record<string, unknown>;
 };
 
-/** GET /api/<endpoint-base>/<handle>?extend=all&profile=all&backlinks=1
- * (no trailing slash on the base -- see personProfile.ts's fetchPersonDetail
- * doc comment; the .../query/ list endpoint takes one, this single-object
- * route 404s if given one). */
+/** A ViewConfig's endpoint is the .../query/ list route; the single-object
+ * route (used both here and by notesApi.ts's attachNoteToObject) is the
+ * same path with that trailing segment stripped (no trailing slash -- see
+ * personProfile.ts's fetchPersonDetail doc comment; the single-object route
+ * 404s if given one). */
+export function endpointBaseFor(view: ViewConfig): string {
+  return view.endpoint.replace(/query\/$/, "");
+}
+
+/** GET /api/<endpoint-base>/<handle>?extend=all&profile=all&backlinks=1 */
 export async function fetchObjectExtended(token: string, view: ViewConfig, handle: string): Promise<ObjectDetail> {
-  const base = view.endpoint.replace(/query\/$/, "");
-  const url = `${API_BASE}${base}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1`;
+  const url = `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });

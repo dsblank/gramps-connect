@@ -91,18 +91,37 @@ export function getCurrentUsername(): string | null {
   return cachedUsername;
 }
 
-/** Decodes a JWT's `exp` claim (seconds since epoch, per the spec) without
- * pulling in a jwt-decode dependency for one field. Returns null for
- * anything unparseable so callers treat it the same as "no expiry info". */
-function decodeExpMs(token: string): number | null {
+/** Decodes a JWT's claims payload without pulling in a jwt-decode
+ * dependency for the couple of fields this module reads. Returns null for
+ * anything unparseable so callers treat it the same as "no claims info". */
+function decodeClaims(token: string): Record<string, unknown> | null {
   try {
     const payload = token.split(".")[1];
     const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    const claims = JSON.parse(json);
-    return typeof claims.exp === "number" ? claims.exp * 1000 : null;
+    return JSON.parse(json);
   } catch {
     return null;
   }
+}
+
+function decodeExpMs(token: string): number | null {
+  const claims = decodeClaims(token);
+  return typeof claims?.exp === "number" ? claims.exp * 1000 : null;
+}
+
+/** Checks the current access token's `permissions` claim (gramps-web-api's
+ * token.py sets this from the user's role, see PERMISSIONS in auth/const.py)
+ * for every permission name given -- true only if all are present. Reads
+ * `cachedToken` directly rather than going through getToken(): this is used
+ * to decide whether to *show* UI, not to make a request, so it doesn't need
+ * to trigger a refresh -- false (hide the UI) is the right answer for "no
+ * token yet" the same as for "token says no". */
+export function hasPermissions(...perms: string[]): boolean {
+  if (!cachedToken) return false;
+  const claims = decodeClaims(cachedToken);
+  const granted = claims?.permissions;
+  if (!Array.isArray(granted)) return false;
+  return perms.every((perm) => granted.includes(perm));
 }
 
 function isExpiringSoon(token: string): boolean {
