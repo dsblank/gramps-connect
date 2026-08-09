@@ -81,15 +81,27 @@ export function DataTable({ view }: DataTableProps) {
 
   // Following a person link in the detail panel (see ViewStore's
   // navigateToHandle) moves selection to a row that's very likely off-
-  // screen -- scroll it into view. "auto" alignment makes this a no-op for
-  // an already-visible row, so this doesn't fight a plain in-view click's
-  // own select() call (which lands here too, since both go through the
-  // same snapshot field).
+  // screen -- scroll it into view. Rows are fixed-height (no measureElement
+  // pass), so item.start/size can be computed directly instead of waiting
+  // on virtualItems to include the target. Skipping the scroll when the row
+  // is already fully visible is what keeps this from fighting a plain
+  // in-view click's own select() call (which lands here too, since both go
+  // through the same snapshot field); when a scroll IS needed, "center"
+  // (rather than "auto"'s minimal nearest-edge scroll) lands the row well
+  // inside the viewport instead of right at its edge, where a rounding/
+  // measurement hair can clip it.
   useEffect(() => {
-    if (snapshot.selectedIndex !== null) {
-      virtualizer.scrollToIndex(snapshot.selectedIndex, { align: "auto" });
+    const el = scrollRef.current;
+    if (snapshot.selectedIndex === null || !el) return;
+    const itemStart = headerHeight + snapshot.selectedIndex * ROW_HEIGHT;
+    const itemEnd = itemStart + ROW_HEIGHT;
+    const viewStart = el.scrollTop + headerHeight;
+    const viewEnd = el.scrollTop + el.clientHeight;
+    const fullyVisible = itemStart >= viewStart && itemEnd <= viewEnd;
+    if (!fullyVisible) {
+      virtualizer.scrollToIndex(snapshot.selectedIndex, { align: "center" });
     }
-  }, [snapshot.selectedIndex]);
+  }, [snapshot.selectedIndex, headerHeight]);
 
   // Up/down arrows move the selection instead of scrolling the table --
   // but only once a row is already selected; with nothing selected there's
