@@ -41,6 +41,10 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   source: ["repositories", "media", "notes", "attributes", "tags", "backlinks"],
   citation: ["source", "media", "notes", "attributes", "tags", "backlinks"],
   media: ["citations", "notes", "attributes", "tags", "backlinks"],
+  // The Output view (store/views.ts's GENERATED_VIEW) is Media
+  // rows under a fixed tag filter, not a distinct object type -- same
+  // sections as the ordinary Media view.
+  generated: ["citations", "notes", "attributes", "tags", "backlinks"],
   note: ["tags", "backlinks"],
   tag: ["backlinks"],
 };

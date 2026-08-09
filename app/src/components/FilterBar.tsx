@@ -40,6 +40,11 @@ export function FilterBar({ view }: FilterBarProps) {
     }
   }
 
+  // A view with a fixed baseFilter (e.g. Output) already defines
+  // its whole dataset -- see ViewConfig.searchable's doc comment -- so
+  // there's no user-editable expression for this box to hold.
+  if (view.searchable === false) return null;
+
   return (
     <Stack gap={4} mb="sm">
       <Group gap="xs" wrap="nowrap">

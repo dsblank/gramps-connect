@@ -1,4 +1,4 @@
-import { Stack, Tooltip, UnstyledButton, Image } from "@mantine/core";
+import { Divider, Stack, Tooltip, UnstyledButton, Image } from "@mantine/core";
 import { VIEWS } from "../store/views";
 import classes from "./Sidebar.module.css";
 
@@ -13,17 +13,20 @@ export function Sidebar({ activeKey, onSelect }: SidebarProps) {
   return (
     <Stack gap={2} align="center" py="sm">
       {VIEWS.map((view) => (
-        <Tooltip key={view.key} label={view.label} position="right" withArrow openDelay={300}>
-          <UnstyledButton
-            className={classes.item}
-            data-active={view.key === activeKey || undefined}
-            onClick={() => onSelect(view.key)}
-            aria-label={view.label}
-            aria-current={view.key === activeKey}
-          >
-            <Image src={view.icon} alt="" w={32} h={32} />
-          </UnstyledButton>
-        </Tooltip>
+        <div key={view.key}>
+          {view.sidebarSeparatorBefore && <Divider my="xs" />}
+          <Tooltip label={view.label} position="right" withArrow openDelay={300}>
+            <UnstyledButton
+              className={classes.item}
+              data-active={view.key === activeKey || undefined}
+              onClick={() => onSelect(view.key)}
+              aria-label={view.label}
+              aria-current={view.key === activeKey}
+            >
+              <Image src={view.icon} alt="" w={32} h={32} />
+            </UnstyledButton>
+          </Tooltip>
+        </div>
       ))}
     </Stack>
   );

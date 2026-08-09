@@ -75,6 +75,7 @@ export function summaryLine(type: string, obj: any): string {
       return [sourceTitle, obj.page].filter(Boolean).join(", ") || obj.gramps_id || "(citation)";
     }
     case "media":
+    case "generated":
       return obj.desc || obj.path || "(media)";
     case "note":
       return truncate(obj.text?.string ?? "", 80) || "(note)";

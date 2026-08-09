@@ -1,5 +1,6 @@
-import { useEffect, useSyncExternalStore } from "react";
-import { AppShell, Group, Image, SegmentedControl, Title, Button, useMantineColorScheme, useComputedColorScheme } from "@mantine/core";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { AppShell, Group, Image, SegmentedControl, Switch, Title, Button, useMantineColorScheme, useComputedColorScheme } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { VIEWS } from "./store/views";
 import { getViewStore } from "./store/registry";
 import { getAuthSnapshot, subscribe as subscribeAuth, logout } from "./auth/auth";
@@ -11,6 +12,13 @@ import { AsideSplit } from "./components/AsideSplit";
 import { StatusBar } from "./components/StatusBar";
 import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
+import { startCatchupSweep, type JobsPollCallbacks } from "./store/jobsPoll";
+import {
+  disableBrowserNotifications,
+  enableBrowserNotifications,
+  isBrowserNotificationsEnabled,
+  notifyBrowser,
+} from "./store/browserNotifications";
 import logo from "./assets/icons/gramps-logo.svg";
 
 export function App() {
@@ -34,6 +42,47 @@ function ColorSchemeToggle() {
   );
 }
 
+/** Toggle for the opt-in browser Notification side-channel (plan §4's UI
+ * bullet) -- separate from Mantine's own in-app toast (always on, shown
+ * via jobsPollCallbacks below), this is the "also notify me even if this
+ * tab isn't focused" escalation, and browsers require it to be requested
+ * from a real click. */
+function BrowserNotificationsToggle() {
+  const [enabled, setEnabled] = useState(isBrowserNotificationsEnabled);
+  return (
+    <Switch
+      size="xs"
+      label="Desktop notifications"
+      checked={enabled}
+      onChange={async (e) => {
+        if (e.currentTarget.checked) {
+          setEnabled(await enableBrowserNotifications());
+        } else {
+          disableBrowserNotifications();
+          setEnabled(false);
+        }
+      }}
+    />
+  );
+}
+
+/** In-app toasts for the job-status watcher (store/jobsPoll.ts) -- shared
+ * by the catch-up sweep started below, and available for a future report/
+ * export trigger UI (out of scope here, see the plan) to pass to
+ * trackJob() for the dispatch-scoped loop's own completion toast. */
+const jobsPollCallbacks: JobsPollCallbacks = {
+  onPromoted: (result, kind) => {
+    const title = kind === "report" ? "Report ready" : "Export ready";
+    notifications.show({ color: "green", title, message: result.desc });
+    notifyBrowser(title, result.desc);
+  },
+  onFailed: (kind, message) => {
+    const title = kind === "report" ? "Report failed" : "Export failed";
+    notifications.show({ color: "red", title, message });
+    notifyBrowser(title, message);
+  },
+};
+
 function AuthenticatedApp() {
   const { activeKey, setActiveKey } = useHistorySync();
   const liveSyncStatus = useLiveSync();
@@ -47,6 +96,13 @@ function AuthenticatedApp() {
       console.error(`[${activeKey}] failed to load`, err);
     });
   }, [activeKey]);
+
+  // Server-driven catch-up sweep for reports/exports whose dispatching tab
+  // is gone -- see jobsPoll.ts's startCatchupSweep. Mounted once for the
+  // whole authenticated app, same lifetime as useLiveSync() above.
+  useEffect(() => {
+    return startCatchupSweep(jobsPollCallbacks);
+  }, []);
 
   return (
     <AppShell
@@ -63,6 +119,7 @@ function AuthenticatedApp() {
             <Title order={4} fw={600}>Gramps Connect</Title>
           </Group>
           <Group gap="md">
+            <BrowserNotificationsToggle />
             <ColorSchemeToggle />
             <Button variant="subtle" size="xs" onClick={logout}>Sign out</Button>
           </Group>

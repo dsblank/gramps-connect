@@ -16,6 +16,7 @@ import iconCitation from "../assets/icons/gramps-citation.svg";
 import iconMedia from "../assets/icons/gramps-media.svg";
 import iconNotes from "../assets/icons/gramps-notes.svg";
 import iconTag from "../assets/icons/gramps-tag.svg";
+import iconReports from "../assets/icons/gramps-reports.svg";
 
 export interface ColumnConfig {
   /** Both the local SQLite column name and the API response key (the
@@ -47,6 +48,29 @@ export interface ViewConfig {
    * used by the icon-rail Sidebar. */
   icon: string;
   endpoint: string;
+  /** The underlying object type this view's rows live in, for live-sync
+   * routing (registry.ts's getViewStoresForTable) -- defaults to `key`.
+   * Set explicitly when more than one view is backed by the same object
+   * type (e.g. "media" and "generated" both watch Media changes), so a
+   * live-sync notification for that type reaches every view that needs it,
+   * not just whichever one happens to share its key. */
+  table?: string;
+  /** A fixed, non-user-editable where_expr always AND-ed into this view's
+   * query (see ViewStore's combinedFilter) -- e.g. the Output view's tag
+   * filter. FilterBar hides its search box entirely for a view
+   * with this set (see `searchable`); live-sync reacts to a change by a
+   * full debounced requery rather than incremental patching, since a thin
+   * notification can't tell whether a changed row still matches the fixed
+   * filter (same reasoning as the ordinary whereExpr!==null guard). */
+  baseFilter?: string;
+  /** False hides FilterBar's search box entirely -- for a view whose
+   * dataset is already fully defined by `baseFilter` and isn't meant to be
+   * further refined by the user. Defaults to true. */
+  searchable?: boolean;
+  /** Sidebar.tsx draws a divider directly above this view's icon -- for a
+   * view that isn't another peer object type in the same list (e.g.
+   * Output, a fixed-filter window onto other views' own Media rows). */
+  sidebarSeparatorBefore?: boolean;
   /** Default sort, used until the user clicks a sortable column header
    * (see ViewStore.setSort). Only ever a plain-column ColumnConfig.select
    * value -- gramps-web-api's order_by validates its column against the
@@ -246,6 +270,7 @@ export const MEDIA_VIEW: ViewConfig = {
   key: "media",
   label: "Media",
   icon: iconMedia,
+  table: "media",
   endpoint: "/api/media/query/",
   // "desc" is a reserved SQL word (Media.desc) -- the server quotes it
   // automatically wherever it's interpolated (select/where/order_by), see
@@ -257,6 +282,37 @@ export const MEDIA_VIEW: ViewConfig = {
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
     { key: "path", label: "Path", select: "path", sqlType: "TEXT" },
+    { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT" },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+  ],
+};
+
+// Reports & exports are stored as ordinary Media objects, tagged "report"
+// or "export" at creation time (see store/jobsPromote.ts) -- this view is
+// just MEDIA_VIEW's endpoint/table with a fixed tag filter standing in for
+// a dedicated "generated output" object type. Report-vs-export isn't its
+// own column: jobsPromote.ts already encodes it as a "Report — "/"Export — "
+// prefix on `desc`, which is simpler than a computed/tag-derived column for
+// two possible values.
+export const GENERATED_VIEW: ViewConfig = {
+  key: "generated",
+  label: "Output",
+  icon: iconReports,
+  table: "media",
+  endpoint: "/api/media/query/",
+  baseFilter: "exists(tags, name == 'report') or exists(tags, name == 'export')",
+  searchable: false,
+  // Sidebar.tsx draws a divider above this view -- it's not another
+  // user-authored object type like the rest of VIEWS, but a fixed-filter
+  // window onto generated reports/exports, so it reads as visually
+  // separate from the list above it.
+  sidebarSeparatorBefore: true,
+  orderBy: [{ column: "change", direction: "desc" }],
+  opfsFilename: "app-cache-generated.sqlite",
+  wherePlaceholder: "",
+  columns: [
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
     { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT" },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
   ],
@@ -308,5 +364,5 @@ export const TAG_VIEW: ViewConfig = {
 
 export const VIEWS: ViewConfig[] = [
   PERSON_VIEW, FAMILY_VIEW, EVENT_VIEW, PLACE_VIEW, REPOSITORY_VIEW,
-  SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW,
+  SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW, GENERATED_VIEW,
 ];

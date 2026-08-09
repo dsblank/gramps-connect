@@ -16,10 +16,27 @@ function getSql(): Promise<SqlJsStatic> {
 
 const stores = new Map<string, ViewStore>(VIEWS.map((view) => [view.key, new ViewStore(view, getSql)]));
 
+// Grouped by ViewConfig.table (defaulting to `key`) rather than by `key`
+// itself -- more than one view can watch the same underlying object type
+// (e.g. "media" and "generated" both back onto Media), so a live-sync
+// notification for that type needs to reach every view backed by it, not
+// just whichever one happens to share its key. See useLiveSync.ts.
+const storesByTable = new Map<string, ViewStore[]>();
+for (const view of VIEWS) {
+  const table = view.table ?? view.key;
+  const list = storesByTable.get(table) ?? [];
+  list.push(stores.get(view.key)!);
+  storesByTable.set(table, list);
+}
+
 export function getViewStore(key: string): ViewStore {
   const store = stores.get(key);
   if (!store) throw new Error(`no such view: ${key}`);
   return store;
+}
+
+export function getViewStoresForTable(table: string): ViewStore[] {
+  return storesByTable.get(table) ?? [];
 }
 
 export function allViewStores(): ViewStore[] {

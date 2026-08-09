@@ -97,6 +97,8 @@ export class ViewStore {
   /** See navigateToHandle()'s doc comment -- true only while it's using
    * runQuery() purely to drop whereExpr, not as a real filter change. */
   private suppressSelectionClear = false;
+  /** See requeryDebounced()'s doc comment. */
+  private requeryTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
   private snapshot: ViewSnapshot;
 
@@ -249,7 +251,11 @@ export class ViewStore {
     const beforeExpr =
       `(${orderCol} ${cmp} ${literal(orderValue)}) or ` +
       `(${orderCol} == ${literal(orderValue)} and handle ${cmp} ${JSON.stringify(item.handle)})`;
-    const { totalCount } = await fetchPage(this.view, token, null, true, beforeExpr, this.orderBy, 1);
+    // combinedFilter() re-applies this view's own baseFilter (if any) --
+    // without it, a permanently-filtered view (e.g. Output) would
+    // rank against every row of the underlying table, not just the subset
+    // it actually shows.
+    const { totalCount } = await fetchPage(this.view, token, null, true, this.combinedFilter(beforeExpr), this.orderBy, 1);
     return totalCount ?? 0;
   }
 
@@ -350,6 +356,19 @@ export class ViewStore {
     }
   }
 
+  /** The where_expr actually sent to the server: `whereExpr` (the
+   * user-editable part FilterBar drives, always null for a view with
+   * `baseFilter` set -- see ViewConfig.searchable) AND-ed with the view's
+   * own fixed `baseFilter`, if any. Kept separate from `this.whereExpr`
+   * (which stays exactly what the user typed, or null) so the snapshot
+   * FilterBar reads never shows the hidden fixed filter as if it were
+   * user input. */
+  private combinedFilter(whereExpr: string | null): string | null {
+    const base = this.view.baseFilter ?? null;
+    if (base && whereExpr) return `(${base}) and (${whereExpr})`;
+    return base ?? whereExpr;
+  }
+
   /** Fetches a fresh (optionally where_expr-filtered) copy of this view's
    * object list from scratch. Page one sets the total count and makes the
    * cache queryable; everything past page one fills in detached, in the
@@ -396,7 +415,7 @@ export class ViewStore {
     let after: string | null = null;
     let first;
     try {
-      first = await fetchPage(this.view, token, after, true, whereExpr, orderBy);
+      first = await fetchPage(this.view, token, after, true, this.combinedFilter(whereExpr), orderBy);
     } catch (err: any) {
       stmt.free();
       if (myGeneration !== this.queryGeneration) return;
@@ -421,7 +440,7 @@ export class ViewStore {
 
     (async () => {
       while (after !== null) {
-        const { page } = await fetchPage(this.view, await getToken(), after, false, whereExpr, orderBy);
+        const { page } = await fetchPage(this.view, await getToken(), after, false, this.combinedFilter(whereExpr), orderBy);
         if (myGeneration !== this.queryGeneration) {
           stmt.free();
           return;
@@ -464,6 +483,25 @@ export class ViewStore {
       current?.column === column && current.direction === "asc" ? "desc" : "asc";
     this.orderBy = [{ column, direction }];
     return this.runQuery(this.whereExpr, false);
+  }
+
+  /** Live-sync reaction for a view with a fixed `baseFilter` (see
+   * useLiveSync.ts): a full requery rather than applyLiveChange()'s
+   * incremental patch, since a thin notification can't tell whether the
+   * changed row still matches `baseFilter` (same reasoning as the ordinary
+   * whereExpr!==null guard, just permanent instead of only while the user
+   * has typed a filter). Debounced (short, fixed delay) so a burst of
+   * notifications for the same underlying table within one poll tick --
+   * several Media rows changing together -- collapses into a single
+   * requery instead of one per row. */
+  requeryDebounced(): void {
+    if (this.requeryTimer) return; // already scheduled
+    this.requeryTimer = setTimeout(() => {
+      this.requeryTimer = null;
+      this.runQuery(this.whereExpr, false).catch((err) => {
+        console.error(`[${this.view.label}] live-sync requery failed`, err);
+      });
+    }, 300);
   }
 
   private insertPage(db: Database, stmt: ReturnType<Database["prepare"]>, items: Parameters<typeof toRowValues>[1][]) {

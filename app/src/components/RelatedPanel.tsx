@@ -12,6 +12,7 @@ import { NoteText } from "./related/NoteText";
 import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
+import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
 
@@ -145,7 +146,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
   const isSelf = isCurrentPage(currentPage, view.key, detail.handle);
   const navigateToSelf = isSelf ? undefined : () => onNavigate(view.key, detail.handle);
 
-  if (view.key === "media") {
+  if (view.key === "media" || view.key === "generated") {
     return (
       <div>
         <MediaThumbnail handle={detail.handle} mime={detail.mime as string | undefined} size={240} />
@@ -272,6 +273,7 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
     <ScrollArea h="100%" type="auto">
       <Stack gap="md" p="md">
         <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
+        {view.key === "generated" && <GeneratedItemActions detail={detail} />}
         <DetailFields type={view.key} detail={detail} />
         {sections.map((section) => {
           const Section = SECTION_COMPONENTS[section];
