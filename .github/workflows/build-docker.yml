@@ -1,0 +1,45 @@
+name: Build and push Docker image
+
+# Manual trigger only: this builds deploy/Dockerfile (which clones gramps +
+# gramps-web-api from source and compiles PyGObject) and pushes the result
+# to GHCR, so a deployment host can `docker compose pull` a finished image
+# instead of building it locally -- the slow git clones and PyGObject
+# compile run on GitHub's runners/network instead.
+on:
+  workflow_dispatch: {}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/gramps-connect
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed to push to GHCR under this repo's owner.
+      packages: write
+    steps:
+      - name: Check out gramps-connect
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

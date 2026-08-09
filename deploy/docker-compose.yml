@@ -1,4 +1,10 @@
 x-app-image: &app-image
+  # Prebuilt by .github/workflows/build-docker.yml (workflow_dispatch) and
+  # pushed to GHCR -- `docker compose pull` grabs that instead of running
+  # the slow from-source build (git clones + PyGObject compile) locally.
+  # `build:` is still here as a fallback for local iteration
+  # (`docker compose build` tags the result with this same name).
+  image: ghcr.io/dsblank/gramps-connect:latest
   build:
     context: ..
     dockerfile: deploy/Dockerfile
