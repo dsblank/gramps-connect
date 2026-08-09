@@ -12,9 +12,32 @@ import { formatAuthoredText } from "./authoredText";
 import { endpointBaseFor } from "./objectDetail";
 import type { ViewConfig } from "./views";
 
-const TEAM_NOTE_TAG = "team-note";
+export const TEAM_NOTE_TAG = "team-note";
 const TODO_OPEN_TAG = "todo-open";
-const TODO_DONE_TAG = "todo-done";
+export const TODO_DONE_TAG = "todo-done";
+
+const tagHandleCache = new Map<string, Promise<string>>();
+
+/** Memoized wrapper around getOrCreateTagHandle -- each tag name looked up
+ * (or created) once and cached for the rest of the session rather than once
+ * per caller. NotesSection needs this on every object with attached notes:
+ * telling a message apart from an ordinary note, and a done message from an
+ * open one, both come down to comparing a nested note's raw tag_list
+ * against one of these known tags' handles (extend=all doesn't resolve tag
+ * names on a note nested inside another object's note_list -- only the
+ * top-level fetched object's own forward refs get that). Reset on failure
+ * so a transient error doesn't wedge every future call for that name. */
+export function getTagHandleCached(token: string, name: string): Promise<string> {
+  let promise = tagHandleCache.get(name);
+  if (!promise) {
+    promise = getOrCreateTagHandle(token, name).catch((err) => {
+      tagHandleCache.delete(name);
+      throw err;
+    });
+    tagHandleCache.set(name, promise);
+  }
+  return promise;
+}
 
 function addedHandle(trans: { type: string; handle: string }[]): string {
   const added = trans.find((t) => t.type === "add");
