@@ -58,6 +58,62 @@ async function loadedStore(seedItems: ReturnType<typeof tagRow>[]): Promise<View
   return store;
 }
 
+describe("ViewStore default selection", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("selects the first row as soon as a query lands, so the detail panes are never empty", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+    expect(store.getSnapshot().selectedIndex).toBe(0);
+    expect(store.getSnapshot().selectionIsDefault).toBe(true);
+  });
+
+  it("leaves nothing selected when the query returns no rows at all", async () => {
+    const store = await loadedStore([]);
+
+    expect(store.getSnapshot().selectedHandle).toBeNull();
+    expect(store.getSnapshot().selectionIsDefault).toBe(false);
+  });
+
+  it("stops flagging the selection as default once the user clicks that same row", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    expect(store.getSnapshot().selectionIsDefault).toBe(true);
+
+    store.select(0); // the row that was already auto-selected
+
+    // The handle didn't change, but this is now an explicit choice --
+    // useHistorySync keys off exactly this flag to decide whether the
+    // handle belongs in the URL.
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+    expect(store.getSnapshot().selectionIsDefault).toBe(false);
+  });
+
+  it("reverts to the default rather than to nothing when the selection is cleared", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.select(1); // H2
+
+    store.clearSelection(); // history navigation to a handle-less "#/view" route
+
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+    expect(store.getSnapshot().selectionIsDefault).toBe(true);
+  });
+
+  it("does not re-emit when clearing a selection that is already the default", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    const before = store.getSnapshot();
+
+    store.clearSelection();
+
+    // Same snapshot object, not just an equal one -- Back onto a
+    // handle-less route repeatedly must not churn subscribers.
+    expect(store.getSnapshot()).toBe(before);
+  });
+});
+
 describe("ViewStore.applyLiveChange", () => {
   beforeEach(() => {
     vi.mocked(fetchPage).mockReset();
@@ -235,13 +291,30 @@ describe("ViewStore.applyLiveChange", () => {
     expect(store.getSnapshot().selectedIndex).toBe(0);
   });
 
-  it("clears the selection entirely when the selected row itself is live-deleted", async () => {
+  it("falls back to the default selection when the selected row itself is live-deleted", async () => {
     const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
     store.select(0); // H1
 
     await store.applyLiveChange(notification("H1", "DELETE"));
 
+    // H1 is gone, so the selection can't follow it -- but with rows still
+    // present the detail panes get the first survivor rather than being
+    // blanked (applyDefaultSelection), flagged as a default so
+    // useHistorySync keeps it out of the URL.
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+    expect(store.getSnapshot().selectedIndex).toBe(0);
+    expect(store.getSnapshot().selectionIsDefault).toBe(true);
+  });
+
+  it("clears the selection entirely when the last remaining row is live-deleted", async () => {
+    const store = await loadedStore([tagRow("H1")]);
+    store.select(0); // H1
+
+    await store.applyLiveChange(notification("H1", "DELETE"));
+
+    // Nothing left to fall back to -- the empty state is real here.
     expect(store.getSnapshot().selectedIndex).toBeNull();
     expect(store.getSnapshot().selectedHandle).toBeNull();
+    expect(store.getSnapshot().selectionIsDefault).toBe(false);
   });
 });

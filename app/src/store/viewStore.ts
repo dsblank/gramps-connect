@@ -48,6 +48,16 @@ export interface ViewSnapshot {
    * where_expr/sort means the old index no longer names the same row. */
   selectedIndex: number | null;
   selectedHandle: string | null;
+  /** True when the current selection is the one applied automatically
+   * against a freshly loaded cache (see applyDefaultSelection) rather than
+   * one the user actually clicked or navigated to. The detail panes read
+   * the selection the same way either way -- this exists only so
+   * useHistorySync.ts can keep a default selection *out* of the URL: a
+   * default is by definition what any visit to this view already shows, so
+   * mirroring it into the hash would both push a history entry the user
+   * never asked for and make Back (which lands on the handle-less `#view`
+   * route -- "no explicit selection") immediately bounce forward again. */
+  selectionIsDefault: boolean;
   /** Bumped only when a live-sync notification's handle matches
    * selectedHandle -- unlike `revision` (bumped for any row in this
    * view), this lets a detail panel refetch when *its own* record
@@ -66,6 +76,7 @@ const EMPTY_SNAPSHOT_BASE = {
   revision: 0,
   selectedIndex: null,
   selectedHandle: null,
+  selectionIsDefault: false,
   selectedRevision: 0,
 };
 
@@ -94,6 +105,7 @@ export class ViewStore {
   private revision = 0;
   private selectedIndex: number | null = null;
   private selectedHandle: string | null = null;
+  private selectionIsDefault = false;
   private selectedRevision = 0;
   /** See navigateToHandle()'s doc comment -- true only while it's using
    * runQuery() purely to drop whereExpr, not as a real filter change. */
@@ -129,6 +141,7 @@ export class ViewStore {
       revision: this.revision,
       selectedIndex: this.selectedIndex,
       selectedHandle: this.selectedHandle,
+      selectionIsDefault: this.selectionIsDefault,
       selectedRevision: this.selectedRevision,
     };
     for (const listener of this.listeners) listener();
@@ -148,17 +161,46 @@ export class ViewStore {
     if (!this.db) return;
     this.selectedIndex = index;
     this.selectedHandle = this.getHandleAt(index);
+    this.selectionIsDefault = false;
     this.emit();
   }
 
-  /** Drops the current selection -- used when history navigation (see
-   * useHistorySync.ts) lands on a view-only URL (no handle segment), so
-   * DetailPanel reverts to its "select a row" placeholder instead of still
-   * showing whatever was selected before. */
+  /** Selects the first row whenever nothing is selected against a loaded
+   * cache, so the detail panes always have a record to show. An empty
+   * right-hand pane is a dead half of the window, and the first row is
+   * both the cheapest thing to show and the one the user would most
+   * likely have clicked on arriving anyway. Called from every point a
+   * selection can go null with rows present: a finished query (fresh
+   * load, filter change, sort change), a live delete of the selected row
+   * (reconcileSelection), and history navigation to a handle-less route
+   * (clearSelection).
+   *
+   * Sets fields only, never emits -- every caller is already emitting in
+   * the same pass for its own reasons. The result is flagged as a
+   * *default* selection (see ViewSnapshot.selectionIsDefault) so it stays
+   * out of the URL; only a real click or navigation puts a handle there. */
+  private applyDefaultSelection(): void {
+    if (!this.db || this.selectedIndex !== null || this.totalCount === 0) return;
+    const handle = this.getHandleAt(0);
+    if (handle === null) return; // totalCount > 0 but page one hasn't landed yet
+    this.selectedIndex = 0;
+    this.selectedHandle = handle;
+    this.selectionIsDefault = true;
+  }
+
+  /** Drops an *explicit* selection -- used when history navigation (see
+   * useHistorySync.ts) lands on a view-only URL (no handle segment).
+   * Falls back to the default selection rather than to nothing at all:
+   * a handle-less route means "whatever this view shows by default", and
+   * that's now the first row, not a blank detail pane. Already being on
+   * the default is therefore a no-op, not a reason to re-emit -- Back to a
+   * view-only route would otherwise churn a snapshot on every press. */
   clearSelection(): void {
+    if (this.selectionIsDefault) return;
     if (this.selectedIndex === null && this.selectedHandle === null) return;
     this.selectedIndex = null;
     this.selectedHandle = null;
+    this.applyDefaultSelection();
     this.emit();
   }
 
@@ -170,6 +212,7 @@ export class ViewStore {
   private selectAt(index: number, handle: string): void {
     this.selectedIndex = index;
     this.selectedHandle = handle;
+    this.selectionIsDefault = false;
     this.emit();
   }
 
@@ -340,6 +383,7 @@ export class ViewStore {
         this.whereExpr = null;
         this.orderBy = this.view.orderBy;
         this.status = "ready";
+        this.applyDefaultSelection();
         this.emit();
         return;
       } catch {
@@ -408,6 +452,7 @@ export class ViewStore {
     if (!this.suppressSelectionClear) {
       this.selectedIndex = null;
       this.selectedHandle = null;
+      this.selectionIsDefault = false;
     }
     this.emit();
 
@@ -451,6 +496,12 @@ export class ViewStore {
     this.loadedCount = first.page.items.length;
     after = first.page.next_after;
     this.status = "ready";
+    // Page one is what makes a default selection possible at all (it's the
+    // first moment there's a row 0 to name) -- a no-op when something is
+    // already selected, which covers both suppressSelectionClear callers:
+    // navigateToHandle is mid-flight toward a real selection here, and
+    // requeryDebounced is preserving one across a live-sync reload.
+    this.applyDefaultSelection();
     this.emit();
 
     (async () => {
@@ -671,13 +722,19 @@ export class ViewStore {
    * live-deleted, or its own edit moved it beyond what's currently loaded
    * (applyLiveChange()'s eviction branch). */
   private reconcileSelection(): void {
-    if (this.selectedHandle === null) return;
-    const index = this.getIndexForHandle(this.selectedHandle);
-    if (index === null) {
-      this.selectedIndex = null;
-      this.selectedHandle = null;
-    } else {
-      this.selectedIndex = index;
+    if (this.selectedHandle !== null) {
+      const index = this.getIndexForHandle(this.selectedHandle);
+      if (index === null) {
+        this.selectedIndex = null;
+        this.selectedHandle = null;
+        this.selectionIsDefault = false;
+      } else {
+        this.selectedIndex = index;
+      }
     }
+    // Losing the selected row to a live delete/eviction leaves the detail
+    // panes with nothing to show -- fall back to the view's default rather
+    // than blanking them (see applyDefaultSelection).
+    this.applyDefaultSelection();
   }
 }

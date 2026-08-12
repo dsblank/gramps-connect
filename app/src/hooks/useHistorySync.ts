@@ -65,11 +65,25 @@ export function useHistorySync(): { activeKey: string; setActiveKey: (key: strin
     // history between every cross-view jump, before self-healing a moment
     // later once navigateToHandle actually finished.
     if (applyingHash.current) return;
-    const next = formatHash({ viewKey: activeKey, handle: activeSnapshot.selectedHandle });
+    // A *default* selection (ViewStore.applyDefaultSelection -- the first
+    // row, auto-selected so the detail panes are never empty) is
+    // deliberately not mirrored here: the hash should say what the user
+    // chose, and every visit to this view already lands on that row
+    // anyway. Writing it would push a spurious history entry per view
+    // switch, and Back onto the resulting handle-less `#view` route would
+    // re-derive the same default and push it straight back again.
+    const next = formatHash({
+      viewKey: activeKey,
+      handle: activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle,
+    });
     if (window.location.hash !== next) {
       window.location.hash = next;
     }
-  }, [activeKey, activeSnapshot.selectedHandle]);
+    // selectionIsDefault is a dependency in its own right, not just a
+    // derived read: clicking the very row that was already auto-selected
+    // leaves selectedHandle unchanged and only flips this flag -- which is
+    // exactly the moment that handle has to start appearing in the hash.
+  }, [activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
 
   return { activeKey, setActiveKey };
 }
