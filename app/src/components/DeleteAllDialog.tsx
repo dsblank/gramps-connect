@@ -31,8 +31,8 @@ interface DeleteAllDialogProps {
   onClose: () => void;
 }
 
-/** Family Trees -> Delete all items... -- mirrors gramps-web's admin
- * "Delete all objects" screen: pick which object types to wipe (all
+/** Family Trees -> Delete... -- mirrors gramps-web's admin
+ * "Delete..." screen: pick which object types to wipe (all
  * selected by default), a loud non-reversible warning, then confirm.
  * gramps-web-api requires a fresh JWT for this endpoint, so a stale
  * session gets routed through ReloginDialog before the request goes out
@@ -96,7 +96,7 @@ export function DeleteAllDialog({ opened, onClose }: DeleteAllDialogProps) {
       <Modal
         opened={opened}
         onClose={handleClose}
-        title="Delete all items"
+        title="Delete"
         closeOnClickOutside={stage !== "deleting"}
         closeOnEscape={stage !== "deleting"}
       >

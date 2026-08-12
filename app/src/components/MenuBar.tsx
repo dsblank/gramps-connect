@@ -77,7 +77,7 @@ export function MenuBar() {
           items={[
             { label: "Import…", perm: PERM_IMPORT_FILE, onClick: () => setImportOpened(true) },
             {
-              label: "Delete all items…",
+              label: "Delete…",
               perm: PERM_DEL_OBJ_BATCH,
               onClick: () => setDeleteAllOpened(true),
               separatorBefore: true,

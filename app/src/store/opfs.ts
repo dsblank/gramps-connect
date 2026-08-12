@@ -35,7 +35,7 @@ export async function clearOpfs(filename: string) {
 
 /** Clears every view's OPFS cache, not just one -- the eager path for a
  * bulk server-side mutation this tab performs itself (Family Trees' Import
- * and Delete all items), which invalidates every view at once rather than
+ * and Delete), which invalidates every view at once rather than
  * one row at a time through live sync.
  *
  * ensureLoaded() (viewStore.ts) would eventually catch this anyway, via the
