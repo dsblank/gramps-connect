@@ -1,21 +1,21 @@
 import { createTheme, type MantineColorsTuple } from "@mantine/core";
 
 // A blue accent close to the Gramps project's own branding (the tree-icon
-// logo), used for the app bar, active nav item, and links -- distinct from
-// `selection`, which is the row-highlight color below.
+// logo), used for the app bar, active nav item, links -- and, as
+// `selection` below, the highlighted table row.
 const grampsBlue: MantineColorsTuple = [
   "#e7f1fb", "#cfe0f5", "#a4c6ec", "#75a9e2", "#4f91da", "#3781d5",
   "#2777d3", "#1866ba", "#0f5aa7", "#004c93",
 ];
 
-// The Gramps desktop client highlights the selected table row in orange
-// (see the reference screenshot) -- kept as its own semantic color rather
-// than reusing `primary`, since selection and brand-accent are independent
-// concerns that happen to look different in the reference UI.
-const selection: MantineColorsTuple = [
-  "#fff2e8", "#ffe0cc", "#ffc199", "#ff9d5c", "#f9822e", "#e8590c",
-  "#c94a09", "#a83c07", "#872f05", "#662304",
-];
+// The selected table row. The Gramps desktop client highlights it in
+// orange, and this used to as well, but next to the blue rail and blue
+// links that orange read as a third, unrelated accent rather than as
+// "this row is active". Still its own semantic name -- selection and
+// brand-accent stay separate concerns, and this is the token to change if
+// they should ever diverge again -- but aliased to the accent rather than
+// spelling out a second tuple, so the two can't drift apart by halves.
+const selection: MantineColorsTuple = grampsBlue;
 
 export const theme = createTheme({
   primaryColor: "grampsBlue",

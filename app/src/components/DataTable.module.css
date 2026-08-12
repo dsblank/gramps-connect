@@ -136,8 +136,12 @@
   background: light-dark(var(--mantine-color-grampsBlue-0), var(--mantine-color-dark-5));
 }
 
+/* One step darker than the shade links use (6 in light, 4 in dark -- see
+   theme.ts, where `selection` is now the same blue): this row is a filled
+   block behind white text, not text on the page background, and the link
+   shade itself only just clears 4.5:1 against white. */
 .row[data-selected] {
-  background: var(--mantine-color-selection-5);
+  background: light-dark(var(--mantine-color-selection-7), var(--mantine-color-selection-8));
   color: white;
 }
 
