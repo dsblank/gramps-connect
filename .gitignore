@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 node_modules/
 dist/
+*~
 
 # dev-fixtures/layer2-local-cache: generated/fetched, not source
 dev-fixtures/layer2-local-cache/api-fixture/gramps-home/
@@ -26,6 +27,8 @@ dev-fixtures/layer3-sync/api-fixture/indexdir/
 dev-fixtures/layer3-sync/api-fixture/persistent_cache/
 dev-fixtures/layer3-sync/api-fixture/request_cache/
 dev-fixtures/layer3-sync/api-fixture/thumbnail_cache/
+dev-fixtures/layer3-sync/api-fixture/export_cache/
+dev-fixtures/layer3-sync/api-fixture/server.log
 
 # app: sql.js WASM assets copied in by scripts/copy-wasm.mjs, not source
 app/public/
