@@ -124,6 +124,18 @@ export function hasPermissions(...perms: string[]): boolean {
   return perms.every((perm) => granted.includes(perm));
 }
 
+/** Whether the current access token is "fresh" -- minted directly by
+ * login(), as opposed to reissued by the silent refresh in getToken()
+ * (gramps-web-api's token.py sets `fresh=True` only on the former). Some
+ * endpoints require this (`fresh_jwt_required`, e.g. deleting every object
+ * in the tree) precisely so a stolen long-lived refresh token can't trigger
+ * them -- callers should check this before attempting one, and re-collect
+ * the password via login() if it's false. */
+export function isTokenFresh(): boolean {
+  if (!cachedToken) return false;
+  return decodeClaims(cachedToken)?.fresh === true;
+}
+
 function isExpiringSoon(token: string): boolean {
   const expMs = decodeExpMs(token);
   return expMs === null || expMs < Date.now() + EXPIRY_TOLERANCE_MS;

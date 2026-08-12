@@ -12,6 +12,7 @@ export type TaskState = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE" | string;
 export interface TaskStatus {
   state: TaskState;
   result_object: unknown;
+  info?: string;
   task_id?: string;
   name?: string;
   created_at?: string;

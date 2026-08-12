@@ -1,11 +1,13 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { AppShell, Group, Image, SegmentedControl, Switch, Title, Button, useMantineColorScheme, useComputedColorScheme } from "@mantine/core";
+import { useEffect, useSyncExternalStore } from "react";
+import { AppShell, Group, Image, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { VIEWS } from "./store/views";
 import { getViewStore } from "./store/registry";
-import { getAuthSnapshot, subscribe as subscribeAuth, logout } from "./auth/auth";
+import { getAuthSnapshot, subscribe as subscribeAuth } from "./auth/auth";
 import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
+import { MenuBar } from "./components/MenuBar";
+import { UserMenu } from "./components/UserMenu";
 import { FilterBar } from "./components/FilterBar";
 import { TeamNoteComposer } from "./components/TeamNoteComposer";
 import { DataTable } from "./components/DataTable";
@@ -15,57 +17,12 @@ import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep, type JobsPollCallbacks } from "./store/jobsPoll";
-import {
-  disableBrowserNotifications,
-  enableBrowserNotifications,
-  isBrowserNotificationsEnabled,
-  notifyBrowser,
-} from "./store/browserNotifications";
+import { notifyBrowser } from "./store/browserNotifications";
 import logo from "./assets/icons/gramps-logo.svg";
 
 export function App() {
   const loggedIn = useSyncExternalStore(subscribeAuth, getAuthSnapshot);
   return loggedIn ? <AuthenticatedApp /> : <LoginForm />;
-}
-
-function ColorSchemeToggle() {
-  const { setColorScheme } = useMantineColorScheme();
-  const computed = useComputedColorScheme("light");
-  return (
-    <SegmentedControl
-      size="xs"
-      value={computed}
-      onChange={(value) => setColorScheme(value as "light" | "dark")}
-      data={[
-        { label: "Light", value: "light" },
-        { label: "Dark", value: "dark" },
-      ]}
-    />
-  );
-}
-
-/** Toggle for the opt-in browser Notification side-channel (plan §4's UI
- * bullet) -- separate from Mantine's own in-app toast (always on, shown
- * via jobsPollCallbacks below), this is the "also notify me even if this
- * tab isn't focused" escalation, and browsers require it to be requested
- * from a real click. */
-function BrowserNotificationsToggle() {
-  const [enabled, setEnabled] = useState(isBrowserNotificationsEnabled);
-  return (
-    <Switch
-      size="xs"
-      label="Desktop notifications"
-      checked={enabled}
-      onChange={async (e) => {
-        if (e.currentTarget.checked) {
-          setEnabled(await enableBrowserNotifications());
-        } else {
-          disableBrowserNotifications();
-          setEnabled(false);
-        }
-      }}
-    />
-  );
 }
 
 /** In-app toasts for the job-status watcher (store/jobsPoll.ts) -- shared
@@ -133,15 +90,14 @@ function AuthenticatedApp() {
     >
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
-            <Image src={logo} alt="" w={32} h={32} />
-            <Title order={4} fw={600}>Gramps Connect</Title>
+          <Group gap="lg">
+            <Group gap="xs">
+              <Image src={logo} alt="" w={32} h={32} />
+              <Title order={4} fw={600}>Gramps Connect</Title>
+            </Group>
+            <MenuBar />
           </Group>
-          <Group gap="md">
-            <BrowserNotificationsToggle />
-            <ColorSchemeToggle />
-            <Button variant="subtle" size="xs" onClick={logout}>Sign out</Button>
-          </Group>
+          <UserMenu />
         </Group>
       </AppShell.Header>
 

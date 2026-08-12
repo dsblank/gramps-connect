@@ -1,6 +1,7 @@
 // OPFS persistence for a view's exported sql.js database -- ported verbatim
 // from the original Layer 2/3 spike's browser.ts (since removed, see git
 // history).
+import { VIEWS } from "./views";
 
 export async function loadFromOpfs(filename: string): Promise<Uint8Array | null> {
   try {
@@ -29,4 +30,14 @@ export async function clearOpfs(filename: string) {
   } catch {
     // nothing to remove
   }
+}
+
+/** Clears every view's OPFS cache, not just one. ensureLoaded() (viewStore.ts)
+ * trusts an on-disk cache unconditionally once it opens cleanly -- it never
+ * checks the server for staleness -- so a bulk server-side mutation that
+ * doesn't go through the normal per-row live-sync path (Family Trees'
+ * Import and Delete all items) has to invalidate every view's cache itself,
+ * or a reload just re-serves the same stale rows from disk. */
+export async function clearAllOpfs(): Promise<void> {
+  await Promise.all(VIEWS.map((view) => clearOpfs(view.opfsFilename)));
 }
