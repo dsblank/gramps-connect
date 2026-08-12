@@ -91,6 +91,18 @@ export function getCurrentUsername(): string | null {
   return cachedUsername;
 }
 
+/** The tree this session's token is scoped to (gramps-web-api's token.py
+ * sets a `tree` claim only in multi-tree mode -- see get_tokens there), or
+ * null in the single-tree case. Used by the cache-staleness check
+ * (store/cacheMeta.ts) to tell one tree's cached rows from another's;
+ * that check pairs it with the served database's own name/id, precisely
+ * because this is null on a single-tree server. */
+export function getTreeId(): string | null {
+  if (!cachedToken) return null;
+  const tree = decodeClaims(cachedToken)?.tree;
+  return typeof tree === "string" ? tree : null;
+}
+
 /** Decodes a JWT's claims payload without pulling in a jwt-decode
  * dependency for the couple of fields this module reads. Returns null for
  * anything unparseable so callers treat it the same as "no claims info". */

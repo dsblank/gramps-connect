@@ -13,6 +13,7 @@ import type { Database, SqlJsStatic } from "sql.js";
 import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage } from "./api";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
+import { fetchServerState, isCacheStale, writeCacheMeta } from "./cacheMeta";
 import { createTableSql, insertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
 import type { OrderBy, ViewConfig } from "./views";
 import type { TreeChangeNotification } from "./historyPoll";
@@ -323,10 +324,17 @@ export class ViewStore {
       try {
         const SQL = await this.getSql();
         const db = new SQL.Database(cached);
-        // A stale OPFS cache from before a schema change would otherwise
-        // throw deep inside getRows(), uncaught -- treat any mismatch as
-        // "not cached" and fall through to a fresh fetch.
+        // A cache from before a *table* change would otherwise throw deep
+        // inside getRows(), uncaught -- treat any mismatch as "not cached"
+        // and fall through to a fresh fetch.
         db.exec(`SELECT ${this.view.columns.map((c) => c.key).join(", ")} FROM ${this.view.key} LIMIT 1;`);
+        // Opening cleanly only proves the shape is right, not that the rows
+        // still are: the server may have moved on (or be a different server
+        // entirely) since this file was written. See cacheMeta.ts.
+        if (await isCacheStale(db, this.view)) {
+          db.close();
+          throw new Error("stale cache");
+        }
         this.db = db;
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
         this.whereExpr = null;
@@ -382,6 +390,13 @@ export class ViewStore {
     // fetchPage calls should keep using the orderBy it started with
     // rather than picking up the newer one mid-flight.
     const orderBy = this.orderBy;
+    // Kicked off (not awaited) before the first page is even requested, so
+    // it costs no latency and, more importantly, describes the server as it
+    // was *before* this fetch -- see writeCacheMeta()'s doc comment on why
+    // capturing it after the fill would mark a cache as current with
+    // changes it doesn't actually contain. Failure resolves to null rather
+    // than rejecting: this is only needed on the persist path below.
+    const serverStateAtStart = persist ? fetchServerState().catch(() => null) : null;
     this.status = "loading";
     this.error = null;
     // A new where_expr or sort invalidates the old index/handle pairing
@@ -453,7 +468,14 @@ export class ViewStore {
       stmt.free();
 
       if (persist && myGeneration === this.queryGeneration) {
-        await saveToOpfs(this.view.opfsFilename, newDb.export());
+        const server = await serverStateAtStart;
+        // Nothing to stamp it with means nothing could ever validate it --
+        // ensureLoaded() would discard it unread on the next load, so don't
+        // spend the export/write at all.
+        if (server) {
+          writeCacheMeta(newDb, this.view, server, this.loadedCount);
+          await saveToOpfs(this.view.opfsFilename, newDb.export());
+        }
       }
     })().catch((err) => {
       // Background-fill failure only gets logged -- by this point the

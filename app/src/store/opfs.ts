@@ -1,6 +1,7 @@
 // OPFS persistence for a view's exported sql.js database -- ported verbatim
 // from the original Layer 2/3 spike's browser.ts (since removed, see git
 // history).
+import { resetServerState } from "./cacheMeta";
 import { VIEWS } from "./views";
 
 export async function loadFromOpfs(filename: string): Promise<Uint8Array | null> {
@@ -32,12 +33,20 @@ export async function clearOpfs(filename: string) {
   }
 }
 
-/** Clears every view's OPFS cache, not just one. ensureLoaded() (viewStore.ts)
- * trusts an on-disk cache unconditionally once it opens cleanly -- it never
- * checks the server for staleness -- so a bulk server-side mutation that
- * doesn't go through the normal per-row live-sync path (Family Trees'
- * Import and Delete all items) has to invalidate every view's cache itself,
- * or a reload just re-serves the same stale rows from disk. */
+/** Clears every view's OPFS cache, not just one -- the eager path for a
+ * bulk server-side mutation this tab performs itself (Family Trees' Import
+ * and Delete all items), which invalidates every view at once rather than
+ * one row at a time through live sync.
+ *
+ * ensureLoaded() (viewStore.ts) would eventually catch this anyway, via the
+ * staleness check in cacheMeta.ts -- but only on the next load of each
+ * view, after a round trip. Dropping the files up front makes the caches
+ * that this tab *knows* are dead go away immediately, and skips the
+ * pointless "is it stale?" question for all of them. */
 export async function clearAllOpfs(): Promise<void> {
   await Promise.all(VIEWS.map((view) => clearOpfs(view.opfsFilename)));
+  // The memoized server state predates the change just made -- see
+  // resetServerState()'s doc comment on why keeping it would make every
+  // rebuilt cache record itself as already stale.
+  resetServerState();
 }

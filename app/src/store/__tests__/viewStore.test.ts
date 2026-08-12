@@ -9,6 +9,11 @@ vi.mock("../api", () => ({
 }));
 vi.mock("../../auth/auth", () => ({
   getToken: vi.fn().mockResolvedValue("test-token"),
+  // Read by cacheMeta.ts (imported by viewStore for its staleness check),
+  // never exercised by these tests -- they all load via runQuery(persist:
+  // false), which touches neither OPFS nor the meta table.
+  getTreeId: vi.fn().mockReturnValue(null),
+  getCurrentUsername: vi.fn().mockReturnValue(null),
 }));
 
 import { fetchByHandle, fetchPage } from "../api";
