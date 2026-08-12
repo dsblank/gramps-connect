@@ -15,6 +15,9 @@ interface ReferenceDetailProps {
   /** Promotes to a real view switch (location.hash) -- wired by AsideSplit,
    * the one place that decides what "navigate" means for each pane. */
   onPromote: OnNavigate;
+  /** Passed straight through to whichever body this renders -- see
+   * RelatedPanel's `flow`. */
+  flow?: boolean;
 }
 
 /** The lower-right pane: whatever was clicked in the upper pane's
@@ -22,7 +25,7 @@ interface ReferenceDetailProps {
  * metadata plus its own RelatedPanel, reused unchanged) or, from
  * MediaSection's "view gallery" link, a grid of every photo attached to a
  * record too large to expand inline (see MediaSection's doc comment). */
-export function ReferenceDetail({ subSelection, onPromote }: ReferenceDetailProps) {
+export function ReferenceDetail({ subSelection, onPromote, flow }: ReferenceDetailProps) {
   if (!subSelection) {
     return (
       <Stack p="md">
@@ -37,6 +40,7 @@ export function ReferenceDetail({ subSelection, onPromote }: ReferenceDetailProp
         items={subSelection.items}
         label={subSelection.label}
         onPromote={(type, handle) => onPromote(type, handle)}
+        flow={flow}
       />
     );
   }
@@ -52,7 +56,7 @@ export function ReferenceDetail({ subSelection, onPromote }: ReferenceDetailProp
   }
 
   return (
-    <Stack gap={0} h="100%">
+    <Stack gap={0} h={flow ? undefined : "100%"}>
       {refMeta && (
         <>
           <Stack gap={4} p="md" pb="sm">
@@ -61,7 +65,7 @@ export function ReferenceDetail({ subSelection, onPromote }: ReferenceDetailProp
           <Divider />
         </>
       )}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={flow ? undefined : { flex: 1, minHeight: 0 }}>
         {/* No live-sync revision source for a sub-selected type outside the
             main table's own ViewStore -- refetches on (type, handle) change
             only, not on a background live-sync patch to this specific
@@ -70,7 +74,7 @@ export function ReferenceDetail({ subSelection, onPromote }: ReferenceDetailProp
             No onViewGallery here -- see RelatedPanelProps' doc comment on
             why the bottom pane's own Media sections fall back to a plain
             count instead. */}
-        <RelatedPanel view={view} handle={handle} revision={0} onNavigate={onPromote} />
+        <RelatedPanel view={view} handle={handle} revision={0} onNavigate={onPromote} flow={flow} />
       </div>
     </Stack>
   );

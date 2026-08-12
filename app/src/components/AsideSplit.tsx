@@ -11,6 +11,11 @@ import { CurrentPageContext } from "./related/CurrentPageContext";
 
 interface AsideSplitProps {
   view: ViewConfig;
+  /** Narrow, stacked layout (App.tsx): both panes size to their content
+   * and the *page* scrolls, instead of splitting a fixed-height column
+   * between two independently-scrolling halves. Threaded on down into
+   * RelatedPanel/ReferenceDetail, which own scrollers of their own. */
+  flow?: boolean;
 }
 
 /** What the collapsed strip says it's holding. Only ever visible in the
@@ -52,11 +57,12 @@ function stripLabel(subSelection: SubSelection | null): string {
  * subject (a new main-table row, or a new view), which is also the only
  * thing that clears `subSelection` -- keeping the pane open there would
  * just re-create the empty half-pane this is meant to avoid. */
-export function AsideSplit({ view }: AsideSplitProps) {
+export function AsideSplit({ view, flow }: AsideSplitProps) {
   const snapshot = useViewStore(view.key);
   const [subSelection, setSubSelection] = useState<SubSelection | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const topPaneRef = useRef<HTMLDivElement>(null);
+  const bottomPaneRef = useRef<HTMLDivElement>(null);
   // The element the user last clicked inside the top pane, captured
   // generically here rather than threaded through OnNavigate (which every
   // section component implements) -- see the layout effect below.
@@ -75,15 +81,24 @@ export function AsideSplit({ view }: AsideSplitProps) {
   // re-running on every render would fight the user's own scrolling once
   // the pane is already open). "nearest" keeps the correction to the
   // minimum movement needed, so a row that's still visible doesn't jump.
+  //
+  // Stacked (`flow`) the panes don't share a fixed height, so nothing
+  // moves and there's nothing to correct -- but the bottom pane now opens
+  // below the whole of the top one, usually off-screen, which makes the
+  // click look like it did nothing. Scroll to the pane itself instead.
   useLayoutEffect(() => {
     const justOpened = detailOpen && !wasOpenRef.current;
     wasOpenRef.current = detailOpen;
     if (!justOpened) return;
+    if (flow) {
+      bottomPaneRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      return;
+    }
     const el = lastClickedRef.current;
     if (el && topPaneRef.current?.contains(el)) {
       el.scrollIntoView({ block: "nearest" });
     }
-  }, [detailOpen]);
+  }, [detailOpen, flow]);
 
   // A generic, view-level title while nothing's selected (or as a brief
   // first paint before the selected record's own fetch resolves) --
@@ -126,13 +141,14 @@ export function AsideSplit({ view }: AsideSplitProps) {
     // links, e.g. a family's Children list including the very person
     // whose page you're already on).
     <CurrentPageContext.Provider value={{ type: view.key, handle: snapshot.selectedHandle }}>
-      <Stack h="100%" gap={0}>
+      <Stack h={flow ? undefined : "100%"} gap={0}>
         <Box
           ref={topPaneRef}
           onClickCapture={(e) => { lastClickedRef.current = e.target as HTMLElement; }}
-          style={{ flex: 1, minHeight: 0, overflow: "auto" }}
+          style={flow ? undefined : { flex: 1, minHeight: 0, overflow: "auto" }}
         >
           <RelatedPanel
+            flow={flow}
             view={view}
             handle={snapshot.selectedHandle}
             revision={snapshot.selectedRevision}
@@ -166,8 +182,9 @@ export function AsideSplit({ view }: AsideSplitProps) {
           </Group>
         </UnstyledButton>
         {detailOpen && (
-          <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          <Box ref={bottomPaneRef} style={flow ? undefined : { flex: 1, minHeight: 0, overflow: "auto" }}>
             <ReferenceDetail
+              flow={flow}
               subSelection={subSelection}
               onPromote={(type, handle) => {
                 window.location.hash = formatHash({ viewKey: type, handle });

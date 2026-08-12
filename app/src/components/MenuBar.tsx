@@ -71,7 +71,12 @@ export function MenuBar() {
 
   return (
     <>
-      <Group gap={2}>
+      {/* Never wraps: the header it sits in has a fixed height, so a
+          second line would render straight through the bottom of it and
+          end up behind the search box. Whoever places the bar decides what
+          happens when it doesn't fit -- App.tsx's narrow header gives it a
+          row of its own that scrolls sideways. */}
+      <Group gap={2} wrap="nowrap">
         <AppMenu
           label="Family Trees"
           items={[

@@ -22,6 +22,20 @@
   scrollbar-width: auto;
 }
 
+/* Narrow window: App.tsx drops the AppShell aside below this same
+   breakpoint (its STACKED_QUERY, Mantine's `sm`) and stacks the detail
+   panes under the table inside Main instead. Those panes size to their
+   content and let the page scroll; this one can't -- the rows are
+   virtualized against this element's own scroll offset -- so it stays a
+   fixed-height window onto the list, just a smaller one, and everything
+   below it is reached by scrolling the page. */
+@media (max-width: 48em) {
+  .tableWrapper {
+    height: 45dvh;
+    min-height: 200px;
+  }
+}
+
 .tableWrapper::-webkit-scrollbar {
   width: 16px;
   height: 16px;

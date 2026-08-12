@@ -9,25 +9,29 @@ import type { GalleryItem } from "./types";
  * Clicking a photo promotes to it directly (same onPromote ReferenceDetail
  * already uses for a single-object sub-selection) -- there's no third pane
  * for a per-photo preview step. */
-export function MediaGallery({ items, label, onPromote }: {
+export function MediaGallery({ items, label, onPromote, flow }: {
   items: GalleryItem[];
   label: string;
   onPromote: (type: string, handle: string) => void;
+  /** Size to content and let the page scroll -- see RelatedPanel's own
+   * `flow` prop, which this mirrors (both are what the bottom pane can
+   * hold, so both have to honour it). */
+  flow?: boolean;
 }) {
-  return (
-    <ScrollArea h="100%" type="auto">
-      <Stack gap="md" p="md">
-        <Title order={4}>{label}</Title>
-        {/* Wraps naturally to the pane's width rather than a fixed column
-            count that could overflow or leave awkward gaps at odd widths. */}
-        <Group gap="sm">
-          {items.map((item) => (
-            <UnstyledButton key={item.handle} onClick={() => onPromote("media", item.handle)}>
-              <MediaThumbnail handle={item.handle} mime={item.mime} size={110} />
-            </UnstyledButton>
-          ))}
-        </Group>
-      </Stack>
-    </ScrollArea>
+  const body = (
+    <Stack gap="md" p="md">
+      <Title order={4}>{label}</Title>
+      {/* Wraps naturally to the pane's width rather than a fixed column
+          count that could overflow or leave awkward gaps at odd widths. */}
+      <Group gap="sm">
+        {items.map((item) => (
+          <UnstyledButton key={item.handle} onClick={() => onPromote("media", item.handle)}>
+            <MediaThumbnail handle={item.handle} mime={item.mime} size={110} />
+          </UnstyledButton>
+        ))}
+      </Group>
+    </Stack>
   );
+
+  return flow ? body : <ScrollArea h="100%" type="auto">{body}</ScrollArea>;
 }

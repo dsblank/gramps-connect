@@ -40,6 +40,12 @@ interface RelatedPanelProps {
    * actually in the URL hash, which the bottom pane deliberately doesn't
    * change). */
   updateDocumentTitle?: boolean;
+  /** Size to content instead of filling a fixed-height container with a
+   * scrollbar of its own. Set by the narrow, stacked layout (App.tsx),
+   * where the panes sit in Main's normal flow under the table and the
+   * *page* is what scrolls -- nesting a scroller inside a scroller there
+   * just hides content behind a second, easily-missed scrollbar. */
+  flow?: boolean;
 }
 
 type LoadState =
@@ -227,7 +233,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
  * pane (mounted for the sub-selected target instead of the main table's
  * selection) -- the only difference between the two mountings is which
  * onNavigate callback AsideSplit wires in. */
-export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery, updateDocumentTitle }: RelatedPanelProps) {
+export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery, updateDocumentTitle, flow }: RelatedPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   // Bumped by TeamNoteActions after a Mark done/Reopen toggle -- that write
   // goes through notesApi.ts directly, not through anything that changes
@@ -278,25 +284,25 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
   const { detail } = state;
   const sections = RELATED_CONFIG[view.key] ?? [];
 
-  return (
-    <ScrollArea h="100%" type="auto">
-      <Stack gap="md" p="md">
-        <Group justify="space-between" align="flex-start" wrap="nowrap">
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
-          </div>
-          <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
-        </Group>
-        {view.key === "generated" && <GeneratedItemActions detail={detail} />}
-        {view.key === "team_note" && (
-          <TeamNoteActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
-        )}
-        <DetailFields type={view.key} detail={detail} />
-        {sections.map((section) => {
-          const Section = SECTION_COMPONENTS[section];
-          return <Section key={section} type={view.key} detail={detail} onNavigate={onNavigate} onViewGallery={onViewGallery} />;
-        })}
-      </Stack>
-    </ScrollArea>
+  const body = (
+    <Stack gap="md" p="md">
+      <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
+        </div>
+        <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
+      </Group>
+      {view.key === "generated" && <GeneratedItemActions detail={detail} />}
+      {view.key === "team_note" && (
+        <TeamNoteActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
+      )}
+      <DetailFields type={view.key} detail={detail} />
+      {sections.map((section) => {
+        const Section = SECTION_COMPONENTS[section];
+        return <Section key={section} type={view.key} detail={detail} onNavigate={onNavigate} onViewGallery={onViewGallery} />;
+      })}
+    </Stack>
   );
+
+  return flow ? body : <ScrollArea h="100%" type="auto">{body}</ScrollArea>;
 }
