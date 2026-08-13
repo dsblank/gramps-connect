@@ -23,12 +23,8 @@ RUN npm run build -w app
 # gramps-web-base only installs system packages and Gramps addons (incl.
 # SharedPostgreSQL) from Dockerfile.base -- it never installs the
 # gramps_webapi Python package itself (see .github/workflows/base-image.yml
-# in the gramps-web-api repo), so it's safe to build on even though the
-# object-query-language endpoints this project needs
-# (https://github.com/gramps-project/gramps-web-api/pull/913) are not yet
-# merged upstream. We install gramps and gramps-web-api from source below,
-# from the exact branches this project already builds and tests against in
-# .github/workflows/build-standalone.yml.
+# in the gramps-web-api repo), so we install gramps and gramps-web-api from
+# source below.
 FROM ghcr.io/gramps-project/gramps-web-base:latest AS backend
 
 WORKDIR /app
@@ -41,8 +37,12 @@ RUN git clone --depth 1 --branch maintenance/gramps60 \
       https://github.com/gramps-project/gramps /app/gramps-src && \
     pip install --no-cache-dir -e /app/gramps-src --no-deps
 
-RUN git clone --depth 1 --branch feat/object-query-endpoints \
-      https://github.com/dsblank/gramps-web-api /app/gramps-web-api-src && \
+# The ten /api/<type>/query/ endpoints this project's client is built on
+# (https://github.com/gramps-project/gramps-web-api/pull/913) are merged
+# upstream now, so this tracks gramps-project master rather than the
+# dsblank/gramps-web-api feat/object-query-endpoints branch it used to.
+RUN git clone --depth 1 --branch master \
+      https://github.com/gramps-project/gramps-web-api /app/gramps-web-api-src && \
     pip install --no-cache-dir -e /app/gramps-web-api-src --no-deps
 
 # PyGObject: gramps/gen/const.py unconditionally does

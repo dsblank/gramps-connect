@@ -5,6 +5,10 @@ standalone
 sdk
 app/node_modules
 app/dist
-app/public
+# Only the generated sql.js copies, not the whole directory: public/ also
+# holds the tracked favicon set that index.html references by absolute path
+# (same split .gitignore already makes). npm ci's postinstall hook
+# (app/scripts/copy-wasm.mjs) re-creates the .wasm files inside the build.
+app/public/*.wasm
 **/__pycache__
 *.pyc
