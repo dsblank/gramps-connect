@@ -108,12 +108,33 @@ export async function getOrCreateTagHandle(token: string, name: string): Promise
   return addedHandle(await res.json());
 }
 
-/** Sets `desc` and appends `tagHandle` to `tag_list` on an existing Media
+/** Attribute holding the name a generated file should download as. Needed
+ * because the server derives the download name from the Media object's
+ * `path`, which it builds itself as `<checksum><ext>` with `ext` guessed
+ * from the upload's MIME type (media.py's get_default_filename) -- so a
+ * format with no registered MIME (.jsonl, .gw, .wft) becomes
+ * `<checksum>.bin`, and every generated file, even the ones that guess
+ * right, downloads under its checksum. `path` itself can't be corrected
+ * from here: local storage *resolves the file* through it (file.py's
+ * LocalFileHandler), so rewriting it would point at nothing.
+ *
+ * A plain custom attribute type, which the API takes as a bare string and
+ * reconstructs server-side as AttributeType(CUSTOM, "File name"). Named to
+ * read properly, since the Output detail panel shows attributes as-is. */
+export const FILE_NAME_ATTRIBUTE = "File name";
+
+/** Sets `desc`, appends `tagHandle` to `tag_list`, and (when given) records
+ * `fileName` as the FILE_NAME_ATTRIBUTE attribute, on an existing Media
  * object. Generic object PUT is a full replace (base.py's _parse_object/
  * update_object take a whole object, not a partial patch), so this fetches
- * the current object first rather than sending just the two changed
- * fields. */
-export async function tagAndDescribeMedia(token: string, handle: string, desc: string, tagHandle: string): Promise<void> {
+ * the current object first rather than sending just the changed fields. */
+export async function tagAndDescribeMedia(
+  token: string,
+  handle: string,
+  desc: string,
+  tagHandle: string,
+  fileName?: string
+): Promise<void> {
   const getRes = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -121,6 +142,12 @@ export async function tagAndDescribeMedia(token: string, handle: string, desc: s
   const obj = await getRes.json();
   obj.desc = desc;
   obj.tag_list = [...(((obj.tag_list as string[]) ?? [])), tagHandle];
+  if (fileName) {
+    obj.attribute_list = [
+      ...((obj.attribute_list as unknown[]) ?? []),
+      { _class: "Attribute", type: FILE_NAME_ATTRIBUTE, value: fileName },
+    ];
+  }
   const putRes = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

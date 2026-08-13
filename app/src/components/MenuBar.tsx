@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Button, Divider, Group, Menu } from "@mantine/core";
 import { getToken, hasPermissions } from "../auth/auth";
 import { ImportDialog } from "./ImportDialog";
+import { ExportDialog } from "./ExportDialog";
 import { DeleteAllDialog } from "./DeleteAllDialog";
 import { ReportDialog } from "./ReportDialog";
 import { formatHash } from "../hash";
@@ -11,6 +12,16 @@ import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/rep
 // at ROLE_OWNER and above.
 const PERM_IMPORT_FILE = "ImportFile";
 const PERM_DEL_OBJ_BATCH = "BatchDeleteObjects";
+// Exporting itself needs no permission (any logged-in user may POST to the
+// exporters endpoint), but *delivering* the result does: the finished file
+// is handed over as a Media object the client creates, tags and describes
+// (store/jobsPromote.ts), so a user who can't do that would watch the
+// export succeed and then fail on the way out. Checking EditObject alone
+// covers the whole promotion: it's granted from ROLE_EDITOR up, and every
+// role holding it also holds AddObject (which arrives one role earlier, at
+// ROLE_CONTRIBUTOR) -- so a contributor, who could upload the file but not
+// then tag it, is correctly excluded too.
+const PERM_EDIT_OBJ = "EditObject";
 
 interface MenuItemSpec {
   label: string;
@@ -144,6 +155,7 @@ function goTo(viewKey: string) {
  * is the first real one. */
 export function MenuBar() {
   const [importOpened, setImportOpened] = useState(false);
+  const [exportOpened, setExportOpened] = useState(false);
   const [deleteAllOpened, setDeleteAllOpened] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportId, setReportId] = useState<string | null>(null);
@@ -178,6 +190,7 @@ export function MenuBar() {
           label="Family Trees"
           items={[
             { label: "Import…", perm: PERM_IMPORT_FILE, onClick: () => setImportOpened(true) },
+            { label: "Export…", perm: PERM_EDIT_OBJ, onClick: () => setExportOpened(true) },
             {
               label: "Delete…",
               perm: PERM_DEL_OBJ_BATCH,
@@ -211,6 +224,7 @@ export function MenuBar() {
         <AppMenu label="Help" items={[]} />
       </Group>
       <ImportDialog opened={importOpened} onClose={() => setImportOpened(false)} />
+      <ExportDialog opened={exportOpened} onClose={() => setExportOpened(false)} />
       <DeleteAllDialog opened={deleteAllOpened} onClose={() => setDeleteAllOpened(false)} />
       <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
     </>
