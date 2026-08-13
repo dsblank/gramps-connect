@@ -21,18 +21,23 @@ export default defineConfig({
       // avoids stale-pre-bundle HMR issues when it changes (see PLAN.md's
       // notes on this package's build-less setup).
       "@gramps-connect/gramps-date",
-      // maplibre-gl (the Map view) spawns a *classic* web worker to parse
-      // vector tiles and GeoJSON. Pre-bundled, Vite rewrites that worker
-      // entry into an ESM module and serves it as
-      // .vite/deps/maplibre-gl-worker.mjs -- which a classic worker can't
-      // parse, so it dies on its first `import` with no error reaching the
-      // page. The symptom is a map that looks *almost* fine: raster
-      // basemap tiles need no worker and draw normally, while everything
-      // that does need one silently never loads -- the style's own vector
-      // layers (no roads, borders or labels) and our places source alike,
-      // with isSourceLoaded() stuck false and not one .pbf ever requested.
-      // Dev-server only; `vite build` bundles the worker correctly either
-      // way.
+      // maplibre-gl (the Map view) spawns a web worker to parse vector
+      // tiles and GeoJSON, found at runtime via `new Worker(new URL(
+      // `./${name}`, import.meta.url))` -- a template literal, which Vite's
+      // static asset scanner can't see, so it never emits the worker file
+      // and the map is left with no worker at all, dev server or
+      // `vite build` alike (see the setWorkerUrl() call in MapCanvas.tsx,
+      // which is the actual fix -- this exclude alone does not solve it).
+      // Pre-bundled instead of excluded, this failed differently but just
+      // as silently: Vite rewrote the worker entry into an ESM module and
+      // served it as .vite/deps/maplibre-gl-worker.mjs, which the *classic*
+      // worker maplibre-gl falls back to constructing can't parse, so it
+      // dies on its first `import` with no error reaching the page. Either
+      // way the symptom is a map that looks *almost* fine: raster basemap
+      // tiles need no worker and draw normally, while everything that does
+      // need one silently never loads -- the style's own vector layers (no
+      // roads, borders or labels) and our places source alike, with
+      // isSourceLoaded() stuck false and not one .pbf ever requested.
       "maplibre-gl",
     ],
   },

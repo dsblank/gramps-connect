@@ -31,10 +31,13 @@ dev-fixtures/layer3-sync/api-fixture/export_cache/
 dev-fixtures/layer3-sync/api-fixture/report_cache/
 dev-fixtures/layer3-sync/api-fixture/server.log
 
-# app: sql.js WASM assets copied in by scripts/copy-wasm.mjs, not source.
-# Only the copies, not the directory: public/ also holds the favicon set,
-# which is artwork we keep.
+# app: sql.js WASM binaries and maplibre-gl's worker + its shared.mjs
+# sibling, all copied in by scripts/copy-wasm.mjs, not source. Only the
+# copies, not the directory: public/ also holds the favicon set, which is
+# artwork we keep. No other .mjs file belongs in public/, so that extension
+# is excluded outright rather than naming the two maplibre files.
 app/public/*.wasm
+app/public/*.mjs
 
 # app: local dev overrides of .env.example -- machine-specific, not source
 app/.env.local

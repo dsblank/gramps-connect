@@ -8,6 +8,29 @@ import type { MapPlace } from "../../store/visualData";
 import { readVisualColors } from "./cssVar";
 import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
+// maplibre-gl loads its tile-parsing/clustering work off the main thread via
+// `new Worker(new URL(\`./${name}\`, import.meta.url))`, with the filename
+// built from a template literal at runtime -- Vite's static asset scanner
+// only recognises a literal string in that position, so it never sees this
+// one and never emits the worker into the build at all. The failure is easy
+// to miss: the *style* still loads (background, controls, attribution all
+// come from the main thread), so the map looks present. Everything that
+// needs the worker silently doesn't -- the vector basemap's own roads/
+// labels, and our clustered GeoJSON places source alike, since GeoJSON
+// clustering is worker-side too.
+//
+// setWorkerUrl() is maplibre's documented way to point at a worker script a
+// bundler can't discover on its own -- but the worker file isn't self-
+// contained: it does `import ... from "./maplibre-gl-shared.mjs"`, a plain
+// relative specifier the package ships expecting a same-directory sibling,
+// not a bundler. A Vite `?url` import fingerprints only the one file asked
+// for, which breaks that relative import (it resolves to an unhashed
+// sibling that was never emitted) rather than fixing it. Both files are
+// instead copied verbatim into public/ by scripts/copy-wasm.mjs, under
+// their own names, so the relative import between them stays intact and
+// they're served at a fixed path the same way the sql.js WASM files are
+// (see registry.ts's locateFile).
+maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
 /** The same OpenFreeMap vector styles gramps-web uses, so the two clients'
  * maps look like the same product. Both are free, key-less, and hosted --
