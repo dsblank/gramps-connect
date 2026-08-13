@@ -1,9 +1,19 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { createRequire } from "node:module";
+
+// Reported by Help > System Information (see src/vite-env.d.ts). Read
+// through createRequire rather than an import so this stays the one place
+// package.json is touched -- importing it from src/ would bundle the whole
+// file, dependency list and all, into the client.
+const { version } = createRequire(import.meta.url)("./package.json");
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   optimizeDeps: {
     exclude: [
       // Workspace-linked @gramps-connect/gramps-date ships raw .ts with no

@@ -5,6 +5,9 @@ import { ImportDialog } from "./ImportDialog";
 import { ExportDialog } from "./ExportDialog";
 import { DeleteAllDialog } from "./DeleteAllDialog";
 import { ReportDialog } from "./ReportDialog";
+import { OverviewDialog } from "./OverviewDialog";
+import { SystemInfoDialog } from "./SystemInfoDialog";
+import { AboutDialog } from "./AboutDialog";
 import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 
@@ -159,6 +162,9 @@ export function MenuBar() {
   const [deleteAllOpened, setDeleteAllOpened] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportId, setReportId] = useState<string | null>(null);
+  const [overviewOpened, setOverviewOpened] = useState(false);
+  const [systemInfoOpened, setSystemInfoOpened] = useState(false);
+  const [aboutOpened, setAboutOpened] = useState(false);
 
   // App.tsx mounts a second MenuBar when the header switches layouts, so
   // the fetch is deduplicated in loadReports() and only its result is
@@ -221,12 +227,38 @@ export function MenuBar() {
           onOpen={() => setReportsRequested(true)}
         />
         <AppMenu label="Tools" items={[]} />
-        <AppMenu label="Help" items={[]} />
+        {/* No permissions here: Overview and About are prose about the app
+            itself, the same for every reader, and someone with the fewest
+            privileges is the one most likely to be new and want them.
+            System Information reads /api/metadata/, which every logged-in
+            user may call (it's a ProtectedResource, not a permissioned
+            one) -- and reporting a bug is exactly what a reader with no
+            privileges still needs to be able to do. */}
+        <AppMenu
+          label="Help"
+          items={[
+            { label: "Overview", onClick: () => setOverviewOpened(true) },
+            { label: "System Information", onClick: () => setSystemInfoOpened(true) },
+            { label: "About", onClick: () => setAboutOpened(true), separatorBefore: true },
+          ]}
+        />
       </Group>
       <ImportDialog opened={importOpened} onClose={() => setImportOpened(false)} />
       <ExportDialog opened={exportOpened} onClose={() => setExportOpened(false)} />
       <DeleteAllDialog opened={deleteAllOpened} onClose={() => setDeleteAllOpened(false)} />
       <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
+      <OverviewDialog opened={overviewOpened} onClose={() => setOverviewOpened(false)} />
+      <SystemInfoDialog opened={systemInfoOpened} onClose={() => setSystemInfoOpened(false)} />
+      {/* About's overview link hands over to the Overview dialog rather
+          than stacking a second modal on top of the first. */}
+      <AboutDialog
+        opened={aboutOpened}
+        onClose={() => setAboutOpened(false)}
+        onShowOverview={() => {
+          setAboutOpened(false);
+          setOverviewOpened(true);
+        }}
+      />
     </>
   );
 }
