@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
 import { getViewStore } from "../store/registry";
-import type { ViewConfig } from "../store/views";
+import { visibleColumns, type ViewConfig } from "../store/views";
 import classes from "./DataTable.module.css";
 
 // Virtualized scroll: the scroll container's inner spacer is sized to
@@ -26,6 +26,13 @@ export function DataTable({ view }: DataTableProps) {
   const store = getViewStore(view.key);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
+  // Everything below (widths, grid tracks, resize indices, cells) is indexed
+  // by position in *this* list, not in view.columns -- a hidden column has no
+  // track and no header to drag. The one exception is reading a value out of
+  // a getRows() row, which is still indexed by the column's `index` into the
+  // full list, since that's the order the cache table and its SELECT are
+  // built in.
+  const columns = useMemo(() => visibleColumns(view), [view]);
   // Column widths are pure display state, so nothing here affects the
   // virtualizer's vertical math -- but this component is remounted per view
   // (see App.tsx's key={`table-${...}`}), so the initial value is read back
@@ -33,7 +40,7 @@ export function DataTable({ view }: DataTableProps) {
   // DEFAULT_COLUMN_WIDTH, and startResize's onUp below writes it back out.
   const [colWidths, setColWidths] = useState<number[]>(() => {
     const saved = getColumnWidths(view.key);
-    return view.columns.map((col) => saved?.[col.key] ?? DEFAULT_COLUMN_WIDTH);
+    return columns.map(({ column }) => saved?.[column.key] ?? DEFAULT_COLUMN_WIDTH);
   });
 
   // The sticky header is a normal-flow sibling *inside* the same scroll
@@ -181,7 +188,7 @@ export function DataTable({ view }: DataTableProps) {
       const widths = colWidths.map((w, i) => (i === index ? finalWidth : w));
       saveColumnWidths(
         view.key,
-        Object.fromEntries(view.columns.map((col, i) => [col.key, widths[i]])),
+        Object.fromEntries(columns.map(({ column }, i) => [column.key, widths[i]])),
       );
     }
     handle.addEventListener("pointermove", onMove);
@@ -203,7 +210,7 @@ export function DataTable({ view }: DataTableProps) {
     // body's column positions during horizontal scroll for free.
     <div className={classes.tableWrapper} ref={scrollRef}>
       <div ref={headerRef} className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: rowWidth }}>
-        {view.columns.map((col, index) => {
+        {columns.map(({ column: col }, index) => {
           // gramps-web-api's order_by only ever accepts a flat, same-table
           // column (see ViewConfig.orderBy's doc comment) -- a column
           // whose select is a json_path (birth_date, place_title, ...)
@@ -255,9 +262,9 @@ export function DataTable({ view }: DataTableProps) {
               }}
             >
               {rawRow ? (
-                view.columns.map((col, i) => (
+                columns.map(({ column: col, index }) => (
                   <div key={col.key} className={classes.cell}>
-                    {col.toDisplay ? col.toDisplay(rawRow[i]) : rawRow[i] == null ? "" : String(rawRow[i])}
+                    {col.toDisplay ? col.toDisplay(rawRow[index]) : rawRow[index] == null ? "" : String(rawRow[index])}
                   </div>
                 ))
               ) : (

@@ -372,6 +372,37 @@ export class ViewStore {
     return res[0]?.values ?? [];
   }
 
+  /** Whole-table read of just the named columns, for a consumer that needs
+   * every cached row at once rather than a scroll window -- the Map and
+   * Timeline (see store/visualData.ts), which plot the entire tree and so
+   * have no viewport to page against.
+   *
+   * Deliberately *not* a general "run any SQL here" escape hatch: the
+   * column names are spliced into the statement, so they're checked against
+   * this view's own ColumnConfig keys first (`handle` too, which every
+   * cache table has as its primary key but which isn't a ColumnConfig).
+   * Unknown names throw rather than being dropped -- a caller asking for a
+   * column this view doesn't cache has a bug, and silently returning short
+   * rows would surface as undefined values far from the cause.
+   *
+   * Row *order* is the same server-derived rowid order as getRows(), which
+   * neither caller depends on (both sort by their own axis -- coordinate,
+   * date), but keeps the two reads consistent. Returns only what's cached:
+   * against a partially filled view this is the loaded prefix, not the
+   * whole tree -- callers watch loadedCount to know. */
+  readColumns(columnKeys: string[]): unknown[][] {
+    if (!this.db) return [];
+    const known = new Set(["handle", ...this.view.columns.map((c) => c.key)]);
+    const unknown = columnKeys.filter((key) => !known.has(key));
+    if (unknown.length > 0) {
+      throw new Error(`[${this.view.key}] not cached columns: ${unknown.join(", ")}`);
+    }
+    const res = this.db.exec(
+      `SELECT ${columnKeys.join(", ")} FROM ${this.view.key} ORDER BY rowid;`
+    );
+    return res[0]?.values ?? [];
+  }
+
   /** Loads this view's cache if it hasn't been loaded yet this session
    * (OPFS, falling back to a fresh fetch); a no-op if already loaded --
    * the caller just reads the current snapshot/rows. */
