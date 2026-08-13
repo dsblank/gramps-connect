@@ -312,6 +312,22 @@ export class ViewStore {
     return (res[0]?.values[0]?.[0] as string | undefined) ?? null;
   }
 
+  /** The Gramps ID of a cached row, by handle. Handles are what selection
+   * is tracked by, but Gramps' report options identify records by Gramps
+   * ID, so ReportDialog.tsx goes through here to pre-fill a report's
+   * subject from whatever the user has selected. Null when this view has
+   * no gramps_id column, hasn't loaded, or doesn't have that row cached --
+   * all of which the caller treats the same way: no pre-fill. */
+  grampsIdForHandle(handle: string): string | null {
+    if (!this.db) return null;
+    if (!this.view.columns.some((column) => column.key === "gramps_id")) return null;
+    const res = this.db.exec(
+      `SELECT gramps_id FROM ${this.view.key} WHERE handle = ?;`,
+      [handle]
+    );
+    return (res[0]?.values[0]?.[0] as string | undefined) ?? null;
+  }
+
   /** Windowed read against the local cache, mirroring the original
    * renderVisible()'s single LIMIT/OFFSET query per scroll frame -- one
    * query for the whole visible range rather than one per row. Returns raw

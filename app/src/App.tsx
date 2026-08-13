@@ -17,7 +17,8 @@ import { StatusBar } from "./components/StatusBar";
 import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
-import { startCatchupSweep, type JobsPollCallbacks } from "./store/jobsPoll";
+import { startCatchupSweep } from "./store/jobsPoll";
+import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import logo from "./assets/icons/gramps-logo.svg";
 
@@ -25,23 +26,6 @@ export function App() {
   const loggedIn = useSyncExternalStore(subscribeAuth, getAuthSnapshot);
   return loggedIn ? <AuthenticatedApp /> : <LoginForm />;
 }
-
-/** In-app toasts for the job-status watcher (store/jobsPoll.ts) -- shared
- * by the catch-up sweep started below, and available for a future report/
- * export trigger UI (out of scope here, see the plan) to pass to
- * trackJob() for the dispatch-scoped loop's own completion toast. */
-const jobsPollCallbacks: JobsPollCallbacks = {
-  onPromoted: (result, kind) => {
-    const title = kind === "report" ? "Report ready" : "Export ready";
-    notifications.show({ color: "green", title, message: result.desc });
-    notifyBrowser(title, result.desc);
-  },
-  onFailed: (kind, message) => {
-    const title = kind === "report" ? "Report failed" : "Export failed";
-    notifications.show({ color: "red", title, message });
-    notifyBrowser(title, message);
-  },
-};
 
 /** Toast for a Notes-table change by someone else, per useLiveSync's
  * onRemoteNoteChange -- same notifications.show + notifyBrowser shape as

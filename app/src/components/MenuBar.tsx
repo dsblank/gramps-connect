@@ -1,8 +1,10 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Button, Divider, Group, Menu } from "@mantine/core";
-import { hasPermissions } from "../auth/auth";
+import { getToken, hasPermissions } from "../auth/auth";
 import { ImportDialog } from "./ImportDialog";
 import { DeleteAllDialog } from "./DeleteAllDialog";
+import { ReportDialog } from "./ReportDialog";
+import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
 // at ROLE_OWNER and above.
@@ -20,11 +22,44 @@ interface MenuItemSpec {
    * apart from the rest of its menu. */
   separatorBefore?: boolean;
   danger?: boolean;
+  /** Turns this item into a submenu. Mutually exclusive with onClick. */
+  children?: MenuItemSpec[];
 }
 
 interface AppMenuProps {
   label: string;
   items: MenuItemSpec[];
+  /** Called each time the dropdown opens -- lets a menu whose contents
+   * come from the server (Reports) hold off fetching until someone
+   * actually looks at it. */
+  onOpen?: () => void;
+}
+
+/** One row of a dropdown: a plain item, or a submenu when it has children.
+ * Recursive, though nothing nests deeper than one level today. */
+function AppMenuItem({ item }: { item: MenuItemSpec }) {
+  const body = item.children ? (
+    <Menu.Sub>
+      <Menu.Sub.Target>
+        <Menu.Sub.Item>{item.label}</Menu.Sub.Item>
+      </Menu.Sub.Target>
+      <Menu.Sub.Dropdown>
+        {item.children.map((child) => (
+          <AppMenuItem key={child.label} item={child} />
+        ))}
+      </Menu.Sub.Dropdown>
+    </Menu.Sub>
+  ) : (
+    <Menu.Item onClick={item.onClick} c={item.danger ? "red" : undefined}>
+      {item.label}
+    </Menu.Item>
+  );
+  return (
+    <>
+      {item.separatorBefore && <Divider />}
+      {body}
+    </>
+  );
 }
 
 /** One top-level dropdown in the bar. Filters items down to ones the
@@ -33,10 +68,10 @@ interface AppMenuProps {
  * still opens but shows a single disabled row rather than the menu
  * disappearing or being unclickable -- keeps the bar's layout stable as
  * items land menu by menu instead of the whole row reflowing each time. */
-function AppMenu({ label, items }: AppMenuProps) {
+function AppMenu({ label, items, onOpen }: AppMenuProps) {
   const visibleItems = items.filter((item) => !item.perm || hasPermissions(item.perm));
   return (
-    <Menu shadow="md" width={200} position="bottom-start">
+    <Menu shadow="md" width={200} position="bottom-start" onOpen={onOpen}>
       <Menu.Target>
         <Button variant="subtle" size="xs">
           {label}
@@ -48,16 +83,50 @@ function AppMenu({ label, items }: AppMenuProps) {
         ) : (
           visibleItems.map((item) => (
             <Fragment key={item.label}>
-              {item.separatorBefore && <Divider />}
-              <Menu.Item onClick={item.onClick} c={item.danger ? "red" : undefined}>
-                {item.label}
-              </Menu.Item>
+              <AppMenuItem item={item} />
             </Fragment>
           ))
         )}
       </Menu.Dropdown>
     </Menu>
   );
+}
+
+// Fetched once per session, on the first open of the Reports menu, and
+// shared by every MenuBar instance (App.tsx renders one of two header
+// layouts, and swaps between them on resize). The list is fixed for the
+// life of the server process -- it's the set of installed report plugins,
+// not tree data -- so there's nothing to invalidate.
+let reportsPromise: Promise<ReportSummary[]> | null = null;
+
+function loadReports(): Promise<ReportSummary[]> {
+  if (!reportsPromise) {
+    reportsPromise = (async () => listReports(await getToken()))().catch((err) => {
+      // Don't cache the failure: the next open should try again.
+      reportsPromise = null;
+      throw err;
+    });
+  }
+  return reportsPromise;
+}
+
+/** The Reports menu's items: one submenu per report category, in desktop
+ * Gramps' own order (REPORT_CATEGORIES), skipping any category no
+ * installed report belongs to. */
+function reportMenuItems(reports: ReportSummary[], onPick: (id: string) => void): MenuItemSpec[] {
+  return REPORT_CATEGORIES.flatMap(({ category, label }) => {
+    const inCategory = reports.filter((report) => report.category === category);
+    if (inCategory.length === 0) return [];
+    return [
+      {
+        label,
+        children: inCategory.map((report) => ({
+          label: report.name,
+          onClick: () => onPick(report.id),
+        })),
+      },
+    ];
+  });
 }
 
 /** The desktop-Gramps-style menu bar (Family Trees/Add/Edit/View/Reports/
@@ -68,6 +137,26 @@ function AppMenu({ label, items }: AppMenuProps) {
 export function MenuBar() {
   const [importOpened, setImportOpened] = useState(false);
   const [deleteAllOpened, setDeleteAllOpened] = useState(false);
+  const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [reportId, setReportId] = useState<string | null>(null);
+
+  // App.tsx mounts a second MenuBar when the header switches layouts, so
+  // the fetch is deduplicated in loadReports() and only its result is
+  // per-instance state. An error leaves `reports` empty, which AppMenu
+  // already renders as the standard "Nothing here yet" row.
+  const [reportsRequested, setReportsRequested] = useState(false);
+  useEffect(() => {
+    if (!reportsRequested) return;
+    let cancelled = false;
+    loadReports()
+      .then((list) => {
+        if (!cancelled) setReports(list);
+      })
+      .catch((err) => console.error("failed to list reports", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [reportsRequested]);
 
   return (
     <>
@@ -93,12 +182,17 @@ export function MenuBar() {
         <AppMenu label="Add" items={[]} />
         <AppMenu label="Edit" items={[]} />
         <AppMenu label="View" items={[]} />
-        <AppMenu label="Reports" items={[]} />
+        <AppMenu
+          label="Reports"
+          items={reportMenuItems(reports, setReportId)}
+          onOpen={() => setReportsRequested(true)}
+        />
         <AppMenu label="Tools" items={[]} />
         <AppMenu label="Help" items={[]} />
       </Group>
       <ImportDialog opened={importOpened} onClose={() => setImportOpened(false)} />
       <DeleteAllDialog opened={deleteAllOpened} onClose={() => setDeleteAllOpened(false)} />
+      <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
     </>
   );
 }

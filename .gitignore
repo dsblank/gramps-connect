@@ -28,6 +28,7 @@ dev-fixtures/layer3-sync/api-fixture/persistent_cache/
 dev-fixtures/layer3-sync/api-fixture/request_cache/
 dev-fixtures/layer3-sync/api-fixture/thumbnail_cache/
 dev-fixtures/layer3-sync/api-fixture/export_cache/
+dev-fixtures/layer3-sync/api-fixture/report_cache/
 dev-fixtures/layer3-sync/api-fixture/server.log
 
 # app: sql.js WASM assets copied in by scripts/copy-wasm.mjs, not source
