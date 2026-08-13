@@ -29,8 +29,9 @@ const MapCanvas = lazy(() => import("./MapCanvas").then((m) => ({ default: m.Map
  * instead -- a person's places, a region's places (see store/visualScope.ts,
  * which resolves that entirely from the caches). */
 export function MapView({ subject }: { subject: VisualSubject | null }) {
-  const { data, loading, error } = useVisualData(true);
-  const { scope, loading: scopeLoading, error: scopeError } = useVisualScope(subject, data);
+  const visual = useVisualData(true);
+  const { data, loading, error } = visual;
+  const { scope, loading: scopeLoading, error: scopeError } = useVisualScope(subject, visual);
   const [search, setSearch] = useState("");
   const [timeOn, setTimeOn] = useState(false);
   const [fitRequest, setFitRequest] = useState(0);

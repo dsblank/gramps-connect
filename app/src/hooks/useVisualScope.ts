@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { VisualSubject } from "../hash";
 import { loadScopeStores, resolveScope, storesNeededFor, type ResolvedScope } from "../store/visualScope";
-import type { VisualData } from "../store/visualData";
 import { useViewStore } from "./useViewStore";
+import type { VisualDataState } from "./useVisualData";
 
 export interface VisualScopeState {
   /** null whenever the route carries no subject, and also while one is
@@ -22,7 +22,8 @@ export interface VisualScopeState {
  * subject is *resolved from*. Split rather than folded in because the
  * second is conditional -- an unscoped map, or one scoped to a place, never
  * touches the People cache at all, and shouldn't pay to download it. */
-export function useVisualScope(subject: VisualSubject | null, data: VisualData): VisualScopeState {
+export function useVisualScope(subject: VisualSubject | null, visual: VisualDataState): VisualScopeState {
+  const { data } = visual;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,10 +59,19 @@ export function useVisualScope(subject: VisualSubject | null, data: VisualData):
     // and flash the chip back to "loading" for an unchanged route.
   }, [subject?.type, subject?.handle, needed]);
 
+  // Resolution needs the Places/Events caches too, not just the stores
+  // above: every branch of resolveScope reaches into `data` for the
+  // event->place join, so resolving before useVisualData is done yields a
+  // scope with no places at all -- reported to the user as "nothing to plot
+  // for this record" for a person whose events are simply still arriving.
+  // Gating on the same signal the plot itself waits for keeps the chip and
+  // the plot telling one story.
+  const dataReady = !visual.loading && visual.error === null;
+
   const scope = useMemo(
-    () => (subject && ready ? resolveScope(subject, data) : null),
+    () => (subject && ready && dataReady ? resolveScope(subject, data) : null),
     [
-      subject?.type, subject?.handle, ready, data,
+      subject?.type, subject?.handle, ready, dataReady, data,
       personSnapshot.loadedCount, personSnapshot.revision,
       familySnapshot.loadedCount, familySnapshot.revision,
     ],
@@ -69,11 +79,11 @@ export function useVisualScope(subject: VisualSubject | null, data: VisualData):
 
   return {
     scope,
-    // A subject that resolved to null once its stores are loaded isn't
-    // loading any more -- it's a handle this cache doesn't have (a stale
-    // link, or a fill that hasn't reached it). The visuals fall back to the
-    // whole tree either way; only the chip needs to tell them apart.
-    loading: subject !== null && !ready && error === null,
-    error,
+    // Still loading until *both* halves are ready. Only once they are does
+    // a null scope mean what the chip says it means -- a handle this cache
+    // genuinely doesn't have (a stale link, or a background fill that
+    // hasn't reached it yet) rather than one it hasn't got to.
+    loading: subject !== null && (!ready || visual.loading) && error === null,
+    error: error ?? visual.error,
   };
 }

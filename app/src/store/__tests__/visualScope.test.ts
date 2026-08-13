@@ -208,16 +208,32 @@ describe("resolveScope: event", () => {
 });
 
 describe("storesNeededFor", () => {
-  it("asks for nothing beyond the caches the visuals already load", () => {
-    // Place and Event resolve straight out of the Places/Events caches
-    // useVisualData has loaded anyway -- neither should trigger a download.
-    expect(storesNeededFor({ type: "place", handle: "x" })).toEqual([]);
-    expect(storesNeededFor({ type: "event", handle: "x" })).toEqual([]);
+  it("names every store its resolver actually reads, including the visuals' own", () => {
+    // This used to return [] for both, on the reasoning that useVisualData
+    // loads the Places and Events caches anyway. It does -- but not
+    // necessarily *yet*, and readRowByHandle can't distinguish an unopened
+    // store from a missing row, so an event subject resolved during that
+    // window reported "Record not found" for a record that was merely still
+    // downloading.
+    expect(storesNeededFor({ type: "event", handle: "x" })).toEqual(["event"]);
+    expect(storesNeededFor({ type: "place", handle: "x" })).toEqual(["place"]);
     expect(storesNeededFor(null)).toEqual([]);
   });
 
   it("asks for the person cache for a family, since the couple's events live there", () => {
     expect(storesNeededFor({ type: "family", handle: "x" })).toContain("person");
     expect(storesNeededFor({ type: "family", handle: "x" })).toContain("family");
+  });
+});
+
+describe("resolveScope against an unloaded store", () => {
+  it("returns null rather than throwing, so a caller can wait and retry", () => {
+    // The state every cache is in on the first run of a build that changed
+    // its columns. Callers must gate on storesNeededFor rather than treat
+    // this null as "no such record" -- see useVisualScope.
+    const empty = new ViewStore(EVENT_VIEW, getSql);
+    stores.set("__unloaded", empty);
+    expect(empty.readRowByHandle("e1", ["event_type"])).toBeNull();
+    stores.delete("__unloaded");
   });
 });

@@ -39,9 +39,18 @@ export interface ResolvedScope {
   contributor: Map<string, string>;
 }
 
-/** Which view stores a subject type needs loaded before it can be resolved.
- * The Places and Events caches are always loaded by useVisualData itself --
- * they're what the visuals plot -- so these are the *extra* ones.
+/** Every view store a subject type's resolver reads, and so every one that
+ * must be loaded before resolveScope can answer for it.
+ *
+ * These used to list only the stores *beyond* the Places and Events caches,
+ * on the reasoning that useVisualData loads those two anyway -- which is
+ * true but says nothing about *when*. readRowByHandle returns null on a
+ * store whose db isn't open yet, indistinguishable from a handle that
+ * genuinely isn't there, so an event or place subject resolved during that
+ * window reported "Record not found" for a record that was merely still
+ * downloading. Every cache refetches from scratch the first time a build
+ * with new columns runs, which made that window wide and the bug the normal
+ * case rather than a rare race.
  *
  * A family needs the person cache as well as its own: its scope includes
  * the couple's events, which live on their Person rows. That the store may
@@ -52,8 +61,8 @@ export interface ResolvedScope {
 const REQUIRED_STORES: Record<string, string[]> = {
   person: ["person"],
   family: ["family", "person"],
-  event: [],
-  place: [],
+  event: ["event"],
+  place: ["place"],
 };
 
 export function storesNeededFor(subject: VisualSubject | null): string[] {

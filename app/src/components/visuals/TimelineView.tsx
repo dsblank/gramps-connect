@@ -29,8 +29,9 @@ import { VisualFrame } from "./VisualFrame";
  * scoped timeline a primary-key lookup here rather than a query. See
  * store/visualScope.ts. */
 export function TimelineView({ subject }: { subject: VisualSubject | null }) {
-  const { data, loading, error } = useVisualData(true);
-  const { scope, loading: scopeLoading, error: scopeError } = useVisualScope(subject, data);
+  const visual = useVisualData(true);
+  const { data, loading, error } = visual;
+  const { scope, loading: scopeLoading, error: scopeError } = useVisualScope(subject, visual);
   const [search, setSearch] = useState("");
   const [hidden, setHidden] = useState<Set<EventCategory>>(() => new Set());
   const [selected, setSelected] = useState<TimelineEvent | null>(null);
