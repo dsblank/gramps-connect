@@ -151,11 +151,10 @@ function goTo(viewKey: string) {
   window.location.hash = formatHash({ viewKey, handle: null });
 }
 
-/** The desktop-Gramps-style menu bar (Family Trees/Add/Edit/View/Reports/
- * Tools/Help, per ~/gramps/gramps' viewmanager.py menu layout) -- all seven
- * are shown now to reserve the bar's layout, but most are still empty
- * ("Nothing here yet") until their features exist; Family Trees > Import
- * is the first real one. */
+/** The desktop-Gramps-style menu bar, following ~/gramps/gramps'
+ * viewmanager.py menu layout and order. Only the menus with something in
+ * them are shown: desktop Gramps' Add, Edit and Tools are left out until
+ * they have items, rather than standing empty ("Nothing here yet"). */
 export function MenuBar() {
   const [importOpened, setImportOpened] = useState(false);
   const [exportOpened, setExportOpened] = useState(false);
@@ -206,8 +205,6 @@ export function MenuBar() {
             },
           ]}
         />
-        <AppMenu label="Add" items={[]} />
-        <AppMenu label="Edit" items={[]} />
         {/* Both are whole-tree overviews of data the app already has cached
             locally, so neither needs a permission: anyone who can see the
             Places and Events tables can see these. Each is a route rather
@@ -226,7 +223,6 @@ export function MenuBar() {
           items={reportMenuItems(reports, setReportId)}
           onOpen={() => setReportsRequested(true)}
         />
-        <AppMenu label="Tools" items={[]} />
         {/* No permissions here: Overview and About are prose about the app
             itself, the same for every reader, and someone with the fewest
             privileges is the one most likely to be new and want them.

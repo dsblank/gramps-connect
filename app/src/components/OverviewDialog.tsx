@@ -44,8 +44,7 @@ export function OverviewDialog({ opened, onClose }: OverviewDialogProps) {
             If you have used Gramps on a desktop computer, this should feel familiar on
             purpose. The icons down the left-hand side switch between the same lists —
             People, Families, Events, Places, and the rest — and the menus across the top
-            are the ones you already know: Family Trees, Add, Edit, View, Reports, Tools,
-            Help.
+            are the ones you already know: Family Trees, View, Reports, Help.
           </Text>
           <Text size="sm">
             That is not just decoration. Genealogy is a long hobby, and people carry
