@@ -147,6 +147,28 @@ describe("resolveScope: family", () => {
     expect([...scope.eventHandles].sort()).toEqual(["e1", "e2", "e3", "e4", "e5"]);
     expect(scope.label).toBe("Bob Jones & Alice Vaughan");
   });
+
+  it("attributes each event to whichever record contributed it", () => {
+    // The point of the whole map: "Cardiff, 2 events" can't tell where they
+    // married from where he died. This is what makes that answerable.
+    const { contributor } = resolveScope({ type: "family", handle: "fam" }, data)!;
+    expect(contributor.get("e4")).toBe("Bob Jones & Alice Vaughan"); // the marriage
+    expect(contributor.get("e1")).toBe("Bob Jones");
+    expect(contributor.get("e3")).toBe("Alice Vaughan");
+  });
+
+  it("gives a person scope a uniform attribution", () => {
+    // Every event is that person's, so the map won't name a contributor per
+    // row -- but the map decides that by counting distinct values, so they
+    // still have to be present and identical.
+    const { contributor } = resolveScope({ type: "person", handle: "bob" }, data)!;
+    expect(new Set(contributor.values())).toEqual(new Set(["Bob Jones"]));
+  });
+
+  it("attributes nothing for a place or event subject", () => {
+    expect(resolveScope({ type: "place", handle: "roath" }, data)!.contributor.size).toBe(0);
+    expect(resolveScope({ type: "event", handle: "e1" }, data)!.contributor.size).toBe(0);
+  });
 });
 
 describe("resolveScope: place", () => {

@@ -5,7 +5,7 @@ import {
 import { useVisualData } from "../../hooks/useVisualData";
 import { useVisualScope } from "../../hooks/useVisualScope";
 import { formatHash, type VisualSubject } from "../../hash";
-import type { MapPlace } from "../../store/visualData";
+import type { EventRecord, MapPlace } from "../../store/visualData";
 import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { VisualFrame } from "./VisualFrame";
 
@@ -36,40 +36,36 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   const [fitRequest, setFitRequest] = useState(0);
   const [selected, setSelected] = useState<MapPlace | null>(null);
 
-  // The years actually present, so the slider's ends are the tree's own range
-  // rather than an arbitrary 1500-to-now.
-  const yearBounds = useMemo<[number, number]>(() => {
-    let min = Infinity;
-    let max = -Infinity;
+  // The scope's places that this map can actually draw, with their event
+  // counts and years *recomputed against the scope*.
+  //
+  // That recomputation is the whole point. MapPlace.eventCount and .years
+  // are tallied over every cached event in the tree (visualData.ts), which
+  // is right for the whole-tree map and actively misleading on a scoped
+  // one: a place where a couple had a single wedding would take its marker
+  // size, its "1,204 events" and its 1650-1980 span from everyone else's
+  // events there, so the only thing on screen that meant anything about
+  // this family was *which* markers appeared. Now the marker size, the
+  // detail card and the year filter all describe the scope.
+  //
+  // Null means unscoped, where the whole-tree figures are the correct ones.
+  const scopedPlaces = useMemo(() => {
+    if (!scope) return null;
+    const result: MapPlace[] = [];
     for (const place of data.places) {
-      for (const year of place.years) {
-        if (year < min) min = year;
-        if (year > max) max = year;
+      if (!scope.placeHandles.has(place.handle)) continue;
+      const here = (data.eventsByPlace.get(place.handle) ?? [])
+        .filter((handle) => scope.eventHandles.has(handle));
+      const years: number[] = [];
+      for (const handle of here) {
+        const year = data.eventsByHandle.get(handle)?.year;
+        if (year != null) years.push(year);
       }
+      years.sort((a, b) => a - b);
+      result.push({ ...place, eventCount: here.length, years });
     }
-    if (!Number.isFinite(min)) {
-      const thisYear = new Date().getFullYear();
-      return [thisYear - 200, thisYear];
-    }
-    return [Math.floor(min), Math.ceil(max)];
-  }, [data.places]);
-
-  const [range, setRange] = useState<[number, number]>(yearBounds);
-  // Re-seed the range whenever the data's own bounds change (first load, or a
-  // background-fill page widening them) -- but only while the filter is off,
-  // so it never yanks a range the user has set.
-  useEffect(() => {
-    if (!timeOn) setRange(yearBounds);
-  }, [yearBounds, timeOn]);
-
-  // The scope's places that this map can actually draw. A scope names place
-  // handles; only the ones with coordinates are ever plotted, so this -- not
-  // scope.placeHandles.size -- is what decides whether scoping does anything
-  // here at all. Null means unscoped.
-  const scopedPlaces = useMemo(
-    () => (scope ? data.places.filter((place) => scope.placeHandles.has(place.handle)) : null),
-    [scope, data.places],
-  );
+    return result;
+  }, [scope, data]);
   const scopeActive = scopedPlaces !== null && scopedPlaces.length > 0;
 
   // A person's or family's places are a handful scattered across a
@@ -83,11 +79,42 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
     setMode(subject && (subject.type === "place" || subject.type === "event") ? "context" : "only");
   }, [subject?.type, subject?.handle]);
 
+  // In "only" mode the scoped copies *are* the map, so they replace the
+  // whole-tree rows outright. In context mode the tree is deliberately what's
+  // plotted, and its own figures are the honest ones there.
   const filtering = scopeActive && mode === "only";
+  const source = filtering ? scopedPlaces! : data.places;
+
+  // The years actually present, so the slider's ends are the range of
+  // whatever is on the map -- the tree's own, or the scope's when one is
+  // filtering, rather than an arbitrary 1500-to-now.
+  const yearBounds = useMemo<[number, number]>(() => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const place of source) {
+      for (const year of place.years) {
+        if (year < min) min = year;
+        if (year > max) max = year;
+      }
+    }
+    if (!Number.isFinite(min)) {
+      const thisYear = new Date().getFullYear();
+      return [thisYear - 200, thisYear];
+    }
+    return [Math.floor(min), Math.ceil(max)];
+  }, [source]);
+
+  const [range, setRange] = useState<[number, number]>(yearBounds);
+  // Re-seed the range whenever the data's own bounds change (first load, or a
+  // background-fill page widening them) -- but only while the filter is off,
+  // so it never yanks a range the user has set.
+  useEffect(() => {
+    if (!timeOn) setRange(yearBounds);
+  }, [yearBounds, timeOn]);
+
   const places = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return data.places.filter((place) => {
-      if (filtering && !scope!.placeHandles.has(place.handle)) return false;
+    return source.filter((place) => {
       if (needle !== "" && !place.title.toLowerCase().includes(needle)
         && !place.grampsId.toLowerCase().includes(needle)) {
         return false;
@@ -95,7 +122,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
       if (timeOn && !place.years.some((year) => year >= range[0] && year <= range[1])) return false;
       return true;
     });
-  }, [data.places, search, timeOn, range, filtering, scope]);
+  }, [source, search, timeOn, range]);
 
   // Fit the view to a search result set, which is the whole point of typing
   // one -- but debounced by a frame's worth of keystrokes so it doesn't fly
@@ -135,11 +162,39 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
     setFitRequest((n) => n + 1);
   }, [scopeActive, subject?.type, subject?.handle]);
 
+  // The scoped events at the clicked place -- the answer to "why is this
+  // marker here?", which a count alone can't give. Null when unscoped,
+  // where the card keeps to its summary: a busy place can hold hundreds of
+  // events tree-wide, and listing them all would be a worse card, not a
+  // better one.
+  const selectedEvents = useMemo(() => {
+    if (!selected || !scope) return null;
+    const records = (data.eventsByPlace.get(selected.handle) ?? [])
+      .filter((handle) => scope.eventHandles.has(handle))
+      .map((handle) => data.eventsByHandle.get(handle))
+      .filter((record): record is EventRecord => record !== undefined);
+    // Chronological, with undated events last rather than sorted as if they
+    // were year zero.
+    records.sort((a, b) => (a.year ?? Infinity) - (b.year ?? Infinity));
+    return records;
+  }, [selected, scope, data]);
+
+  // Naming whose event each one is only earns its space when the scope
+  // actually draws from more than one record -- true of a family (the
+  // couple plus each parent), pointless for a person, where every row would
+  // repeat the name already on the chip above.
+  const namedContributors = scope ? new Set(scope.contributor.values()).size > 1 : false;
+
   function openPlace(handle: string) {
     window.location.hash = formatHash({ viewKey: "place", handle });
   }
 
-  const withoutCoords = data.placesCached - data.places.length;
+  // While filtering, the places dropped for want of coordinates are the
+  // scope's own -- the tree-wide figure would be describing places this map
+  // was never going to show anyway.
+  const withoutCoords = filtering
+    ? scope!.placeHandles.size - scopedPlaces!.length
+    : data.placesCached - data.places.length;
 
   return (
     <VisualFrame
@@ -210,13 +265,18 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
       status={
         <Group gap="xs" justify="space-between">
           <Text size="xs" c="dimmed">
-            {places.length.toLocaleString()} of {data.places.length.toLocaleString()} located places shown
+            {/* Both numbers come from `source`, so while filtering they
+                describe the scope ("2 of 2 of this family's places") rather
+                than quoting a tree-wide total the map isn't showing. */}
+            {places.length.toLocaleString()} of {source.length.toLocaleString()} located places shown
             {withoutCoords > 0 && ` · ${withoutCoords.toLocaleString()} without coordinates omitted`}
           </Text>
           <Text size="xs" c="dimmed">
             {data.placesCached < data.placesTotal
               ? `from ${data.placesCached.toLocaleString()} of ${data.placesTotal.toLocaleString()} places cached so far — still filling`
-              : "marker size shows how many events happened there · click a marker for details"}
+              : filtering
+                ? "marker size shows how many of these events happened there · click a marker to see which"
+                : "marker size shows how many events happened there · click a marker for details"}
           </Text>
         </Group>
       }
@@ -240,7 +300,13 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
         />
       </Suspense>
       {selected && (
-        <PlaceCard place={selected} onOpen={() => openPlace(selected.handle)} onClose={() => setSelected(null)} />
+        <PlaceCard
+          place={selected}
+          events={selectedEvents}
+          contributor={namedContributors ? scope!.contributor : null}
+          onOpen={() => openPlace(selected.handle)}
+          onClose={() => setSelected(null)}
+        />
       )}
     </VisualFrame>
   );
@@ -248,14 +314,25 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
 
 interface PlaceCardProps {
   place: MapPlace;
+  /** The scoped events here, chronologically -- null when the map isn't
+   * scoped, where the summary above is all this card shows. */
+  events: EventRecord[] | null;
+  /** Event handle -> whose record it came from, or null when naming them
+   * would add nothing (see namedContributors). */
+  contributor: Map<string, string> | null;
   onOpen: () => void;
   onClose: () => void;
 }
 
 /** The clicked marker's details, and the one control that leaves the map for
  * the Places view. Bottom-left, clear of maplibre's own controls (navigation
- * top-right, scale bottom-left is shifted by this card's own margin). */
-function PlaceCard({ place, onOpen, onClose }: PlaceCardProps) {
+ * top-right, scale bottom-left is shifted by this card's own margin).
+ *
+ * On a scoped map it also lists the events that put this place in scope,
+ * which is the question a scoped marker actually raises -- "Cardiff, 2
+ * events" doesn't distinguish where a couple married from where one of them
+ * was born, and for a family map that distinction is the entire content. */
+function PlaceCard({ place, events, contributor, onOpen, onClose }: PlaceCardProps) {
   // Both ends floored, because MapPlace.years are fractional *within* a year
   // -- so Math.floor is simply the calendar year the event falls in. Ceiling
   // the later end instead made a single 1916 event read as a two-year span,
@@ -285,6 +362,28 @@ function PlaceCard({ place, onOpen, onClose }: PlaceCardProps) {
       <Text size="xs" c="dimmed" mb="xs">
         {place.lat.toFixed(4)}, {place.long.toFixed(4)}
       </Text>
+      {events && events.length > 0 && (
+        // Capped and scrolled: a place can hold a dozen of one person's
+        // events, and an unbounded list would push the card off the map.
+        <Stack gap={4} mb="xs" style={{ maxHeight: 150, overflowY: "auto" }}>
+          {events.map((event) => (
+            <div key={event.handle}>
+              <Text size="xs" fw={500}>
+                {event.type}
+                {/* Said out loud rather than left blank -- an undated event
+                    is still why this marker is here, and a bare type would
+                    read as a rendering gap. */}
+                <Text span size="xs" c="dimmed" fw={400}>
+                  {" · "}{event.dateText || "no date"}
+                </Text>
+              </Text>
+              {contributor?.get(event.handle) && (
+                <Text size="xs" c="dimmed">{contributor.get(event.handle)}</Text>
+              )}
+            </div>
+          ))}
+        </Stack>
+      )}
       <Button size="xs" fullWidth onClick={onOpen}>Open in Places</Button>
     </Paper>
   );

@@ -33,8 +33,8 @@ export interface MapPlace {
   years: number[];
 }
 
-/** A cached Event that has a usable date. */
-export interface TimelineEvent {
+/** A cached Event, whether or not its date can be placed on an axis. */
+export interface EventRecord {
   handle: string;
   grampsId: string;
   /** Event type as display text (see views.ts's formatEventType) -- what
@@ -42,11 +42,20 @@ export interface TimelineEvent {
   type: string;
   description: string;
   placeTitle: string;
-  /** Formatted date, for the tooltip. */
+  /** Formatted date, for the tooltip. Empty when there's no date at all. */
   dateText: string;
-  /** Fractional Gregorian year -- the timeline's x axis. Fractional so
-   * dots within a year still separate when zoomed right in, without
-   * dragging JS Date (and its year-1..99 and BC handling) into it. */
+  /** Fractional Gregorian year, or null when the date can't be placed on
+   * an axis (unset, or text-only). Fractional so dots within a year still
+   * separate when zoomed right in, without dragging JS Date (and its
+   * year-1..99 and BC handling) into it. */
+  year: number | null;
+}
+
+/** An EventRecord datable enough to plot -- the timeline's x axis needs a
+ * year, so it takes only these. Narrowed rather than a separate shape: the
+ * two collections below share their objects by reference, so an undated
+ * event costs nothing extra and a dated one isn't stored twice. */
+export interface TimelineEvent extends EventRecord {
   year: number;
 }
 
@@ -61,6 +70,10 @@ export interface VisualData {
   /** The inverse: place handle -> handles of the events there. What lets
    * "everything that happened in this town" be answered locally. */
   eventsByPlace: Map<string, string[]>;
+  /** Every cached event by handle, dated or not -- what lets a scoped view
+   * say *which* events put a place in scope, rather than only how many.
+   * `events` above holds the datable subset of these same objects. */
+  eventsByHandle: Map<string, EventRecord>;
   /** Place handle -> handles of the places directly inside it, inverted
    * from each place's own `enclosed_by`. Gramps records an event against
    * the most specific place it knows, so scoping to a county or a country
@@ -79,7 +92,7 @@ export interface VisualData {
 
 export const EMPTY_VISUAL_DATA: VisualData = {
   places: [], events: [],
-  placeOfEvent: new Map(), eventsByPlace: new Map(), childPlaces: new Map(),
+  placeOfEvent: new Map(), eventsByPlace: new Map(), eventsByHandle: new Map(), childPlaces: new Map(),
   placesCached: 0, placesTotal: 0, eventsCached: 0, eventsTotal: 0,
 };
 
@@ -146,6 +159,7 @@ export function readVisualData(): VisualData {
   // The two scoping indexes (see VisualData), filled from the same scan.
   const placeOfEvent = new Map<string, string>();
   const eventsByPlace = new Map<string, string[]>();
+  const eventsByHandle = new Map<string, EventRecord>();
 
   for (const row of eventStore.readColumns([
     "handle", "gramps_id", "event_type", "description", "place_title", "place", "date",
@@ -167,8 +181,11 @@ export function readVisualData(): VisualData {
         else yearsByPlace.set(placeHandle, [year]);
       }
     }
-    if (year === null) continue;
-    events.push({
+    // Built for every event, then shared by reference into `events` when
+    // it's datable -- an undated event still has to be nameable (a scoped
+    // place card lists it as what put that place in scope), it just can't
+    // be plotted.
+    const record: EventRecord = {
       handle,
       grampsId: grampsId ?? "",
       type: formatEventType(typeJson) || "Unknown",
@@ -176,7 +193,9 @@ export function readVisualData(): VisualData {
       placeTitle: placeTitle ?? "",
       dateText: formatStoredDate(dateJson),
       year,
-    });
+    };
+    eventsByHandle.set(handle, record);
+    if (year !== null) events.push(record as TimelineEvent);
   }
   events.sort((a, b) => a.year - b.year);
   for (const years of yearsByPlace.values()) years.sort((a, b) => a - b);
@@ -214,6 +233,7 @@ export function readVisualData(): VisualData {
     events,
     placeOfEvent,
     eventsByPlace,
+    eventsByHandle,
     childPlaces,
     placesCached: placeSnapshot.loadedCount,
     placesTotal: placeSnapshot.totalCount,

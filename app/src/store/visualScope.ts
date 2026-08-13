@@ -30,6 +30,13 @@ export interface ResolvedScope {
   /** The places to plot: for a person or family, wherever their events
    * happened; for a place, itself and everything inside it. */
   placeHandles: Set<string>;
+  /** Event handle -> whose record contributed it. A family scope draws
+   * from three places at once (the couple's own events and each parent's),
+   * and "Cardiff, 2 events" can't answer the question a family map is
+   * actually asked -- is this where they married, or where he was born?
+   * Empty for a place or event subject, where there's no such distinction
+   * to draw. */
+  contributor: Map<string, string>;
 }
 
 /** Which view stores a subject type needs loaded before it can be resolved.
@@ -89,11 +96,16 @@ function resolvePerson(subject: VisualSubject, data: VisualData): ResolvedScope 
   if (!row) return null;
   const [given, surname, eventRefs] = row as [string | null, string | null, string | null];
   const eventHandles = new Set(parseHandleList(eventRefs));
+  const label = [given, surname].filter(Boolean).join(" ") || "(unnamed person)";
   return {
     subject,
-    label: [given, surname].filter(Boolean).join(" ") || "(unnamed person)",
+    label,
     eventHandles,
     placeHandles: placesOfEvents(eventHandles, data),
+    // Uniform -- every event here is this person's. Recorded anyway so
+    // consumers don't need a per-type branch; they show it only when a
+    // scope has more than one distinct contributor.
+    contributor: new Map([...eventHandles].map((handle) => [handle, label])),
   };
 }
 
@@ -114,20 +126,35 @@ function resolveFamily(subject: VisualSubject, data: VisualData): ResolvedScope 
   ];
 
   const eventHandles = new Set(parseHandleList(eventRefs));
+  const names = [nameOf(fatherJson), nameOf(motherJson)].filter(Boolean);
+  const label = names.length > 0 ? names.join(" & ") : "(family)";
+
+  // The couple's shared events (the marriage) are attributed to the family
+  // as a whole -- they belong to neither parent alone.
+  const contributor = new Map([...eventHandles].map((handle) => [handle, label]));
+
   const personStore = getViewStore("person");
-  for (const parent of [fatherHandle, motherHandle]) {
+  for (const [parent, parentName] of [
+    [fatherHandle, nameOf(fatherJson)], [motherHandle, nameOf(motherJson)],
+  ] as const) {
     if (!parent) continue;
     const parentRow = personStore.readRowByHandle(parent, ["event_refs"]);
     if (!parentRow) continue;
-    for (const handle of parseHandleList(parentRow[0] as string | null)) eventHandles.add(handle);
+    for (const handle of parseHandleList(parentRow[0] as string | null)) {
+      eventHandles.add(handle);
+      // First contributor wins, so an event already claimed by the family
+      // (or by the other parent, for a shared one) keeps that attribution
+      // rather than being overwritten by whoever is scanned last.
+      if (!contributor.has(handle)) contributor.set(handle, parentName || "(unnamed)");
+    }
   }
 
-  const names = [nameOf(fatherJson), nameOf(motherJson)].filter(Boolean);
   return {
     subject,
-    label: names.length > 0 ? names.join(" & ") : "(family)",
+    label,
     eventHandles,
     placeHandles: placesOfEvents(eventHandles, data),
+    contributor,
   };
 }
 
@@ -146,6 +173,7 @@ function resolveEvent(subject: VisualSubject, data: VisualData): ResolvedScope |
     label: [formatEventType(typeJson), placeTitle].filter(Boolean).join(" — ") || "(event)",
     eventHandles,
     placeHandles: placesOfEvents(eventHandles, data),
+    contributor: new Map(),
   };
 }
 
@@ -180,6 +208,7 @@ function resolvePlace(subject: VisualSubject, data: VisualData): ResolvedScope |
     label: (row[0] as string | null) || "(untitled place)",
     eventHandles,
     placeHandles,
+    contributor: new Map(),
   };
 }
 

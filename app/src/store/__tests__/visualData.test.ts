@@ -205,3 +205,25 @@ describe("readVisualData indexes", () => {
     expect(childPlaces.get("cardiff")).toEqual(["roath"]);
   });
 });
+
+describe("eventsByHandle", () => {
+  it("names an undated event, which `events` deliberately leaves out", () => {
+    // A scoped place card lists what put that place in scope, and an
+    // undated burial is as much a reason as a dated one -- it just can't be
+    // plotted on the timeline's axis.
+    const { eventsByHandle, events } = readVisualData();
+    expect(events.some((e) => e.handle === "e2")).toBe(false);
+    expect(eventsByHandle.get("e2")).toMatchObject({ type: "Death", year: null });
+  });
+
+  it("shares its objects with `events` rather than storing dated ones twice", () => {
+    const { eventsByHandle, events } = readVisualData();
+    expect(eventsByHandle.get("e1")).toBe(events.find((e) => e.handle === "e1"));
+  });
+
+  it("covers an event with no place at all", () => {
+    // Not in placeOfEvent (nowhere to put it) but still a real event.
+    const { eventsByHandle } = readVisualData();
+    expect(eventsByHandle.get("e3")?.type).toBe("Census");
+  });
+});
