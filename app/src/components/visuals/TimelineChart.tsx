@@ -28,7 +28,7 @@ const BUTTON_FACTOR = 1.6;
 const KEY_PAN = 0.15;
 
 interface TimelineChartProps {
-  /** Already filtered by the modal's category/text filters -- this component
+  /** Already filtered by TimelineView's category/text filters -- this component
    * plots exactly what it's given. */
   events: TimelineEvent[];
   /** Full unfiltered set, so zooming out reaches the whole tree's extent
@@ -36,8 +36,22 @@ interface TimelineChartProps {
    * off would silently re-scale the axis under the user, and turning it back
    * on wouldn't restore the frame. */
   allEvents: TimelineEvent[];
+  /** In-context scope mode (see ScopeChip): every dot stays plotted and
+   * hoverable, but only these are drawn at full strength. Undefined means
+   * "no scope" -- the whole-tree default. */
+  highlighted?: Set<string>;
+  /** A year range to jump the frame to, for arriving with a scope. Applied
+   * whenever its values change, so re-scoping re-frames but panning away
+   * afterwards isn't fought. */
+  focus?: [number, number] | null;
   onOpenEvent: (handle: string) => void;
 }
+
+/** Full strength, or receded to context. Lower than the map's equivalent
+ * because a dot is a much smaller mark than a marker and the dots pack
+ * tightly -- at the map's 0.15 the un-scoped mass still reads as a solid
+ * band rather than as background. */
+const DIM_ALPHA = 0.12;
 
 interface HoverState {
   dot: Dot;
@@ -63,7 +77,7 @@ interface HoverState {
  * timeline uses for the same job -- a single overlapping row of dots plus a
  * kernel-density band above it -- with one, and means density is legible at
  * any zoom without needing the band. */
-export function TimelineChart({ events, allEvents, onOpenEvent }: TimelineChartProps) {
+export function TimelineChart({ events, allEvents, highlighted, focus, onOpenEvent }: TimelineChartProps) {
   const colorScheme = useComputedColorScheme("light");
   const dark = colorScheme === "dark";
   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,6 +94,18 @@ export function TimelineChart({ events, allEvents, onOpenEvent }: TimelineChartP
   useEffect(() => {
     setDomain(fullDomain(allEvents));
   }, [allEvents]);
+
+  // Frame the scope on arrival. Deliberately *after* the reset above in
+  // source order but keyed on its own values, so a scoped open that also
+  // resolves allEvents for the first time settles on the scope's range
+  // rather than the whole tree's. Clamped to the data's own limit so a
+  // single-event scope doesn't zoom past what the axis can express.
+  const focusFrom = focus?.[0];
+  const focusTo = focus?.[1];
+  useEffect(() => {
+    if (focusFrom === undefined || focusTo === undefined) return;
+    setDomain(zoomDomain([focusFrom, focusTo], 1, 0.5, limit));
+  }, [focusFrom, focusTo, limit]);
 
   useLayoutEffect(() => {
     const element = containerRef.current;
@@ -139,6 +165,9 @@ export function TimelineChart({ events, allEvents, onOpenEvent }: TimelineChartP
     ctx.lineWidth = 2;
     for (const dot of layout.dots) {
       const style = dotStyle(dot.category, dark, colors.muted);
+      // Alpha rather than a washed-out colour, so a dimmed dot keeps its
+      // category hue (and so the legend still describes it) while receding.
+      ctx.globalAlpha = highlighted && !highlighted.has(dot.event.handle) ? DIM_ALPHA : 1;
       ctx.beginPath();
       ctx.arc(dot.cx, dot.cy, DOT_RADIUS, 0, Math.PI * 2);
       if (style.fill) {
@@ -153,6 +182,7 @@ export function TimelineChart({ events, allEvents, onOpenEvent }: TimelineChartP
         ctx.lineWidth = 2;
       }
     }
+    ctx.globalAlpha = 1;
 
     // "+N" for a column taller than the plot. Text wears a text token, never
     // a series colour -- and labelled selectively: adjacent full columns are
@@ -184,7 +214,7 @@ export function TimelineChart({ events, allEvents, onOpenEvent }: TimelineChartP
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-  }, [layout, size.width, size.height, dark, colorScheme, hover]);
+  }, [layout, size.width, size.height, dark, colorScheme, hover, highlighted]);
 
   const zoomBy = useCallback((factor: number, anchor = 0.5) => {
     setDomain((current) => zoomDomain(current, factor, anchor, limit));
@@ -192,7 +222,7 @@ export function TimelineChart({ events, allEvents, onOpenEvent }: TimelineChartP
 
   // Wheel zoom, anchored so the year under the cursor stays under the cursor.
   // Attached natively rather than via onWheel because React's wheel listener
-  // is passive -- preventDefault() there is ignored and the modal scrolls
+  // is passive -- preventDefault() there is ignored and the page scrolls
   // behind the chart instead of the chart zooming.
   useEffect(() => {
     const element = containerRef.current;
@@ -338,7 +368,7 @@ export function TimelineChart({ events, allEvents, onOpenEvent }: TimelineChartP
  * densest at the recent (right-hand) end, and every column stacks up from the
  * baseline, so the most-hovered dots of all are the ones in the bottom-right
  * corner -- anchoring the box's top below the cursor there put most of it
- * off the bottom of the modal, with the last line of text cut off. */
+ * off the bottom of the frame, with the last line of text cut off. */
 function DotTooltip({ hover, width, height }: { hover: HoverState; width: number; height: number }) {
   const { dot, x, y } = hover;
   const flipX = x > width - 260;

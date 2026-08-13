@@ -392,15 +392,47 @@ export class ViewStore {
    * whole tree -- callers watch loadedCount to know. */
   readColumns(columnKeys: string[]): unknown[][] {
     if (!this.db) return [];
+    this.assertCachedColumns(columnKeys);
+    const res = this.db.exec(
+      `SELECT ${columnKeys.join(", ")} FROM ${this.view.key} ORDER BY rowid;`
+    );
+    return res[0]?.values ?? [];
+  }
+
+  /** One row's worth of the named columns, by handle, or null if this view
+   * has no such row cached (not loaded yet, or only a prefix of the tree
+   * filled so far -- callers can't tell those apart and mostly shouldn't
+   * care; both mean "can't answer from here").
+   *
+   * The single-row counterpart to readColumns, for a caller that wants one
+   * known record rather than the whole table -- visualScope.ts, resolving a
+   * routed subject to its events. Scanning readColumns' whole-table result
+   * for one handle would work and be O(rows); `handle` is the table's
+   * PRIMARY KEY (see sql.ts's createTableSql), so this is an index lookup
+   * instead. Same column-name guard, for the same reason: the names are
+   * spliced into the statement. */
+  readRowByHandle(handle: string, columnKeys: string[]): unknown[] | null {
+    if (!this.db) return null;
+    this.assertCachedColumns(columnKeys);
+    const res = this.db.exec(
+      `SELECT ${columnKeys.join(", ")} FROM ${this.view.key} WHERE handle = ?;`,
+      [handle]
+    );
+    return res[0]?.values[0] ?? null;
+  }
+
+  /** Shared guard for the two whole-row readers above: the column names are
+   * spliced into SQL, so they're checked against this view's own
+   * ColumnConfig keys (plus `handle`, the primary key, which isn't one).
+   * Unknown names throw rather than being dropped -- a caller asking for a
+   * column this view doesn't cache has a bug, and silently returning short
+   * rows would surface as undefined values far from the cause. */
+  private assertCachedColumns(columnKeys: string[]): void {
     const known = new Set(["handle", ...this.view.columns.map((c) => c.key)]);
     const unknown = columnKeys.filter((key) => !known.has(key));
     if (unknown.length > 0) {
       throw new Error(`[${this.view.key}] not cached columns: ${unknown.join(", ")}`);
     }
-    const res = this.db.exec(
-      `SELECT ${columnKeys.join(", ")} FROM ${this.view.key} ORDER BY rowid;`
-    );
-    return res[0]?.values ?? [];
   }
 
   /** Loads this view's cache if it hasn't been loaded yet this session

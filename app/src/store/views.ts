@@ -40,7 +40,7 @@ export interface ColumnConfig {
    * a DataTable column (see visibleColumns) -- for a field some *other*
    * feature reads out of the local cache rather than one the user is meant
    * to read in the table. Event's `place_handle` is the case this exists
-   * for: MapModal joins events to places entirely locally, which needs the
+   * for: MapView joins events to places entirely locally, which needs the
    * foreign key, but "a5af0eb667015e355db" is noise in a table that
    * already shows the place's title next to it. */
   hidden?: boolean;
@@ -115,6 +115,41 @@ function toSqlJson(value: unknown): string | null {
   return value ? JSON.stringify(value) : null;
 }
 
+/** A list of *reference objects* (EventRef, PlaceRef, ...) reduced to just
+ * the handles they point at, comma-joined.
+ *
+ * The .../query/ endpoints hand back the whole ref struct -- an EventRef
+ * carries `_class`, `role`, `private`, and its own empty `attribute_list`/
+ * `citation_list`/`note_list`, ~250 bytes of which one 26-char `ref` is the
+ * only part any of this app's callers want. Storing the raw JSON would put
+ * all of that in every user's cache (and in OPFS) for nothing. The wire cost
+ * is unavoidable (the API has no "just the refs" projection) but it gzips
+ * hard, being the same keys over and over.
+ *
+ * Comma-joined rather than a JSON array because a Gramps handle is
+ * `[A-Za-z0-9]` only -- it can never contain a comma -- so split(",") is an
+ * exact inverse at a quarter the punctuation. See parseHandleList. */
+function toRefHandles(value: unknown): string | null {
+  const refs = value as { ref?: string }[] | null | undefined;
+  if (!refs?.length) return null;
+  return refs.map((ref) => ref.ref).filter(Boolean).join(",") || null;
+}
+
+/** Same, for a list that's already bare handle strings (Person.family_list)
+ * rather than ref objects. */
+function toHandles(value: unknown): string | null {
+  const handles = value as string[] | null | undefined;
+  if (!handles?.length) return null;
+  return handles.filter(Boolean).join(",") || null;
+}
+
+/** Reads back what toRefHandles/toHandles wrote. The inverse lives here
+ * next to them so the two halves of the encoding can't drift apart. */
+export function parseHandleList(sqlValue: unknown): string[] {
+  if (typeof sqlValue !== "string" || sqlValue === "") return [];
+  return sqlValue.split(",");
+}
+
 // `change` is a plain Unix mtime (when the record was last edited), not a
 // GrampsDate struct -- unrelated to gramps-date, which is about
 // genealogical event dates specifically.
@@ -157,6 +192,26 @@ export const PERSON_VIEW: ViewConfig = {
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    // Hidden, for the Map/Timeline's subject scoping (store/visualScope.ts).
+    // Person.event_ref_list isn't a flat secondary column and isn't a
+    // registered relationship either, so it resolves as a plain json_path --
+    // which is what makes "which events are this person's" answerable from
+    // the local cache at all. Without it, scoping a visual to a person would
+    // need a fetchObjectExtended round trip on every click, on every reload,
+    // and on every shared link, and wouldn't work offline.
+    {
+      key: "event_refs", label: "Event handles", select: { json_path: ["event_ref_list"] },
+      sqlType: "TEXT", hidden: true, toSql: toRefHandles,
+    },
+    // Not read by the current "own events only" person scope -- cached
+    // because adding a column later forces every user to refetch this whole
+    // table (see viewStore.ts's schema probe), and "include the marriages"
+    // is the one obvious extension of that scope. ~25 bytes a person to keep
+    // that a UI change rather than a second forced refetch.
+    {
+      key: "family_list", label: "Family handles", select: { json_path: ["family_list"] },
+      sqlType: "TEXT", hidden: true, toSql: toHandles,
+    },
   ],
 };
 
@@ -182,6 +237,20 @@ export const FAMILY_VIEW: ViewConfig = {
       toSql: toSqlJson, toDisplay: displayName,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    // Hidden, for subject scoping -- same reasoning as Person's above.
+    {
+      key: "event_refs", label: "Event handles", select: { json_path: ["event_ref_list"] },
+      sqlType: "TEXT", hidden: true, toSql: toRefHandles,
+    },
+    // The couple's own handles. A family's *own* event_ref_list is usually
+    // just the Marriage, so a family scope built from it alone would plot a
+    // single dot -- degenerate in exactly the way a lone Event is. These two
+    // let visualScope.ts union in the parents' events, which is what "this
+    // family on a timeline" actually means. Flat secondary columns, unlike
+    // the father_name/mother_name above them (those cross the relationship
+    // to read a field off the target). */
+    { key: "father_handle", label: "Father handle", select: "father_handle", sqlType: "TEXT", hidden: true },
+    { key: "mother_handle", label: "Mother handle", select: "mother_handle", sqlType: "TEXT", hidden: true },
   ],
 };
 
@@ -210,7 +279,7 @@ const EVENT_TYPE_LABELS: Record<number, string> = {
 
 /** An Event's type as text, from the stored raw EventType struct. A custom
  * type's own name (`string`) wins over the "Custom" placeholder its value 0
- * maps to; exported because TimelineModal groups and colors events by
+ * maps to; exported because TimelineView groups and colors events by
  * exactly this string. */
 export function formatEventType(json: unknown): string {
   if (!json) return "";
@@ -253,7 +322,7 @@ export const EVENT_VIEW: ViewConfig = {
     // spelled exactly as the select for a flat column, since that's the
     // response key toRowValues reads it back under -- `as` aliasing only
     // applies to json_path entries. Hidden (see ColumnConfig.hidden): it's
-    // here so MapModal's time filter can match events to places by key
+    // here so MapView's time filter can match events to places by key
     // rather than by comparing display titles.
     { key: "place", label: "Place handle", select: "place", sqlType: "TEXT", hidden: true },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
@@ -274,6 +343,17 @@ export const PLACE_VIEW: ViewConfig = {
     { key: "lat", label: "Lat", select: "lat", sqlType: "TEXT" },
     { key: "long", label: "Long", select: "long", sqlType: "TEXT" },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    // Hidden: the handles of the places this one sits inside (PlaceRef.ref).
+    // Gramps places are a containment hierarchy -- an event is usually
+    // recorded against a specific town, not the county or country above it
+    // -- so scoping a visual to a *region* has to reach its descendants or
+    // it plots nothing. visualScope.ts inverts this into parent -> children
+    // and walks it. One handle for almost every place, so it costs about as
+    // much as `lat` does.
+    {
+      key: "enclosed_by", label: "Enclosing place handles", select: { json_path: ["placeref_list"] },
+      sqlType: "TEXT", hidden: true, toSql: toRefHandles,
+    },
   ],
 };
 

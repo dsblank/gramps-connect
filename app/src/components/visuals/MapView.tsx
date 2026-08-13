@@ -3,19 +3,16 @@ import {
   Badge, Box, Button, CloseButton, Group, Loader, Paper, RangeSlider, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
 import { useVisualData } from "../../hooks/useVisualData";
-import { formatHash } from "../../hash";
+import { useVisualScope } from "../../hooks/useVisualScope";
+import { formatHash, type VisualSubject } from "../../hash";
 import type { MapPlace } from "../../store/visualData";
-import { VisualModal } from "./VisualModal";
+import { ScopeChip, type ScopeMode } from "./ScopeChip";
+import { VisualFrame } from "./VisualFrame";
 
 // maplibre-gl is ~900KB of the bundle on its own -- an order of magnitude more
 // than anything else here -- so it's split out and only fetched when someone
 // actually opens View > Map.
 const MapCanvas = lazy(() => import("./MapCanvas").then((m) => ({ default: m.MapCanvas })));
-
-interface MapModalProps {
-  opened: boolean;
-  onClose: () => void;
-}
 
 /** View > Map: every place in the tree that has coordinates, plotted from the
  * local Places cache.
@@ -26,9 +23,14 @@ interface MapModalProps {
  * range rather than its year-plus-span pair -- "1850 to 1900" is what someone
  * actually means, and the span-around-a-year form makes them solve for it.
  * It's driven by a local join of events onto places (see visualData.ts) rather
- * than gramps-web's separate /api/events/ fetch. */
-export function MapModal({ opened, onClose }: MapModalProps) {
-  const { data, loading, error } = useVisualData(opened);
+ * than gramps-web's separate /api/events/ fetch.
+ *
+ * With a `subject` in the route it shows one record's slice of the tree
+ * instead -- a person's places, a region's places (see store/visualScope.ts,
+ * which resolves that entirely from the caches). */
+export function MapView({ subject }: { subject: VisualSubject | null }) {
+  const { data, loading, error } = useVisualData(true);
+  const { scope, loading: scopeLoading, error: scopeError } = useVisualScope(subject, data);
   const [search, setSearch] = useState("");
   const [timeOn, setTimeOn] = useState(false);
   const [fitRequest, setFitRequest] = useState(0);
@@ -60,9 +62,32 @@ export function MapModal({ opened, onClose }: MapModalProps) {
     if (!timeOn) setRange(yearBounds);
   }, [yearBounds, timeOn]);
 
+  // The scope's places that this map can actually draw. A scope names place
+  // handles; only the ones with coordinates are ever plotted, so this -- not
+  // scope.placeHandles.size -- is what decides whether scoping does anything
+  // here at all. Null means unscoped.
+  const scopedPlaces = useMemo(
+    () => (scope ? data.places.filter((place) => scope.placeHandles.has(place.handle)) : null),
+    [scope, data.places],
+  );
+  const scopeActive = scopedPlaces !== null && scopedPlaces.length > 0;
+
+  // A person's or family's places are a handful scattered across a
+  // continent, and filtering to them is the point. A *place* subject
+  // resolves to itself and whatever it encloses, and filtering to that
+  // would just be a map of the one thing the user was already looking at --
+  // so it opens showing where that sits in the tree instead. Same reasoning
+  // as an Event, which resolves to a single marker.
+  const [mode, setMode] = useState<ScopeMode>("only");
+  useEffect(() => {
+    setMode(subject && (subject.type === "place" || subject.type === "event") ? "context" : "only");
+  }, [subject?.type, subject?.handle]);
+
+  const filtering = scopeActive && mode === "only";
   const places = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return data.places.filter((place) => {
+      if (filtering && !scope!.placeHandles.has(place.handle)) return false;
       if (needle !== "" && !place.title.toLowerCase().includes(needle)
         && !place.grampsId.toLowerCase().includes(needle)) {
         return false;
@@ -70,7 +95,7 @@ export function MapModal({ opened, onClose }: MapModalProps) {
       if (timeOn && !place.years.some((year) => year >= range[0] && year <= range[1])) return false;
       return true;
     });
-  }, [data.places, search, timeOn, range]);
+  }, [data.places, search, timeOn, range, filtering, scope]);
 
   // Fit the view to a search result set, which is the whole point of typing
   // one -- but debounced by a frame's worth of keystrokes so it doesn't fly
@@ -92,18 +117,45 @@ export function MapModal({ opened, onClose }: MapModalProps) {
     if (selected && !places.some((p) => p.handle === selected.handle)) setSelected(null);
   }, [places, selected]);
 
+  // Arriving with a scope frames it, in either mode -- that's the whole
+  // point of following a Map button, and in context mode the scoped markers
+  // would otherwise be invisible needles in the whole-tree haystack.
+  //
+  // Once per subject, tracked by a ref rather than by the effect's deps.
+  // `scope` is a fresh object every time the underlying caches change, and
+  // they change repeatedly while a background fill is still running -- so
+  // depending on it directly would re-fit the map every few hundred rows,
+  // yanking the viewport back from wherever the user had just panned it.
+  const fittedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const key = subject ? `${subject.type}:${subject.handle}` : null;
+    if (key === null) fittedFor.current = null;
+    if (!scopeActive || fittedFor.current === key) return;
+    fittedFor.current = key;
+    setFitRequest((n) => n + 1);
+  }, [scopeActive, subject?.type, subject?.handle]);
+
   function openPlace(handle: string) {
     window.location.hash = formatHash({ viewKey: "place", handle });
-    onClose();
   }
 
   const withoutCoords = data.placesCached - data.places.length;
 
   return (
-    <VisualModal
-      opened={opened}
-      onClose={onClose}
+    <VisualFrame
       title="Map"
+      scope={subject && (
+        <ScopeChip
+          visual="map"
+          scope={scope}
+          loading={scopeLoading}
+          unresolved={!scopeLoading && scopeError === null && scope === null}
+          mode={mode}
+          onModeChange={setMode}
+          matched={scopedPlaces?.length ?? 0}
+          noun="place"
+        />
+      )}
       loading={loading}
       error={error}
       empty={data.places.length === 0 ? (
@@ -177,12 +229,20 @@ export function MapModal({ opened, onClose }: MapModalProps) {
           </Stack>
         }
       >
-        <MapCanvas places={places} fitRequest={fitRequest} onSelectPlace={setSelected} />
+        <MapCanvas
+          places={places}
+          fitRequest={fitRequest}
+          // Only in context mode: in "only" mode every marker drawn is
+          // already a scoped one, so dimming would have nothing to say.
+          highlighted={scopeActive && mode === "context" ? scope!.placeHandles : undefined}
+          fitTo={scopeActive && mode === "context" ? scopedPlaces! : undefined}
+          onSelectPlace={setSelected}
+        />
       </Suspense>
       {selected && (
         <PlaceCard place={selected} onOpen={() => openPlace(selected.handle)} onClose={() => setSelected(null)} />
       )}
-    </VisualModal>
+    </VisualFrame>
   );
 }
 

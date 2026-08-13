@@ -17,7 +17,7 @@ import {
   DateFormat, formatDate, getStartDate, gregorianSdn, gregorianYmd, type GrampsDate,
 } from "@gramps-connect/gramps-date";
 import { getViewStore } from "./registry";
-import { formatEventType } from "./views";
+import { formatEventType, parseHandleList } from "./views";
 
 /** A cached Place that has usable coordinates. */
 export interface MapPlace {
@@ -53,6 +53,21 @@ export interface TimelineEvent {
 export interface VisualData {
   places: MapPlace[];
   events: TimelineEvent[];
+  /** Event handle -> the place it happened at, for turning a set of scoped
+   * events into the places to plot them at (store/visualScope.ts). Covers
+   * *undated* events too, unlike `events` above: a person's undated burial
+   * still has a location worth putting on their map. */
+  placeOfEvent: Map<string, string>;
+  /** The inverse: place handle -> handles of the events there. What lets
+   * "everything that happened in this town" be answered locally. */
+  eventsByPlace: Map<string, string[]>;
+  /** Place handle -> handles of the places directly inside it, inverted
+   * from each place's own `enclosed_by`. Gramps records an event against
+   * the most specific place it knows, so scoping to a county or a country
+   * has to walk down this to reach the towns that actually carry events.
+   * Includes places with no coordinates of their own, which is the common
+   * shape for exactly those upper levels. */
+  childPlaces: Map<string, string[]>;
   /** Rows cached vs. rows the server says exist, per object type -- the
    * visuals plot the first number and disclose the second, since a
    * still-filling cache means an honestly incomplete picture. */
@@ -64,6 +79,7 @@ export interface VisualData {
 
 export const EMPTY_VISUAL_DATA: VisualData = {
   places: [], events: [],
+  placeOfEvent: new Map(), eventsByPlace: new Map(), childPlaces: new Map(),
   placesCached: 0, placesTotal: 0, eventsCached: 0, eventsTotal: 0,
 };
 
@@ -127,6 +143,9 @@ export function readVisualData(): VisualData {
   // timeline's own rows: one scan of the events table serves both visuals.
   const yearsByPlace = new Map<string, number[]>();
   const countByPlace = new Map<string, number>();
+  // The two scoping indexes (see VisualData), filled from the same scan.
+  const placeOfEvent = new Map<string, string>();
+  const eventsByPlace = new Map<string, string[]>();
 
   for (const row of eventStore.readColumns([
     "handle", "gramps_id", "event_type", "description", "place_title", "place", "date",
@@ -138,6 +157,10 @@ export function readVisualData(): VisualData {
     const year = date ? dateToYear(date) : null;
     if (placeHandle) {
       countByPlace.set(placeHandle, (countByPlace.get(placeHandle) ?? 0) + 1);
+      placeOfEvent.set(handle, placeHandle);
+      const atPlace = eventsByPlace.get(placeHandle);
+      if (atPlace) atPlace.push(handle);
+      else eventsByPlace.set(placeHandle, [handle]);
       if (year !== null) {
         const years = yearsByPlace.get(placeHandle);
         if (years) years.push(year);
@@ -159,10 +182,20 @@ export function readVisualData(): VisualData {
   for (const years of yearsByPlace.values()) years.sort((a, b) => a - b);
 
   const places: MapPlace[] = [];
-  for (const row of placeStore.readColumns(["handle", "gramps_id", "title", "lat", "long"])) {
-    const [handle, grampsId, title, latText, longText] = row as [
-      string, string | null, string | null, string | null, string | null,
+  const childPlaces = new Map<string, string[]>();
+  for (const row of placeStore.readColumns(["handle", "gramps_id", "title", "lat", "long", "enclosed_by"])) {
+    const [handle, grampsId, title, latText, longText, enclosedBy] = row as [
+      string, string | null, string | null, string | null, string | null, string | null,
     ];
+    // Before the coordinate check below, not after: a country or county
+    // usually has no coordinates of its own but is exactly the level a
+    // user scopes to, and dropping it here would sever the towns beneath
+    // it from the walk in visualScope.ts.
+    for (const parent of parseHandleList(enclosedBy)) {
+      const children = childPlaces.get(parent);
+      if (children) children.push(handle);
+      else childPlaces.set(parent, [handle]);
+    }
     const coords = parseCoords(latText, longText);
     if (!coords) continue;
     places.push({
@@ -179,6 +212,9 @@ export function readVisualData(): VisualData {
   return {
     places,
     events,
+    placeOfEvent,
+    eventsByPlace,
+    childPlaces,
     placesCached: placeSnapshot.loadedCount,
     placesTotal: placeSnapshot.totalCount,
     eventsCached: eventSnapshot.loadedCount,

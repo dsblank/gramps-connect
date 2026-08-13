@@ -14,6 +14,7 @@ import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MessageButton } from "./related/MessageButton";
+import { VisualButtons } from "./related/VisualButtons";
 import { MessageActions } from "./related/MessageActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
@@ -290,8 +291,20 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
         <div style={{ flex: 1, minWidth: 0 }}>
           <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
         </div>
-        <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
+        {/* The header's action slot: things that act on the record itself
+            (edit it, delete it, start a message about it) rather than ways
+            of looking at it. Kept as a Group so more can sit beside
+            MessageButton without disturbing the title's own layout. */}
+        <Group gap="xs" wrap="nowrap" style={{ flex: "none" }}>
+          <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
+        </Group>
       </Group>
+      {/* Directly under the title, not up in the header slot above: these
+          are ways of *viewing* this record rather than actions on it, and
+          they only exist for four of the types -- on their own row and at
+          full size they read as an offer, which a compact icon tucked into
+          a corner shared with the record's own controls did not. */}
+      <VisualButtons view={view} detail={detail} />
       {view.key === "generated" && <GeneratedItemActions detail={detail} />}
       {view.key === "messages" && (
         <MessageActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />

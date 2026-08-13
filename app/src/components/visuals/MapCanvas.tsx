@@ -57,16 +57,26 @@ const POINT_LAYER = "place-points";
 const LABEL_LAYER = "place-labels";
 
 interface MapCanvasProps {
-  /** Already filtered by MapModal's search and time filter. */
+  /** Already filtered by MapView's search and time filter. */
   places: MapPlace[];
   /** Bumped by the parent to request a re-fit to `places` -- e.g. after a
    * search narrows them down. A counter rather than a boolean so consecutive
    * requests are distinguishable. */
   fitRequest: number;
+  /** In-context scope mode (see ScopeChip): every place stays plotted, but
+   * only these are drawn at full strength and the rest recede. Undefined
+   * means "no scope" -- every marker at full strength, the whole-tree
+   * default. An empty set is not the same thing and never passed: MapView
+   * drops the scope entirely rather than dimming the entire map. */
+  highlighted?: Set<string>;
+  /** Which places a fit should frame. Defaults to `places`; set in context
+   * mode, where the plotted set is the whole tree but the thing worth
+   * looking at is the handful the scope picked out. */
+  fitTo?: MapPlace[];
   onSelectPlace: (place: MapPlace | null) => void;
 }
 
-function toGeoJson(places: MapPlace[]): FeatureCollection<GeoJsonPoint> {
+function toGeoJson(places: MapPlace[], highlighted?: Set<string>): FeatureCollection<GeoJsonPoint> {
   return {
     type: "FeatureCollection",
     features: places.map((place) => ({
@@ -77,15 +87,24 @@ function toGeoJson(places: MapPlace[]): FeatureCollection<GeoJsonPoint> {
         title: place.title,
         grampsId: place.grampsId,
         eventCount: place.eventCount,
+        // A plain boolean on the feature rather than a second source and a
+        // second layer: maplibre can branch a paint property on it (see the
+        // circle-opacity expressions below), so one set of layers keeps
+        // serving both modes and clustering keeps working across them.
+        dim: highlighted ? !highlighted.has(place.handle) : false,
       },
     })),
   };
 }
 
-/** The maplibre map itself, in its own module so MapModal can import() it
+/** Full strength, or receded to context. Applied to fill and label alike so
+ * a dimmed marker's name recedes with it. */
+const DIM_OPACITY = 0.15;
+
+/** The maplibre map itself, in its own module so MapView can import() it
  * lazily -- maplibre-gl is by far the heaviest thing in this app, and a
  * session that never opens View > Map should never download it. */
-export function MapCanvas({ places, fitRequest, onSelectPlace }: MapCanvasProps) {
+export function MapCanvas({ places, fitRequest, highlighted, fitTo, onSelectPlace }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -98,6 +117,8 @@ export function MapCanvas({ places, fitRequest, onSelectPlace }: MapCanvasProps)
   // rebuilding listeners on each filter keystroke.
   const placesRef = useRef(places);
   placesRef.current = places;
+  const highlightedRef = useRef(highlighted);
+  highlightedRef.current = highlighted;
   const onSelectRef = useRef(onSelectPlace);
   onSelectRef.current = onSelectPlace;
 
@@ -182,7 +203,7 @@ export function MapCanvas({ places, fitRequest, onSelectPlace }: MapCanvasProps)
       });
     }
     // Hover name, below the zoom at which the label layer kicks in -- a
-    // maplibre Popup rather than React state lifted to the modal, so it
+    // maplibre Popup rather than React state lifted to MapView, so it
     // tracks the marker as the map moves instead of the cursor.
     map.on("mousemove", POINT_LAYER, (e) => {
       const feature = e.features?.[0];
@@ -221,7 +242,7 @@ export function MapCanvas({ places, fitRequest, onSelectPlace }: MapCanvasProps)
     if (!map.getSource(SOURCE)) {
       map.addSource(SOURCE, {
         type: "geojson",
-        data: toGeoJson(placesRef.current),
+        data: toGeoJson(placesRef.current, highlightedRef.current),
         // maplibre's own clustering, which the local-cache read makes worth
         // having: the whole tree's places are handed over at once rather than
         // in viewport-sized fetches, so a tree with thousands of them would
@@ -276,12 +297,16 @@ export function MapCanvas({ places, fitRequest, onSelectPlace }: MapCanvasProps)
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-color": markColor,
-          "circle-opacity": 0.9,
+          // Dimmed markers stay clickable and keep their size -- what
+          // recedes is only their weight, so the scoped ones read as
+          // figure against the rest as ground.
+          "circle-opacity": ["case", ["get", "dim"], DIM_OPACITY, 0.9],
           // Never below a 8px marker (r >= 4), stepping up with how much
           // happened at this place.
           "circle-radius": ["step", ["get", "eventCount"], 5, 1, 7, 5, 10, 20, 14],
           "circle-stroke-width": 2,
           "circle-stroke-color": colors.surface,
+          "circle-stroke-opacity": ["case", ["get", "dim"], DIM_OPACITY, 1],
         },
       });
       map.addLayer({
@@ -304,6 +329,7 @@ export function MapCanvas({ places, fitRequest, onSelectPlace }: MapCanvasProps)
           "text-color": colors.text,
           "text-halo-color": colors.surface,
           "text-halo-width": 1.5,
+          "text-opacity": ["case", ["get", "dim"], DIM_OPACITY, 1],
         },
       });
     }
@@ -333,25 +359,26 @@ export function MapCanvas({ places, fitRequest, onSelectPlace }: MapCanvasProps)
     const map = mapRef.current;
     if (!map || !ready) return;
     const source = map.getSource(SOURCE) as GeoJSONSource | undefined;
-    source?.setData(toGeoJson(places));
-  }, [places, ready]);
+    source?.setData(toGeoJson(places, highlighted));
+  }, [places, highlighted, ready]);
 
-  // Fit to the current places on request (see fitRequest). Skipped at
-  // fitRequest 0 so the remembered viewport survives the first open.
+  // Fit to the requested places (see fitRequest). Skipped at fitRequest 0 so
+  // the remembered viewport survives the first open.
+  const fitPlaces = fitTo ?? places;
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || fitRequest === 0 || places.length === 0) return;
-    if (places.length === 1) {
-      map.easeTo({ center: [places[0].long, places[0].lat], zoom: Math.max(map.getZoom(), 9) });
+    if (!map || !ready || fitRequest === 0 || fitPlaces.length === 0) return;
+    if (fitPlaces.length === 1) {
+      map.easeTo({ center: [fitPlaces[0].long, fitPlaces[0].lat], zoom: Math.max(map.getZoom(), 9) });
       return;
     }
     const bounds = new maplibregl.LngLatBounds(
-      [places[0].long, places[0].lat],
-      [places[0].long, places[0].lat],
+      [fitPlaces[0].long, fitPlaces[0].lat],
+      [fitPlaces[0].long, fitPlaces[0].lat],
     );
-    for (const place of places) bounds.extend([place.long, place.lat]);
+    for (const place of fitPlaces) bounds.extend([place.long, place.lat]);
     map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 600 });
-  }, [fitRequest, ready, places]);
+  }, [fitRequest, ready, fitPlaces]);
 
   return (
     <Box style={{ flex: 1, minHeight: 0, position: "relative" }}>

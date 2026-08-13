@@ -11,11 +11,13 @@ export interface VisualDataState {
 /** The Places + Events data both the Map and the Timeline plot, loaded from
  * the local caches and kept current.
  *
- * `enabled` is the modal's own `opened`: nothing loads until one of the two
- * visuals is actually on screen, so a session that never opens either never
- * pays for the Places/Events caches it wouldn't otherwise have filled.
- * Once loaded it *stays* loaded for the rest of the session (the caches are
- * the views' own, not this hook's), so reopening is instant.
+ * `enabled` gates the load, so nothing is fetched until one of the two
+ * visuals is actually on screen -- a session that never visits either never
+ * pays for the Places/Events caches it wouldn't otherwise have filled. Both
+ * callers now simply pass `true`: each is mounted only while its own route
+ * is active (App.tsx), so being rendered at all *is* being on screen. Once
+ * loaded it stays loaded for the rest of the session (the caches are the
+ * views' own, not this hook's), so coming back is instant.
  *
  * Re-reads whenever either cache changes underneath it -- a background fill
  * page landing (loadedCount) or a live-sync patch (revision) -- which is

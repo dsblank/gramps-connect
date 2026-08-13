@@ -1,7 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import initSqlJs, { type SqlJsStatic } from "sql.js";
 import { Calendar, Modifier, Quality, gregorianSdn, type GrampsDate } from "@gramps-connect/gramps-date";
-import { dateToYear } from "../visualData";
-import { EVENT_VIEW, formatEventType, visibleColumns } from "../views";
+import { EVENT_VIEW, PLACE_VIEW, formatEventType, visibleColumns, type ViewConfig } from "../views";
+
+vi.mock("../api", () => ({ fetchPage: vi.fn(), fetchByHandle: vi.fn() }));
+vi.mock("../../auth/auth", () => ({
+  getToken: vi.fn().mockResolvedValue("test-token"),
+  getTreeId: vi.fn().mockReturnValue(null),
+  getCurrentUsername: vi.fn().mockReturnValue(null),
+}));
+const stores = new Map<string, ViewStore>();
+vi.mock("../registry", () => ({
+  getViewStore: (key: string) => {
+    const store = stores.get(key);
+    if (!store) throw new Error(`no test store registered for ${key}`);
+    return store;
+  },
+}));
+
+import { fetchPage } from "../api";
+import { ViewStore } from "../viewStore";
+import { dateToYear, readVisualData } from "../visualData";
 
 function date(partial: Partial<GrampsDate> & { dateval: GrampsDate["dateval"] }): GrampsDate {
   return {
@@ -109,5 +128,80 @@ describe("visibleColumns", () => {
   it("leaves a view with no hidden columns exactly as it is", () => {
     const view = { ...EVENT_VIEW, columns: EVENT_VIEW.columns.filter((c) => !c.hidden) };
     expect(visibleColumns(view).map(({ index }) => index)).toEqual(view.columns.map((_, i) => i));
+  });
+});
+
+let sqlPromise: Promise<SqlJsStatic> | null = null;
+function getSql(): Promise<SqlJsStatic> {
+  if (!sqlPromise) sqlPromise = initSqlJs();
+  return sqlPromise;
+}
+
+type SeedItem = Record<string, unknown> & { handle: string };
+
+async function register(view: ViewConfig, items: SeedItem[]): Promise<void> {
+  vi.mocked(fetchPage).mockResolvedValueOnce({
+    page: { items, next_after: null },
+    totalCount: items.length,
+  });
+  const store = new ViewStore(view, getSql);
+  await store.runQuery(null, false);
+  stores.set(view.key, store);
+}
+
+/** Wales (no coordinates) > Cardiff > Roath, with one dated event at Roath,
+ * one undated event at Cardiff, and one event with no place at all. */
+beforeAll(async () => {
+  await register(PLACE_VIEW, [
+    { handle: "wales", gramps_id: "P1", title: "Wales", lat: "", long: "", enclosed_by: [] },
+    {
+      handle: "cardiff", gramps_id: "P2", title: "Cardiff", lat: "51.48", long: "-3.18",
+      enclosed_by: [{ _class: "PlaceRef", ref: "wales" }],
+    },
+    {
+      handle: "roath", gramps_id: "P3", title: "Roath", lat: "51.49", long: "-3.16",
+      enclosed_by: [{ _class: "PlaceRef", ref: "cardiff" }],
+    },
+  ]);
+  await register(EVENT_VIEW, [
+    {
+      handle: "e1", gramps_id: "E1", event_type: { string: "", value: 12 }, description: "",
+      place_title: "Roath", place: "roath",
+      date: { _class: "Date", dateval: [0, 0, 1900, false], modifier: 0, quality: 0, calendar: 0, sortval: 0, text: "", newyear: 0 },
+    },
+    // Undated: absent from `events`, but its place still counts.
+    { handle: "e2", gramps_id: "E2", event_type: { string: "", value: 13 }, description: "", place_title: "Cardiff", place: "cardiff", date: null },
+    // No place at all.
+    { handle: "e3", gramps_id: "E3", event_type: { string: "", value: 21 }, description: "", place_title: "", place: null, date: null },
+  ]);
+});
+
+describe("readVisualData indexes", () => {
+  it("maps every event to its place, dated or not", () => {
+    // The map half of a scope needs undated events too -- a person's
+    // undated burial still has a location worth plotting.
+    const { placeOfEvent, events } = readVisualData();
+    expect(placeOfEvent.get("e1")).toBe("roath");
+    expect(placeOfEvent.get("e2")).toBe("cardiff");
+    expect(events.map((e) => e.handle)).toEqual(["e1"]);
+  });
+
+  it("leaves a placeless event out of the index rather than mapping it to nothing", () => {
+    expect(readVisualData().placeOfEvent.has("e3")).toBe(false);
+  });
+
+  it("inverts that into events-by-place", () => {
+    const { eventsByPlace } = readVisualData();
+    expect(eventsByPlace.get("roath")).toEqual(["e1"]);
+    expect(eventsByPlace.get("cardiff")).toEqual(["e2"]);
+  });
+
+  it("builds the containment tree from places that have no coordinates of their own", () => {
+    // Wales is never plotted (no lat/long) but must still appear as
+    // Cardiff's parent, or scoping to it would reach nothing beneath it.
+    const { childPlaces, places } = readVisualData();
+    expect(places.map((p) => p.handle).sort()).toEqual(["cardiff", "roath"]);
+    expect(childPlaces.get("wales")).toEqual(["cardiff"]);
+    expect(childPlaces.get("cardiff")).toEqual(["roath"]);
   });
 });

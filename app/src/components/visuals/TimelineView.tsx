@@ -1,60 +1,118 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge, Box, CloseButton, Group, Text, TextInput, Tooltip, UnstyledButton, useComputedColorScheme,
 } from "@mantine/core";
 import { useVisualData } from "../../hooks/useVisualData";
-import { formatHash } from "../../hash";
+import { useVisualScope } from "../../hooks/useVisualScope";
+import { formatHash, type VisualSubject } from "../../hash";
 import type { TimelineEvent } from "../../store/visualData";
 import { CATEGORIES, categoryOf, dotStyle, type EventCategory } from "./eventCategories";
 import { readVisualColors } from "./cssVar";
+import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { TimelineChart } from "./TimelineChart";
-import { VisualModal } from "./VisualModal";
-
-interface TimelineModalProps {
-  opened: boolean;
-  onClose: () => void;
-}
+import { VisualFrame } from "./VisualFrame";
 
 /** View > Timeline: every dated event in the tree on one zoomable time axis.
  *
  * Both filters here run entirely against the in-memory rows -- no request, no
  * debounce, results on the keystroke -- which is the affordance the local
- * cache buys. That's also why they're the filters they are: gramps-web's
- * timeline filters by *person* with ancestors/descendants modes, which needs
- * the server's IsLessThanNthGenerationAncestorOf rule and a round trip per
- * change. The cached Events rows carry their own type, description and place
- * title but no person link, so what's local and instant is a text match over
- * those three plus the category legend, and that's what this offers. A
- * person-scoped timeline is better served by the Events list on a person's
- * own detail panel anyway. */
-export function TimelineModal({ opened, onClose }: TimelineModalProps) {
-  const { data, loading, error } = useVisualData(opened);
+ * cache buys.
+ *
+ * So is the person/family scoping, which is the other thing this offers and
+ * the one gramps-web reaches for the server to do: its timeline filters by
+ * person with ancestors/descendants modes, via the
+ * IsLessThanNthGenerationAncestorOf rule and a round trip per change. An
+ * Event points forward to its place but never back to its participants, so
+ * the Events cache alone can't say whose an event is -- the Person and
+ * Family caches carry that (views.ts's hidden `event_refs`), which makes a
+ * scoped timeline a primary-key lookup here rather than a query. See
+ * store/visualScope.ts. */
+export function TimelineView({ subject }: { subject: VisualSubject | null }) {
+  const { data, loading, error } = useVisualData(true);
+  const { scope, loading: scopeLoading, error: scopeError } = useVisualScope(subject, data);
   const [search, setSearch] = useState("");
   const [hidden, setHidden] = useState<Set<EventCategory>>(() => new Set());
 
+  // The scope's events this timeline can actually draw: a scope names event
+  // handles, but only dated ones are plotted. This -- not
+  // scope.eventHandles.size -- is what decides whether scoping does anything
+  // here. Null means unscoped.
+  const scopedEvents = useMemo(
+    () => (scope ? data.events.filter((event) => scope.eventHandles.has(event.handle)) : null),
+    [scope, data.events],
+  );
+  const scopeActive = scopedEvents !== null && scopedEvents.length > 0;
+
+  // A single Event resolves to one dot, which says nothing on its own -- so
+  // that subject opens framed against the whole tree instead of filtered
+  // down to itself. Every other subject is a set worth seeing alone, Place
+  // included: "everything that happened in this town, over time" is the one
+  // combination that turns a record into a view it has nowhere else.
+  const [mode, setMode] = useState<ScopeMode>("only");
+  useEffect(() => {
+    setMode(subject?.type === "event" ? "context" : "only");
+  }, [subject?.type, subject?.handle]);
+
+  const filtering = scopeActive && mode === "only";
   const events = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (needle === "" && hidden.size === 0) return data.events;
+    if (needle === "" && hidden.size === 0 && !filtering) return data.events;
     return data.events.filter((event) => {
+      if (filtering && !scope!.eventHandles.has(event.handle)) return false;
       if (hidden.has(categoryOf(event.type))) return false;
       if (needle === "") return true;
       return matches(event, needle);
     });
-  }, [data.events, search, hidden]);
+  }, [data.events, search, hidden, filtering, scope]);
 
-  // Per-category totals for the legend, over the text-filtered set but *not*
-  // the category-filtered one -- a legend row has to keep showing its own
-  // count while it's switched off, or turning it back on is a guess.
+  // The year range the scope occupies, handed to the chart to frame on
+  // arrival. Padded by a tenth of its own span (and at least a year) so the
+  // outermost dots aren't jammed against the plot's edges, and so a scope
+  // spanning a single instant still gets a readable window rather than a
+  // zero-width domain.
+  //
+  // Computed once per subject, in an effect guarded by a ref rather than as
+  // a memo over the data: the scoped set grows while a background fill is
+  // still running, and re-framing on each page would repeatedly throw away
+  // whatever the user had zoomed to. State rather than a ref alone because
+  // the chart needs to see it change.
+  const [focus, setFocus] = useState<[number, number] | null>(null);
+  const framedFor = useRef<string | null>(null);
+  useEffect(() => {
+    const key = subject ? `${subject.type}:${subject.handle}` : null;
+    if (key === null) {
+      framedFor.current = null;
+      setFocus(null);
+      return;
+    }
+    if (!scopeActive || framedFor.current === key) return;
+    framedFor.current = key;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const event of scopedEvents!) {
+      if (event.year < min) min = event.year;
+      if (event.year > max) max = event.year;
+    }
+    const pad = Math.max((max - min) * 0.1, 1);
+    setFocus([min - pad, max + pad]);
+  }, [scopeActive, scopedEvents, subject?.type, subject?.handle]);
+
+  // Per-category totals for the legend, over the text-filtered and (when
+  // one is filtering) scope-filtered set, but *not* the category-filtered
+  // one -- a legend row has to keep showing its own count while it's
+  // switched off, or turning it back on is a guess. The scope does belong
+  // in here though: a legend reading "412 Births" beside a plot of one
+  // person's three dots would be describing a different chart.
   const counts = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const tally = new Map<EventCategory, number>();
-    for (const event of data.events) {
+    for (const event of filtering ? scopedEvents! : data.events) {
       if (needle !== "" && !matches(event, needle)) continue;
       const category = categoryOf(event.type);
       tally.set(category, (tally.get(category) ?? 0) + 1);
     }
     return tally;
-  }, [data.events, search]);
+  }, [data.events, search, filtering, scopedEvents]);
 
   function toggle(category: EventCategory) {
     setHidden((current) => {
@@ -67,18 +125,27 @@ export function TimelineModal({ opened, onClose }: TimelineModalProps) {
 
   function openEvent(handle: string) {
     // Hand off to the Events view, where the three-pane layout shows the
-    // whole record -- see VisualModal's doc comment.
+    // whole record -- see VisualFrame's doc comment.
     window.location.hash = formatHash({ viewKey: "event", handle });
-    onClose();
   }
 
   const undated = data.eventsCached - data.events.length;
 
   return (
-    <VisualModal
-      opened={opened}
-      onClose={onClose}
+    <VisualFrame
       title="Timeline"
+      scope={subject && (
+        <ScopeChip
+          visual="timeline"
+          scope={scope}
+          loading={scopeLoading}
+          unresolved={!scopeLoading && scopeError === null && scope === null}
+          mode={mode}
+          onModeChange={setMode}
+          matched={scopedEvents?.length ?? 0}
+          noun="event"
+        />
+      )}
       loading={loading}
       error={error}
       empty={data.events.length === 0 ? (
@@ -114,8 +181,16 @@ export function TimelineModal({ opened, onClose }: TimelineModalProps) {
         </Group>
       }
     >
-      <TimelineChart events={events} allEvents={data.events} onOpenEvent={openEvent} />
-    </VisualModal>
+      <TimelineChart
+        events={events}
+        allEvents={data.events}
+        // Only in context mode -- in "only" mode every dot drawn is already
+        // a scoped one, so dimming would have nothing to say.
+        highlighted={scopeActive && mode === "context" ? scope!.eventHandles : undefined}
+        focus={focus}
+        onOpenEvent={openEvent}
+      />
+    </VisualFrame>
   );
 }
 

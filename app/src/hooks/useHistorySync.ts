@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { formatHash, parseHash } from "../hash";
+import { formatHash, isVisualKey, parseHash, type VisualSubject } from "../hash";
 import { getViewStore } from "../store/registry";
+import { VIEWS } from "../store/views";
 import { useViewStore } from "./useViewStore";
 
 /** Keeps the URL hash, the active sidebar tab, and the active view's
@@ -21,9 +22,26 @@ import { useViewStore } from "./useViewStore";
  * The equality checks in both effects are what keep this from looping: a
  * self-triggered hashchange re-applies a route that's already current, so
  * neither direction fires a second time. */
-export function useHistorySync(): { activeKey: string; setActiveKey: (key: string) => void } {
+export function useHistorySync(): {
+  activeKey: string;
+  setActiveKey: (key: string) => void;
+  /** The record the active visual page is scoped to, or null (always null
+   * when the active route isn't a visual). Read from the hash rather than
+   * held anywhere else -- see hash.ts's VisualSubject. */
+  visualSubject: VisualSubject | null;
+} {
   const [activeKey, setActiveKey] = useState(() => parseHash().viewKey);
-  const activeSnapshot = useViewStore(activeKey);
+  // Mirrors the route's subject. Held in state (rather than re-parsed at
+  // each render) so the outward effect below has something to write back
+  // *from*: without it, that effect would reformat a scoped visual route as
+  // its bare "#/map" self and immediately throw the scope away again.
+  const [visualSubject, setVisualSubject] = useState<VisualSubject | null>(() => parseHash().subject);
+  // A visual page (#/map, #/timeline) is a route but not a view: it has no
+  // store, so there's no snapshot to sync and getViewStore() would throw on
+  // its key. Subscribe to the first view instead of skipping the hook --
+  // its snapshot is simply unused below while a visual is active.
+  const visual = isVisualKey(activeKey);
+  const activeSnapshot = useViewStore(visual ? VIEWS[0].key : activeKey);
   // True while a hashchange is still being applied to store state -- see
   // the outward effect's comment below on the race this closes.
   const applyingHash = useRef(false);
@@ -32,8 +50,10 @@ export function useHistorySync(): { activeKey: string; setActiveKey: (key: strin
     async function applyHash() {
       applyingHash.current = true;
       try {
-        const { viewKey, handle } = parseHash();
+        const { viewKey, handle, subject } = parseHash();
         setActiveKey(viewKey);
+        setVisualSubject(subject);
+        if (isVisualKey(viewKey)) return; // nothing to select -- see `visual` above
         const store = getViewStore(viewKey);
         if (handle) {
           if (store.getSnapshot().selectedHandle !== handle) {
@@ -74,7 +94,15 @@ export function useHistorySync(): { activeKey: string; setActiveKey: (key: strin
     // re-derive the same default and push it straight back again.
     const next = formatHash({
       viewKey: activeKey,
-      handle: activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle,
+      // A visual page carries no handle, and the snapshot read here is some
+      // other view's (see `visual` above) -- appending its selection would
+      // make up a route that doesn't exist.
+      handle: visual || activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle,
+      // ...it carries a subject instead, and only while it's the active
+      // route: a stale subject left over from a visual would otherwise be
+      // formatted onto an ordinary view's hash, where formatHash ignores it
+      // but nothing else would have cleared it.
+      subject: visual ? visualSubject : null,
     });
     if (window.location.hash !== next) {
       window.location.hash = next;
@@ -83,7 +111,7 @@ export function useHistorySync(): { activeKey: string; setActiveKey: (key: strin
     // derived read: clicking the very row that was already auto-selected
     // leaves selectedHandle unchanged and only flips this flag -- which is
     // exactly the moment that handle has to start appearing in the hash.
-  }, [activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
+  }, [visual, visualSubject, activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
 
-  return { activeKey, setActiveKey };
+  return { activeKey, setActiveKey, visualSubject };
 }

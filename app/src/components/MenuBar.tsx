@@ -4,8 +4,7 @@ import { getToken, hasPermissions } from "../auth/auth";
 import { ImportDialog } from "./ImportDialog";
 import { DeleteAllDialog } from "./DeleteAllDialog";
 import { ReportDialog } from "./ReportDialog";
-import { MapModal } from "./visuals/MapModal";
-import { TimelineModal } from "./visuals/TimelineModal";
+import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
@@ -131,6 +130,13 @@ function reportMenuItems(reports: ReportSummary[], onPick: (id: string) => void)
   });
 }
 
+/** A menu item that navigates rather than opening something -- written to
+ * the same location.hash channel useHistorySync listens on, so it lands in
+ * browser history like any other view switch. */
+function goTo(viewKey: string) {
+  window.location.hash = formatHash({ viewKey, handle: null });
+}
+
 /** The desktop-Gramps-style menu bar (Family Trees/Add/Edit/View/Reports/
  * Tools/Help, per ~/gramps/gramps' viewmanager.py menu layout) -- all seven
  * are shown now to reserve the bar's layout, but most are still empty
@@ -139,8 +145,6 @@ function reportMenuItems(reports: ReportSummary[], onPick: (id: string) => void)
 export function MenuBar() {
   const [importOpened, setImportOpened] = useState(false);
   const [deleteAllOpened, setDeleteAllOpened] = useState(false);
-  const [mapOpened, setMapOpened] = useState(false);
-  const [timelineOpened, setTimelineOpened] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportId, setReportId] = useState<string | null>(null);
 
@@ -187,12 +191,15 @@ export function MenuBar() {
         <AppMenu label="Edit" items={[]} />
         {/* Both are whole-tree overviews of data the app already has cached
             locally, so neither needs a permission: anyone who can see the
-            Places and Events tables can see these. */}
+            Places and Events tables can see these. Each is a route rather
+            than a dialog (see hash.ts), so picking one is an ordinary
+            navigation -- App.tsx renders it over the whole content area,
+            and Back returns to the table you came from. */}
         <AppMenu
           label="View"
           items={[
-            { label: "Map", onClick: () => setMapOpened(true) },
-            { label: "Timeline", onClick: () => setTimelineOpened(true) },
+            { label: "Map", onClick: () => goTo("map") },
+            { label: "Timeline", onClick: () => goTo("timeline") },
           ]}
         />
         <AppMenu
@@ -206,12 +213,6 @@ export function MenuBar() {
       <ImportDialog opened={importOpened} onClose={() => setImportOpened(false)} />
       <DeleteAllDialog opened={deleteAllOpened} onClose={() => setDeleteAllOpened(false)} />
       <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
-      {/* Mounted only while open, unlike the dialogs above: each holds a
-          derived copy of a few thousand rows (and the map, a live WebGL
-          context), so a closed one shouldn't be sitting in the tree keeping
-          that alive. */}
-      {mapOpened && <MapModal opened onClose={() => setMapOpened(false)} />}
-      {timelineOpened && <TimelineModal opened onClose={() => setTimelineOpened(false)} />}
     </>
   );
 }
