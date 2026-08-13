@@ -1,7 +1,7 @@
 import { Anchor, Group, Image, Modal, Stack, Text, Title } from "@mantine/core";
 import { API_BASE } from "../config";
 import { getCurrentUsername } from "../auth/auth";
-import logo from "../assets/icons/gramps-logo.svg";
+import logo from "../assets/icons/gramps-connect-logo.svg";
 
 interface AboutDialogProps {
   opened: boolean;

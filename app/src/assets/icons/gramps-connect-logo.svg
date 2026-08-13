@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-label="Gramps Connect">
+  <!-- The Gramps Connect mark: a pedigree chart cut to three boxes — one
+       person, a bracket, the generation before. Kin to the Gramps desktop
+       app icon (which is the same chart at seven boxes) but drawn in this
+       app's own blue, and simple enough to survive being scaled down.
+
+       Loaded through <img> (see App.tsx), so currentColor can't reach it
+       and the colour has to be baked in. The app follows the OS colour
+       scheme (main.tsx's defaultColorScheme="auto"), so the two blues are
+       picked with a media query instead — which does apply inside an
+       SVG used as an image. Both values are from theme.ts's grampsBlue:
+       [7] on light ground, [3] on dark, the same pair the UI uses. -->
+  <style>
+    :root { --mark: #1866ba; }
+    @media (prefers-color-scheme: dark) { :root { --mark: #75a9e2; } }
+  </style>
+  <g fill="none" stroke="var(--mark)" stroke-width="5" stroke-linecap="round">
+    <path d="M25 32h7M32 15v34M32 15h7M32 49h7"/>
+  </g>
+  <g fill="var(--mark)">
+    <rect x="1" y="24" width="24" height="16" rx="4"/>
+    <rect x="39" y="7" width="24" height="16" rx="4"/>
+    <rect x="39" y="41" width="24" height="16" rx="4"/>
+  </g>
+</svg>

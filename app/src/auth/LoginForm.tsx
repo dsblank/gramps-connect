@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Center, Paper, Stack, Group, Image, Title, TextInput, PasswordInput, Button, Text } from "@mantine/core";
 import { login } from "./auth";
-import logo from "../assets/icons/gramps-logo.svg";
+import logo from "../assets/icons/gramps-connect-logo.svg";
 
 export function LoginForm() {
   const [username, setUsername] = useState("");

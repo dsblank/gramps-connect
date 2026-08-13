@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-label="Gramps Connect">
+  <!-- The badged form of the mark in gramps-connect-logo.svg: the same
+       three-box pedigree, knocked out of a solid tile. The tile is what
+       makes it work as a favicon — a filled shape still reads at 16px
+       once the interior detail stops resolving, where the bare mark's
+       connectors close up.
+
+       Fixed colours on purpose, unlike the in-app logo: this sits in the
+       browser's chrome, not on a surface the app controls, and a
+       saturated blue tile holds its own against both light and dark tab
+       strips. #1866ba is theme.ts's grampsBlue[7]. -->
+  <rect width="64" height="64" rx="15" fill="#1866ba"/>
+  <g transform="translate(9.6 9.6) scale(0.7)">
+    <g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round">
+      <path d="M25 32h7M32 15v34M32 15h7M32 49h7"/>
+    </g>
+    <g fill="#fff">
+      <rect x="1" y="24" width="24" height="16" rx="4"/>
+      <rect x="39" y="7" width="24" height="16" rx="4"/>
+      <rect x="39" y="41" width="24" height="16" rx="4"/>
+    </g>
+  </g>
+</svg>

@@ -31,8 +31,10 @@ dev-fixtures/layer3-sync/api-fixture/export_cache/
 dev-fixtures/layer3-sync/api-fixture/report_cache/
 dev-fixtures/layer3-sync/api-fixture/server.log
 
-# app: sql.js WASM assets copied in by scripts/copy-wasm.mjs, not source
-app/public/
+# app: sql.js WASM assets copied in by scripts/copy-wasm.mjs, not source.
+# Only the copies, not the directory: public/ also holds the favicon set,
+# which is artwork we keep.
+app/public/*.wasm
 
 # app: local dev overrides of .env.example -- machine-specific, not source
 app/.env.local

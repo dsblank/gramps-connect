@@ -23,7 +23,7 @@ import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep } from "./store/jobsPoll";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
-import logo from "./assets/icons/gramps-logo.svg";
+import logo from "./assets/icons/gramps-connect-logo.svg";
 
 export function App() {
   const loggedIn = useSyncExternalStore(subscribeAuth, getAuthSnapshot);
