@@ -36,6 +36,25 @@ export interface ColumnConfig {
   /** Stored SQLite value -> displayed cell text. Default: String(value),
    * or "" for null/undefined. */
   toDisplay?: (sqlValue: unknown) => string;
+  /** Cached and kept up to date like any other column, but never shown as
+   * a DataTable column (see visibleColumns) -- for a field some *other*
+   * feature reads out of the local cache rather than one the user is meant
+   * to read in the table. Event's `place_handle` is the case this exists
+   * for: MapModal joins events to places entirely locally, which needs the
+   * foreign key, but "a5af0eb667015e355db" is noise in a table that
+   * already shows the place's title next to it. */
+  hidden?: boolean;
+}
+
+/** The columns DataTable actually renders, each paired with its index into
+ * the full `view.columns` list -- which is the index its value sits at in a
+ * ViewStore.getRows() row, since the cache table and its SELECT are built
+ * from the full list, hidden columns included. Callers must use `index` to
+ * read values and never their own position in this array. */
+export function visibleColumns(view: ViewConfig): { column: ColumnConfig; index: number }[] {
+  return view.columns
+    .map((column, index) => ({ column, index }))
+    .filter(({ column }) => !column.hidden);
 }
 
 export interface OrderBy {
@@ -166,6 +185,40 @@ export const FAMILY_VIEW: ViewConfig = {
   ],
 };
 
+// EventType's value -> untranslated name, from gramps/gen/lib/eventtype.py's
+// _DATAMAP. Needed because the .../query/ endpoints return the *raw* struct,
+// where a built-in type carries only its integer `value` and leaves `string`
+// empty (only a CUSTOM type, value 0, puts its name there) -- unlike the
+// single-object GET route, which serializes the whole EventType down to one
+// display string (that's what related/detailFieldDefinitions.ts reads).
+// Same treatment as CONFIDENCE_LABELS below.
+const EVENT_TYPE_LABELS: Record<number, string> = {
+  [-1]: "Unknown", 0: "Custom", 1: "Marriage", 2: "Marriage Settlement",
+  3: "Marriage License", 4: "Marriage Contract", 5: "Marriage Banns",
+  6: "Engagement", 7: "Divorce", 8: "Divorce Filing", 9: "Annulment",
+  10: "Alternate Marriage", 11: "Adopted", 12: "Birth", 13: "Death",
+  14: "Adult Christening", 15: "Baptism", 16: "Bar Mitzvah", 17: "Bas Mitzvah",
+  18: "Blessing", 19: "Burial", 20: "Cause Of Death", 21: "Census",
+  22: "Christening", 23: "Confirmation", 24: "Cremation", 25: "Degree",
+  26: "Education", 27: "Elected", 28: "Emigration", 29: "First Communion",
+  30: "Immigration", 31: "Graduation", 32: "Medical Information",
+  33: "Military Service", 34: "Naturalization", 35: "Nobility Title",
+  36: "Number of Marriages", 37: "Occupation", 38: "Ordination", 39: "Probate",
+  40: "Property", 41: "Religion", 42: "Residence", 43: "Retirement",
+  44: "Will", 45: "Stillbirth",
+};
+
+/** An Event's type as text, from the stored raw EventType struct. A custom
+ * type's own name (`string`) wins over the "Custom" placeholder its value 0
+ * maps to; exported because TimelineModal groups and colors events by
+ * exactly this string. */
+export function formatEventType(json: unknown): string {
+  if (!json) return "";
+  const type = JSON.parse(json as string) as { string?: string; value?: number };
+  if (type.string) return type.string;
+  return EVENT_TYPE_LABELS[type.value ?? -1] ?? "";
+}
+
 export const EVENT_VIEW: ViewConfig = {
   key: "event",
   label: "Events",
@@ -177,6 +230,10 @@ export const EVENT_VIEW: ViewConfig = {
   wherePlaceholder: 'e.g. type.value == 12',
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    {
+      key: "event_type", label: "Type", select: { json_path: ["type"] }, sqlType: "TEXT",
+      toSql: toSqlJson, toDisplay: formatEventType,
+    },
     { key: "description", label: "Description", select: "description", sqlType: "TEXT" },
     {
       // Not "birth.date"/"death.date" crossing a relationship -- an Event
@@ -188,6 +245,17 @@ export const EVENT_VIEW: ViewConfig = {
     {
       key: "place_title", label: "Place", select: { json_path: ["place", "title"] }, sqlType: "TEXT",
     },
+    // An Event's raw `place` *is* the target handle, so this is a flat
+    // column, not a json_path -- the sibling place_title above is what
+    // crosses the relationship to read a field off the target (the server
+    // rejects a bare `{json_path: ["place"]}` outright: "'place' is a
+    // relationship on 'event', not a value on its own"). Key has to stay
+    // spelled exactly as the select for a flat column, since that's the
+    // response key toRowValues reads it back under -- `as` aliasing only
+    // applies to json_path entries. Hidden (see ColumnConfig.hidden): it's
+    // here so MapModal's time filter can match events to places by key
+    // rather than by comparing display titles.
+    { key: "place", label: "Place handle", select: "place", sqlType: "TEXT", hidden: true },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
   ],
 };
