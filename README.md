@@ -125,6 +125,46 @@ which stands up a Postgres-backed instance with example data;
 before running it** — it is not idempotent against an already-populated
 tree.
 
+### Deploying
+
+The dev setup above (`npm run dev -w app` plus a `dev-fixtures/` backend)
+is for working on the code — it's two separate processes, one of them
+unauthenticated-by-default and meant to be thrown away. `deploy/` is the
+other thing entirely: a single containerized `app/` + `gramps-web-api`,
+backed by real Postgres and fronted by Caddy for TLS, for actually running
+Gramps Connect somewhere. Frontend and backend share one container/origin,
+so there's no separate frontend image or CORS setup.
+
+**Locally**, to try the real deployment shape rather than the dev server:
+
+```sh
+cp deploy/.env.example deploy/.env    # then edit it -- see the file's comments
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+```
+
+Then visit `https://localhost` (Caddy issues itself a local, self-signed
+certificate automatically — accept the browser warning).
+
+**On a real host**, build once on GitHub's runners instead of on the host
+(`gh workflow run build-docker.yml`, or trigger it from the Actions tab),
+which pushes `ghcr.io/<owner>/gramps-connect:latest`, then on the host:
+
+```sh
+cp deploy/.env.example deploy/.env    # real secrets/domain this time
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env pull
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+```
+
+Point a domain at the host and edit `deploy/Caddyfile` (one block swap) to
+get a real certificate instead of the self-signed one — see
+[deploy/README.md](deploy/README.md#tls).
+
+Either way, first boot seeds a site admin from `deploy/.env` but creating
+the first tree and assigning a user to it is a one-time API call, not a UI
+flow yet — **[deploy/README.md](deploy/README.md)** covers that, plus
+importing existing Gramps data, day-to-day `docker compose` commands, and
+deployment-specific gotchas.
+
 ### Testing
 
 ```sh

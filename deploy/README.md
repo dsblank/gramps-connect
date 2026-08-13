@@ -199,11 +199,20 @@ deploy/docker-compose.yml up -d` to pick up both changes.
   see the Dockerfile) is a plausible source of subtle fork-safety bugs, and
   a single worker instance doesn't need the concurrency `--pool=solo`
   gives up. Revisit if worker throughput becomes a bottleneck.
-- The backend is built from `dsblank/gramps-web-api@feat/object-query-endpoints`
-  and `gramps-project/gramps@maintenance/gramps60` from source, not from a
-  pre-built image, because the query-language endpoints this project depends
-  on ([PR #913](https://github.com/gramps-project/gramps-web-api/pull/913))
-  aren't merged upstream yet. See `deploy/Dockerfile` for details.
+- The backend is built from `gramps-project/gramps-web-api@master` and
+  `gramps-project/gramps@maintenance/gramps60` from source, not from a
+  pre-built image — `gramps-web-base` (the image this one builds on)
+  installs system packages and Gramps addons but never the `gramps_webapi`
+  Python package itself. See `deploy/Dockerfile` for details.
+- Building from source (a `git clone` plus a PyGObject compile) is slow
+  enough that it's better done once on GitHub's runners than on every
+  deploy host: `.github/workflows/build-docker.yml` (manual trigger —
+  `gh workflow run build-docker.yml`, or the Actions tab) builds
+  `deploy/Dockerfile` and pushes `ghcr.io/<owner>/gramps-connect:latest`.
+  `docker compose -f deploy/docker-compose.yml --env-file deploy/.env pull`
+  grabs that instead of building locally; `up -d --build` (as in the Docker
+  commands above) remains there for local iteration on the Dockerfile
+  itself.
 - `app/`'s browser-side local cache (sql.js, OPFS) is keyed by a fixed
   filename per view, not by backend URL or tree ID — switching
   `VITE_API_BASE`, or re-importing/recreating a tree against the same
