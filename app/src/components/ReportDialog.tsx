@@ -210,10 +210,23 @@ export function ReportDialog({ reportId, onClose }: ReportDialogProps) {
 
         {stage === "ready" && report && (
           <>
-            {report.description && (
-              <Text size="sm" c="dimmed">
-                {report.description}
-              </Text>
+            {/* The heading gramps-web's own report view shows above the
+                options (its GrampsjsViewReport): what the report does, and
+                who wrote it -- the latter being the only hint that an
+                unfamiliar report came from an addon rather than core. */}
+            {(report.description || report.authors.length > 0) && (
+              <Stack gap={4}>
+                {report.description && (
+                  <Text size="sm" c="dimmed">
+                    {report.description}
+                  </Text>
+                )}
+                {report.authors.length > 0 && (
+                  <Text size="xs" c="dimmed">
+                    By {report.authors.join(", ")}
+                  </Text>
+                )}
+              </Stack>
             )}
 
             {fields

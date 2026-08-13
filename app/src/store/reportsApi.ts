@@ -27,6 +27,9 @@ export interface ReportSummary {
   name: string;
   description: string;
   category: number;
+  /** Plugin authors, as the plugin registration lists them -- one entry
+   * per author, and empty for plugins that name none. */
+  authors: string[];
 }
 
 export interface ReportDetail extends ReportSummary {
