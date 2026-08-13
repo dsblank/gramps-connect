@@ -6,6 +6,7 @@ import { useVisualData } from "../../hooks/useVisualData";
 import { useVisualScope } from "../../hooks/useVisualScope";
 import { formatHash, type VisualSubject } from "../../hash";
 import type { EventRecord, MapPlace } from "../../store/visualData";
+import { NoMatches } from "./NoMatches";
 import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { VisualFrame } from "./VisualFrame";
 
@@ -67,7 +68,11 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
     }
     return result;
   }, [scope, data]);
-  const scopeActive = scopedPlaces !== null && scopedPlaces.length > 0;
+  // A resolved scope is active even when it matched nothing. It used to take
+  // a non-empty match to count, so a record with no located place fell back
+  // to plotting the entire tree -- see NoMatches: the filter is honoured and
+  // the empty result is said out loud instead.
+  const scopeActive = scopedPlaces !== null;
 
   // A person's or family's places are a handful scattered across a
   // continent, and filtering to them is the point. A *place* subject
@@ -158,10 +163,13 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   useEffect(() => {
     const key = subject ? `${subject.type}:${subject.handle}` : null;
     if (key === null) fittedFor.current = null;
-    if (!scopeActive || fittedFor.current === key) return;
+    // Nothing to fit to yet: a scope can resolve empty and stay that way, or
+    // fill in as the caches do, so this waits for a marker rather than
+    // spending the one fit this subject gets on an empty set.
+    if (!scopeActive || scopedPlaces!.length === 0 || fittedFor.current === key) return;
     fittedFor.current = key;
     setFitRequest((n) => n + 1);
-  }, [scopeActive, subject?.type, subject?.handle]);
+  }, [scopeActive, scopedPlaces, subject?.type, subject?.handle]);
 
   // The scoped events at the clicked place -- the answer to "why is this
   // marker here?", which a count alone can't give. Null when unscoped,
@@ -196,6 +204,33 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   const withoutCoords = filtering
     ? scope!.placeHandles.size - scopedPlaces!.length
     : data.placesCached - data.places.length;
+
+  // Nothing plotted, with places in the tree to plot -- so it's the scope or
+  // the filters that emptied the map, and which one decides both what to say
+  // and what the one button undoes. (`data.places` empty is the other case
+  // entirely, and VisualFrame's `empty` has it.)
+  const noMatches = data.places.length > 0 && places.length === 0
+    ? filtering && scopedPlaces!.length === 0
+      ? {
+        title: `Nothing to map for ${scope!.label}`,
+        detail: scope!.placeHandles.size === 0
+          ? "None of this record's events names a place."
+          : withoutCoords === 1
+            ? "Its one place has no coordinates."
+            : `None of its ${withoutCoords.toLocaleString()} places has coordinates.`,
+        action: { label: "Show the whole tree", href: formatHash({ viewKey: "map" }) },
+      }
+      : {
+        title: "No places match these filters",
+        detail: filtering
+          ? "Widen them to see the rest of this record's places."
+          : "Widen them to see the rest of the tree.",
+        action: {
+          label: "Clear filters",
+          onClick: () => { setSearch(""); setTimeOn(false); },
+        },
+      }
+    : null;
 
   return (
     <VisualFrame
@@ -294,13 +329,18 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           places={places}
           fitRequest={fitRequest}
           // Only in context mode: in "only" mode every marker drawn is
-          // already a scoped one, so dimming would have nothing to say.
-          highlighted={scopeActive && mode === "context" ? scope!.placeHandles : undefined}
+          // already a scoped one, so dimming would have nothing to say. Nor
+          // with an empty scope, where it would dim every marker on the map
+          // to make a point the chip above already makes in words.
+          highlighted={scopeActive && mode === "context" && scopedPlaces!.length > 0
+            ? scope!.placeHandles
+            : undefined}
           fitTo={scopeActive && mode === "context" ? scopedPlaces! : undefined}
           selectedHandle={selected?.handle ?? null}
           onSelectPlace={setSelected}
         />
       </Suspense>
+      {noMatches && <NoMatches {...noMatches} />}
       {selected && (
         <PlaceCard
           place={selected}

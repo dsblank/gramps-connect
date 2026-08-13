@@ -9,6 +9,7 @@ import { formatHash, type VisualSubject } from "../../hash";
 import type { TimelineEvent } from "../../store/visualData";
 import { CATEGORIES, categoryOf, dotStyle, type EventCategory } from "./eventCategories";
 import { readVisualColors } from "./cssVar";
+import { NoMatches } from "./NoMatches";
 import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { TimelineChart } from "./TimelineChart";
 import { VisualFrame } from "./VisualFrame";
@@ -44,7 +45,11 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
     () => (scope ? data.events.filter((event) => scope.eventHandles.has(event.handle)) : null),
     [scope, data.events],
   );
-  const scopeActive = scopedEvents !== null && scopedEvents.length > 0;
+  // A resolved scope is active even when it matched nothing. It used to take
+  // a non-empty match to count, so a record whose events are all undated fell
+  // back to plotting the entire tree -- see NoMatches: the filter is honoured
+  // and the empty result is said out loud instead.
+  const scopeActive = scopedEvents !== null;
 
   // A single Event resolves to one dot, which says nothing on its own -- so
   // that subject opens framed against the whole tree instead of filtered
@@ -57,16 +62,21 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
   }, [subject?.type, subject?.handle]);
 
   const filtering = scopeActive && mode === "only";
+  // What this timeline is a timeline *of*: the scope's dated events while
+  // filtering, the tree's otherwise. The toolbar filters narrow this, and the
+  // status line counts against it -- so "3 of 12" reads as three of this
+  // person's twelve, the same way the map's counts read. Mirrors MapView's
+  // `source`.
+  const source = filtering ? scopedEvents! : data.events;
   const events = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (needle === "" && hidden.size === 0 && !filtering) return data.events;
-    return data.events.filter((event) => {
-      if (filtering && !scope!.eventHandles.has(event.handle)) return false;
+    if (needle === "" && hidden.size === 0) return source;
+    return source.filter((event) => {
       if (hidden.has(categoryOf(event.type))) return false;
       if (needle === "") return true;
       return matches(event, needle);
     });
-  }, [data.events, search, hidden, filtering, scope]);
+  }, [source, search, hidden]);
 
   // The year range the scope occupies, handed to the chart to frame on
   // arrival. Padded by a tenth of its own span (and at least a year) so the
@@ -88,7 +98,10 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
       setFocus(null);
       return;
     }
-    if (!scopeActive || framedFor.current === key) return;
+    // Nothing to frame yet: a scope can resolve empty and stay that way, or
+    // fill in as the caches do, so this waits for a dot rather than spending
+    // the one framing this subject gets on an empty range.
+    if (!scopeActive || scopedEvents!.length === 0 || framedFor.current === key) return;
     framedFor.current = key;
     let min = Infinity;
     let max = -Infinity;
@@ -109,13 +122,13 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
   const counts = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const tally = new Map<EventCategory, number>();
-    for (const event of filtering ? scopedEvents! : data.events) {
+    for (const event of source) {
       if (needle !== "" && !matches(event, needle)) continue;
       const category = categoryOf(event.type);
       tally.set(category, (tally.get(category) ?? 0) + 1);
     }
     return tally;
-  }, [data.events, search, filtering, scopedEvents]);
+  }, [source, search]);
 
   function toggle(category: EventCategory) {
     setHidden((current) => {
@@ -140,7 +153,39 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
     window.location.hash = formatHash({ viewKey: "event", handle });
   }
 
-  const undated = data.eventsCached - data.events.length;
+  // While filtering, the events dropped for want of a date are the scope's
+  // own -- the tree-wide figure would be describing events this timeline was
+  // never going to plot anyway. Mirrors MapView's `withoutCoords`.
+  const undated = filtering
+    ? scope!.eventHandles.size - scopedEvents!.length
+    : data.eventsCached - data.events.length;
+
+  // Nothing plotted, with dated events in the tree to plot -- so it's the
+  // scope or the filters that emptied the chart, and which one decides both
+  // what to say and what the one button undoes. (`data.events` empty is the
+  // other case entirely, and VisualFrame's `empty` has it.)
+  const noMatches = data.events.length > 0 && events.length === 0
+    ? filtering && scopedEvents!.length === 0
+      ? {
+        title: `Nothing to plot for ${scope!.label}`,
+        detail: scope!.eventHandles.size === 0
+          ? "This record has no events."
+          : undated === 1
+            ? "Its one event has no date that can be placed on a timeline."
+            : `None of its ${undated.toLocaleString()} events has a date that can be placed on a timeline.`,
+        action: { label: "Show the whole tree", href: formatHash({ viewKey: "timeline" }) },
+      }
+      : {
+        title: "No events match these filters",
+        detail: filtering
+          ? "Widen them to see the rest of this record's events."
+          : "Widen them to see the rest of the tree.",
+        action: {
+          label: "Clear filters",
+          onClick: () => { setSearch(""); setHidden(new Set()); },
+        },
+      }
+    : null;
 
   return (
     <VisualFrame
@@ -181,7 +226,10 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
       status={
         <Group gap="xs" justify="space-between">
           <Text size="xs" c="dimmed">
-            {events.length.toLocaleString()} of {data.events.length.toLocaleString()} dated events shown
+            {/* Both numbers come from `source`, so while filtering they
+                describe the scope ("3 of 3 of this person's events") rather
+                than quoting a tree-wide total the chart isn't plotting. */}
+            {events.length.toLocaleString()} of {source.length.toLocaleString()} dated events shown
             {undated > 0 && ` · ${undated.toLocaleString()} undated events omitted`}
           </Text>
           <Text size="xs" c="dimmed">
@@ -196,12 +244,17 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
         events={events}
         allEvents={data.events}
         // Only in context mode -- in "only" mode every dot drawn is already
-        // a scoped one, so dimming would have nothing to say.
-        highlighted={scopeActive && mode === "context" ? scope!.eventHandles : undefined}
+        // a scoped one, so dimming would have nothing to say. Nor with an
+        // empty scope, where it would dim every dot in the tree to make a
+        // point the chip above already makes in words.
+        highlighted={scopeActive && mode === "context" && scopedEvents!.length > 0
+          ? scope!.eventHandles
+          : undefined}
         focus={focus}
         selectedHandle={selected?.handle ?? null}
         onSelectEvent={setSelected}
       />
+      {noMatches && <NoMatches {...noMatches} />}
       {selected && (
         <EventCard
           event={selected}

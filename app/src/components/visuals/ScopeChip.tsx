@@ -88,21 +88,30 @@ export function ScopeChip({
       >
         {scope.label}
       </Badge>
-      {empty ? (
+      {/* Shown even when the scope matched nothing. The empty scope used to
+          drop this control and fall back to the whole tree, which left the
+          user looking at a plot they hadn't asked for and no way back to the
+          one they had -- the count on the chip was the only sign anything had
+          happened. Now "only" means only, empty or not; the plot says so (see
+          NoMatches), and this stays put so switching to context and the ✕ are
+          both still one click away. */}
+      <SegmentedControl
+        size="xs"
+        value={mode}
+        onChange={(value) => onModeChange(value as ScopeMode)}
+        data={[
+          { value: "only", label: empty ? "Only these" : `Only these ${matched.toLocaleString()}` },
+          { value: "context", label: "In context" },
+        ]}
+        aria-label={`Show only this record's ${noun}s, or highlight them in the whole tree`}
+      />
+      {/* Context mode plots the whole tree by design, so nothing on screen
+          would otherwise say the scope came up empty. In "only" mode the
+          plot itself says it, at more length than would fit here. */}
+      {empty && mode === "context" && (
         <Text size="xs" c="dimmed">
-          nothing to plot for this record — showing the whole tree
+          no {noun}s here for this record
         </Text>
-      ) : (
-        <SegmentedControl
-          size="xs"
-          value={mode}
-          onChange={(value) => onModeChange(value as ScopeMode)}
-          data={[
-            { value: "only", label: `Only these ${matched.toLocaleString()}` },
-            { value: "context", label: "In context" },
-          ]}
-          aria-label={`Show only this record's ${noun}s, or highlight them in the whole tree`}
-        />
       )}
     </Group>
   );
