@@ -1,7 +1,7 @@
 // Write path for Gramps Connect messages -- standalone Notes (never
-// attached to another object's note_list) tagged "team-note", with a
+// attached to another object's note_list) tagged "message", with a
 // "todo-open"/"todo-done" tag pair standing in for a done flag (see
-// store/views.ts's TEAM_NOTES_VIEW doc comment for why a tag pair, not a
+// store/views.ts's MESSAGES_VIEW doc comment for why a tag pair, not a
 // column). Same generic-object-CRUD, no-backend-changes shape as
 // jobsApi.ts's Media helpers -- gramps-web-api gets nothing new here
 // either.
@@ -12,7 +12,7 @@ import { formatAuthoredText } from "./authoredText";
 import { endpointBaseFor } from "./objectDetail";
 import type { ViewConfig } from "./views";
 
-export const TEAM_NOTE_TAG = "team-note";
+export const MESSAGE_TAG = "message";
 const TODO_OPEN_TAG = "todo-open";
 export const TODO_DONE_TAG = "todo-done";
 
@@ -45,19 +45,19 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
   return added.handle;
 }
 
-/** Creates a standalone Note tagged "team-note" + "todo-open". Unlike
+/** Creates a standalone Note tagged "message" + "todo-open". Unlike
  * uploadMedia, Note creation has no blob-upload step -- the POST body is
  * JSON throughout, so tag_list can be set in the same request instead of a
  * follow-up GET+PUT. */
-export async function createTeamNote(token: string, author: string, message: string): Promise<string> {
-  const [teamTag, openTag] = await Promise.all([
-    getOrCreateTagHandle(token, TEAM_NOTE_TAG),
+export async function createMessage(token: string, author: string, message: string): Promise<string> {
+  const [messageTag, openTag] = await Promise.all([
+    getOrCreateTagHandle(token, MESSAGE_TAG),
     getOrCreateTagHandle(token, TODO_OPEN_TAG),
   ]);
   const res = await fetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ text: { string: formatAuthoredText(author, message) }, tag_list: [teamTag, openTag] }),
+    body: JSON.stringify({ text: { string: formatAuthoredText(author, message) }, tag_list: [messageTag, openTag] }),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return addedHandle(await res.json());
@@ -68,7 +68,7 @@ export async function createTeamNote(token: string, author: string, message: str
  * model (NotesSection.tsx already renders whatever's in note_list for every
  * type that has one). Same GET-then-PUT-full-object shape as
  * jobsApi.ts's tagAndDescribeMedia (Media's tag_list) and this file's own
- * toggleTeamNoteDone (a Note's tag_list), generalized to any object type
+ * toggleMessageDone (a Note's tag_list), generalized to any object type
  * via `view.endpoint` instead of a hardcoded `/api/media/`. */
 export async function attachNoteToObject(
   token: string,
@@ -91,10 +91,10 @@ export async function attachNoteToObject(
   if (!putRes.ok) throw new Error(await parseErrorMessage(putRes));
 }
 
-/** Swaps the todo-open/todo-done tag on an existing team note. Generic
+/** Swaps the todo-open/todo-done tag on an existing message. Generic
  * object PUT is a full replace (same reasoning as jobsApi.ts's
  * tagAndDescribeMedia), so this fetches the current object first. */
-export async function toggleTeamNoteDone(token: string, handle: string, done: boolean): Promise<void> {
+export async function toggleMessageDone(token: string, handle: string, done: boolean): Promise<void> {
   const [addTag, removeTag] = done ? [TODO_DONE_TAG, TODO_OPEN_TAG] : [TODO_OPEN_TAG, TODO_DONE_TAG];
   const addTagHandle = await getOrCreateTagHandle(token, addTag);
 
@@ -116,7 +116,7 @@ export async function toggleTeamNoteDone(token: string, handle: string, done: bo
   if (!putRes.ok) throw new Error(await parseErrorMessage(putRes));
 }
 
-export async function deleteTeamNote(token: string, handle: string): Promise<void> {
+export async function deleteMessage(token: string, handle: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },

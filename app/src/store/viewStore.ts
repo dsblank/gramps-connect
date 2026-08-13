@@ -588,7 +588,7 @@ export class ViewStore {
    * the freshly reloaded cache instead (same "handle survives, index gets
    * re-derived" treatment applyLiveChange() gives a selected row) -- a
    * baseFilter view is exactly the case where an unrelated live change is
-   * expected to arrive *while* a row is open (Team Notes: someone else
+   * expected to arrive *while* a row is open (Messages: someone else
    * adding a note shouldn't silently close the one you're reading). */
   requeryDebounced(): void {
     if (this.requeryTimer) return; // already scheduled

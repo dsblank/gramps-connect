@@ -78,7 +78,7 @@ export function summaryLine(type: string, obj: any): string {
     case "generated":
       return obj.desc || obj.path || "(media)";
     case "note":
-    case "team_note":
+    case "messages":
       return truncate(obj.text?.string ?? "", 80) || "(note)";
     case "tag":
       return obj.name || "(tag)";

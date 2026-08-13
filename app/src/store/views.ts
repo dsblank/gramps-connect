@@ -325,7 +325,7 @@ function truncate(text: string, max: number): string {
 }
 
 // Gramps Connect messages: standalone Notes (never attached to another
-// object's note_list) tagged "team-note" at creation -- same trick
+// object's note_list) tagged "message" at creation -- same trick
 // GENERATED_VIEW uses for report/export, applied to Note instead of Media.
 // Completion state is a second tag pair ("todo-open"/"todo-done", see
 // notesApi.ts) rather than its own column, for the same reason
@@ -336,23 +336,23 @@ function truncate(text: string, max: number): string {
 // singular one (a Person's "father"/"birth") can. `table: "note"` (key
 // differs) puts this store in the same live-sync bucket as NOTE_VIEW, so
 // both get notified off one getViewStoresForTable("note") lookup.
-export const TEAM_NOTES_VIEW: ViewConfig = {
-  // Underscore, not hyphen: viewStore.ts splices view.key directly into
-  // raw SQL as the local cache's table name (unquoted -- see e.g.
-  // `SELECT ... FROM ${this.view.key}`), and "team-note" there parses as
-  // `team MINUS note`. Every other view.key happens to have no hyphen, so
-  // this was latent until this view.
-  key: "team_note",
+export const MESSAGES_VIEW: ViewConfig = {
+  // The key is both the URL segment (#/messages/<handle>, see hash.ts) and,
+  // spliced unquoted into raw SQL by viewStore.ts (`SELECT ... FROM
+  // ${this.view.key}`), the local cache's table name -- so it has to stay a
+  // bare identifier: a hyphenated key would parse there as a subtraction
+  // of two column names rather than a table name.
+  key: "messages",
   label: "Messages",
   icon: iconChat,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "exists(tags, name == 'team-note')",
+  baseFilter: "exists(tags, name == 'message')",
   // No separator of its own -- GENERATED_VIEW's divider already opens this
   // "not an ordinary object type" group in the sidebar; Messages just
   // continues it rather than starting a second one.
   orderBy: [{ column: "change", direction: "desc" }],
-  opfsFilename: "app-cache-team-note.sqlite",
+  opfsFilename: "app-cache-messages.sqlite",
   wherePlaceholder: 'e.g. "urgent" in text.string',
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
@@ -416,5 +416,5 @@ export const TAG_VIEW: ViewConfig = {
 export const VIEWS: ViewConfig[] = [
   PERSON_VIEW, FAMILY_VIEW, EVENT_VIEW, PLACE_VIEW, REPOSITORY_VIEW,
   SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW, GENERATED_VIEW,
-  TEAM_NOTES_VIEW,
+  MESSAGES_VIEW,
 ];

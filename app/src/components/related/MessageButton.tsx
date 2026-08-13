@@ -4,7 +4,7 @@ import { hasPermissions } from "../../auth/auth";
 import { attachNoteToObject } from "../../store/notesApi";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
-import { TeamNoteComposer } from "../TeamNoteComposer";
+import { MessageComposer } from "../MessageComposer";
 import { RELATED_CONFIG } from "./config";
 
 /** view.label is the sidebar's plural/collective name ("People", "Events",
@@ -25,7 +25,7 @@ function singularLabel(view: ViewConfig): string {
 }
 
 /** Top-right icon on a RelatedPanel that starts a Gramps Connect message
- * "about" the object currently shown -- opens the same TeamNoteComposer
+ * "about" the object currently shown -- opens the same MessageComposer
  * modal Messages' own trigger uses, but on save also attaches the new
  * note's handle to this object's own note_list (Gramps' own way for a Note
  * to reference another object; NotesSection.tsx already renders whatever's
@@ -55,7 +55,7 @@ export function MessageButton({
   const label = `Message about this ${singularLabel(view)}`;
 
   return (
-    <TeamNoteComposer
+    <MessageComposer
       renderTrigger={(open) => (
         <Tooltip label={label} withArrow>
           <UnstyledButton onClick={open} aria-label={label}>

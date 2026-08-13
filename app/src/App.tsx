@@ -10,7 +10,7 @@ import { Sidebar } from "./components/Sidebar";
 import { MenuBar } from "./components/MenuBar";
 import { UserMenu } from "./components/UserMenu";
 import { FilterBar } from "./components/FilterBar";
-import { TeamNoteComposer } from "./components/TeamNoteComposer";
+import { MessageComposer } from "./components/MessageComposer";
 import { DataTable } from "./components/DataTable";
 import { AsideSplit } from "./components/AsideSplit";
 import { StatusBar } from "./components/StatusBar";
@@ -159,7 +159,7 @@ function AuthenticatedApp() {
             key" warning, and FilterBar instances piling up instead of
             unmounting) caught by an end-to-end smoke test. */}
         <FilterBar key={`filter-${view.key}`} view={view} />
-        {view.key === "team_note" && <TeamNoteComposer key={`compose-${view.key}`} />}
+        {view.key === "messages" && <MessageComposer key={`compose-${view.key}`} />}
         <DataTable key={`table-${view.key}`} view={view} />
         {/* Stacked layout only -- the same panes the aside holds when
             there's width for it, but in `flow` mode: no height of their

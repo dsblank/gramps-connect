@@ -2,19 +2,19 @@ import { useState } from "react";
 import { Alert, Button, Group } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
-import { toggleTeamNoteDone, deleteTeamNote } from "../../store/notesApi";
+import { toggleMessageDone, deleteMessage } from "../../store/notesApi";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { zipHandles } from "./sections/shared";
 
-/** Mark done/Reopen + delete for a Team Note, in RelatedPanel's
- * `view.key === "team_note"` branch -- same Button+Group+error-Alert shape
+/** Mark done/Reopen + delete for a message, in RelatedPanel's
+ * `view.key === "messages"` branch -- same Button+Group+error-Alert shape
  * as GeneratedItemActions.tsx. `onToggled` (not called after delete --
  * see its own call site) tells RelatedPanel to refetch this handle's
  * detail, since the tag write here doesn't otherwise reach the panel's
  * already-fetched `detail` (its Tags section reads the same stale
  * tag_list this component would otherwise be the only place showing the
  * new state). */
-export function TeamNoteActions({ detail, onToggled }: { detail: ObjectDetail; onToggled: () => void }) {
+export function MessageActions({ detail, onToggled }: { detail: ObjectDetail; onToggled: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [deleted, setDeleted] = useState(false);
 
@@ -29,8 +29,8 @@ export function TeamNoteActions({ detail, onToggled }: { detail: ObjectDetail; o
     setError(null);
     try {
       const token = await getToken();
-      await toggleTeamNoteDone(token, detail.handle, !isDone);
-      getViewStore("team_note").requeryDebounced();
+      await toggleMessageDone(token, detail.handle, !isDone);
+      getViewStore("messages").requeryDebounced();
       onToggled();
     } catch (err: any) {
       setError(err.message ?? String(err));
@@ -42,9 +42,9 @@ export function TeamNoteActions({ detail, onToggled }: { detail: ObjectDetail; o
     setError(null);
     try {
       const token = await getToken();
-      await deleteTeamNote(token, detail.handle);
+      await deleteMessage(token, detail.handle);
       setDeleted(true);
-      getViewStore("team_note").requeryDebounced();
+      getViewStore("messages").requeryDebounced();
     } catch (err: any) {
       setError(err.message ?? String(err));
     }

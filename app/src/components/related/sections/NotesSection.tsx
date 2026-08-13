@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getToken } from "../../../auth/auth";
-import { getTagHandleCached, TEAM_NOTE_TAG, TODO_DONE_TAG } from "../../../store/notesApi";
+import { getTagHandleCached, MESSAGE_TAG, TODO_DONE_TAG } from "../../../store/notesApi";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
 import type { SectionProps } from "../types";
@@ -9,14 +9,14 @@ interface RawNote {
   tag_list?: string[];
 }
 
-/** The "team-note" and "todo-done" tags' own handles (resolved once,
+/** The "message" and "todo-done" tags' own handles (resolved once,
  * cached -- see getTagHandleCached's doc comment), needed to tell which of
  * a note's raw tag_list entries mean anything. Both start `null` before the
  * lookups resolve, so a message briefly renders as a plain, non-done note
  * on first paint rather than blocking the whole section on two network
  * round trips. */
-function useKnownTagHandles(): { teamNote: string | null; done: string | null } {
-  const [teamNote, setTeamNote] = useState<string | null>(null);
+function useKnownTagHandles(): { message: string | null; done: string | null } {
+  const [message, setMessage] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,12 +24,12 @@ function useKnownTagHandles(): { teamNote: string | null; done: string | null } 
     (async () => {
       try {
         const token = await getToken();
-        const [teamNoteHandle, doneHandle] = await Promise.all([
-          getTagHandleCached(token, TEAM_NOTE_TAG),
+        const [messageHandle, doneHandle] = await Promise.all([
+          getTagHandleCached(token, MESSAGE_TAG),
           getTagHandleCached(token, TODO_DONE_TAG),
         ]);
         if (!cancelled) {
-          setTeamNote(teamNoteHandle);
+          setMessage(messageHandle);
           setDone(doneHandle);
         }
       } catch {
@@ -43,7 +43,7 @@ function useKnownTagHandles(): { teamNote: string | null; done: string | null } 
     };
   }, []);
 
-  return { teamNote, done };
+  return { message, done };
 }
 
 /** NoteBase.note_list -- a plain handle list, present on nearly every type.
@@ -54,15 +54,15 @@ function useKnownTagHandles(): { teamNote: string | null; done: string | null } 
  * second level deep, so a nested note's `tag_list` here is still raw
  * handles. Split into two SectionShells (mirrors Notes/Messages already
  * being separate top-level sidebar views) rather than one mixed list;
- * message rows route through onNavigate as "team_note" rather than "note"
+ * message rows route through onNavigate as "messages" rather than "note"
  * -- otherwise a click lands on the general Notes view instead of Messages
- * and loses TeamNoteActions (Mark done/Reopen/Delete) -- and get a "done"
+ * and loses MessageActions (Mark done/Reopen/Delete) -- and get a "done"
  * indicator ordinary notes have no equivalent of. */
 export function NotesSection({ detail, onNavigate }: SectionProps) {
-  const { teamNote: teamNoteTag, done: doneTag } = useKnownTagHandles();
+  const { message: messageTag, done: doneTag } = useKnownTagHandles();
 
   const rows = zipHandles<RawNote>(detail.note_list, detail.extended?.notes);
-  const isMessage = (target: RawNote) => Boolean(teamNoteTag && target?.tag_list?.includes(teamNoteTag));
+  const isMessage = (target: RawNote) => Boolean(messageTag && target?.tag_list?.includes(messageTag));
   const noteRows = rows.filter(({ target }) => !isMessage(target));
   const messageRows = rows.filter(({ target }) => isMessage(target));
 
@@ -79,8 +79,8 @@ export function NotesSection({ detail, onNavigate }: SectionProps) {
         <SectionShell label="Messages" count={messageRows.length} defaultOpen>
           {messageRows.map(({ handle, target }) => {
             const isDone = Boolean(doneTag && target.tag_list?.includes(doneTag));
-            const label = `${isDone ? "✓ " : ""}${summaryLine("team_note", target)}`;
-            return <RefRow key={handle} type="team_note" handle={handle} obj={target} label={label} onNavigate={onNavigate} />;
+            const label = `${isDone ? "✓ " : ""}${summaryLine("messages", target)}`;
+            return <RefRow key={handle} type="messages" handle={handle} obj={target} label={label} onNavigate={onNavigate} />;
           })}
         </SectionShell>
       )}

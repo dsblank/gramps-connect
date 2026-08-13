@@ -2,9 +2,9 @@ import { useState, type ReactNode } from "react";
 import { Alert, Button, Group, Modal, Textarea } from "@mantine/core";
 import { getToken, getCurrentUsername } from "../auth/auth";
 import { getViewStore } from "../store/registry";
-import { createTeamNote } from "../store/notesApi";
+import { createMessage } from "../store/notesApi";
 
-interface TeamNoteComposerProps {
+interface MessageComposerProps {
   /** Defaults to the plain "+ New message" button App.tsx has always shown
    * for the untargeted Messages-view composer. A caller wanting a
    * different trigger (e.g. MessageButton's small icon, opening the same
@@ -14,7 +14,7 @@ interface TeamNoteComposerProps {
   /** Called with the newly created note's handle (and the token already
    * fetched to create it, so callers needing a follow-up authenticated
    * request -- MessageButton's attachNoteToObject -- don't need a second
-   * getToken()) right after createTeamNote succeeds, inside the same
+   * getToken()) right after createMessage succeeds, inside the same
    * try/catch as the create call itself: a failure here surfaces in the
    * same error Alert and leaves the modal open, same as any other save
    * failure, rather than silently losing the "this note should also be
@@ -24,11 +24,11 @@ interface TeamNoteComposerProps {
 
 /** Compose form for a new Gramps Connect message -- the app's first Mantine
  * Modal (no dialog/overlay component exists anywhere else yet). Default
- * mounting is in App.tsx's AppShell.Main for the "team_note" view only, in
- * the space FilterBar leaves empty there (TEAM_NOTES_VIEW.searchable is
+ * mounting is in App.tsx's AppShell.Main for the "messages" view only, in
+ * the space FilterBar leaves empty there (MESSAGES_VIEW.searchable is
  * false); also mounted per-object by MessageButton.tsx with a custom
  * trigger and an onSaved that links the note to that object. */
-export function TeamNoteComposer({ renderTrigger, onSaved }: TeamNoteComposerProps) {
+export function MessageComposer({ renderTrigger, onSaved }: MessageComposerProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,12 +46,12 @@ export function TeamNoteComposer({ renderTrigger, onSaved }: TeamNoteComposerPro
     setError(null);
     try {
       const token = await getToken();
-      const noteHandle = await createTeamNote(token, getCurrentUsername() ?? "unknown", text.trim());
+      const noteHandle = await createMessage(token, getCurrentUsername() ?? "unknown", text.trim());
       if (onSaved) await onSaved(noteHandle, token);
       close();
       // Immediate feedback for the author, rather than waiting on the next
       // live-sync poll tick (up to POLL_INTERVAL_MS) to see their own note.
-      getViewStore("team_note").requeryDebounced();
+      getViewStore("messages").requeryDebounced();
     } catch (err: any) {
       setError(err.message ?? String(err));
     } finally {

@@ -14,7 +14,7 @@ import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MessageButton } from "./related/MessageButton";
-import { TeamNoteActions } from "./related/TeamNoteActions";
+import { MessageActions } from "./related/MessageActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
 
@@ -168,7 +168,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     );
   }
 
-  if (view.key === "note" || view.key === "team_note") {
+  if (view.key === "note" || view.key === "messages") {
     const text = (detail.text as { string: string; tags?: { name: string; ranges: [number, number][]; value: string }[] } | undefined) ?? { string: "" };
     return (
       <div>
@@ -235,7 +235,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
  * onNavigate callback AsideSplit wires in. */
 export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery, updateDocumentTitle, flow }: RelatedPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  // Bumped by TeamNoteActions after a Mark done/Reopen toggle -- that write
+  // Bumped by MessageActions after a Mark done/Reopen toggle -- that write
   // goes through notesApi.ts directly, not through anything that changes
   // `handle` or waits on `revision` (only bumped by a *live-sync*
   // notification matching this handle, which could be up to
@@ -293,8 +293,8 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
         <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
       </Group>
       {view.key === "generated" && <GeneratedItemActions detail={detail} />}
-      {view.key === "team_note" && (
-        <TeamNoteActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
+      {view.key === "messages" && (
+        <MessageActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
       )}
       <DetailFields type={view.key} detail={detail} />
       {sections.map((section) => {
