@@ -1,4 +1,4 @@
-import { Image, Tooltip, UnstyledButton } from "@mantine/core";
+import { Image, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import iconChat from "../../assets/icons/chat-message.svg";
 import { hasPermissions } from "../../auth/auth";
 import { attachNoteToObject } from "../../store/notesApi";
@@ -6,6 +6,7 @@ import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
 import { MessageComposer } from "../MessageComposer";
 import { RELATED_CONFIG } from "./config";
+import { summaryLine } from "./summary";
 
 /** view.label is the sidebar's plural/collective name ("People", "Events",
  * "Places", ...) -- fine there, wrong in "Message about this ___" ("this
@@ -54,8 +55,22 @@ export function MessageButton({
 
   const label = `Message about this ${singularLabel(view)}`;
 
+  // Same two lines the panel header behind the modal shows for this object
+  // (RelatedPanel.tsx's PanelHeader: summaryLine, falling back to the type
+  // label when a type has nothing to summarize, then "ID: <gramps_id>"), so
+  // the hint names the object the same way the rest of the app just did.
+  const summary = summaryLine(view.key, detail) || view.label;
+  const grampsId = typeof detail.gramps_id === "string" ? detail.gramps_id : "";
+
   return (
     <MessageComposer
+      about={
+        <>
+          About this {singularLabel(view)}:{" "}
+          <Text span fw={600} inherit>{summary}</Text>
+          {grampsId ? ` (${grampsId})` : ""}
+        </>
+      }
       renderTrigger={(open) => (
         <Tooltip label={label} withArrow>
           <UnstyledButton onClick={open} aria-label={label}>

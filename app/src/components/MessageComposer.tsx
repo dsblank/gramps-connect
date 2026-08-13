@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Alert, Button, Group, Modal, Textarea } from "@mantine/core";
+import { Alert, Button, Group, Modal, Text, Textarea } from "@mantine/core";
 import { getToken, getCurrentUsername } from "../auth/auth";
 import { getViewStore } from "../store/registry";
 import { createMessage } from "../store/notesApi";
@@ -20,6 +20,13 @@ interface MessageComposerProps {
    * failure, rather than silently losing the "this note should also be
    * attached somewhere" step. */
   onSaved?: (noteHandle: string, token: string) => Promise<void> | void;
+  /** Which object this message will be attached to, shown as a hint line
+   * above the text area. The composer's own trigger (the Messages view's
+   * "+ New message") leaves it unset -- that message is about nothing in
+   * particular -- while MessageButton passes the panel's current object, so
+   * the author can tell from the modal alone whose record they are about to
+   * comment on (the modal covers the panel that would otherwise say). */
+  about?: ReactNode;
 }
 
 /** Compose form for a new Gramps Connect message -- the app's first Mantine
@@ -28,7 +35,7 @@ interface MessageComposerProps {
  * the space FilterBar leaves empty there (MESSAGES_VIEW.searchable is
  * false); also mounted per-object by MessageButton.tsx with a custom
  * trigger and an onSaved that links the note to that object. */
-export function MessageComposer({ renderTrigger, onSaved }: MessageComposerProps) {
+export function MessageComposer({ renderTrigger, onSaved, about }: MessageComposerProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -69,12 +76,17 @@ export function MessageComposer({ renderTrigger, onSaved }: MessageComposerProps
         </Group>
       )}
       <Modal opened={open} onClose={close} title="New Gramps Connect message">
+        {about && (
+          <Text size="sm" c="dimmed" mb="xs">
+            {about}
+          </Text>
+        )}
         <Textarea
           autosize
           minRows={4}
           value={text}
           onChange={(e) => setText(e.currentTarget.value)}
-          placeholder="Message for anyone with edit access..."
+          placeholder="Message for collaborators..."
           disabled={saving}
         />
         {error && <Alert color="red" mt="sm">{error}</Alert>}
