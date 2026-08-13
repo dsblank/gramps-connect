@@ -5,6 +5,7 @@
 // refresh tokens are long-lived, so getToken() proactively refreshes ahead
 // of expiry rather than waiting for a 401.
 import { login as apiLogin, refreshAccessToken as apiRefreshAccessToken } from "../store/api";
+import { API_BASE } from "../config";
 
 const STORAGE_KEY = "gramps-connect.token";
 const REFRESH_STORAGE_KEY = "gramps-connect.refreshToken";
@@ -101,6 +102,40 @@ export function getTreeId(): string | null {
   if (!cachedToken) return null;
   const tree = decodeClaims(cachedToken)?.tree;
   return typeof tree === "string" ? tree : null;
+}
+
+/** Base64url without padding, the encoding gramps-api-client's
+ * parse_api_key() expects for the URL half of a key. TextEncoder first so a
+ * non-ASCII host doesn't throw out of btoa(). */
+function base64url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** A GRAMPS_WEB_API_KEY value for this session, or null when not logged in.
+ *
+ * Not a server-issued credential: gramps-web-api has no user-facing API key
+ * of its own (its persistent access tokens, POST /users/-/access-tokens/,
+ * are hardcoded to the anniversaries_ics scope and no endpoint consumes one
+ * yet). The key is a client-side composition -- `<refresh token>*<base64url
+ * of the API URL>` -- of exactly what gramps-api-client's mint_api_key()
+ * builds after its own username/password login, so pasting this into
+ * GRAMPS_WEB_API_KEY makes Client.from_env() work without a second login.
+ *
+ * That means the key IS this session's refresh token, which is
+ * password-equivalent: gramps-web-api's JWT_REFRESH_TOKEN_EXPIRES is False,
+ * nothing revokes it (no JWT blocklist is configured), and signing out only
+ * clears it locally. Changing the account password is the only way to
+ * retire a copy, so the UI offering this must say so. */
+export function getApiKey(): string | null {
+  if (!cachedRefreshToken) return null;
+  // gramps-api-client needs an absolute URL, and API_BASE is empty for a
+  // same-origin deployment -- resolve against the current page either way.
+  // The `/api` suffix matches what the client appends to a bare host itself.
+  const url = new URL(`${API_BASE}/api`, window.location.href).href;
+  return `${cachedRefreshToken}*${base64url(url)}`;
 }
 
 /** Decodes a JWT's claims payload without pulling in a jwt-decode
