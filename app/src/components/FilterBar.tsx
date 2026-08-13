@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { Stack, Group, TextInput, CloseButton, Text } from "@mantine/core";
+import { Stack, Group, TextInput, CloseButton, Text, ActionIcon, Tooltip } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
+import { getSearchHelp } from "../store/searchHelp";
+import { SearchHelpDialog } from "./SearchHelpDialog";
 import type { ViewConfig } from "../store/views";
 
 interface FilterBarProps {
@@ -16,6 +18,10 @@ export function FilterBar({ view }: FilterBarProps) {
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  // Undefined for a view with no help written for it yet -- the button is
+  // simply absent there, rather than opening an empty dialog.
+  const help = getSearchHelp(view);
 
   // The store's filter can also be cleared from outside this component --
   // a person link in PersonDetail drops it before jumping to the target
@@ -77,8 +83,36 @@ export function FilterBar({ view }: FilterBarProps) {
             )
           }
         />
+        {help && (
+          <Tooltip label={`How to search ${view.label}`} withArrow>
+            <ActionIcon
+              variant="default"
+              radius="xl"
+              size="sm"
+              aria-label={`How to search ${view.label}`}
+              onClick={() => setHelpOpen(true)}
+            >
+              <Text component="span" size="xs" fw={700} ff="serif" fs="italic">i</Text>
+            </ActionIcon>
+          </Tooltip>
+        )}
       </Group>
       {error && <Text size="xs" c="red">{error}</Text>}
+      {help && (
+        <SearchHelpDialog
+          opened={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          viewLabel={view.label}
+          help={help}
+          // Left unapplied in the box, so it's a starting point to edit
+          // rather than a search of someone else's tree that returns
+          // nothing here. Closing the dialog puts it in view.
+          onUseExample={(expr) => {
+            setInput(expr);
+            setHelpOpen(false);
+          }}
+        />
+      )}
     </Stack>
   );
 }
