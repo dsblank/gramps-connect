@@ -73,10 +73,18 @@ interface MapCanvasProps {
    * mode, where the plotted set is the whole tree but the thing worth
    * looking at is the handful the scope picked out. */
   fitTo?: MapPlace[];
+  /** The marker to ring as selected, so the record the detail card is
+   * describing stays findable -- the timeline rings its selected dot for
+   * the same reason. */
+  selectedHandle?: string | null;
   onSelectPlace: (place: MapPlace | null) => void;
 }
 
-function toGeoJson(places: MapPlace[], highlighted?: Set<string>): FeatureCollection<GeoJsonPoint> {
+function toGeoJson(
+  places: MapPlace[],
+  highlighted?: Set<string>,
+  selectedHandle?: string | null,
+): FeatureCollection<GeoJsonPoint> {
   return {
     type: "FeatureCollection",
     features: places.map((place) => ({
@@ -92,6 +100,7 @@ function toGeoJson(places: MapPlace[], highlighted?: Set<string>): FeatureCollec
         // circle-opacity expressions below), so one set of layers keeps
         // serving both modes and clustering keeps working across them.
         dim: highlighted ? !highlighted.has(place.handle) : false,
+        selected: place.handle === selectedHandle,
       },
     })),
   };
@@ -104,7 +113,9 @@ const DIM_OPACITY = 0.15;
 /** The maplibre map itself, in its own module so MapView can import() it
  * lazily -- maplibre-gl is by far the heaviest thing in this app, and a
  * session that never opens View > Map should never download it. */
-export function MapCanvas({ places, fitRequest, highlighted, fitTo, onSelectPlace }: MapCanvasProps) {
+export function MapCanvas({
+  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace,
+}: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -119,6 +130,8 @@ export function MapCanvas({ places, fitRequest, highlighted, fitTo, onSelectPlac
   placesRef.current = places;
   const highlightedRef = useRef(highlighted);
   highlightedRef.current = highlighted;
+  const selectedRef = useRef(selectedHandle);
+  selectedRef.current = selectedHandle;
   const onSelectRef = useRef(onSelectPlace);
   onSelectRef.current = onSelectPlace;
 
@@ -242,7 +255,7 @@ export function MapCanvas({ places, fitRequest, highlighted, fitTo, onSelectPlac
     if (!map.getSource(SOURCE)) {
       map.addSource(SOURCE, {
         type: "geojson",
-        data: toGeoJson(placesRef.current, highlightedRef.current),
+        data: toGeoJson(placesRef.current, highlightedRef.current, selectedRef.current),
         // maplibre's own clustering, which the local-cache read makes worth
         // having: the whole tree's places are handed over at once rather than
         // in viewport-sized fetches, so a tree with thousands of them would
@@ -304,8 +317,12 @@ export function MapCanvas({ places, fitRequest, highlighted, fitTo, onSelectPlac
           // Never below a 8px marker (r >= 4), stepping up with how much
           // happened at this place.
           "circle-radius": ["step", ["get", "eventCount"], 5, 1, 7, 5, 10, 20, 14],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": colors.surface,
+          // The selected marker keeps the same size but takes a thicker ring
+          // in ink instead of the surface colour -- the timeline rings its
+          // selected dot the same way, and for the same reason: the detail
+          // card outlives the pointer that opened it.
+          "circle-stroke-width": ["case", ["get", "selected"], 3, 2],
+          "circle-stroke-color": ["case", ["get", "selected"], colors.text, colors.surface],
           "circle-stroke-opacity": ["case", ["get", "dim"], DIM_OPACITY, 1],
         },
       });
@@ -359,8 +376,8 @@ export function MapCanvas({ places, fitRequest, highlighted, fitTo, onSelectPlac
     const map = mapRef.current;
     if (!map || !ready) return;
     const source = map.getSource(SOURCE) as GeoJSONSource | undefined;
-    source?.setData(toGeoJson(places, highlighted));
-  }, [places, highlighted, ready]);
+    source?.setData(toGeoJson(places, highlighted, selectedHandle));
+  }, [places, highlighted, selectedHandle, ready]);
 
   // Fit to the requested places (see fitRequest). Skipped at fitRequest 0 so
   // the remembered viewport survives the first open.

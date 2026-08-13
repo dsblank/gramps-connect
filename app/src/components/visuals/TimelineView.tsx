@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Badge, Box, CloseButton, Group, Text, TextInput, Tooltip, UnstyledButton, useComputedColorScheme,
+  Badge, Box, Button, CloseButton, Group, Paper, Text, TextInput, Tooltip, UnstyledButton,
+  useComputedColorScheme,
 } from "@mantine/core";
 import { useVisualData } from "../../hooks/useVisualData";
 import { useVisualScope } from "../../hooks/useVisualScope";
@@ -32,6 +33,7 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
   const { scope, loading: scopeLoading, error: scopeError } = useVisualScope(subject, data);
   const [search, setSearch] = useState("");
   const [hidden, setHidden] = useState<Set<EventCategory>>(() => new Set());
+  const [selected, setSelected] = useState<TimelineEvent | null>(null);
 
   // The scope's events this timeline can actually draw: a scope names event
   // handles, but only dated ones are plotted. This -- not
@@ -123,9 +125,17 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
     });
   }
 
+  // An event that drops out of the filtered set can't stay selected -- its
+  // card would describe a dot that's no longer drawn. Mirrors MapView's own
+  // guard on the selected place.
+  useEffect(() => {
+    if (selected && !events.some((e) => e.handle === selected.handle)) setSelected(null);
+  }, [events, selected]);
+
   function openEvent(handle: string) {
     // Hand off to the Events view, where the three-pane layout shows the
-    // whole record -- see VisualFrame's doc comment.
+    // whole record -- see VisualFrame's doc comment. Reached only from the
+    // detail card's own button, never from a click in the plot.
     window.location.hash = formatHash({ viewKey: "event", handle });
   }
 
@@ -176,7 +186,7 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
           <Text size="xs" c="dimmed">
             {data.eventsCached < data.eventsTotal
               ? `from ${data.eventsCached.toLocaleString()} of ${data.eventsTotal.toLocaleString()} events cached so far — still filling`
-              : "drag to pan · scroll to zoom · click a dot to open the event"}
+              : "drag to pan · scroll to zoom · click a dot for details"}
           </Text>
         </Group>
       }
@@ -188,9 +198,55 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
         // a scoped one, so dimming would have nothing to say.
         highlighted={scopeActive && mode === "context" ? scope!.eventHandles : undefined}
         focus={focus}
-        onOpenEvent={openEvent}
+        selectedHandle={selected?.handle ?? null}
+        onSelectEvent={setSelected}
       />
+      {selected && (
+        <EventCard
+          event={selected}
+          onOpen={() => openEvent(selected.handle)}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </VisualFrame>
+  );
+}
+
+interface EventCardProps {
+  event: TimelineEvent;
+  onOpen: () => void;
+  onClose: () => void;
+}
+
+/** The clicked dot's details, and the one control that leaves the timeline
+ * for the Events view -- the exact counterpart of the map's PlaceCard, in
+ * the same corner, with the same shape and the same commit button, because
+ * the two plots now answer a click the same way. Bottom-left, clear of the
+ * axis strip below and the zoom controls at the right. */
+function EventCard({ event, onOpen, onClose }: EventCardProps) {
+  return (
+    <Paper
+      withBorder
+      shadow="md"
+      p="sm"
+      // Same offsets as PlaceCard, which clear maplibre's scale control
+      // there and the 26px axis strip here.
+      style={{ position: "absolute", left: 12, bottom: 42, width: 280, zIndex: 3 }}
+    >
+      <Group justify="space-between" wrap="nowrap" gap="xs" mb={4}>
+        <Text size="sm" fw={600} lineClamp={2}>{event.type || "Event"}</Text>
+        <CloseButton size="sm" onClick={onClose} aria-label="Close event details" />
+      </Group>
+      <Group gap="xs" mb="xs">
+        {event.grampsId && <Badge size="xs" variant="light" color="gray">{event.grampsId}</Badge>}
+        {event.dateText && <Badge size="xs" variant="light">{event.dateText}</Badge>}
+      </Group>
+      {event.placeTitle && <Text size="xs" mb={4}>{event.placeTitle}</Text>}
+      {event.description && (
+        <Text size="xs" c="dimmed" mb="xs" lineClamp={3}>{event.description}</Text>
+      )}
+      <Button size="xs" fullWidth onClick={onOpen}>Open in Events</Button>
+    </Paper>
   );
 }
 

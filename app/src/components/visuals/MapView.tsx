@@ -296,6 +296,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           // already a scoped one, so dimming would have nothing to say.
           highlighted={scopeActive && mode === "context" ? scope!.placeHandles : undefined}
           fitTo={scopeActive && mode === "context" ? scopedPlaces! : undefined}
+          selectedHandle={selected?.handle ?? null}
           onSelectPlace={setSelected}
         />
       </Suspense>

@@ -44,7 +44,13 @@ interface TimelineChartProps {
    * whenever its values change, so re-scoping re-frames but panning away
    * afterwards isn't fought. */
   focus?: [number, number] | null;
-  onOpenEvent: (handle: string) => void;
+  /** The dot to ring as selected, so the record the detail card is
+   * describing stays findable once the pointer has moved away. */
+  selectedHandle?: string | null;
+  /** A click *selects* -- it doesn't navigate. Null when the click landed
+   * on bare plot, which dismisses the card. See the positional rule in this
+   * component's doc comment. */
+  onSelectEvent: (event: TimelineEvent | null) => void;
 }
 
 /** Full strength, or receded to context. Lower than the map's equivalent
@@ -76,8 +82,17 @@ interface HoverState {
  * clickable record. That replaces the two separate mechanisms gramps-web's
  * timeline uses for the same job -- a single overlapping row of dots plus a
  * kernel-density band above it -- with one, and means density is legible at
- * any zoom without needing the band. */
-export function TimelineChart({ events, allEvents, highlighted, focus, onOpenEvent }: TimelineChartProps) {
+ * any zoom without needing the band.
+ *
+ * Hovering names a dot; clicking *selects* it into the detail card beside
+ * the plot, and only that card's own button leaves for the Events view.
+ * That's the same positional rule the map and the aside's two panes follow
+ * -- clicking in the plot previews, clicking in the preview commits -- and
+ * this chart used to break it by navigating away on the first click, which
+ * made a mis-aimed click on a dense column an unwanted page change. */
+export function TimelineChart({
+  events, allEvents, highlighted, focus, selectedHandle, onSelectEvent,
+}: TimelineChartProps) {
   const colorScheme = useComputedColorScheme("light");
   const dark = colorScheme === "dark";
   const containerRef = useRef<HTMLDivElement>(null);
@@ -214,7 +229,22 @@ export function TimelineChart({ events, allEvents, highlighted, focus, onOpenEve
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-  }, [layout, size.width, size.height, dark, colorScheme, hover, highlighted]);
+
+    // The selected dot, ringed in ink rather than in its own series colour
+    // -- it has to stay findable after the pointer has left, and read as
+    // distinct from the hover ring above, which wears the series colour.
+    // Drawn last so it survives a dot being both hovered and selected.
+    if (selectedHandle) {
+      const dot = layout.dots.find((d) => d.event.handle === selectedHandle);
+      if (dot) {
+        ctx.beginPath();
+        ctx.arc(dot.cx, dot.cy, DOT_RADIUS + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = colors.text;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+  }, [layout, size.width, size.height, dark, colorScheme, hover, highlighted, selectedHandle]);
 
   const zoomBy = useCallback((factor: number, anchor = 0.5) => {
     setDomain((current) => zoomDomain(current, factor, anchor, limit));
@@ -276,7 +306,9 @@ export function TimelineChart({ events, allEvents, highlighted, focus, onOpenEve
     if (!drag || drag.moved) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const dot = hitTest(layout.dots, e.clientX - rect.left, e.clientY - rect.top, DOT_RADIUS);
-    if (dot) onOpenEvent(dot.event.handle);
+    // A click on bare plot passes null, which dismisses the card -- the
+    // same way clicking bare map does.
+    onSelectEvent(dot ? dot.event : null);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -363,12 +395,19 @@ export function TimelineChart({ events, allEvents, highlighted, focus, onOpenEve
   );
 }
 
-/** Per-mark hover tooltip, flipped away from whichever edge the cursor is
+/** Per-mark hover label, flipped away from whichever edge the cursor is
  * near so it never runs off the plot. Both axes need it: the columns are
  * densest at the recent (right-hand) end, and every column stacks up from the
  * baseline, so the most-hovered dots of all are the ones in the bottom-right
  * corner -- anchoring the box's top below the cursor there put most of it
- * off the bottom of the frame, with the last line of text cut off. */
+ * off the bottom of the frame, with the last line of text cut off.
+ *
+ * Identity only -- type and date, the least that distinguishes this dot from
+ * its neighbours in a stack. The full record is one click away in the detail
+ * card, exactly as the map's hover gives a place's name and its card gives
+ * the rest. This used to carry the whole record instead, which put the
+ * timeline's disclosure a step ahead of the map's for no reason and meant a
+ * pointer sweep across a dense column strobed a large box. */
 function DotTooltip({ hover, width, height }: { hover: HoverState; width: number; height: number }) {
   const { dot, x, y } = hover;
   const flipX = x > width - 260;
@@ -377,7 +416,8 @@ function DotTooltip({ hover, width, height }: { hover: HoverState; width: number
     <Paper
       withBorder
       shadow="sm"
-      p="xs"
+      px="xs"
+      py={4}
       style={{
         position: "absolute",
         left: flipX ? undefined : x + 12,
@@ -389,11 +429,12 @@ function DotTooltip({ hover, width, height }: { hover: HoverState; width: number
         zIndex: 3,
       }}
     >
-      <Text size="sm" fw={600}>{dot.event.type || "Event"}</Text>
-      <Text size="xs">{dot.event.dateText}</Text>
-      {dot.event.placeTitle && <Text size="xs" c="dimmed">{dot.event.placeTitle}</Text>}
-      {dot.event.description && <Text size="xs" c="dimmed" lineClamp={2}>{dot.event.description}</Text>}
-      <Text size="xs" c="dimmed" mt={4}>{dot.event.grampsId} · click to open</Text>
+      <Text size="xs" fw={600}>
+        {dot.event.type || "Event"}
+        {dot.event.dateText && (
+          <Text span size="xs" c="dimmed" fw={400}>{" · "}{dot.event.dateText}</Text>
+        )}
+      </Text>
     </Paper>
   );
 }
