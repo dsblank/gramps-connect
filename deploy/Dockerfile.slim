@@ -1,0 +1,230 @@
+# syntax=docker/dockerfile:1
+#
+# Experimental slim variant of deploy/Dockerfile.
+#
+# The difference is entirely the base. deploy/Dockerfile builds on
+# ghcr.io/gramps-project/gramps-web-base, which is ~4.3GB before our first
+# instruction: torch, sentence-transformers and a downloaded embedding
+# model (~2.0GB) for the semantic-search/chat features, opencv (~0.3GB),
+# 45 tesseract language packs, ffmpeg, poppler and GTK2/mesa dev headers.
+# This deployment enables none of that -- there is no vector/embedding/chat
+# configuration in deploy/.env or deploy/docker-compose.yml, and the client
+# never calls those endpoints. Inherited layers can't be slimmed after the
+# fact (deleting a file in a later layer only adds a whiteout), so the only
+# way to drop the weight is to not inherit it: build on python:3.13-slim
+# and add back, by hand, the parts this project actually reaches.
+#
+# What is deliberately kept, and why:
+#   graphviz        -- the Relationship Graph / Hourglass / Family Lines
+#                      reports shell out to `dot`, and app/src/store/
+#                      reportsApi.ts exposes every registered report.
+#   GLib typelib    -- gramps/gen/const.py imports GLib at module load
+#                      just to compute XDG dirs (see deploy/Dockerfile).
+#   Pango/cairo     -- gramps' cairodoc docgen backs the PDF/PS/SVG report
+#                      output formats.
+#   Gramps addons   -- SharedPostgreSQL is the database backend; JSON,
+#                      PostgreSQL and FilterRules come with it upstream.
+#   PyICU + libicu  -- Gramps' collation backend. Not a declared dependency
+#                      of either project, but without it name sorting falls
+#                      back to glibc and startup says so.
+#   pdf2image +     -- PDF-to-image thumbnailing in gramps_webapi/api/
+#   poppler-utils      image.py, which 501s without them.
+#
+# What is deliberately dropped: the AI/CV stack, OCR (pytesseract), video
+# conversion (ffmpeg-python) and S3 storage (boto3) -- optional
+# gramps-web-api features this deployment doesn't enable, so their Python
+# packages and system dependencies alike are left out.
+
+# --- Stage 1: build the frontend ---------------------------------------
+FROM node:20-slim AS frontend-build
+
+WORKDIR /src
+
+COPY package.json package-lock.json ./
+COPY packages ./packages
+COPY app ./app
+
+# Same-origin as deploy/Dockerfile: see the note there.
+ENV VITE_API_BASE=""
+
+RUN npm ci
+RUN npm run build -w app
+
+# --- Stage 2: Gramps addons ---------------------------------------------
+#
+# Lifted from gramps-web-base's own Dockerfile.base so the slim image ends
+# up with an identical /root/gramps/gramps60/plugins. Its wget/unzip stay
+# in this stage rather than the runtime image.
+FROM debian:trixie-slim AS addons
+
+ENV GRAMPS_VERSION=60
+
+RUN apt-get update && apt-get install -y --no-install-recommends wget unzip ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /root/gramps/gramps${GRAMPS_VERSION}/plugins && \
+    wget -q https://github.com/gramps-project/addons/archive/refs/heads/master.zip && \
+    for addon in PostgreSQL SharedPostgreSQL FilterRules JSON; do \
+      unzip -p master.zip addons-master/gramps${GRAMPS_VERSION}/download/$addon.addon.tgz | \
+      tar -xz -C /root/gramps/gramps${GRAMPS_VERSION}/plugins; \
+    done && \
+    rm master.zip
+
+# --- Stage 3: build the Python environment ------------------------------
+#
+# Everything here lands in /venv, which is the only thing stage 4 keeps --
+# so the compilers, headers and git checkouts never reach the final image.
+FROM python:3.13-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git gcc g++ pkg-config \
+      libgirepository1.0-dev libcairo2-dev libicu-dev \
+      gettext && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /venv
+ENV PATH=/venv/bin:$PATH
+
+# PyGObject publishes no manylinux wheel at this pin, so it compiles here
+# against libgirepository1.0-dev/libcairo2-dev. Stage 4 needs only the
+# corresponding runtime libraries.
+RUN pip install --no-cache-dir "PYGObject<=3.50.0"
+
+# PyICU is not a dependency of either project -- it is the optional
+# collation backend Gramps looks for, and without it every startup logs
+# "ICU not loaded ... Localization will be impaired" and name sorting falls
+# back to glibc's. It compiles against libicu-dev here; the runtime stage
+# needs the matching libicu shared library.
+RUN pip install --no-cache-dir PyICU
+
+# Installed non-editable, unlike deploy/Dockerfile: an editable install
+# would leave the final image depending on the git checkout staying around
+# (~130MB of source and .git), whereas this copies just the package and its
+# data files into /venv.
+RUN git clone --depth 1 --branch maintenance/gramps60 \
+      https://github.com/gramps-project/gramps /src/gramps && \
+    pip install --no-cache-dir /src/gramps --no-deps
+
+RUN git clone --depth 1 --branch master \
+      https://github.com/gramps-project/gramps-web-api /src/gramps-web-api && \
+    pip install --no-cache-dir /src/gramps-web-api --no-deps
+
+# --no-deps above would leave gramps-web-api's dependencies uninstalled, so
+# they are installed here -- but read out of its own pyproject.toml rather
+# than copied into this file. deploy/Dockerfile keeps a hand-copied list,
+# which has already drifted: it pins gramps-object-query-language>=0.3.1
+# where upstream now says >=0.3.4,<0.4, and a dependency added upstream
+# tomorrow would simply be missing. Generating the list means the pins are
+# whatever the checked-out commit says, and new dependencies arrive on
+# their own.
+#
+# Four names are filtered out, each for a specific reason:
+#   gramps[all]   -- would pull the released gramps from PyPI over the
+#                    from-source install above (the reason for --no-deps).
+#   PyGObject     -- already installed, compiled, further up.
+#   pdf2image / ffmpeg-python / boto3 / pytesseract -- real dependencies,
+#                    but only for optional features (PDF rasterising, video
+#                    conversion, S3 storage, OCR) this deployment doesn't
+#                    enable; each is imported at its call site rather than
+#                    at module load, which is what makes omitting them safe
+#                    (the same omission .github/workflows/build-standalone.yml
+#                    already makes, verified there call site by call site).
+# Anything else upstream lists is installed, whether or not this file has
+# heard of it. The filter itself lives in deploy/webapi-requirements.py --
+# which also fails the build if a name it skips has disappeared from
+# upstream's list, so the exclusions can't rot silently.
+COPY deploy/webapi-requirements.py /tmp/webapi-requirements.py
+RUN python /tmp/webapi-requirements.py /src/gramps-web-api/pyproject.toml \
+      > /tmp/requirements.txt && cat /tmp/requirements.txt
+
+# gunicorn and psycopg2-binary are on top of that list, not in it: gunicorn
+# is how this image serves (see CMD), and psycopg2 is what the
+# SharedPostgreSQL addon imports -- gramps-web-base supplied both, so
+# neither appears in any dependency list we now read.
+RUN pip install --no-cache-dir -r /tmp/requirements.txt gunicorn psycopg2-binary
+
+# --- Stage 4: runtime ----------------------------------------------------
+FROM python:3.13-slim AS backend
+
+WORKDIR /app
+
+# Runtime counterparts only -- the -dev packages stayed in stage 3.
+# gir1.2-gtk-3.0 brings the GTK3 typelibs that Gramps' plugin registration
+# and its cairo/Pango docgen backends expect, along with Pango, GdkPixbuf
+# and Atk. libgirepository-1.0-1 is named separately because the gir1.2-*
+# packages ship only typelib data -- without it, `import gi` dies on a
+# missing libgirepository-1.0.so.1 before anything else gets a chance to
+# fail.
+#
+# postgresql-client is here for one binary: deploy/docker-entrypoint.sh
+# waits for the database with `until pg_isready ...`, and a missing command
+# inside `until` is a non-zero exit like any other -- the loop would simply
+# spin out its 30 attempts and abort startup with "Postgres did not become
+# ready in time", on every container in the stack.
+#
+# libicu76 is what PyICU was compiled against in stage 3 (same Debian
+# release, so the soname matches). poppler-utils supplies the pdftoppm /
+# pdftocairo binaries that pdf2image shells out to for PDF thumbnailing.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libgirepository-1.0-1 gir1.2-gtk-3.0 libcairo2 graphviz \
+      libicu76 poppler-utils \
+      postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV PATH=/venv/bin:$PATH
+COPY --from=builder /venv /venv
+COPY --from=addons /root/gramps /root/gramps
+
+# deploy/docker-entrypoint.sh runs `cd /app/gramps-web-api-src && python3 -m
+# gramps_webapi user migrate`, because alembic.ini (script_location =
+# alembic_users) sits at gramps-web-api's source root and alembic resolves
+# it relative to the working directory. deploy/Dockerfile satisfies that
+# with its editable install's checkout; here the install is non-editable, so
+# these two -- the only part of that 130MB checkout anything reads at
+# runtime -- are copied in on their own.
+COPY --from=builder /src/gramps-web-api/alembic.ini /app/gramps-web-api-src/alembic.ini
+COPY --from=builder /src/gramps-web-api/alembic_users /app/gramps-web-api-src/alembic_users
+
+# Persistent data directories -- mount a volume covering /app/db, /app/media,
+# /app/indexdir, /app/users, /app/secret (see deploy/docker-compose.yml).
+RUN mkdir -p \
+      /app/db /app/media /app/indexdir /app/users /app/secret \
+      /app/thumbnail_cache \
+      /app/cache/reports /app/cache/export \
+      /app/cache/request_cache /app/cache/persistent_cache
+
+COPY --from=frontend-build /src/app/dist /app/static
+
+ENV GRAMPSWEB_USER_DB_URI=sqlite:////app/users/users.sqlite \
+    GRAMPSWEB_MEDIA_BASE_DIR=/app/media \
+    GRAMPSWEB_SEARCH_INDEX_DB_URI=sqlite:////app/indexdir/search_index.db \
+    GRAMPSWEB_STATIC_PATH=/app/static \
+    GRAMPSWEB_THUMBNAIL_CACHE_CONFIG__CACHE_DIR=/app/thumbnail_cache \
+    GRAMPSWEB_REQUEST_CACHE_CONFIG__CACHE_DIR=/app/cache/request_cache \
+    GRAMPSWEB_PERSISTENT_CACHE_CONFIG__CACHE_DIR=/app/cache/persistent_cache \
+    GRAMPSWEB_REPORT_DIR=/app/cache/reports \
+    GRAMPSWEB_EXPORT_DIR=/app/cache/export \
+    GRAMPS_DATABASE_PATH=/app/db
+
+# Where stage 2's addons landed (matches deploy/Dockerfile and upstream).
+ENV GRAMPSHOME=/root
+
+# python:3.13-slim ships no locale archive, so glibc has only C/POSIX.
+# C.UTF-8 is built in and gives Gramps a UTF-8 locale without the ~25MB
+# `locales` package and a localedef run.
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+# Matches gramps-web-base, which sets this to keep BLAS-backed libraries
+# from spawning a thread per core inside each gunicorn worker.
+ENV OMP_NUM_THREADS=1
+
+EXPOSE 5000
+
+COPY deploy/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD gunicorn -w ${GUNICORN_NUM_WORKERS:-4} -b 0.0.0.0:5000 \
+      gramps_webapi.wsgi:app \
+      --timeout ${GUNICORN_TIMEOUT:-120} \
+      --limit-request-line 8190
