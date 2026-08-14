@@ -12,6 +12,10 @@ import { AboutDialog } from "./AboutDialog";
 import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
+import { runMediaExport } from "../store/mediaExportApi";
+import { exportLabel, promoteJob } from "../store/jobsPromote";
+import { trackJob } from "../store/jobsPoll";
+import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
 // at ROLE_OWNER and above.
@@ -159,6 +163,32 @@ function goTo(viewKey: string) {
   window.location.hash = formatHash({ viewKey, handle: null });
 }
 
+/** Export -> Media…: unlike the Family Tree export, there's no format or
+ * option to pick -- one archive, every Media file the caller may see -- so
+ * this dispatches straight from the menu instead of opening a dialog first.
+ * Otherwise the same fire-and-forget pipeline as ExportDialog's
+ * handleExport: the POST returns fast either way (a task id to poll, or --
+ * no Celery broker -- the finished archive already sitting there), and the
+ * result lands in Output as an "export"-tagged Media object, announced by
+ * toast. */
+function handleExportMedia() {
+  const desc = exportLabel("Media");
+  notifyJobStarted("export", "Media");
+
+  (async () => {
+    const token = await getToken();
+    const result = await runMediaExport(token);
+    if (result.kind === "task") {
+      trackJob(result.taskId, "export", jobsPollCallbacks, desc);
+      return;
+    }
+    const promoted = await promoteJob(token, "export", result.url, desc);
+    if (promoted) jobsPollCallbacks.onPromoted(promoted, "export");
+  })().catch((err: any) => {
+    jobsPollCallbacks.onFailed("export", err.message ?? String(err));
+  });
+}
+
 /** The desktop-Gramps-style menu bar, following ~/gramps/gramps'
  * viewmanager.py menu layout and order. Only the menus with something in
  * them are shown: desktop Gramps' Edit and Tools are left out until they
@@ -221,7 +251,14 @@ export function MenuBar({ draftStack }: MenuBarProps) {
                 { label: "Media…", onClick: () => setImportMediaOpened(true) },
               ],
             },
-            { label: "Export…", perm: PERM_EDIT_OBJ, onClick: () => setExportOpened(true) },
+            {
+              label: "Export…",
+              perm: PERM_EDIT_OBJ,
+              children: [
+                { label: "Family Tree…", onClick: () => setExportOpened(true) },
+                { label: "Media…", onClick: handleExportMedia },
+              ],
+            },
             {
               label: "Delete…",
               perm: PERM_DEL_OBJ_BATCH,

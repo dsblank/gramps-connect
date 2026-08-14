@@ -14,6 +14,11 @@ export interface PromoteResult {
 
 const REPORT_URL_RE = /^\/api\/reports\/([^/]+)\/file\/processed\//;
 const EXPORT_URL_RE = /^\/api\/exporters\/([^/]+)\/file\/processed\//;
+// Media archives aren't listed by exporters.py -- export_media (tasks.py)
+// hands back its own `/api/media/archive/<uuid>.zip`, with no plugin id to
+// look up a name for. There's only ever the one kind of media export, so
+// the label is a constant rather than something fetched.
+const MEDIA_ARCHIVE_URL_RE = /^\/api\/media\/archive\//;
 
 // Gramps plugin display names carry a GTK mnemonic marker (an underscore
 // before the accelerator letter, e.g. "GE_DCOM", "_Web Family Tree") --
@@ -155,6 +160,7 @@ function truncateBytes(text: string, max: number): string {
  * dispatch-scoped loop instead builds a richer desc itself, from the
  * `options` it still has in memory at that point. */
 export async function describeGenericJob(token: string, kind: JobKind, url: string): Promise<string> {
+  if (kind === "export" && MEDIA_ARCHIVE_URL_RE.test(url)) return exportLabel("Media");
   const stamp = new Date().toISOString().slice(0, 10);
   const [urlRe, apiPath, idFallback] =
     kind === "report"

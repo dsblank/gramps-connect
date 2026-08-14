@@ -19,6 +19,7 @@ const SWEEP_INTERVAL_MS = 3 * 60 * 1000;
 const TASK_NAME_TO_KIND: Record<string, JobKind> = {
   generate_report: "report",
   export_db: "export",
+  export_media: "export",
 };
 
 function resultUrl(resultObject: unknown): string | null {
