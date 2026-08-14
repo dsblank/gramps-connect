@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Stack, Group, TextInput, CloseButton, Text, ActionIcon, Tooltip, Checkbox } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import { getSearchHelp } from "../store/searchHelp";
+import { getSearchState, setSearchState } from "../store/searchState";
 import { SearchHelpDialog } from "./SearchHelpDialog";
 import type { ViewConfig } from "../store/views";
 
@@ -11,20 +12,34 @@ interface FilterBarProps {
 }
 
 /** Rendered keyed by view.key from the parent so switching views remounts
- * it fresh (clears the input/error, matching the original spike's
- * selectView() resetting #where-expr/#filter-error). */
+ * it fresh (clears transient `error`/`applying`, matching the original
+ * spike's selectView() resetting #filter-error) -- but `input`/`useGoql`
+ * seed from searchState.ts's per-view store instead of a fixed default, so
+ * switching back to a view the user had a search typed into (GOQL or not)
+ * shows it again rather than a blank box. */
 export function FilterBar({ view }: FilterBarProps) {
   const snapshot = useViewStore(view.key);
-  const [input, setInput] = useState("");
+  const [input, setInputState] = useState(() => getSearchState(view.key).input);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   // Defaults to the plain-text mode -- every view's everyday search is
   // simpler than the query language, which stays an opt-in escape hatch
-  // (see ViewConfig.simpleSearch). Not persisted: this component remounts
-  // on view switch (see the doc comment above), so switching back to a
-  // view always starts in plain-text mode again.
-  const [useGoql, setUseGoql] = useState(false);
+  // (see ViewConfig.simpleSearch).
+  const [useGoql, setUseGoqlState] = useState(() => getSearchState(view.key).useGoql);
+
+  // Both setters also write through to searchState.ts, so the *next*
+  // FilterBar mounted for this view.key (after a switch away and back)
+  // picks up where this one left off -- see this component's own doc
+  // comment above.
+  function setInput(value: string) {
+    setInputState(value);
+    setSearchState(view.key, { input: value });
+  }
+  function setUseGoql(value: boolean) {
+    setUseGoqlState(value);
+    setSearchState(view.key, { useGoql: value });
+  }
   // Undefined for a view with no help written for it yet -- the button is
   // simply absent there, rather than opening an empty dialog. Shown in both
   // simpleSearch modes -- Person's help text still needs editing to cover
@@ -38,7 +53,20 @@ export function FilterBar({ view }: FilterBarProps) {
   // direction: this component is still the sole source of truth for
   // *applying* a new expression, so a non-null whereExpr never overwrites
   // the input the user is mid-typing.
+  //
+  // Skipped on this instance's very first run: mounting with a restored
+  // `input` (searchState.ts, above) but a null snapshot.whereExpr is the
+  // ordinary case for a submitted-but-too-short query (buildExpr's null
+  // return, same "clears the filter" case this effect itself handles) or
+  // simply a search the user typed but never submitted -- neither is an
+  // *external* clear, so treating mount itself as one would wipe the very
+  // input this component just restored.
+  const skipNextWhereExprClear = useRef(true);
   useEffect(() => {
+    if (skipNextWhereExprClear.current) {
+      skipNextWhereExprClear.current = false;
+      return;
+    }
     if (snapshot.whereExpr === null) setInput("");
   }, [snapshot.whereExpr]);
 
