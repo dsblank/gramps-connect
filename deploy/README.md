@@ -51,6 +51,18 @@ docker compose -f deploy/docker-compose.yml down -v
 docker compose -f deploy/docker-compose.yml exec app sh
 ```
 
+### Login credentials: this deploy vs. the standalone build
+
+This docker deploy has **no default password** — you set
+`GRAMPSWEB_ADMIN_USER`/`GRAMPSWEB_ADMIN_PASSWORD` yourself in `deploy/.env`
+before first boot (see below), and that's what the entrypoint seeds. Nothing
+generates or prints a password for you.
+
+That's different from `standalone/` (the single-user PyInstaller demo build,
+unrelated to this docker deploy): it always seeds a fixed `admin`/`admin`
+account (`standalone/launcher.py`), which is fine there since it's a
+throwaway local demo, not something exposed on a real server.
+
 ## First-time setup: the seeded admin
 
 On first boot (first time the `app-users`/`app-db` volumes are empty), the
@@ -208,7 +220,7 @@ deploy/docker-compose.yml up -d` to pick up both changes.
   enough that it's better done once on GitHub's runners than on every
   deploy host: `.github/workflows/build-docker.yml` (manual trigger —
   `gh workflow run build-docker.yml`, or the Actions tab) builds
-  `deploy/Dockerfile` and pushes `ghcr.io/<owner>/gramps-connect:latest`.
+  `deploy/Dockerfile.slim` and pushes `ghcr.io/<owner>/gramps-connect:latest`.
   `docker compose -f deploy/docker-compose.yml --env-file deploy/.env pull`
   grabs that instead of building locally; `up -d --build` (as in the Docker
   commands above) remains there for local iteration on the Dockerfile
