@@ -23,17 +23,6 @@ HERE = os.path.abspath(os.path.dirname(os.path.abspath(SPEC)))
 
 datas = [
     (os.path.join(HERE, "frontend"), "frontend"),
-    (os.path.join(HERE, "example.gramps"), "."),
-    # example.gramps' <file src="..."/> media references are plain
-    # filenames, resolved by gramps-web-api relative to MEDIA_BASE_DIR --
-    # the actual image files live alongside example.gramps itself in the
-    # gramps source tree, not inside it, so they need bundling separately.
-    # launcher.py's copy_example_media() copies them into place on first
-    # run. Whole directory (a few harmless extras: example.gramps itself,
-    # image_credits.md -- copy_example_media() skips those) rather than an
-    # explicit file list, so a future gramps update to this fixture's
-    # photo set doesn't need a matching change here.
-    (os.path.join(HERE, "example-media"), "example-media"),
     # Whole plugins tree as real files -- see module docstring.
     (os.path.join(GRAMPS_PKG_DIR, "plugins"), "gramps/plugins"),
     # "installed" resource layout expected by
@@ -107,14 +96,19 @@ hiddenimports = collect_submodules("gramps") + [
 datas += collect_data_files("gramps_webapi")
 
 # Every one of these is an optional, lazily-imported gramps-web-api feature
-# (confirmed by reading each call site) that gramps-connect's UI doesn't use
-# today -- AI chat, semantic ("AI") search, face detection in photos,
-# S3-backed media storage, OCR, DNA/Y-DNA matching, and PDF/video conversion
-# (the last two need their own system binaries -- poppler/ffmpeg -- to work
-# at all, so bundling just the Python side wouldn't have made them
-# functional anyway). Cutting all of them, plus the huge transitive graphs
-# some of them pull in, plus the shared conda env's own large unrelated
-# ML/notebook packages that were getting swept in alongside them.
+# that this build ships without -- AI chat, semantic ("AI") search, face
+# detection in photos, S3-backed media storage, OCR, DNA/Y-DNA matching, and
+# PDF/video conversion. Most of these gramps-connect's UI genuinely doesn't
+# use (confirmed by reading each call site); PDF thumbnails are the one
+# exception -- app/src/components/related/MediaThumbnail.tsx *does* request
+# them for application/pdf media -- but they're still cut here because
+# pdf2image needs poppler's pdftoppm/pdftocairo on PATH (gramps_webapi's
+# _get_image_pdf() calls convert_from_path() with no poppler_path, so
+# there's no config-only fix) and this build bundles no system binaries at
+# all, only Python. A tracked gap, not a considered feature decision.
+# Cutting all of these, plus the huge transitive graphs some of them pull
+# in, plus the shared conda env's own large unrelated ML/notebook packages
+# that were getting swept in alongside them.
 excludes = [
     # Real PyGObject/GTK -- replaced by runtime_hooks/rthook_gi_stub.py's
     # sys.modules injection (see that file for why). Excluding it here is
@@ -164,7 +158,9 @@ excludes = [
     "s3transfer",
     # OCR on scanned docs (also needs a system tesseract binary regardless)
     "pytesseract",
-    # PDF page / video thumbnails (also need poppler/ffmpeg binaries)
+    # PDF page / video thumbnails -- PDF ones ARE requested by the client
+    # (see the block comment above); cut anyway for lack of a bundled
+    # poppler/ffmpeg binary.
     "pdf2image",
     "ffmpeg",
     # unrelated large packages from the shared conda env

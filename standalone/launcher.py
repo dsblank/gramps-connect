@@ -1,13 +1,15 @@
 """Standalone Gramps Connect server.
 
 Bundles gramps-web-api (as the backend) with app/'s production build (as
-the frontend) and Gramps' own example.gramps sample database, so a tester
-can run one executable with no separate install, server, or database setup.
+the frontend), so a tester can run one executable with no separate install,
+server, or database setup.
 
 On first run: creates an isolated GRAMPSHOME under DATA_DIR, an admin user,
-a single tree, and imports example.gramps into it. On later runs, reuses
-what's already there. Not idempotent against a manually-deleted-but-not-
-fully-deleted DATA_DIR -- delete the whole directory to start over.
+and a single empty tree -- ready to import a Gramps XML (.gramps) or
+GEDCOM (.ged) file into via the app's own Family Trees -> Import... screen.
+On later runs, reuses what's already there. Not idempotent against a
+manually-deleted-but-not-fully-deleted DATA_DIR -- delete the whole
+directory to start over.
 """
 
 from __future__ import annotations
@@ -76,30 +78,10 @@ def build_config() -> dict:
     }
 
 
-def copy_example_media() -> None:
-    """example.gramps' <file src="..."/> references are plain filenames,
-    resolved by gramps-web-api relative to MEDIA_BASE_DIR -- the actual
-    image files live alongside example.gramps in the gramps source tree
-    (bundled as the "example-media" resource) and need to land there."""
-    import shutil
-
-    media_dir = data_path("media")
-    src_dir = resource_path("example-media")
-    for name in os.listdir(src_dir):
-        if name.endswith((".gramps", ".md")):
-            continue  # example.gramps itself + image_credits.md, not media
-        shutil.copy2(os.path.join(src_dir, name), os.path.join(media_dir, name))
-
-
 def first_run_setup(app) -> None:
     from gramps_webapi.auth import add_user, user_db
     from gramps_webapi.auth.const import ROLE_OWNER
     from gramps_webapi.dbmanager import WebDbManager
-    from gramps_webapi.api.resources.util import run_import
-
-    example_gramps = resource_path("example.gramps")
-
-    copy_example_media()
 
     with app.app_context():
         user_db.create_all()
@@ -112,15 +94,7 @@ def first_run_setup(app) -> None:
         )
         db_manager = WebDbManager(name=TREE_NAME, create_if_missing=True)
         dbstate = db_manager.get_db(readonly=False)
-        try:
-            run_import(
-                db_handle=dbstate.db,
-                file_name=example_gramps,
-                extension="gramps",
-                delete=False,
-            )
-        finally:
-            dbstate.db.close()
+        dbstate.db.close()
 
 
 def open_browser_later() -> None:

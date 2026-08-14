@@ -43,11 +43,9 @@ app/public/*.mjs
 app/.env.local
 
 # standalone: PyInstaller build output + files copied in by the build
-# workflow (app/dist, gramps' example.gramps) -- not source
+# workflow (app/dist) -- not source
 standalone/build/
 standalone/frontend/
-standalone/example.gramps
-standalone/example-media/
 
 # standalone: gramps-web-api's filesystem caches, written to whatever the
 # server process's cwd was when run locally from standalone/ -- not source
