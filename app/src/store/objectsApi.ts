@@ -83,3 +83,17 @@ export async function updateObject(
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
 }
+
+/** DELETEs a single object. Server-side (delete.py's per-type
+ * delete_person/delete_event/delete_citation/...) this also strips the
+ * deleted handle out of every *other* object that referenced it -- but
+ * never cascades the other way (deleting a Citation doesn't touch its
+ * Source even if now unreferenced). No client-side orphan cleanup is
+ * attempted here; see DeleteButton.tsx's doc comment. */
+export async function deleteObject(token: string, view: ViewConfig, handle: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+}

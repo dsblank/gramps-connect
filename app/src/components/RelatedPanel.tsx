@@ -15,6 +15,7 @@ import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MessageButton } from "./related/MessageButton";
 import { EditButton } from "./related/EditButton";
+import { DeleteButton } from "./related/DeleteButton";
 import { VisualButtons } from "./related/VisualButtons";
 import { MessageActions } from "./related/MessageActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
@@ -306,6 +307,7 @@ export function RelatedPanel({
             MessageButton without disturbing the title's own layout. */}
         <Group gap="xs" wrap="nowrap" style={{ flex: "none" }}>
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
+          <DeleteButton view={view} detail={detail} />
           <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
       </Group>
