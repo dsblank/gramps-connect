@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Button, Divider, Group, Menu } from "@mantine/core";
 import { getToken, hasPermissions } from "../auth/auth";
 import { ImportDialog } from "./ImportDialog";
+import { ImportMediaDialog } from "./ImportMediaDialog";
 import { ExportDialog } from "./ExportDialog";
 import { DeleteAllDialog } from "./DeleteAllDialog";
 import { ReportDialog } from "./ReportDialog";
@@ -157,6 +158,7 @@ function goTo(viewKey: string) {
  * they have items, rather than standing empty ("Nothing here yet"). */
 export function MenuBar() {
   const [importOpened, setImportOpened] = useState(false);
+  const [importMediaOpened, setImportMediaOpened] = useState(false);
   const [exportOpened, setExportOpened] = useState(false);
   const [deleteAllOpened, setDeleteAllOpened] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
@@ -194,7 +196,14 @@ export function MenuBar() {
         <AppMenu
           label="Family Trees"
           items={[
-            { label: "Import…", perm: PERM_IMPORT_FILE, onClick: () => setImportOpened(true) },
+            {
+              label: "Import…",
+              perm: PERM_IMPORT_FILE,
+              children: [
+                { label: "Family Tree…", onClick: () => setImportOpened(true) },
+                { label: "Media…", onClick: () => setImportMediaOpened(true) },
+              ],
+            },
             { label: "Export…", perm: PERM_EDIT_OBJ, onClick: () => setExportOpened(true) },
             {
               label: "Delete…",
@@ -240,6 +249,7 @@ export function MenuBar() {
         />
       </Group>
       <ImportDialog opened={importOpened} onClose={() => setImportOpened(false)} />
+      <ImportMediaDialog opened={importMediaOpened} onClose={() => setImportMediaOpened(false)} />
       <ExportDialog opened={exportOpened} onClose={() => setExportOpened(false)} />
       <DeleteAllDialog opened={deleteAllOpened} onClose={() => setDeleteAllOpened(false)} />
       <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
