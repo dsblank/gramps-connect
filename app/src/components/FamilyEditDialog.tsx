@@ -96,6 +96,59 @@ function PersonSearch({ onPick }: { onPick: (item: QueryItem) => void }) {
   );
 }
 
+interface ChildRefLite {
+  _class: "ChildRef";
+  ref: string;
+  frel?: string;
+  mrel?: string;
+}
+
+interface ChildrenFieldProps {
+  refs: ChildRefLite[];
+  labels: Record<string, string>;
+  onAdd: (item: QueryItem) => void;
+  onRemove: (handle: string) => void;
+}
+
+/** Family.child_ref_list -- add/remove an existing Person only; unlike the
+ * parent slots, there's no "+ New Person" here (would need generalizing
+ * draftStack's single-field `openedFrom` to an indexed one for a list this
+ * plan doesn't otherwise need -- create the child via Person first, then
+ * attach them here). frel/mrel (relationship to father/mother) default to
+ * Gramps' own default ("Birth") rather than exposing them, same MVP scope
+ * as the parent slots not exposing every ChildRef field either. */
+function ChildrenField({ refs, labels, onAdd, onRemove }: ChildrenFieldProps) {
+  const [searching, setSearching] = useState(false);
+  const pickedHandles = new Set(refs.map((r) => r.ref));
+
+  return (
+    <Stack gap={4}>
+      <Text size="sm" fw={500}>Children</Text>
+      {refs.length === 0 && <Text size="xs" c="dimmed">No children</Text>}
+      {refs.map((ref) => (
+        <Group key={ref.ref} gap="xs">
+          <Text size="sm">{labels[ref.ref] ?? ref.ref}</Text>
+          <Anchor component="button" type="button" size="sm" c="red" onClick={() => onRemove(ref.ref)}>
+            Remove
+          </Anchor>
+        </Group>
+      ))}
+      {searching ? (
+        <PersonSearch
+          onPick={(item) => {
+            setSearching(false);
+            if (!pickedHandles.has(item.handle)) onAdd(item);
+          }}
+        />
+      ) : (
+        <Button variant="default" size="xs" onClick={() => setSearching(true)}>
+          + Add child…
+        </Button>
+      )}
+    </Stack>
+  );
+}
+
 interface ParentSlotProps {
   label: string;
   field: ParentField;
@@ -218,18 +271,22 @@ export function FamilyEditDialog({
   const [pickedLabels, setPickedLabels] = useState<Record<string, string>>({});
   const [showDetails, setShowDetails] = useState(false);
 
-  // A freshly-opened edit draft's father_handle/mother_handle come straight
-  // off the server GET -- pickedLabels (only ever populated by an in-session
-  // PersonSearch pick) has no entry for either yet, which without this
-  // effect left ParentSlot showing "Select existing..." for an *already
-  // set* parent (falls through to the no-handle branch below, since that
-  // branch keys on pickedLabel being present, not on `handle` alone) --
+  const childRefs = ((draft.data.child_ref_list as ChildRefLite[] | undefined) ?? []);
+
+  // A freshly-opened edit draft's father_handle/mother_handle/child_ref_list
+  // come straight off the server GET -- pickedLabels (only ever populated by
+  // an in-session PersonSearch pick) has no entry for any of them yet, which
+  // without this effect left ParentSlot showing "Select existing..." for an
+  // *already set* parent (falls through to the no-handle branch below, since
+  // that branch keys on pickedLabel being present, not on `handle` alone) --
   // indistinguishable from an actually-empty slot, and one edit away from
-  // silently overwriting the wrong parent. Fetches a label for whichever of
-  // the two isn't already known, once.
+  // silently overwriting the wrong parent -- and left every existing child
+  // showing its bare handle instead of a name. Fetches a label for whichever
+  // of these isn't already known, once.
   useEffect(() => {
     if (draft.mode !== "edit" || draft.status !== "ready") return;
-    const handles = [draft.data.father_handle, draft.data.mother_handle].filter(
+    const childHandles = ((draft.data.child_ref_list as ChildRefLite[] | undefined) ?? []).map((r) => r.ref);
+    const handles = [draft.data.father_handle, draft.data.mother_handle, ...childHandles].filter(
       (h): h is string => typeof h === "string" && h.length > 0 && !(h in pickedLabels)
     );
     if (handles.length === 0) return;
@@ -243,7 +300,7 @@ export function FamilyEditDialog({
     })();
     // pickedLabels deliberately excluded -- see the comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.mode, draft.status, draft.data.father_handle, draft.data.mother_handle]);
+  }, [draft.mode, draft.status, draft.data.father_handle, draft.data.mother_handle, draft.data.child_ref_list]);
 
   function findChildDraft(field: ParentField): DraftEntry | undefined {
     return stack.find((d) => d.active && d.openedFrom?.handle === draft.handle && d.openedFrom.field === field);
@@ -300,6 +357,18 @@ export function FamilyEditDialog({
       <Stack gap="lg">
         <ParentSlot {...slotProps("father_handle", "Father")} />
         <ParentSlot {...slotProps("mother_handle", "Mother")} />
+
+        <ChildrenField
+          refs={childRefs}
+          labels={pickedLabels}
+          onAdd={(item) => {
+            setPickedLabels((prev) => ({ ...prev, [item.handle]: personLabel(item) }));
+            onChange({
+              child_ref_list: [...childRefs, { _class: "ChildRef", ref: item.handle, frel: "Birth", mrel: "Birth" }],
+            });
+          }}
+          onRemove={(handle) => onChange({ child_ref_list: childRefs.filter((r) => r.ref !== handle) })}
+        />
 
         <Select
           label="Relationship type"
