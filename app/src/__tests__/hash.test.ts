@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatHash, isSubjectKey, isVisualKey, parseHash } from "../hash";
+import { formatHash, isHomeKey, isStorelessKey, isSubjectKey, isVisualKey, parseHash } from "../hash";
 import { VIEWS } from "../store/views";
 
 describe("parseHash", () => {
@@ -43,6 +43,10 @@ describe("parseHash", () => {
     // segment is only ever a subject there.
     expect(parseHash("#/timeline/abc123").handle).toBeNull();
   });
+
+  it("reads the Home route", () => {
+    expect(parseHash("#/home")).toEqual({ viewKey: "home", handle: null, subject: null });
+  });
 });
 
 describe("formatHash", () => {
@@ -52,6 +56,7 @@ describe("formatHash", () => {
       { viewKey: "place", handle: "abc123", subject: null },
       { viewKey: "map", handle: null, subject: null },
       { viewKey: "timeline", handle: null, subject: { type: "person", handle: "abc123" } },
+      { viewKey: "home", handle: null, subject: null },
     ]) {
       expect(parseHash(formatHash(route))).toEqual(route);
     }
@@ -80,5 +85,16 @@ describe("key predicates", () => {
   it("recognizes exactly the four scopable types", () => {
     for (const key of ["person", "family", "event", "place"]) expect(isSubjectKey(key)).toBe(true);
     for (const key of ["note", "media", "tag", "map"]) expect(isSubjectKey(key)).toBe(false);
+  });
+
+  it("recognizes the Home key, and no view key, as Home", () => {
+    expect(isHomeKey("home")).toBe(true);
+    expect(isHomeKey("place")).toBe(false);
+    expect(isHomeKey("map")).toBe(false);
+  });
+
+  it("treats Home and both visuals, and nothing else, as storeless", () => {
+    for (const key of ["home", "map", "timeline"]) expect(isStorelessKey(key)).toBe(true);
+    for (const key of ["place", "person"]) expect(isStorelessKey(key)).toBe(false);
   });
 });

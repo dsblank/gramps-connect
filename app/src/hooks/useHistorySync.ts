@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatHash, isVisualKey, parseHash, type VisualSubject } from "../hash";
+import { formatHash, isStorelessKey, isVisualKey, parseHash, type VisualSubject } from "../hash";
 import { getViewStore } from "../store/registry";
 import { VIEWS } from "../store/views";
 import { useViewStore } from "./useViewStore";
@@ -36,12 +36,15 @@ export function useHistorySync(): {
   // *from*: without it, that effect would reformat a scoped visual route as
   // its bare "#/map" self and immediately throw the scope away again.
   const [visualSubject, setVisualSubject] = useState<VisualSubject | null>(() => parseHash().subject);
-  // A visual page (#/map, #/timeline) is a route but not a view: it has no
-  // store, so there's no snapshot to sync and getViewStore() would throw on
-  // its key. Subscribe to the first view instead of skipping the hook --
-  // its snapshot is simply unused below while a visual is active.
+  // A visual page (#/map, #/timeline) or Home (#/home) is a route but not a
+  // view: it has no store, so there's no snapshot to sync and
+  // getViewStore() would throw on its key. Subscribe to the first view
+  // instead of skipping the hook -- its snapshot is simply unused below
+  // while one of those is active. `visual` (narrower than `noStore`) gates
+  // only the subject-writing logic further down: Home never carries one.
   const visual = isVisualKey(activeKey);
-  const activeSnapshot = useViewStore(visual ? VIEWS[0].key : activeKey);
+  const noStore = isStorelessKey(activeKey);
+  const activeSnapshot = useViewStore(noStore ? VIEWS[0].key : activeKey);
   // True while a hashchange is still being applied to store state -- see
   // the outward effect's comment below on the race this closes.
   const applyingHash = useRef(false);
@@ -53,7 +56,7 @@ export function useHistorySync(): {
         const { viewKey, handle, subject } = parseHash();
         setActiveKey(viewKey);
         setVisualSubject(subject);
-        if (isVisualKey(viewKey)) return; // nothing to select -- see `visual` above
+        if (isStorelessKey(viewKey)) return; // nothing to select -- see `noStore` above
         const store = getViewStore(viewKey);
         if (handle) {
           if (store.getSnapshot().selectedHandle !== handle) {
@@ -94,14 +97,14 @@ export function useHistorySync(): {
     // re-derive the same default and push it straight back again.
     const next = formatHash({
       viewKey: activeKey,
-      // A visual page carries no handle, and the snapshot read here is some
-      // other view's (see `visual` above) -- appending its selection would
-      // make up a route that doesn't exist.
-      handle: visual || activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle,
-      // ...it carries a subject instead, and only while it's the active
-      // route: a stale subject left over from a visual would otherwise be
-      // formatted onto an ordinary view's hash, where formatHash ignores it
-      // but nothing else would have cleared it.
+      // A visual or Home page carries no handle, and the snapshot read here
+      // is some other view's (see `noStore` above) -- appending its
+      // selection would make up a route that doesn't exist.
+      handle: noStore || activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle,
+      // ...a visual carries a subject instead, and only while it's the
+      // active route: a stale subject left over from a visual would
+      // otherwise be formatted onto an ordinary view's hash, where
+      // formatHash ignores it but nothing else would have cleared it.
       subject: visual ? visualSubject : null,
     });
     if (window.location.hash !== next) {
@@ -111,7 +114,7 @@ export function useHistorySync(): {
     // derived read: clicking the very row that was already auto-selected
     // leaves selectedHandle unchanged and only flips this flag -- which is
     // exactly the moment that handle has to start appearing in the hash.
-  }, [visual, visualSubject, activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
+  }, [visual, noStore, visualSubject, activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
 
   return { activeKey, setActiveKey, visualSubject };
 }

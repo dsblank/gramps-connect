@@ -75,18 +75,38 @@ export function isVisualKey(key: string): key is VisualKey {
   return (VISUAL_KEYS as readonly string[]).includes(key);
 }
 
-/** Parses "#/<viewKey>", "#/<viewKey>/<handle>", or a visual's
+/** The dashboard page (App.tsx's HomeView) -- like a visual, it takes over
+ * the whole content area and has no ViewConfig/store of its own, but unlike
+ * one it never carries a subject: it's a single, unscoped overview. */
+export const HOME_KEY = "home";
+
+export function isHomeKey(key: string): boolean {
+  return key === HOME_KEY;
+}
+
+/** Every route key that names a page rather than a VIEWS entry -- the ones
+ * with no ViewStore to select a row in or wait on (useHistorySync.ts) and
+ * no per-view load to kick off (App.tsx's ensureLoaded effect). */
+export function isStorelessKey(key: string): boolean {
+  return isVisualKey(key) || isHomeKey(key);
+}
+
+/** Parses "#/<viewKey>", "#/<viewKey>/<handle>", "#/home", or a visual's
  * "#/<visualKey>/<type>:<handle>" (also tolerates a missing leading slash,
  * or no hash at all). An unrecognized/missing view key falls back to the
  * first view rather than erroring -- a stale or hand-edited URL should still
  * land somewhere sane, and by the same rule an unparseable subject degrades
  * to the unscoped whole-tree visual rather than to no page at all. A visual
- * still has no selection to restore, so it never carries a plain `handle`. */
+ * still has no selection to restore, so it never carries a plain `handle`;
+ * neither does Home. */
 export function parseHash(hash: string = window.location.hash): HashRoute {
   const parts = hash.slice(1).split("/").filter(Boolean);
   const [viewKey, handle] = parts;
   if (viewKey && isVisualKey(viewKey)) {
     return { viewKey, handle: null, subject: parseSubject(handle) };
+  }
+  if (viewKey && isHomeKey(viewKey)) {
+    return { viewKey, handle: null, subject: null };
   }
   const resolvedKey = VIEWS.some((v) => v.key === viewKey) ? viewKey : VIEWS[0].key;
   return { viewKey: resolvedKey, handle: handle ?? null, subject: null };

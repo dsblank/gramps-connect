@@ -4,10 +4,11 @@ import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { EVENT_VIEW, PLACE_VIEW, VIEWS, type ViewConfig } from "./store/views";
 import { getViewStore } from "./store/registry";
-import { isVisualKey, type VisualKey } from "./hash";
+import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
 import { getAuthSnapshot, subscribe as subscribeAuth } from "./auth/auth";
 import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
+import { HomeView } from "./components/HomeView";
 import { MenuBar } from "./components/MenuBar";
 import { UserMenu } from "./components/UserMenu";
 import { FilterBar } from "./components/FilterBar";
@@ -83,13 +84,21 @@ function AuthenticatedApp() {
   const draftStack = useDraftStack();
   // #/map and #/timeline are pages in their own right rather than VIEWS
   // entries -- each takes over the whole content area (table *and* detail
-  // panes) for one whole-tree plot; see hash.ts.
+  // panes) for one whole-tree plot; see hash.ts. #/home is the same idea
+  // with nothing to plot: a dashboard, not a per-record page.
   const visualKey = isVisualKey(activeKey) ? activeKey : null;
-  // `view` is null on a visual page -- the table, the panes and the filter
-  // bar all key off it, and none of them belong there. `statusView` is the
-  // one thing that still needs a ViewConfig either way (see above).
-  const statusView = visualKey ? VISUAL_STATUS_VIEW[visualKey] : VIEWS.find((v) => v.key === activeKey)!;
-  const view = visualKey ? null : statusView;
+  const isHome = activeKey === HOME_KEY;
+  // `view` is null on a visual or Home page -- the table, the panes and the
+  // filter bar all key off it, and none of them belong there. `statusView`
+  // is null only for Home: a visual still has a ViewConfig to report load
+  // progress for (see VISUAL_STATUS_VIEW), but Home has no single view's
+  // progress to show, just the live-sync badge.
+  const statusView = visualKey
+    ? VISUAL_STATUS_VIEW[visualKey]
+    : isHome
+    ? null
+    : VIEWS.find((v) => v.key === activeKey)!;
+  const view = visualKey || isHome ? null : statusView;
 
   // Narrow window: there's no room left for the 50/50 side-by-side split,
   // so the detail panes move *under* the table inside Main instead. Read
@@ -125,9 +134,10 @@ function AuthenticatedApp() {
   // call in selectView() -- a no-op if this view was already loaded
   // earlier this session.
   // A visual page has no store to load here -- it reads the Places and
-  // Events caches, which useVisualData loads for itself.
+  // Events caches, which useVisualData loads for itself. Home has no store
+  // at all -- see homeStats.ts.
   useEffect(() => {
-    if (isVisualKey(activeKey)) return;
+    if (isStorelessKey(activeKey)) return;
     getViewStore(activeKey).ensureLoaded().catch((err) => {
       console.error(`[${activeKey}] failed to load`, err);
     });
@@ -156,8 +166,9 @@ function AuthenticatedApp() {
         // isn't another way of looking at one selected record, so there's
         // nothing for the detail panes to show beside it, and the plot wants
         // the width. Clicking a marker or a dot navigates to that record in
-        // Places or Events, where they take over again.
-        aside={stacked || visualKey ? undefined : { width: "50%", breakpoint: 0 }}
+        // Places or Events, where they take over again. Same for Home: no
+        // selected record, nothing for a detail pane to show.
+        aside={stacked || visualKey || isHome ? undefined : { width: "50%", breakpoint: 0 }}
         // Stacked: no docked footer either. A permanently pinned 36px strip
         // is a poor trade for vertical space that's already scarce, and it's
         // what pane 3 was ending up jammed against -- the same StatusBar
@@ -212,6 +223,12 @@ function AuthenticatedApp() {
           {visualKey === "timeline" && (
             <Box style={{ height: visualHeight }}><TimelineView subject={visualSubject} /></Box>
           )}
+          {/* Unlike the two above, not height-bounded to visualHeight: a
+              dashboard's content isn't a canvas that measures itself against
+              its frame, it's ordinary flowing text and lists, so it's sized
+              to its content and Main scrolls past it like it already does
+              for the stacked detail panes below. */}
+          {isHome && <HomeView />}
           {/* Keyed by view.key so switching views remounts fresh local state
               (filter input/error, scroll position) rather than carrying it
               over from the previous view. Prefixed distinctly per element --

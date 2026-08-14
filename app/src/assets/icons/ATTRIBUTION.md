@@ -13,6 +13,11 @@ https://creativecommons.org/licenses/by-sa/2.5/) license.
 Gramps' own icon theme has no chat/message glyph to source from, so it
 doesn't follow the `gramps-*.svg` naming or Tango style of the icons above.
 
+`gramps-home.svg` is also original artwork (Home page) -- the desktop
+Gramps icon theme has no dashboard/home glyph either. Named `gramps-*.svg`
+like the object-type icons above (Home sits in the same icon rail) even
+though, like `chat-message.svg`, it isn't sourced from Gramps or Tango.
+
 `gramps-connect-logo.svg` is also original artwork: this app's own mark,
 and the reason the row above no longer includes a `gramps-logo.svg`. That
 file was Gramps' application icon (`org.gramps_project.Gramps.svg`), and
