@@ -1,4 +1,12 @@
 # syntax=docker/dockerfile:1
+#
+# Full-featured deploy image, including the AI/CV stack (torch,
+# sentence-transformers, opencv, tesseract) for gramps-web-api's
+# semantic-search/chat and OCR features. deploy/docker-compose.yml and
+# .github/workflows/build-docker.yml build deploy/Dockerfile.slim by
+# default instead, since this deployment doesn't enable any of that --
+# see deploy/Dockerfile.slim for why. Kept around for anyone who does
+# want those features.
 
 # --- Stage 1: build the frontend ---------------------------------------
 FROM node:20-slim AS frontend-build

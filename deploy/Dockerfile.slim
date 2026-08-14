@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 #
-# Experimental slim variant of deploy/Dockerfile.
+# Default deploy image (deploy/docker-compose.yml and
+# .github/workflows/build-docker.yml both build/push this one). See
+# deploy/Dockerfile for the full variant with the AI/CV stack instead.
 #
 # The difference is entirely the base. deploy/Dockerfile builds on
 # ghcr.io/gramps-project/gramps-web-base, which is ~4.3GB before our first

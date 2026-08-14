@@ -7,7 +7,7 @@ x-app-image: &app-image
   image: ghcr.io/dsblank/gramps-connect:latest
   build:
     context: ..
-    dockerfile: deploy/Dockerfile
+    dockerfile: deploy/Dockerfile.slim
 
 x-app-env: &app-env
   # Multi-tree mode, required for the SharedPostgreSQL backend.

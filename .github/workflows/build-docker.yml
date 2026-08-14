@@ -1,10 +1,10 @@
 name: Build and push Docker image
 
-# Manual trigger only: this builds deploy/Dockerfile (which clones gramps +
-# gramps-web-api from source and compiles PyGObject) and pushes the result
-# to GHCR, so a deployment host can `docker compose pull` a finished image
-# instead of building it locally -- the slow git clones and PyGObject
-# compile run on GitHub's runners/network instead.
+# Manual trigger only: this builds deploy/Dockerfile.slim (which clones
+# gramps + gramps-web-api from source and compiles PyGObject) and pushes
+# the result to GHCR, so a deployment host can `docker compose pull` a
+# finished image instead of building it locally -- the slow git clones and
+# PyGObject compile run on GitHub's runners/network instead.
 on:
   workflow_dispatch: {}
 
@@ -36,7 +36,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/Dockerfile
+          file: deploy/Dockerfile.slim
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
