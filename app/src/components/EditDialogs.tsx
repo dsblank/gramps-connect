@@ -2,6 +2,7 @@ import { Modal } from "@mantine/core";
 import type { UseDraftStack } from "../store/draftStack";
 import { PersonEditDialog } from "./PersonEditDialog";
 import { FamilyEditDialog } from "./FamilyEditDialog";
+import { ObjectEditDialog } from "./ObjectEditDialog";
 
 interface EditDialogsProps {
   draftStack: UseDraftStack;
@@ -58,17 +59,32 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
             />
           );
         }
+        if (draft.type === "family") {
+          return (
+            <FamilyEditDialog
+              key={handle}
+              draft={draft}
+              opened={opened}
+              stack={stack}
+              openHandles={openHandles}
+              onChange={(patch) => updateDraft(handle, patch)}
+              onOpenPersonDraft={(field) => openDraft("person", { handle, field })}
+              onShowDraft={showDraft}
+              onCloseDraft={closeDraft}
+              onCancel={() => closeDraft(handle)}
+              primaryLabel={primaryLabel}
+              onPrimary={onPrimary}
+              saving={isTopLevel && saving}
+              error={isTopLevel ? error : null}
+            />
+          );
+        }
         return (
-          <FamilyEditDialog
+          <ObjectEditDialog
             key={handle}
             draft={draft}
             opened={opened}
-            stack={stack}
-            openHandles={openHandles}
             onChange={(patch) => updateDraft(handle, patch)}
-            onOpenPersonDraft={(field) => openDraft("person", { handle, field })}
-            onShowDraft={showDraft}
-            onCloseDraft={closeDraft}
             onCancel={() => closeDraft(handle)}
             primaryLabel={primaryLabel}
             onPrimary={onPrimary}

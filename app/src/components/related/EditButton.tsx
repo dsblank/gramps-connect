@@ -1,17 +1,20 @@
 import { Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { hasPermissions } from "../../auth/auth";
-import type { UseDraftStack } from "../../store/draftStack";
+import { EDITABLE_TYPES, type DraftType, type UseDraftStack } from "../../store/draftStack";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
 
 /** Top-right icon on a RelatedPanel (next to MessageButton, in the same
  * "act on the record itself" header slot) that opens this object in the
- * stacked edit-dialog flow (PersonEditDialog.tsx/FamilyEditDialog.tsx via
- * draftStack.ts's openEditDraft) -- the same dialogs the "Add" menu's
- * New Person/New Family already use, just pre-filled instead of blank.
+ * stacked edit-dialog flow (PersonEditDialog.tsx/FamilyEditDialog.tsx/
+ * ObjectEditDialog.tsx via draftStack.ts's openEditDraft) -- the same
+ * dialogs the "Add" menu's New Person/New Family/... already use, just
+ * pre-filled instead of blank.
  *
- * Only offered for the two types that have an edit dialog so far, and only
- * to a user who actually holds EditObject (what the PUT this eventually
+ * Only offered for a type with an edit dialog (EDITABLE_TYPES --
+ * everything except Media, which wraps an uploaded file rather than a
+ * blank form, and the synthetic Output/Messages views), and only to a
+ * user who actually holds EditObject (what the PUT this eventually
  * triggers requires server-side, base.py's GrampsObjectProtectedResource.put).
  *
  * A plain text glyph rather than an SVG icon (unlike MessageButton's) --
@@ -27,7 +30,7 @@ export function EditButton({
   detail: ObjectDetail;
   draftStack: UseDraftStack;
 }) {
-  const eligible = view.key === "person" || view.key === "family";
+  const eligible = EDITABLE_TYPES.includes(view.key as DraftType);
   if (!eligible || !hasPermissions("EditObject")) return null;
 
   const label = `Edit this ${view.key}`;
@@ -35,7 +38,7 @@ export function EditButton({
   return (
     <Tooltip label={label} withArrow>
       <UnstyledButton
-        onClick={() => draftStack.openEditDraft(view.key as "person" | "family", detail.handle)}
+        onClick={() => draftStack.openEditDraft(view.key as DraftType, detail.handle)}
         aria-label={label}
       >
         <Text size="lg" lh={1}>✎</Text>

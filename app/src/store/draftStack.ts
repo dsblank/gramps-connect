@@ -16,14 +16,43 @@ import { useState } from "react";
 import { getToken } from "../auth/auth";
 import { getViewStore } from "./registry";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "./objectsApi";
-import { EVENT_VIEW, FAMILY_VIEW, PERSON_VIEW, type ViewConfig } from "./views";
+import {
+  CITATION_VIEW, EVENT_VIEW, FAMILY_VIEW, NOTE_VIEW, PERSON_VIEW, PLACE_VIEW, REPOSITORY_VIEW, SOURCE_VIEW,
+  TAG_VIEW, type ViewConfig,
+} from "./views";
 
-export type DraftType = "person" | "family";
+export type DraftType =
+  | "person" | "family" | "event" | "place" | "repository" | "source" | "citation" | "note" | "tag";
 
-const VIEW_BY_TYPE: Record<DraftType | "event", ViewConfig> = {
+/** Every type with a create/edit dialog -- MenuBar's "Add" menu and
+ * EditButton's eligibility check both derive from this instead of each
+ * hand-listing the same set, so a future type is one line here. Excludes
+ * Media (wraps an uploaded file -- path/checksum are server-derived from
+ * the binary upload, not fields a blank form fills in; see jobsApi.ts's
+ * uploadMedia / ImportMediaDialog for that flow) and the two synthetic
+ * views, "generated"/"messages" (Media/Note under a fixed tag filter, not
+ * distinct object types). */
+export const EDITABLE_TYPES: DraftType[] = [
+  "person", "family", "event", "place", "repository", "source", "citation", "note", "tag",
+];
+
+/** Singular display name per type, for dialog titles ("New Event"/"Edit
+ * Event") and MenuBar's "Add" entries ("New Event…"). */
+export const DRAFT_TYPE_LABELS: Record<DraftType, string> = {
+  person: "Person", family: "Family", event: "Event", place: "Place", repository: "Repository", source: "Source",
+  citation: "Citation", note: "Note", tag: "Tag",
+};
+
+const VIEW_BY_TYPE: Record<DraftType, ViewConfig> = {
   person: PERSON_VIEW,
   family: FAMILY_VIEW,
   event: EVENT_VIEW,
+  place: PLACE_VIEW,
+  repository: REPOSITORY_VIEW,
+  source: SOURCE_VIEW,
+  citation: CITATION_VIEW,
+  note: NOTE_VIEW,
+  tag: TAG_VIEW,
 };
 
 export interface DraftEntry {
@@ -66,8 +95,17 @@ export interface DraftEntry {
    * object" shape doesn't need new draftStack plumbing. Populated via
    * setExtraObjects(); untouched by openDraft/openEditDraft. */
   extraCreate: Record<string, unknown>[];
-  extraUpdate: { type: DraftType | "event"; handle: string; data: Record<string, unknown> }[];
+  extraUpdate: { type: DraftType; handle: string; data: Record<string, unknown> }[];
 }
+
+// Gramps' own class name per type -- gramps-web-api fills in the rest of
+// that class's defaults (complete_gramps_object_dict) for any key a draft
+// doesn't set, so a bare `{ _class, handle }` is a valid create payload for
+// every type that has no field a blank record can't sensibly start without.
+const CLASS_NAME: Record<DraftType, string> = {
+  person: "Person", family: "Family", event: "Event", place: "Place", repository: "Repository", source: "Source",
+  citation: "Citation", note: "Note", tag: "Tag",
+};
 
 function defaultDataFor(type: DraftType, handle: string): Record<string, unknown> {
   if (type === "person") {
@@ -84,7 +122,10 @@ function defaultDataFor(type: DraftType, handle: string): Record<string, unknown
       },
     };
   }
-  return { _class: "Family", handle, type: "Married" };
+  if (type === "family") {
+    return { _class: "Family", handle, type: "Married" };
+  }
+  return { _class: CLASS_NAME[type], handle };
 }
 
 /** Every draft `handle` depends on (any other draft whose openedFrom points
@@ -261,9 +302,8 @@ export function useDraftStack(): UseDraftStack {
       const touchedEvents = [...newDrafts, ...editDrafts].some(
         (d) => d.extraCreate.length > 0 || d.extraUpdate.length > 0
       );
-      if (touchedTypes.has("person")) getViewStore("person").requeryDebounced();
-      if (touchedTypes.has("family")) getViewStore("family").requeryDebounced();
-      if (touchedEvents) getViewStore("event").requeryDebounced();
+      if (touchedEvents) touchedTypes.add("event");
+      for (const type of touchedTypes) getViewStore(type).requeryDebounced();
       setStack([]);
       setOpenHandles([]);
     } catch (err: any) {

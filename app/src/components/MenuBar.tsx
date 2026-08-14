@@ -11,7 +11,7 @@ import { SystemInfoDialog } from "./SystemInfoDialog";
 import { AboutDialog } from "./AboutDialog";
 import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
-import type { UseDraftStack } from "../store/draftStack";
+import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
 
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
 // at ROLE_OWNER and above.
@@ -233,14 +233,18 @@ export function MenuBar({ draftStack }: MenuBarProps) {
         />
         <AppMenu
           label="Add"
-          items={[
-            { label: "New Person…", perm: PERM_ADD_OBJ, onClick: () => draftStack.openDraft("person") },
-            {
-              label: "New Family…",
-              perm: [PERM_ADD_OBJ, PERM_EDIT_OBJ],
-              onClick: () => draftStack.openDraft("family"),
-            },
-          ]}
+          items={EDITABLE_TYPES.map((type) => ({
+            label: `New ${DRAFT_TYPE_LABELS[type]}…`,
+            // Family alone needs EditObject too -- families.py's
+            // FamiliesResource.post() checks both, because adding a
+            // Family also rewrites its parents' Person records
+            // (family_list). Every other type's resource has no such
+            // post() override (confirmed against gramps-web-api's
+            // events/places/sources/citations/repositories/notes/tags.py),
+            // so plain AddObject is correct for the rest.
+            perm: type === "family" ? [PERM_ADD_OBJ, PERM_EDIT_OBJ] : PERM_ADD_OBJ,
+            onClick: () => draftStack.openDraft(type),
+          }))}
         />
         {/* Both are whole-tree overviews of data the app already has cached
             locally, so neither needs a permission: anyone who can see the
