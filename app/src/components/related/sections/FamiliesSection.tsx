@@ -1,4 +1,5 @@
 import { SectionShell, RefRow } from "./shared";
+import { withGrampsId } from "../summary";
 import type { SectionProps } from "../types";
 
 /** Person.family_list -- families this person is a spouse/parent in (as
@@ -9,6 +10,7 @@ import type { SectionProps } from "../types";
  * summaries -- extend=all can't past one level) rather than extended. */
 interface FamilyProfile {
   handle: string;
+  gramps_id?: string;
   father?: { handle?: string; name_display?: string };
   mother?: { handle?: string; name_display?: string };
 }
@@ -35,7 +37,7 @@ export function FamiliesSection({ type, detail, onNavigate }: SectionProps) {
             type="family"
             handle={fam.handle}
             obj={fam}
-            label={spouse ? `Spouse: ${spouse.name_display}` : undefined}
+            label={spouse ? withGrampsId(fam.gramps_id, `Spouse: ${spouse.name_display}`) : undefined}
             onNavigate={onNavigate}
           />
         );

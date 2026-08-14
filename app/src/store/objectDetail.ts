@@ -86,9 +86,52 @@ export function zipRefs<T>(rawList: unknown, extendedList: unknown): { ref: RawR
   return result;
 }
 
-/** Backlinks grouped by referencing object type (e.g. `{person: [...], event: [...]}`),
- * fully resolved -- present only when the request included both `extend=all`
- * and `backlinks=1` (see get_extended_attributes's backlinks handling). */
+/** Backlink types whose raw one-level-deep shape is missing something
+ * summaryLine's case needs (family: father/mother; citation: source) *and*
+ * whose `profile.references` twin is a safe, strictly-richer substitute --
+ * confirmed against a live gramps-web-api instance for every backlink type:
+ * profile Place flattens `name` to a plain string (raw's `name.value`
+ * lookup would break), profile Media drops `desc`/`path` entirely, and
+ * profile Event's `date` is a pre-formatted string, not the GrampsDate
+ * struct `displayDate()` expects -- swapping any of those in would trade one
+ * missing-label bug for another. Person/Note/Repository/Source/Tag all read
+ * fields (`primary_name`, `text.string`, `name`, `title`) that are native to
+ * the raw object already, no swap needed. Keep this in sync with
+ * summary.ts's `summaryText` if a new case there starts reading a nested
+ * ref field the same way family/citation do. */
+const PROFILE_RESOLVED_BACKLINK_TYPES = new Set(["family", "citation"]);
+
+/** Backlinks grouped by referencing object type (e.g. `{person: [...], event: [...]}`)
+ * -- present only when the request included both `extend=all` and
+ * `backlinks=1` (see get_extended_attributes's backlinks handling).
+ *
+ * `extended.backlinks.*` itself is only resolved *one level deep*: a
+ * backlink Family, for instance, comes back with `father_handle`/
+ * `mother_handle` as bare handles, not a resolved `father`/`mother` (extend
+ * already spent its one hop resolving the backlink's own handle into an
+ * object -- it doesn't recurse into that object's own refs). `profile.
+ * references` is the same backlinks-by-type map, but profile-shaped
+ * (father/mother with `name_display`, etc.) -- computed server-side the
+ * same way `profile.families`/`primary_parent_family` are for a Person's
+ * *forward* refs. So, for the types in PROFILE_RESOLVED_BACKLINK_TYPES
+ * above, each raw backlink item is swapped for its profile.references twin
+ * (matched by handle) when one exists, rather than left as a
+ * summary-less raw record (see summary.ts's family/citation cases, which
+ * need that nesting). */
 export function getBacklinks(detail: ObjectDetail): Record<string, unknown[]> {
-  return (detail.extended?.backlinks as Record<string, unknown[]> | undefined) ?? {};
+  const raw = (detail.extended?.backlinks as Record<string, unknown[]> | undefined) ?? {};
+  const references = (detail.profile?.references as Record<string, { handle: string }[]> | undefined) ?? {};
+  const result: Record<string, unknown[]> = {};
+  for (const [type, items] of Object.entries(raw)) {
+    if (!PROFILE_RESOLVED_BACKLINK_TYPES.has(type)) {
+      result[type] = items;
+      continue;
+    }
+    const resolved = new Map((references[type] ?? []).map((r) => [r.handle, r]));
+    result[type] = items.map((item) => {
+      const handle = (item as { handle?: string }).handle;
+      return (handle && resolved.get(handle)) ?? item;
+    });
+  }
+  return result;
 }

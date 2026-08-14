@@ -170,9 +170,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
         <div style={{ marginTop: "var(--mantine-spacing-xs)" }}>
           <ClickableTitle onClick={navigateToSelf}>{summaryLine(view.key, detail) || view.label}</ClickableTitle>
         </div>
-        {typeof detail.gramps_id === "string" && (
-          <Text size="sm" c="dimmed">ID: {detail.gramps_id} <PrivateIndicator detail={detail} /></Text>
-        )}
+        <PrivateIndicator detail={detail} />
       </div>
     );
   }
@@ -182,7 +180,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     return (
       <div>
         <Text size="sm" c="dimmed" fw={600}>
-          {view.label}{typeof detail.gramps_id === "string" ? ` — ${detail.gramps_id}` : ""} <PrivateIndicator detail={detail} />
+          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{view.label} <PrivateIndicator detail={detail} />
         </Text>
         {isSelf ? (
           <Text fw={700}>{text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}</Text>
@@ -225,11 +223,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
             {sex && SEX_SYMBOL[sex] ? ` ${SEX_SYMBOL[sex]}` : ""}
           </ClickableTitle>
         </Group>
-        {typeof detail.gramps_id === "string" ? (
-          <Text size="sm" c="dimmed">ID: {detail.gramps_id} <PrivateIndicator detail={detail} /></Text>
-        ) : (
-          <PrivateIndicator detail={detail} />
-        )}
+        <PrivateIndicator detail={detail} />
       </div>
     </Group>
   );

@@ -42,8 +42,7 @@ function truncate(text: string, max = 60): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-export function summaryLine(type: string, obj: any): string {
-  if (!obj) return "";
+function summaryText(type: string, obj: any): string {
   switch (type) {
     case "person":
       return personName(obj);
@@ -56,7 +55,7 @@ export function summaryLine(type: string, obj: any): string {
       const father = obj.extended?.father ?? obj.father;
       const mother = obj.extended?.mother ?? obj.mother;
       const names = [father, mother].filter(Boolean).map(personName);
-      return names.length > 0 ? names.join(" & ") : obj.gramps_id ?? "(family)";
+      return names.length > 0 ? names.join(" & ") : "(family)";
     }
     case "event": {
       const type_ = obj.type ?? "Event";
@@ -70,9 +69,13 @@ export function summaryLine(type: string, obj: any): string {
     case "source":
       return obj.title || "(source)";
     case "citation": {
-      const source = obj.extended?.source;
+      // Either shape, same reasoning as family's father/mother above: a
+      // directly-fetched Citation's own extended.source, or a profile-shaped
+      // reference (getBacklinks' PROFILE_RESOLVED_BACKLINK_TYPES swap, or
+      // CitationsSection's own zipRefs) whose `source` is already resolved.
+      const source = obj.extended?.source ?? obj.source;
       const sourceTitle = source?.title ?? "";
-      return [sourceTitle, obj.page].filter(Boolean).join(", ") || obj.gramps_id || "(citation)";
+      return [sourceTitle, obj.page].filter(Boolean).join(", ") || "(citation)";
     }
     case "media":
     case "generated":
@@ -83,6 +86,30 @@ export function summaryLine(type: string, obj: any): string {
     case "tag":
       return obj.name || "(tag)";
     default:
-      return obj.gramps_id ?? obj.handle ?? "";
+      return obj.handle ?? "";
   }
+}
+
+/** Prefixes a label with its record's gramps_id (per Gramps convention of
+ * always identifying a record by its stable ID first) -- shared by every
+ * list/picker row, not just summaryLine() below: RecordPicker.tsx,
+ * AttachControl.tsx, FamilyEditDialog.tsx, and FamiliesSection/
+ * ParentsSection's spouse/parent-name label overrides all build their own
+ * text outside summaryLine's switch (flat query-list rows, or a name
+ * standing in for the family it belongs to) and need the same prefix. Tag
+ * is the one type with no gramps_id at all (gramps/gen/lib/tag.py), so `id`
+ * is optional here rather than assumed present. */
+export function withGrampsId(id: string | undefined, text: string): string {
+  if (!id) return text;
+  return text ? `[${id}] ${text}` : `[${id}]`;
+}
+
+/** Every list/detail row leads with the object's `gramps_id` (per Gramps
+ * convention of always identifying records by their stable ID) followed by
+ * the type-specific summary text built above. */
+export function summaryLine(type: string, obj: any): string {
+  if (!obj) return "";
+  const text = summaryText(type, obj);
+  const id = typeof obj.gramps_id === "string" ? obj.gramps_id : undefined;
+  return withGrampsId(id, text);
 }

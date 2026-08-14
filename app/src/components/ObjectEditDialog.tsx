@@ -10,6 +10,7 @@ import { PLACE_VIEW, SOURCE_VIEW } from "../store/views";
 import { DRAFT_TYPE_LABELS, type DraftEntry, type DraftType } from "../store/draftStack";
 import { SimpleDateInput } from "./SimpleDateInput";
 import { RecordPicker } from "./RecordPicker";
+import { withGrampsId } from "./related/summary";
 import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
@@ -229,8 +230,8 @@ export function ObjectEditDialog({
       for (const { f, handle } of toFetch) {
         const { page } = await fetchPage(f.refView, token, null, false, `handle == "${handle}"`);
         const item = page.items[0];
-        const label = item ? (item[f.refField] as string | undefined) : undefined;
-        if (label) setPickedLabels((prev) => ({ ...prev, [handle]: label }));
+        const text = item ? (item[f.refField] as string | undefined) : undefined;
+        if (text) setPickedLabels((prev) => ({ ...prev, [handle]: withGrampsId(item?.gramps_id as string | undefined, text) }));
       }
     })();
     // pickedLabels deliberately excluded -- see FamilyEditDialog.tsx's
@@ -361,7 +362,11 @@ export function ObjectEditDialog({
             handle={handle}
             label={handle ? (pickedLabels[handle] ?? null) : null}
             onPick={(item) => {
-              setPickedLabels((prev) => ({ ...prev, [item.handle]: (item[f.refField] as string) ?? "" }));
+              const text = (item[f.refField] as string | undefined) ?? "";
+              setPickedLabels((prev) => ({
+                ...prev,
+                [item.handle]: withGrampsId(item.gramps_id as string | undefined, text),
+              }));
               onChange({ [f.key]: item.handle });
             }}
             onRemove={() => onChange({ [f.key]: null })}

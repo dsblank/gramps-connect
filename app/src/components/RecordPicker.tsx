@@ -3,6 +3,7 @@ import { Button, Card, Group, Loader, NavLink, ScrollArea, Stack, Text, TextInpu
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
 import type { ViewConfig } from "../store/views";
+import { withGrampsId } from "./related/summary";
 
 // Capped rather than raised when a search is too broad: a picker that can
 // return hundreds of matches needs a narrower query, not a longer dropdown
@@ -110,7 +111,14 @@ export function RecordPicker({
               {results.map((item) => (
                 <NavLink
                   key={item.handle}
-                  label={renderLabel ? renderLabel(item) : (item[searchField] as string | undefined) || "(untitled)"}
+                  label={
+                    renderLabel
+                      ? renderLabel(item)
+                      : withGrampsId(
+                          item.gramps_id as string | undefined,
+                          (item[searchField] as string | undefined) || "(untitled)"
+                        )
+                  }
                   active={confirmWithButton ? item.handle === selectedHandle : undefined}
                   onClick={() => (confirmWithButton ? setSelectedHandle(item.handle) : onPick(item))}
                   styles={{

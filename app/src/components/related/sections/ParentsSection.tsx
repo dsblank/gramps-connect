@@ -1,10 +1,12 @@
 import { Stack, Text } from "@mantine/core";
 import type { RawRef } from "../../../store/objectDetail";
 import { SectionShell, RefRow, PairGroup } from "./shared";
+import { withGrampsId } from "../summary";
 import type { OnNavigate, SectionProps } from "../types";
 
 interface FamilyProfile {
   handle: string;
+  gramps_id?: string;
   father?: { handle?: string; name_display?: string };
   mother?: { handle?: string; name_display?: string };
 }
@@ -25,10 +27,24 @@ function ParentFamilyPair({ profileFamily, rawFamily, childHandle, onNavigate }:
   return (
     <PairGroup>
       {father?.handle && (
-        <RefRow type="family" handle={profileFamily.handle} obj={profileFamily} refMeta={myRef} label={father.name_display} onNavigate={onNavigate} />
+        <RefRow
+          type="family"
+          handle={profileFamily.handle}
+          obj={profileFamily}
+          refMeta={myRef}
+          label={father.name_display ? withGrampsId(profileFamily.gramps_id, father.name_display) : undefined}
+          onNavigate={onNavigate}
+        />
       )}
       {mother?.handle && (
-        <RefRow type="family" handle={profileFamily.handle} obj={profileFamily} refMeta={myRef} label={mother.name_display} onNavigate={onNavigate} />
+        <RefRow
+          type="family"
+          handle={profileFamily.handle}
+          obj={profileFamily}
+          refMeta={myRef}
+          label={mother.name_display ? withGrampsId(profileFamily.gramps_id, mother.name_display) : undefined}
+          onNavigate={onNavigate}
+        />
       )}
     </PairGroup>
   );

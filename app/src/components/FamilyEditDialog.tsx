@@ -8,6 +8,7 @@ import { AttributeListField, type Attribute } from "./EmbeddedListFields";
 import { fetchPage, type QueryItem } from "../store/api";
 import { buildPersonSearchExpr } from "../store/personSearch";
 import { PERSON_VIEW } from "../store/views";
+import { withGrampsId } from "./related/summary";
 import type { DraftEntry } from "../store/draftStack";
 
 // FamilyRelType's built-in values (gramps/gen/lib/familyreltype.py) as plain
@@ -21,7 +22,8 @@ type ParentField = "father_handle" | "mother_handle";
 function personLabel(item: QueryItem): string {
   const given = (item.given_name as string | undefined) ?? "";
   const surname = (item.surname as string | undefined) ?? "";
-  return [given, surname].filter(Boolean).join(" ") || "(unnamed)";
+  const name = [given, surname].filter(Boolean).join(" ") || "(unnamed)";
+  return withGrampsId(item.gramps_id as string | undefined, name);
 }
 
 // Capped rather than raised when a search is too broad: a picker that can

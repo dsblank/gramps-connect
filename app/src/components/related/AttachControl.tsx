@@ -4,6 +4,7 @@ import { getToken, hasPermissions } from "../../auth/auth";
 import { attachRefListEntry } from "../../store/refListApi";
 import { CircleGlyphButton } from "../CircleGlyphButton";
 import { RecordPicker } from "../RecordPicker";
+import { withGrampsId } from "./summary";
 import type { QueryItem } from "../../store/api";
 import type { ViewConfig } from "../../store/views";
 
@@ -15,27 +16,26 @@ import type { ViewConfig } from "../../store/views";
  * Using summaryLine here silently fell through to a bare Gramps ID (or
  * "(citation)") for every result, since a QueryItem never has `.extended`
  * at all. Only ever called with one of the four picker views this file
- * uses (note/citation/tag/media), matching their exact column keys. */
+ * uses (note/citation/tag/media), matching their exact column keys. Still
+ * leads with the gramps_id, same as summaryLine, via the shared
+ * withGrampsId() helper -- Tag is the one type with no gramps_id at all, so
+ * its id comes back undefined and withGrampsId leaves the label alone. */
 function pickerResultLabel(type: string, item: QueryItem): string {
+  const id = item.gramps_id as string | undefined;
   switch (type) {
     case "note":
-      return (item.text as string | undefined) || (item.gramps_id as string | undefined) || "(untitled)";
+      return withGrampsId(id, (item.text as string | undefined) || "(untitled)");
     case "citation": {
       const title = (item.source_title as string | undefined) ?? "";
       const page = (item.page as string | undefined) ?? "";
-      return [title, page].filter(Boolean).join(", ") || (item.gramps_id as string | undefined) || "(untitled)";
+      return withGrampsId(id, [title, page].filter(Boolean).join(", ") || "(untitled)");
     }
     case "tag":
       return (item.name as string | undefined) || "(untitled)";
     case "media":
-      return (
-        (item.desc as string | undefined) ||
-        (item.path as string | undefined) ||
-        (item.gramps_id as string | undefined) ||
-        "(untitled)"
-      );
+      return withGrampsId(id, (item.desc as string | undefined) || (item.path as string | undefined) || "(untitled)");
     default:
-      return (item.gramps_id as string | undefined) ?? item.handle;
+      return withGrampsId(id, item.handle);
   }
 }
 
