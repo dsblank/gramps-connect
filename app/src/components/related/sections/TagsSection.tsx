@@ -1,4 +1,9 @@
 import { Badge, Group } from "@mantine/core";
+import { getToken, hasPermissions } from "../../../auth/auth";
+import { detachRefListEntry } from "../../../store/refListApi";
+import { TAG_VIEW } from "../../../store/views";
+import { AttachControl } from "../AttachControl";
+import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { SectionShell, zipHandles } from "./shared";
 import { gtkColorToCss } from "../color";
 import type { SectionProps } from "../types";
@@ -6,13 +11,23 @@ import type { SectionProps } from "../types";
 /** PrimaryObject.tag_list -- a plain handle list. Tags are simple enough
  * (name/color/priority, no sub-detail worth drilling into) that they're
  * rendered as plain colored badges rather than full RefRows; clicking one
- * still navigates like any other reference. */
-export function TagsSection({ detail, onNavigate }: SectionProps) {
+ * still navigates like any other reference. Detach uses a small
+ * CircleGlyphButton inside the badge's rightSection rather than RefRow's
+ * "−", since there's no RefRow here to hang it off. */
+export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
   const rows = zipHandles<{ handle: string; name: string; color?: string }>(detail.tag_list, detail.extended?.tags);
-  if (rows.length === 0) return null;
+  const canAttach = hasPermissions("EditObject");
+  if (rows.length === 0 && !canAttach) return null;
+
+  async function handleRemove(handle: string) {
+    const token = await getToken();
+    await detachRefListEntry(token, view, detail.handle, "tag_list", handle);
+    onRefetch?.();
+  }
+
   return (
-    <SectionShell label="Tags" count={rows.length} defaultOpen>
-      <Group gap={6}>
+    <SectionShell label="Tags">
+      <Group gap={6} align="center">
         {rows.map(({ handle, target }) => (
           <Badge
             key={handle}
@@ -21,11 +36,36 @@ export function TagsSection({ detail, onNavigate }: SectionProps) {
             color={gtkColorToCss(target?.color) || "gray"}
             style={{ cursor: "pointer" }}
             onClick={() => onNavigate("tag", handle)}
+            rightSection={
+              canAttach ? (
+                <CircleGlyphButton
+                  glyph="−"
+                  label="Remove tag"
+                  size={14}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemove(handle);
+                  }}
+                />
+              ) : undefined
+            }
           >
             {target?.name ?? handle}
           </Badge>
         ))}
       </Group>
+      {canAttach && (
+        <Group mt={rows.length > 0 ? "xs" : 0}>
+          <AttachControl
+            targetView={view}
+            targetHandle={detail.handle}
+            pickerView={TAG_VIEW}
+            listField="tag_list"
+            itemLabel="a tag"
+            onAttached={() => onRefetch?.()}
+          />
+        </Group>
+      )}
     </SectionShell>
   );
 }

@@ -18,7 +18,7 @@ export function FamiliesSection({ type, detail, onNavigate }: SectionProps) {
   const families = ((detail.profile as any)?.families as FamilyProfile[] | undefined) ?? [];
   if (families.length === 0) return null;
   return (
-    <SectionShell label="Families" count={families.length} defaultOpen>
+    <SectionShell label="Families">
       {families.map((fam) => {
         // Show the *other* member of the family (the spouse), not both --
         // father/mother is {} rather than absent when missing (see

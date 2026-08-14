@@ -2,9 +2,9 @@
 // keeping these in one place is what makes "add a private-flag badge
 // everywhere" or "fix how a row's click target works" a one-file change
 // instead of an 18-file one.
-import { useState } from "react";
 import type { ReactNode } from "react";
-import { Anchor, Collapse, Group, Image, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { Anchor, Group, Image, Stack, Text, Tooltip } from "@mantine/core";
+import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { VIEWS } from "../../../store/views";
 import { summaryLine } from "../summary";
 import { RefMetaRow } from "../RefBadges";
@@ -18,27 +18,22 @@ import type { OnNavigate } from "../types";
 // original PersonDetail.tsx's LINK_STYLE).
 const LINK_STYLE = { display: "inline", width: "auto", textAlign: "left" } as const;
 
-export function SectionShell({ label, count, defaultOpen = false, children }: {
+/** No collapse/expand -- every one of this file's ~18 call sites always
+ * passed `defaultOpen` anyway (collapsed-by-default was never actually
+ * used), and the pane this renders in already scrolls, so a toggle added
+ * nothing. Just a static label over its children -- no item count either
+ * (redundant now that the list underneath it is always visible), and no
+ * header-right action slot (AttachControl.tsx's "+" lives inside the list
+ * as its own trailing row instead -- see NotesSection.tsx/CitationsSection.tsx/
+ * TagsSection.tsx -- rather than crowding this one-line header). */
+export function SectionShell({ label, children }: {
   label: string;
-  /** Shown next to the label so an empty/1-item section is distinguishable
-   * without opening it; omit for sections with no natural count (e.g. a
-   * single Place/Source ref). */
-  count?: number;
-  defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
-      <UnstyledButton onClick={() => setOpen((v) => !v)} style={{ display: "block", cursor: "pointer" }}>
-        <Text size="md" fw={600}>
-          {open ? "▾" : "▸"} {label}
-          {!open && count !== undefined ? ` (${count})` : ""}
-        </Text>
-      </UnstyledButton>
-      <Collapse in={open}>
-        <Stack gap="sm" pl="md" pt="xs">{children}</Stack>
-      </Collapse>
+      <Text size="md" fw={600}>{label}</Text>
+      <Stack gap="sm" pl="md" pt="xs">{children}</Stack>
     </div>
   );
 }
@@ -68,7 +63,7 @@ function TypeIcon({ type }: { type: string }) {
  * always through the `onNavigate` callback RelatedPanel was given, so the
  * same row works whether it's mounted in the top pane (sets sub-selection)
  * or the bottom pane (promotes to a real view switch). */
-export function RefRow({ type, handle, obj, refMeta, onNavigate, label }: {
+export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onRemove }: {
   type: string;
   handle: string;
   obj: unknown;
@@ -79,6 +74,11 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label }: {
    * FamiliesSection showing just the *other* spouse's name rather than
    * both family members). */
   label?: string;
+  /** Detaches this reference from the record being viewed (not a delete of
+   * the target object itself) -- only set by sections with an
+   * AttachControl (Notes/Citations), already permission-gated by the
+   * caller the same way AttachControl gates itself. */
+  onRemove?: () => void;
 }) {
   const currentPage = useCurrentPage();
   const text = label ?? summaryLine(type, obj);
@@ -105,6 +105,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label }: {
             {text}
           </Anchor>
         )}
+        {onRemove && <CircleGlyphButton glyph="−" label="Remove" onClick={onRemove} size={16} />}
       </Group>
       <RefMetaRow refMeta={refMeta} />
     </Stack>

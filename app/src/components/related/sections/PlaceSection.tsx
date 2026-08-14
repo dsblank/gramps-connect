@@ -13,7 +13,7 @@ export function PlaceSection({ detail, onNavigate }: SectionProps) {
   const place = detail.extended?.place as { handle?: string } | undefined;
   if (!place?.handle) return null;
   return (
-    <SectionShell label="Place" defaultOpen>
+    <SectionShell label="Place">
       <RefRow type="place" handle={place.handle} obj={place} onNavigate={onNavigate} />
     </SectionShell>
   );

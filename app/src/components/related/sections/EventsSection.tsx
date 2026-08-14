@@ -8,7 +8,7 @@ export function EventsSection({ detail, onNavigate }: SectionProps) {
   const rows = zipRefs(detail.event_ref_list, detail.extended?.events);
   if (rows.length === 0) return null;
   return (
-    <SectionShell label="Events" count={rows.length} defaultOpen>
+    <SectionShell label="Events">
       {rows.map(({ ref, target }) => (
         <RefRow key={ref.ref} type="event" handle={ref.ref} obj={target} refMeta={ref} onNavigate={onNavigate} />
       ))}

@@ -9,7 +9,7 @@ export function SourceSection({ detail, onNavigate }: SectionProps) {
   const source = detail.extended?.source as { handle?: string } | undefined;
   if (!source?.handle) return null;
   return (
-    <SectionShell label="Source" defaultOpen>
+    <SectionShell label="Source">
       <RefRow type="source" handle={source.handle} obj={source} onNavigate={onNavigate} />
     </SectionShell>
   );

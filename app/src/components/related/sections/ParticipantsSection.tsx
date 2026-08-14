@@ -14,7 +14,7 @@ export function ParticipantsSection({ detail, onNavigate }: SectionProps) {
   const families = (participants?.families as { family: { handle: string }; role: string }[] | undefined) ?? [];
   if (people.length === 0 && families.length === 0) return null;
   return (
-    <SectionShell label="Participants" count={people.length + families.length} defaultOpen>
+    <SectionShell label="Participants">
       {people.map(({ person, role }) => (
         <RefRow key={person.handle} type="person" handle={person.handle} obj={person} refMeta={{ role }} onNavigate={onNavigate} />
       ))}

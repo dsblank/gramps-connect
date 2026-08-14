@@ -1,4 +1,5 @@
 import type { ObjectDetail, RefMeta } from "../../store/objectDetail";
+import type { ViewConfig } from "../../store/views";
 
 /** Every section calls this instead of navigating directly -- RelatedPanel
  * is mounted twice (top pane vs. inside ReferenceDetail's bottom pane) with
@@ -27,10 +28,17 @@ export type OnViewGallery = (items: GalleryItem[], label: string) => void;
  * each), the fetched object (already carrying `extended`/`profile`/
  * `backlinks`), and the navigate callback to wire into its RefRows.
  * `onViewGallery` is optional and only meaningful to MediaSection --
- * everything else ignores it. */
+ * everything else ignores it. `view` and `onRefetch` are only used by the
+ * four sections with an AttachControl (Notes/Citations/Tags/Media): `view`
+ * is `type`'s own ViewConfig (needed for refListApi.ts's GET/PUT, which
+ * `type` alone as a bare string can't provide), and `onRefetch` lets a
+ * section trigger RelatedPanel's own refetch after an attach/detach, the
+ * same mechanism MessageButton's `onAttached` already uses. */
 export interface SectionProps {
   type: string;
+  view: ViewConfig;
   detail: ObjectDetail;
   onNavigate: OnNavigate;
   onViewGallery?: OnViewGallery;
+  onRefetch?: () => void;
 }

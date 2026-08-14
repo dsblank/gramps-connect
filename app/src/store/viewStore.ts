@@ -504,8 +504,26 @@ export class ViewStore {
    * object list from scratch. Page one sets the total count and makes the
    * cache queryable; everything past page one fills in detached, in the
    * background. Only an unfiltered result persists to OPFS -- a filtered
-   * result isn't "the dataset", so it shouldn't overwrite that cache. */
-  async runQuery(whereExpr: string | null, persist: boolean): Promise<void> {
+   * result isn't "the dataset", so it shouldn't overwrite that cache.
+   *
+   * `preserveDisplayUntilCaughtUp`, set only by requeryDebounced(): a
+   * live-sync full requery of an already-scrolled view (more than one page
+   * loaded) would otherwise swap in a brand-new, page-one-only db the
+   * moment page one lands -- loadedCount visibly drops back to one page's
+   * worth (DataTable renders every row past it as a loading placeholder)
+   * until the background fill claws its way back up, seconds later. Bug:
+   * looked like the whole table "clearing" every time anything on the
+   * live-synced table changed anywhere in the tree. With this set, the old
+   * db/loadedCount keep serving reads until the new fetch has loaded at
+   * least as many rows as were already showing (or finishes entirely),
+   * then swaps in atomically -- same eventual data, no visible dip. */
+  async runQuery(
+    whereExpr: string | null,
+    persist: boolean,
+    options?: { preserveDisplayUntilCaughtUp?: boolean }
+  ): Promise<void> {
+    const preserve = options?.preserveDisplayUntilCaughtUp ?? false;
+    const previousLoadedCount = this.loadedCount;
     const myGeneration = ++this.queryGeneration;
     // Captured once per call, not read fresh off `this.orderBy` later --
     // a setSort() during this query's background fill bumps
@@ -568,20 +586,36 @@ export class ViewStore {
       return; // superseded by a newer query while this was in flight
     }
 
-    this.db = newDb;
-    this.totalCount = first.totalCount ?? 0;
-    this.whereExpr = whereExpr;
+    const newTotalCount = first.totalCount ?? 0;
     this.insertPage(newDb, stmt, first.page.items);
-    this.loadedCount = first.page.items.length;
+    let loadedSoFar = first.page.items.length;
     after = first.page.next_after;
-    this.status = "ready";
-    // Page one is what makes a default selection possible at all (it's the
-    // first moment there's a row 0 to name) -- a no-op when something is
-    // already selected, which covers both suppressSelectionClear callers:
-    // navigateToHandle is mid-flight toward a real selection here, and
-    // requeryDebounced is preserving one across a live-sync reload.
-    this.applyDefaultSelection();
-    this.emit();
+    let swapped = false;
+
+    // Swaps the new db/counts in as the visible ones -- immediately after
+    // page one for every ordinary call (preserve is false), or, when
+    // preserving, only once loadedSoFar has caught back up to what was
+    // already showing (see this method's own doc comment).
+    const swapIn = () => {
+      swapped = true;
+      this.db = newDb;
+      this.totalCount = newTotalCount;
+      this.whereExpr = whereExpr;
+      this.loadedCount = loadedSoFar;
+      this.status = "ready";
+      // Page one is what makes a default selection possible at all (it's
+      // the first moment there's a row 0 to name) -- a no-op when
+      // something is already selected, which covers both
+      // suppressSelectionClear callers: navigateToHandle is mid-flight
+      // toward a real selection here, and requeryDebounced is preserving
+      // one across a live-sync reload.
+      this.applyDefaultSelection();
+    };
+
+    if (!preserve || loadedSoFar >= previousLoadedCount || after === null) {
+      swapIn();
+      this.emit();
+    }
 
     (async () => {
       while (after !== null) {
@@ -591,8 +625,15 @@ export class ViewStore {
           return;
         }
         this.insertPage(newDb, stmt, page.items);
-        this.loadedCount += page.items.length;
+        loadedSoFar += page.items.length;
         after = page.next_after;
+        if (swapped) {
+          this.loadedCount = loadedSoFar;
+        } else if (loadedSoFar >= previousLoadedCount || after === null) {
+          swapIn();
+        } else {
+          continue; // still catching up -- nothing new to show yet
+        }
         this.emit();
       }
       stmt.free();
@@ -658,7 +699,7 @@ export class ViewStore {
     this.requeryTimer = setTimeout(() => {
       this.requeryTimer = null;
       this.suppressSelectionClear = true;
-      this.runQuery(this.whereExpr, false)
+      this.runQuery(this.whereExpr, false, { preserveDisplayUntilCaughtUp: true })
         .then(() => this.reconcileSelection())
         .catch((err) => {
           console.error(`[${this.view.label}] live-sync requery failed`, err);

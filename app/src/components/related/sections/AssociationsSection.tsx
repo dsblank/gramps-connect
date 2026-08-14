@@ -8,7 +8,7 @@ export function AssociationsSection({ detail, onNavigate }: SectionProps) {
   const rows = zipRefs(detail.person_ref_list, detail.extended?.people);
   if (rows.length === 0) return null;
   return (
-    <SectionShell label="Associations" count={rows.length} defaultOpen>
+    <SectionShell label="Associations">
       {rows.map(({ ref, target }) => (
         <RefRow key={ref.ref} type="person" handle={ref.ref} obj={target} refMeta={ref} onNavigate={onNavigate} />
       ))}

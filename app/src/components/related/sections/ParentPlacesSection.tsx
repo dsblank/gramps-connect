@@ -9,7 +9,7 @@ export function ParentPlacesSection({ detail, onNavigate }: SectionProps) {
   const rows = zipRefs(detail.placeref_list, detail.extended?.places);
   if (rows.length === 0) return null;
   return (
-    <SectionShell label="Enclosing places" count={rows.length} defaultOpen>
+    <SectionShell label="Enclosing places">
       {rows.map(({ ref, target }) => (
         <RefRow key={ref.ref} type="place" handle={ref.ref} obj={target} refMeta={ref} onNavigate={onNavigate} />
       ))}

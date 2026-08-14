@@ -3,6 +3,7 @@ import {
   Alert, Anchor, Button, Card, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
 import { getToken } from "../auth/auth";
+import { CircleGlyphButton } from "./CircleGlyphButton";
 import { fetchPage, type QueryItem } from "../store/api";
 import { buildPersonSearchExpr } from "../store/personSearch";
 import { PERSON_VIEW } from "../store/views";
@@ -128,9 +129,7 @@ function ChildrenField({ refs, labels, onAdd, onRemove }: ChildrenFieldProps) {
       {refs.map((ref) => (
         <Group key={ref.ref} gap="xs">
           <Text size="sm">{labels[ref.ref] ?? ref.ref}</Text>
-          <Anchor component="button" type="button" size="sm" c="red" onClick={() => onRemove(ref.ref)}>
-            Remove
-          </Anchor>
+          <CircleGlyphButton glyph="−" label="Remove child" onClick={() => onRemove(ref.ref)} size={16} />
         </Group>
       ))}
       {searching ? (
@@ -141,9 +140,10 @@ function ChildrenField({ refs, labels, onAdd, onRemove }: ChildrenFieldProps) {
           }}
         />
       ) : (
-        <Button variant="default" size="xs" onClick={() => setSearching(true)}>
-          + Add child…
-        </Button>
+        <Group gap="xs">
+          <CircleGlyphButton glyph="+" label="Add child" onClick={() => setSearching(true)} />
+          <Text size="sm" c="dimmed">Add child</Text>
+        </Group>
       )}
     </Stack>
   );
@@ -191,9 +191,7 @@ function ParentSlot({
           {!isChildOpen && (
             <Text size="xs" c="dimmed">(hidden -- click name to edit)</Text>
           )}
-          <Anchor component="button" type="button" size="sm" c="red" onClick={onRemoveChildDraft}>
-            Remove
-          </Anchor>
+          <CircleGlyphButton glyph="−" label="Remove" onClick={onRemoveChildDraft} size={16} />
         </Group>
       </Stack>
     );
@@ -205,9 +203,7 @@ function ParentSlot({
         <Text size="sm" fw={500}>{label}</Text>
         <Group gap="xs">
           <Text size="sm">{pickedLabel}</Text>
-          <Anchor component="button" type="button" size="sm" c="red" onClick={onRemovePicked}>
-            Remove
-          </Anchor>
+          <CircleGlyphButton glyph="−" label="Remove" onClick={onRemovePicked} size={16} />
         </Group>
       </Stack>
     );

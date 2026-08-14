@@ -31,7 +31,7 @@ export function LdsOrdinancesSection({ detail }: SectionProps) {
   const ords = (detail.lds_ord_list as LdsOrd[] | undefined) ?? [];
   if (ords.length === 0) return null;
   return (
-    <SectionShell label="LDS Ordinances" count={ords.length} defaultOpen>
+    <SectionShell label="LDS Ordinances">
       {ords.map((ord, i) => {
         const parts = [displayDate(ord.date), ord.temple, STATUS_LABELS[ord.status]].filter(Boolean);
         return (

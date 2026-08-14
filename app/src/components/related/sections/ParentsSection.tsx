@@ -62,7 +62,7 @@ export function ParentsSection({ type, detail, onNavigate }: SectionProps) {
     const mother = detail.extended?.mother as { handle?: string } | undefined;
     if (!father?.handle && !mother?.handle) return null;
     return (
-      <SectionShell label="Parents" defaultOpen>
+      <SectionShell label="Parents">
         <PairGroup>
           {father?.handle && <RefRow type="person" handle={father.handle} obj={father} onNavigate={onNavigate} />}
           {mother?.handle && <RefRow type="person" handle={mother.handle} obj={mother} onNavigate={onNavigate} />}
@@ -84,7 +84,7 @@ export function ParentsSection({ type, detail, onNavigate }: SectionProps) {
   const rawParentFamilies = (detail.extended?.parent_families as ({ handle: string; child_ref_list?: RawRef[] })[] | undefined) ?? [];
 
   return (
-    <SectionShell label="Parents" defaultOpen>
+    <SectionShell label="Parents">
       <Stack gap="md">
         {hasPrimary && primary && (
           <ParentFamilyPair profileFamily={primary} rawFamily={rawPrimary} childHandle={detail.handle} onNavigate={onNavigate} />

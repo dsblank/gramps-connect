@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { getToken } from "../../../auth/auth";
+import { getToken, hasPermissions } from "../../../auth/auth";
 import { getTagHandleCached, MESSAGE_TAG, TODO_DONE_TAG } from "../../../store/notesApi";
+import { detachRefListEntry } from "../../../store/refListApi";
+import { NOTE_VIEW } from "../../../store/views";
+import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
 import type { SectionProps } from "../types";
@@ -58,25 +61,49 @@ function useKnownTagHandles(): { message: string | null; done: string | null } {
  * -- otherwise a click lands on the general Notes view instead of Messages
  * and loses MessageActions (Mark done/Reopen/Delete) -- and get a "done"
  * indicator ordinary notes have no equivalent of. */
-export function NotesSection({ detail, onNavigate }: SectionProps) {
+export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
   const { message: messageTag, done: doneTag } = useKnownTagHandles();
 
   const rows = zipHandles<RawNote>(detail.note_list, detail.extended?.notes);
   const isMessage = (target: RawNote) => Boolean(messageTag && target?.tag_list?.includes(messageTag));
   const noteRows = rows.filter(({ target }) => !isMessage(target));
   const messageRows = rows.filter(({ target }) => isMessage(target));
+  const canAttach = hasPermissions("EditObject");
+
+  async function handleRemove(handle: string) {
+    const token = await getToken();
+    await detachRefListEntry(token, view, detail.handle, "note_list", handle);
+    onRefetch?.();
+  }
 
   return (
     <>
-      {noteRows.length > 0 && (
-        <SectionShell label="Notes" count={noteRows.length} defaultOpen>
+      {(noteRows.length > 0 || canAttach) && (
+        <SectionShell label="Notes">
           {noteRows.map(({ handle, target }) => (
-            <RefRow key={handle} type="note" handle={handle} obj={target} onNavigate={onNavigate} />
+            <RefRow
+              key={handle}
+              type="note"
+              handle={handle}
+              obj={target}
+              onNavigate={onNavigate}
+              onRemove={canAttach ? () => handleRemove(handle) : undefined}
+            />
           ))}
+          {canAttach && (
+            <AttachControl
+              targetView={view}
+              targetHandle={detail.handle}
+              pickerView={NOTE_VIEW}
+              listField="note_list"
+              itemLabel="a note"
+              onAttached={() => onRefetch?.()}
+            />
+          )}
         </SectionShell>
       )}
       {messageRows.length > 0 && (
-        <SectionShell label="Messages" count={messageRows.length} defaultOpen>
+        <SectionShell label="Messages">
           {messageRows.map(({ handle, target }) => {
             const isDone = Boolean(doneTag && target.tag_list?.includes(doneTag));
             const label = `${isDone ? "✓ " : ""}${summaryLine("messages", target)}`;

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -260,14 +260,30 @@ export function RelatedPanel({
       : undefined
   );
 
+  // Tracks which (view, handle) the currently-held `state` belongs to, so a
+  // same-record refetch (revision/refetchNonce bumped by a live-sync poll
+  // tick, or by this very panel's own AttachControl/DeleteButton actions)
+  // can be told apart from an actual navigation to a different record.
+  // Only the latter should reset to the loading spinner below -- swapping
+  // it in for a same-record refresh unmounted the ScrollArea and remounted
+  // a fresh one once data landed, snapping the user's scroll position back
+  // to the top on every poll tick even though nothing they were looking at
+  // had moved.
+  const loadedForRef = useRef<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
-    setState({ status: "loading" });
+    const key = `${view.key}:${handle}`;
+    const isNewRecord = loadedForRef.current !== key;
+    if (isNewRecord) setState({ status: "loading" });
     (async () => {
       try {
         const token = await getToken();
         const detail = await fetchObjectExtended(token, view, handle);
-        if (!cancelled) setState({ status: "ready", detail });
+        if (!cancelled) {
+          loadedForRef.current = key;
+          setState({ status: "ready", detail });
+        }
       } catch (err: any) {
         if (!cancelled) setState({ status: "error", message: err.message ?? String(err) });
       }
@@ -324,7 +340,17 @@ export function RelatedPanel({
       <DetailFields type={view.key} detail={detail} />
       {sections.map((section) => {
         const Section = SECTION_COMPONENTS[section];
-        return <Section key={section} type={view.key} detail={detail} onNavigate={onNavigate} onViewGallery={onViewGallery} />;
+        return (
+          <Section
+            key={section}
+            type={view.key}
+            view={view}
+            detail={detail}
+            onNavigate={onNavigate}
+            onViewGallery={onViewGallery}
+            onRefetch={() => setRefetchNonce((n) => n + 1)}
+          />
+        );
       })}
     </Stack>
   );

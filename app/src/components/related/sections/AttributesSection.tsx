@@ -15,7 +15,7 @@ export function AttributesSection({ detail }: SectionProps) {
   const attrs = (detail.attribute_list as Attribute[] | undefined) ?? [];
   if (attrs.length === 0) return null;
   return (
-    <SectionShell label="Attributes" count={attrs.length} defaultOpen>
+    <SectionShell label="Attributes">
       {attrs.map((attr, i) => (
         <Group key={i} gap={6}>
           <Text size="md" fw={500}>{attr.type}:</Text>

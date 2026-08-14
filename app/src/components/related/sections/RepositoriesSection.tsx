@@ -8,7 +8,7 @@ export function RepositoriesSection({ detail, onNavigate }: SectionProps) {
   const rows = zipRefs(detail.reporef_list, detail.extended?.repositories);
   if (rows.length === 0) return null;
   return (
-    <SectionShell label="Repositories" count={rows.length} defaultOpen>
+    <SectionShell label="Repositories">
       {rows.map(({ ref, target }) => (
         <RefRow key={ref.ref} type="repository" handle={ref.ref} obj={target} refMeta={ref} onNavigate={onNavigate} />
       ))}

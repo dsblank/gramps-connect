@@ -114,6 +114,61 @@ describe("ViewStore default selection", () => {
   });
 });
 
+describe("ViewStore.runQuery preserveDisplayUntilCaughtUp (requeryDebounced)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("does not let loadedCount regress while a live-sync requery's first page is still smaller than what was already showing", async () => {
+    // Already-scrolled view: 3 rows loaded across two pages.
+    vi.mocked(fetchPage)
+      .mockResolvedValueOnce({ page: { items: [tagRow("H1"), tagRow("H2")], next_after: "H2" }, totalCount: 3 })
+      .mockResolvedValueOnce({ page: { items: [tagRow("H3")], next_after: null }, totalCount: 3 });
+    const store = new ViewStore(TAG_VIEW, getSql);
+    await store.runQuery(null, false);
+    await vi.waitFor(() => expect(store.getSnapshot().loadedCount).toBe(3));
+
+    // A live-sync requery whose own page one only comes back with 1 row,
+    // with more still to fetch in the background.
+    vi.mocked(fetchPage)
+      .mockResolvedValueOnce({ page: { items: [tagRow("H1")], next_after: "H1" }, totalCount: 3 })
+      .mockResolvedValueOnce({ page: { items: [tagRow("H2"), tagRow("H3")], next_after: null }, totalCount: 3 });
+
+    await store.runQuery(null, false, { preserveDisplayUntilCaughtUp: true });
+
+    // The bug this guards against: loadedCount briefly dropping to 1 (the
+    // requery's own page-one size) before the background fill catches
+    // back up -- DataTable would render rows 1-2 as "loading" placeholders
+    // even though they were already showing a moment before.
+    expect(store.getSnapshot().loadedCount).toBe(3);
+
+    // The background fill still completes and the new data does land.
+    await vi.waitFor(() => expect(store.getSnapshot().totalCount).toBe(3));
+    expect(store.getSnapshot().loadedCount).toBe(3);
+  });
+
+  it("still shows the requery's first page immediately once it alone reaches the previous count", async () => {
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H2")], next_after: null },
+      totalCount: 2,
+    });
+    const store = new ViewStore(TAG_VIEW, getSql);
+    await store.runQuery(null, false);
+    expect(store.getSnapshot().loadedCount).toBe(2);
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H2"), tagRow("H3")], next_after: null },
+      totalCount: 3,
+    });
+    await store.runQuery(null, false, { preserveDisplayUntilCaughtUp: true });
+
+    // One page already covers (and exceeds) the old count -- no need to
+    // wait for a background fill that isn't coming.
+    expect(store.getSnapshot().loadedCount).toBe(3);
+  });
+});
+
 describe("ViewStore.applyLiveChange", () => {
   beforeEach(() => {
     vi.mocked(fetchPage).mockReset();
