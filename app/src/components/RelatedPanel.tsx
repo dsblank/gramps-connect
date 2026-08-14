@@ -14,14 +14,21 @@ import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MessageButton } from "./related/MessageButton";
+import { EditButton } from "./related/EditButton";
 import { VisualButtons } from "./related/VisualButtons";
 import { MessageActions } from "./related/MessageActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
+import type { UseDraftStack } from "../store/draftStack";
 
 interface RelatedPanelProps {
   view: ViewConfig;
   handle: string;
+  /** Owned by App.tsx, threaded down through AsideSplit/ReferenceDetail --
+   * optional because not every mount of this component (e.g. a future one
+   * with no edit affordance planned) needs it; EditButton itself renders
+   * nothing when it's absent. */
+  draftStack?: UseDraftStack;
   /** ViewStore's selectedRevision -- bumped only when a live-sync
    * notification's handle matches this exact `handle`, so the effect
    * below re-fetches when a poll picks up a change to *this* row, not
@@ -234,7 +241,9 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
  * pane (mounted for the sub-selected target instead of the main table's
  * selection) -- the only difference between the two mountings is which
  * onNavigate callback AsideSplit wires in. */
-export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery, updateDocumentTitle, flow }: RelatedPanelProps) {
+export function RelatedPanel({
+  view, handle, draftStack, revision, onNavigate, onViewGallery, updateDocumentTitle, flow,
+}: RelatedPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   // Bumped by MessageActions after a Mark done/Reopen toggle -- that write
   // goes through notesApi.ts directly, not through anything that changes
@@ -296,6 +305,7 @@ export function RelatedPanel({ view, handle, revision, onNavigate, onViewGallery
             of looking at it. Kept as a Group so more can sit beside
             MessageButton without disturbing the title's own layout. */}
         <Group gap="xs" wrap="nowrap" style={{ flex: "none" }}>
+          {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
       </Group>

@@ -234,7 +234,7 @@ function AuthenticatedApp() {
               mt="md"
               style={{ border: "1px solid var(--mantine-color-default-border)" }}
             >
-              <AsideSplit key={`detail-${view.key}`} view={view} flow />
+              <AsideSplit key={`detail-${view.key}`} view={view} draftStack={draftStack} flow />
             </Box>
           )}
           {/* In flow rather than docked (see the footer config above), and
@@ -259,7 +259,7 @@ function AuthenticatedApp() {
 
         {!stacked && view && (
           <AppShell.Aside>
-            <AsideSplit key={`detail-${view.key}`} view={view} />
+            <AsideSplit key={`detail-${view.key}`} view={view} draftStack={draftStack} />
           </AppShell.Aside>
         )}
 

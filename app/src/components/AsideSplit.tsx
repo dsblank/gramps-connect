@@ -8,6 +8,7 @@ import { RelatedPanel } from "./RelatedPanel";
 import { ReferenceDetail } from "./ReferenceDetail";
 import type { SubSelection } from "./ReferenceDetail";
 import { CurrentPageContext } from "./related/CurrentPageContext";
+import type { UseDraftStack } from "../store/draftStack";
 
 interface AsideSplitProps {
   view: ViewConfig;
@@ -16,6 +17,9 @@ interface AsideSplitProps {
    * between two independently-scrolling halves. Threaded on down into
    * RelatedPanel/ReferenceDetail, which own scrollers of their own. */
   flow?: boolean;
+  /** Owned by App.tsx -- threaded through to both panes' RelatedPanel so
+   * either can offer an Edit button (see RelatedPanel's own doc comment). */
+  draftStack?: UseDraftStack;
 }
 
 /** What the collapsed strip says it's holding. Only ever visible in the
@@ -57,7 +61,7 @@ function stripLabel(subSelection: SubSelection | null): string {
  * subject (a new main-table row, or a new view), which is also the only
  * thing that clears `subSelection` -- keeping the pane open there would
  * just re-create the empty half-pane this is meant to avoid. */
-export function AsideSplit({ view, flow }: AsideSplitProps) {
+export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
   const snapshot = useViewStore(view.key);
   const [subSelection, setSubSelection] = useState<SubSelection | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -150,6 +154,7 @@ export function AsideSplit({ view, flow }: AsideSplitProps) {
           <RelatedPanel
             flow={flow}
             view={view}
+            draftStack={draftStack}
             handle={snapshot.selectedHandle}
             revision={snapshot.selectedRevision}
             onNavigate={(type, handle, refMeta) => {
@@ -185,6 +190,7 @@ export function AsideSplit({ view, flow }: AsideSplitProps) {
           <Box ref={bottomPaneRef} style={flow ? undefined : { flex: 1, minHeight: 0, overflow: "auto" }}>
             <ReferenceDetail
               flow={flow}
+              draftStack={draftStack}
               subSelection={subSelection}
               onPromote={(type, handle) => {
                 window.location.hash = formatHash({ viewKey: type, handle });

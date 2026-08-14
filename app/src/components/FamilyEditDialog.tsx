@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Alert, Anchor, Button, Card, Group, Loader, Modal, Select, Stack, Text, TextInput,
+  Alert, Anchor, Button, Card, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
@@ -151,6 +151,10 @@ interface ParentSlotProps {
   childDraft: DraftEntry | undefined;
   isChildOpen: boolean;
   pickedLabel: string | null;
+  /** False while editing an existing Family -- mixed create+edit is
+   * deferred (see the plan), so an edit draft can only reference
+   * already-existing people, not spawn a brand-new nested draft. */
+  allowNewPerson: boolean;
   onOpenNewPerson: () => void;
   onPickExisting: (item: QueryItem) => void;
   onRemoveChildDraft: () => void;
@@ -159,7 +163,7 @@ interface ParentSlotProps {
 }
 
 function ParentSlot({
-  label, field: _field, handle, childDraft, isChildOpen, pickedLabel,
+  label, field: _field, handle, childDraft, isChildOpen, pickedLabel, allowNewPerson,
   onOpenNewPerson, onPickExisting, onRemoveChildDraft, onRemovePicked, onReopenChildDraft,
 }: ParentSlotProps) {
   const [searching, setSearching] = useState(false);
@@ -217,9 +221,11 @@ function ParentSlot({
           <Button variant="default" size="xs" onClick={() => setSearching(true)}>
             Select existing…
           </Button>
-          <Button variant="default" size="xs" onClick={onOpenNewPerson}>
-            + New Person
-          </Button>
+          {allowNewPerson && (
+            <Button variant="default" size="xs" onClick={onOpenNewPerson}>
+              + New Person
+            </Button>
+          )}
         </Group>
       )}
     </Stack>
@@ -242,20 +248,75 @@ interface FamilyEditDialogProps {
   error: string | null;
 }
 
-/** The "New Family" dialog -- MVP fields only (father, mother, relationship
- * type). Each parent slot can point at an existing Person (picked via
- * PersonSearch) or spawn its own "New Person" dialog in the stack
- * (draftStack.ts's openDraft with openedFrom); see the plan's Save flow for
- * why Cancel here cascades to any such child drafts but Done on a child
- * draft doesn't. */
+/** The "New Family"/"Edit Family" dialog, depending on `draft.mode` --
+ * quick fields (father, mother, relationship type) plus a "> Details"
+ * disclosure (currently just privacy). Each parent slot can point at an
+ * existing Person (picked via PersonSearch) or, only while creating a new
+ * Family, spawn its own "New Person" dialog in the stack (draftStack.ts's
+ * openDraft with openedFrom) -- see the plan's Save flow for why Cancel
+ * here cascades to any such child drafts but Done on a child draft
+ * doesn't, and why editing an existing Family can't spawn one at all
+ * (mixed create+edit is deferred). */
 export function FamilyEditDialog({
   draft, opened, stack, openHandles, onChange, onOpenPersonDraft, onShowDraft, onCloseDraft, onCancel,
   primaryLabel, onPrimary, saving, error,
 }: FamilyEditDialogProps) {
   const [pickedLabels, setPickedLabels] = useState<Record<string, string>>({});
+  const [showDetails, setShowDetails] = useState(false);
+
+  // A freshly-opened edit draft's father_handle/mother_handle come straight
+  // off the server GET -- pickedLabels (only ever populated by an in-session
+  // PersonSearch pick) has no entry for either yet, which without this
+  // effect left ParentSlot showing "Select existing..." for an *already
+  // set* parent (falls through to the no-handle branch below, since that
+  // branch keys on pickedLabel being present, not on `handle` alone) --
+  // indistinguishable from an actually-empty slot, and one edit away from
+  // silently overwriting the wrong parent. Fetches a label for whichever of
+  // the two isn't already known, once.
+  useEffect(() => {
+    if (draft.mode !== "edit" || draft.status !== "ready") return;
+    const handles = [draft.data.father_handle, draft.data.mother_handle].filter(
+      (h): h is string => typeof h === "string" && h.length > 0 && !(h in pickedLabels)
+    );
+    if (handles.length === 0) return;
+    (async () => {
+      const token = await getToken();
+      for (const h of handles) {
+        const { page } = await fetchPage(PERSON_VIEW, token, null, false, `handle == "${h}"`);
+        const item = page.items[0];
+        if (item) setPickedLabels((prev) => ({ ...prev, [h]: personLabel(item) }));
+      }
+    })();
+    // pickedLabels deliberately excluded -- see the comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.mode, draft.status, draft.data.father_handle, draft.data.mother_handle]);
 
   function findChildDraft(field: ParentField): DraftEntry | undefined {
     return stack.find((d) => d.active && d.openedFrom?.handle === draft.handle && d.openedFrom.field === field);
+  }
+
+  const title = draft.mode === "edit" ? "Edit Family" : "New Family";
+
+  if (draft.status === "loading") {
+    return (
+      <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
+        <Group justify="center" py="md">
+          <Loader size="sm" />
+        </Group>
+      </Modal>
+    );
+  }
+  if (draft.status === "error") {
+    return (
+      <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
+        <Stack gap="md">
+          <Alert color="red" title="Could not load">{draft.loadError}</Alert>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onCancel}>Close</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    );
   }
 
   function slotProps(field: ParentField, label: string) {
@@ -268,6 +329,7 @@ export function FamilyEditDialog({
       childDraft,
       isChildOpen: childDraft ? openHandles.includes(childDraft.handle) : false,
       pickedLabel: handle ? (pickedLabels[handle] ?? null) : null,
+      allowNewPerson: draft.mode === "new",
       onOpenNewPerson: () => onOpenPersonDraft(field),
       onPickExisting: (item: QueryItem) => {
         setPickedLabels((prev) => ({ ...prev, [item.handle]: personLabel(item) }));
@@ -280,7 +342,7 @@ export function FamilyEditDialog({
   }
 
   return (
-    <Modal opened={opened} onClose={onCancel} title="New Family" size="lg" stackId={draft.handle}>
+    <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
       <Stack gap="lg">
         <ParentSlot {...slotProps("father_handle", "Father")} />
         <ParentSlot {...slotProps("mother_handle", "Mother")} />
@@ -293,6 +355,17 @@ export function FamilyEditDialog({
           allowDeselect={false}
           comboboxProps={{ withinPortal: true }}
         />
+
+        <Anchor component="button" type="button" size="sm" onClick={() => setShowDetails((v) => !v)}>
+          {showDetails ? "▾" : "▸"} Details
+        </Anchor>
+        <Collapse in={showDetails}>
+          <Switch
+            label="Private"
+            checked={Boolean(draft.data.private)}
+            onChange={(e) => onChange({ private: e.currentTarget.checked })}
+          />
+        </Collapse>
 
         {error && (
           <Alert color="red" title="Could not save">

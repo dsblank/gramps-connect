@@ -10,6 +10,8 @@
 // parents up by handle at that point in the transaction).
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { endpointBaseFor } from "./objectDetail";
+import type { ViewConfig } from "./views";
 
 export interface TransactionEntry {
   type: "add" | "update" | "delete";
@@ -42,4 +44,42 @@ export async function createObjects(
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return await res.json();
+}
+
+/** Plain GET of an object's editable-dict shape -- no `extend`/`profile`/
+ * `backlinks` params, unlike `objectDetail.ts`'s `fetchObjectExtended`
+ * (that one is fattened for display, with extra `extended`/`profile` keys
+ * a PUT shouldn't send back). Same bare-GET shape `notesApi.ts`'s
+ * `attachNoteToObject`/`toggleMessageDone` already inline before their own
+ * PUT; factored out here since it's now needed in more than one place
+ * (draftStack.ts's openEditDraft, PersonEditDialog's own birth/death Event
+ * fetch). */
+export async function fetchPlainObject(
+  token: string,
+  view: ViewConfig,
+  handle: string
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  return await res.json();
+}
+
+/** PUTs a full object dict back -- gramps-web-api's generic object PUT is a
+ * full replace, not a partial patch (same reasoning as jobsApi.ts's
+ * tagAndDescribeMedia and notesApi.ts's toggleMessageDone), so callers must
+ * have started from fetchPlainObject's result and mutated it in place. */
+export async function updateObject(
+  token: string,
+  view: ViewConfig,
+  handle: string,
+  data: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
 }

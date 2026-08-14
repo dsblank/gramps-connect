@@ -5,6 +5,7 @@ import { RelatedPanel } from "./RelatedPanel";
 import { RefMetaRow } from "./related/RefBadges";
 import { MediaGallery } from "./related/MediaGallery";
 import type { GalleryItem, OnNavigate } from "./related/types";
+import type { UseDraftStack } from "../store/draftStack";
 
 export type SubSelection =
   | { kind: "object"; type: string; handle: string; refMeta?: RefMeta }
@@ -18,6 +19,9 @@ interface ReferenceDetailProps {
   /** Passed straight through to whichever body this renders -- see
    * RelatedPanel's `flow`. */
   flow?: boolean;
+  /** Passed straight through to the nested RelatedPanel -- see its own
+   * `draftStack` doc comment. */
+  draftStack?: UseDraftStack;
 }
 
 /** The lower-right pane: whatever was clicked in the upper pane's
@@ -25,7 +29,7 @@ interface ReferenceDetailProps {
  * metadata plus its own RelatedPanel, reused unchanged) or, from
  * MediaSection's "view gallery" link, a grid of every photo attached to a
  * record too large to expand inline (see MediaSection's doc comment). */
-export function ReferenceDetail({ subSelection, onPromote, flow }: ReferenceDetailProps) {
+export function ReferenceDetail({ subSelection, onPromote, flow, draftStack }: ReferenceDetailProps) {
   if (!subSelection) {
     return (
       <Stack p="md">
@@ -74,7 +78,9 @@ export function ReferenceDetail({ subSelection, onPromote, flow }: ReferenceDeta
             No onViewGallery here -- see RelatedPanelProps' doc comment on
             why the bottom pane's own Media sections fall back to a plain
             count instead. */}
-        <RelatedPanel view={view} handle={handle} revision={0} onNavigate={onPromote} flow={flow} />
+        <RelatedPanel
+          view={view} handle={handle} draftStack={draftStack} revision={0} onNavigate={onPromote} flow={flow}
+        />
       </div>
     </Stack>
   );

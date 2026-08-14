@@ -1,8 +1,11 @@
-// State for the stacked create-dialog flow -- see the plan this implements
-// (eager-booping-galaxy.md): any number of not-yet-saved Person/Family
-// objects, editable as separate floating dialogs (EditDialogs.tsx), saved
-// together in one atomic POST /api/objects/ (objectsApi.ts) rather than one
-// request per dialog.
+// State for the stacked create/edit dialog flow -- see the plan this
+// implements (eager-booping-galaxy.md): any number of open Person/Family
+// drafts, each either a not-yet-saved new object or an in-progress edit of
+// an existing one, editable as separate floating dialogs (EditDialogs.tsx).
+// A save of only-new drafts goes through one atomic POST /api/objects/
+// (objectsApi.ts); an edit draft is a single PUT of the whole object,
+// preceded by any small "extra objects" it needs first (currently just a
+// Person's birth/death Event -- see DraftEntry.extraCreate/extraUpdate).
 //
 // Plain React state + a co-located hook, not a class+subscribe()/
 // getSnapshot() store like viewStore.ts -- that pattern is reserved in this
@@ -12,18 +15,39 @@
 import { useState } from "react";
 import { getToken } from "../auth/auth";
 import { getViewStore } from "./registry";
-import { createHandle, createObjects } from "./objectsApi";
+import { createHandle, createObjects, fetchPlainObject, updateObject } from "./objectsApi";
+import { EVENT_VIEW, FAMILY_VIEW, PERSON_VIEW, type ViewConfig } from "./views";
 
 export type DraftType = "person" | "family";
 
+const VIEW_BY_TYPE: Record<DraftType | "event", ViewConfig> = {
+  person: PERSON_VIEW,
+  family: FAMILY_VIEW,
+  event: EVENT_VIEW,
+};
+
 export interface DraftEntry {
-  /** Client-generated up front (createHandle()) -- this *is* the object's
-   * eventual Gramps handle, chosen before it exists on the server, so
-   * another draft can reference it (e.g. a Family's father_handle) before
-   * either is saved. No separate temp-id/real-id resolution step. */
+  /** For a "new" draft, client-generated up front (createHandle()) -- this
+   * *is* the object's eventual Gramps handle, chosen before it exists on
+   * the server, so another draft can reference it (e.g. a Family's
+   * father_handle) before either is saved. For an "edit" draft, the real
+   * handle of the object being edited. Either way, no separate temp-id/
+   * real-id resolution step. */
   handle: string;
   type: DraftType;
-  /** Partial Gramps object dict, in the shape POST /api/objects/ expects. */
+  /** "new": save creates it (POST /api/objects/). "edit": save PUTs the
+   * whole object back. Mixed create+edit (an edit draft spawning a nested
+   * "+ New Person") is deferred -- see the plan -- so an "edit" draft never
+   * has `openedFrom` and never appears in another draft's extraCreate. */
+  mode: "new" | "edit";
+  /** "loading" only while an edit draft's initial GET is in flight;
+   * "error" if that GET failed (loadError carries the message) -- either
+   * way the dialog withholds its form/Save button until "ready". A "new"
+   * draft is "ready" immediately (its default data is synchronous). */
+  status: "loading" | "ready" | "error";
+  loadError?: string;
+  /** Partial (new) or full (edit) Gramps object dict, in the shape the
+   * relevant endpoint expects. */
   data: Record<string, unknown>;
   /** Set only when this draft was opened from a field on another draft
    * (e.g. a Family's "+ New Person" on Father) -- lets Cancel on this
@@ -36,6 +60,13 @@ export interface DraftEntry {
    * module's doc comment on Mantine's ModalStack for why unmounting a
    * registered Modal is unsafe. */
   active: boolean;
+  /** Extra objects this draft's save must also create/update first --
+   * currently only used by PersonEditDialog for a birth/death Event, kept
+   * generic (not Person-specific) so a future field with the same "linked
+   * object" shape doesn't need new draftStack plumbing. Populated via
+   * setExtraObjects(); untouched by openDraft/openEditDraft. */
+  extraCreate: Record<string, unknown>[];
+  extraUpdate: { type: DraftType | "event"; handle: string; data: Record<string, unknown> }[];
 }
 
 function defaultDataFor(type: DraftType, handle: string): Record<string, unknown> {
@@ -60,7 +91,8 @@ function defaultDataFor(type: DraftType, handle: string): Record<string, unknown
  * at one of `handle`'s fields) must precede it in the save array -- see
  * objectsApi.ts's doc comment on why. Recurses so nesting deeper than one
  * level (not used by this plan's MVP dialogs, but not precluded by the data
- * model either) still orders correctly. */
+ * model either) still orders correctly. Only ever called with "new" drafts
+ * -- an "edit" draft is saved by its own PUT, not folded into this array. */
 function orderedForSave(drafts: DraftEntry[]): DraftEntry[] {
   const visited = new Set<string>();
   const ordered: DraftEntry[] = [];
@@ -86,16 +118,29 @@ export interface UseDraftStack {
   /** Which drafts currently show as an open (vs. hidden) dialog. */
   openHandles: string[];
   openDraft: (type: DraftType, openedFrom?: DraftEntry["openedFrom"]) => string;
+  /** Opens a draft for editing an existing object: fetches its current
+   * plain (non-extended) dict and fills the draft in once it lands. Always
+   * top-level (no `openedFrom` param) -- mixed create+edit is deferred. */
+  openEditDraft: (type: DraftType, handle: string) => void;
   showDraft: (handle: string) => void;
   hideDraft: (handle: string) => void;
   updateDraft: (handle: string, patch: Record<string, unknown>) => void;
+  /** Wholesale-replaces a draft's extraCreate/extraUpdate -- see
+   * DraftEntry's doc comment. Simplest correct behavior for a field that
+   * can go from empty -> filled -> edited -> filled differently. */
+  setExtraObjects: (
+    handle: string,
+    extra: { create: Record<string, unknown>[]; update: DraftEntry["extraUpdate"] }
+  ) => void;
   /** Discards a draft and, recursively, every draft opened from it (marks
    * them inactive and hides them); if it was itself opened from a parent
    * field, clears that field back out. */
   closeDraft: (handle: string) => void;
-  /** Saves every *active* draft in one POST /api/objects/, in dependency
-   * order. Not scoped to whichever dialog's Save button was clicked --
-   * there's only ever one pending save, covering every open draft. */
+  /** Saves every *active* draft. "new" drafts go together in one atomic
+   * POST /api/objects/, in dependency order; each "edit" draft is its own
+   * PUT (preceded by its own extraCreate/extraUpdate), sequentially. Not
+   * scoped to whichever dialog's Save button was clicked -- there's only
+   * ever one pending save, covering every open draft. */
   saveAll: () => Promise<void>;
   saving: boolean;
   error: string | null;
@@ -109,7 +154,10 @@ export function useDraftStack(): UseDraftStack {
 
   function openDraft(type: DraftType, openedFrom?: DraftEntry["openedFrom"]): string {
     const handle = createHandle();
-    const entry: DraftEntry = { handle, type, data: defaultDataFor(type, handle), openedFrom, active: true };
+    const entry: DraftEntry = {
+      handle, type, mode: "new", status: "ready", data: defaultDataFor(type, handle), openedFrom, active: true,
+      extraCreate: [], extraUpdate: [],
+    };
     setStack((prev) => {
       const next = [...prev, entry];
       if (!openedFrom) return next;
@@ -119,6 +167,26 @@ export function useDraftStack(): UseDraftStack {
     });
     setOpenHandles((prev) => [...prev, handle]);
     return handle;
+  }
+
+  function openEditDraft(type: DraftType, handle: string) {
+    const entry: DraftEntry = {
+      handle, type, mode: "edit", status: "loading", data: {}, active: true, extraCreate: [], extraUpdate: [],
+    };
+    setStack((prev) => [...prev, entry]);
+    setOpenHandles((prev) => [...prev, handle]);
+
+    (async () => {
+      try {
+        const token = await getToken();
+        const data = await fetchPlainObject(token, VIEW_BY_TYPE[type], handle);
+        setStack((prev) => prev.map((d) => (d.handle === handle ? { ...d, data, status: "ready" } : d)));
+      } catch (err: any) {
+        setStack((prev) =>
+          prev.map((d) => (d.handle === handle ? { ...d, status: "error", loadError: err.message ?? String(err) } : d))
+        );
+      }
+    })();
   }
 
   function showDraft(handle: string) {
@@ -131,6 +199,15 @@ export function useDraftStack(): UseDraftStack {
 
   function updateDraft(handle: string, patch: Record<string, unknown>) {
     setStack((prev) => prev.map((d) => (d.handle === handle ? { ...d, data: { ...d.data, ...patch } } : d)));
+  }
+
+  function setExtraObjects(
+    handle: string,
+    extra: { create: Record<string, unknown>[]; update: DraftEntry["extraUpdate"] }
+  ) {
+    setStack((prev) =>
+      prev.map((d) => (d.handle === handle ? { ...d, extraCreate: extra.create, extraUpdate: extra.update } : d))
+    );
   }
 
   function closeDraft(handle: string) {
@@ -159,16 +236,34 @@ export function useDraftStack(): UseDraftStack {
     setError(null);
     try {
       const token = await getToken();
-      const ordered = orderedForSave(stack.filter((d) => d.active));
-      await createObjects(
-        token,
-        ordered.map((d) => d.data)
-      );
+      const active = stack.filter((d) => d.active);
+      const newDrafts = orderedForSave(active.filter((d) => d.mode === "new"));
+      const editDrafts = active.filter((d) => d.mode === "edit");
+
+      const createBatch = newDrafts.flatMap((d) => [...d.extraCreate, d.data]);
+      if (createBatch.length > 0) {
+        await createObjects(token, createBatch);
+      }
+
+      for (const draft of editDrafts) {
+        if (draft.extraCreate.length > 0) {
+          await createObjects(token, draft.extraCreate);
+        }
+        for (const upd of draft.extraUpdate) {
+          await updateObject(token, VIEW_BY_TYPE[upd.type], upd.handle, upd.data);
+        }
+        await updateObject(token, VIEW_BY_TYPE[draft.type], draft.handle, draft.data);
+      }
+
       // Immediate feedback for the author, rather than waiting on
       // historyPoll's next tick (same reasoning as MessageComposer.tsx).
-      const tables = new Set(ordered.map((d) => d.type));
-      if (tables.has("person")) getViewStore("person").requeryDebounced();
-      if (tables.has("family")) getViewStore("family").requeryDebounced();
+      const touchedTypes = new Set([...newDrafts.map((d) => d.type), ...editDrafts.map((d) => d.type)]);
+      const touchedEvents = [...newDrafts, ...editDrafts].some(
+        (d) => d.extraCreate.length > 0 || d.extraUpdate.length > 0
+      );
+      if (touchedTypes.has("person")) getViewStore("person").requeryDebounced();
+      if (touchedTypes.has("family")) getViewStore("family").requeryDebounced();
+      if (touchedEvents) getViewStore("event").requeryDebounced();
       setStack([]);
       setOpenHandles([]);
     } catch (err: any) {
@@ -178,5 +273,8 @@ export function useDraftStack(): UseDraftStack {
     }
   }
 
-  return { stack, openHandles, openDraft, showDraft, hideDraft, updateDraft, closeDraft, saveAll, saving, error };
+  return {
+    stack, openHandles, openDraft, openEditDraft, showDraft, hideDraft, updateDraft, setExtraObjects, closeDraft,
+    saveAll, saving, error,
+  };
 }

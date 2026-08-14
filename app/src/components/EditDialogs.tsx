@@ -10,7 +10,9 @@ interface EditDialogsProps {
 /** Renders every draft opened this session (draftStack.stack) as a Modal
  * inside a Mantine Modal.Stack, so a "New Family" dialog and any "New
  * Person" dialogs it spawned can all be open -- and independently
- * clickable to the front -- at once.
+ * clickable to the front -- at once. A draft's own `mode`/`status`
+ * (draftStack.ts) decide what each dialog renders (New vs. Edit title,
+ * loading/error state) -- this component just wires callbacks through.
  *
  * Renders unconditionally over the whole stack, not just the open ones
  * (openHandles only controls each Modal's `opened` prop): Mantine's
@@ -26,8 +28,10 @@ interface EditDialogsProps {
  * result down, the same "state lives with whoever mounts the dialog"
  * convention every other dialog here follows. */
 export function EditDialogs({ draftStack }: EditDialogsProps) {
-  const { stack, openHandles, openDraft, showDraft, hideDraft, updateDraft, closeDraft, saveAll, saving, error } =
-    draftStack;
+  const {
+    stack, openHandles, openDraft, showDraft, hideDraft, updateDraft, setExtraObjects, closeDraft, saveAll, saving,
+    error,
+  } = draftStack;
 
   return (
     <Modal.Stack>
@@ -45,6 +49,7 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
               draft={draft}
               opened={opened}
               onChange={(patch) => updateDraft(handle, patch)}
+              onSetExtraObjects={(extra) => setExtraObjects(handle, extra)}
               onCancel={() => closeDraft(handle)}
               primaryLabel={primaryLabel}
               onPrimary={onPrimary}
