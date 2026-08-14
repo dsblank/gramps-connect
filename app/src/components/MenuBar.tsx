@@ -11,6 +11,7 @@ import { SystemInfoDialog } from "./SystemInfoDialog";
 import { AboutDialog } from "./AboutDialog";
 import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
+import type { UseDraftStack } from "../store/draftStack";
 
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
 // at ROLE_OWNER and above.
@@ -26,13 +27,17 @@ const PERM_DEL_OBJ_BATCH = "BatchDeleteObjects";
 // ROLE_CONTRIBUTOR) -- so a contributor, who could upload the file but not
 // then tag it, is correctly excluded too.
 const PERM_EDIT_OBJ = "EditObject";
+// Creating a Person needs only this. Creating a Family needs it *and*
+// EditObject -- families.py's FamiliesResource.post() checks both, because
+// adding a Family also rewrites its parents' Person records (family_list).
+const PERM_ADD_OBJ = "AddObject";
 
 interface MenuItemSpec {
   label: string;
-  /** gramps-web-api permission name required to show this item (see
+  /** gramps-web-api permission name(s) required to show this item (see
    * auth/const.py's PERMISSIONS map) -- omitted means every logged-in user
-   * sees it. */
-  perm?: string;
+   * sees it; an array requires all of them. */
+  perm?: string | string[];
   onClick?: () => void;
   /** Renders a divider above this item -- used to set a destructive action
    * apart from the rest of its menu. */
@@ -85,7 +90,9 @@ function AppMenuItem({ item }: { item: MenuItemSpec }) {
  * disappearing or being unclickable -- keeps the bar's layout stable as
  * items land menu by menu instead of the whole row reflowing each time. */
 function AppMenu({ label, items, onOpen }: AppMenuProps) {
-  const visibleItems = items.filter((item) => !item.perm || hasPermissions(item.perm));
+  const visibleItems = items.filter(
+    (item) => !item.perm || hasPermissions(...(Array.isArray(item.perm) ? item.perm : [item.perm]))
+  );
   return (
     <Menu shadow="md" width={200} position="bottom-start" onOpen={onOpen}>
       <Menu.Target>
@@ -154,9 +161,19 @@ function goTo(viewKey: string) {
 
 /** The desktop-Gramps-style menu bar, following ~/gramps/gramps'
  * viewmanager.py menu layout and order. Only the menus with something in
- * them are shown: desktop Gramps' Add, Edit and Tools are left out until
- * they have items, rather than standing empty ("Nothing here yet"). */
-export function MenuBar() {
+ * them are shown: desktop Gramps' Edit and Tools are left out until they
+ * have items, rather than standing empty ("Nothing here yet"). Add now has
+ * its first two items -- New Person/Family, opening the stacked create
+ * dialogs in EditDialogs.tsx (see draftStack.ts). */
+interface MenuBarProps {
+  /** Owned by App.tsx, not here -- see its doc comment on why: the header
+   * swaps between two MenuBar instances on resize, and only one is ever
+   * mounted at a time, so state local to this component wouldn't survive
+   * that. */
+  draftStack: UseDraftStack;
+}
+
+export function MenuBar({ draftStack }: MenuBarProps) {
   const [importOpened, setImportOpened] = useState(false);
   const [importMediaOpened, setImportMediaOpened] = useState(false);
   const [exportOpened, setExportOpened] = useState(false);
@@ -211,6 +228,17 @@ export function MenuBar() {
               onClick: () => setDeleteAllOpened(true),
               separatorBefore: true,
               danger: true,
+            },
+          ]}
+        />
+        <AppMenu
+          label="Add"
+          items={[
+            { label: "New Person…", perm: PERM_ADD_OBJ, onClick: () => draftStack.openDraft("person") },
+            {
+              label: "New Family…",
+              perm: [PERM_ADD_OBJ, PERM_EDIT_OBJ],
+              onClick: () => draftStack.openDraft("family"),
             },
           ]}
         />

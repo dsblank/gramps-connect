@@ -23,6 +23,8 @@ import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep } from "./store/jobsPoll";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
+import { useDraftStack } from "./store/draftStack";
+import { EditDialogs } from "./components/EditDialogs";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 
 export function App() {
@@ -73,6 +75,12 @@ const VISUAL_STATUS_VIEW: Record<VisualKey, ViewConfig> = {
 function AuthenticatedApp() {
   const { activeKey, setActiveKey, visualSubject } = useHistorySync();
   const liveSyncStatus = useLiveSync(onRemoteNoteChange);
+  // Lifted above MenuBar (rather than MenuBar calling this itself) because
+  // the header below swaps between two MenuBar instances on resize --
+  // stacked vs. side-by-side -- and only one is ever mounted at a time.
+  // State owned by MenuBar itself would vanish (mid-edit!) on a resize that
+  // crosses STACKED_QUERY's breakpoint; state owned here survives it.
+  const draftStack = useDraftStack();
   // #/map and #/timeline are pages in their own right rather than VIEWS
   // entries -- each takes over the whole content area (table *and* detail
   // panes) for one whole-tree plot; see hash.ts.
@@ -133,132 +141,137 @@ function AuthenticatedApp() {
   }, []);
 
   return (
-    <AppShell
-      header={{ height: stacked ? HEADER_HEIGHT_STACKED : HEADER_HEIGHT }}
-      // breakpoint 0 on both = never let AppShell switch them into its own
-      // "mobile" mode, where a navbar/aside becomes 100% wide, drops its
-      // Main offset, and so covers the content outright (position: fixed).
-      // That's exactly what used to hide the table on a narrow window: the
-      // aside painted over the whole of Main. Narrow is handled by
-      // `stacked` below instead -- the icon rail just stays a rail, and
-      // the aside is dropped rather than overlaid.
-      navbar={{ width: 68, breakpoint: 0 }}
-      // No aside on a visual page either: a map of every place at once
-      // isn't another way of looking at one selected record, so there's
-      // nothing for the detail panes to show beside it, and the plot wants
-      // the width. Clicking a marker or a dot navigates to that record in
-      // Places or Events, where they take over again.
-      aside={stacked || visualKey ? undefined : { width: "50%", breakpoint: 0 }}
-      // Stacked: no docked footer either. A permanently pinned 36px strip
-      // is a poor trade for vertical space that's already scarce, and it's
-      // what pane 3 was ending up jammed against -- the same StatusBar
-      // renders at the end of Main instead, scrolling in when wanted.
-      footer={stacked ? undefined : { height: FOOTER_HEIGHT }}
-      padding="md"
-    >
-      <AppShell.Header>
-        {stacked ? (
-          // Two rows. Side by side, the wordmark + seven menus + avatar
-          // stop fitting somewhere around 650px, and a Group answers that
-          // by wrapping -- straight down through the header's fixed height
-          // and behind the search box below it. Give the bar a row of its
-          // own instead (HEADER_HEIGHT_STACKED covers both).
-          <Stack gap={0} h="100%">
-            <Group h={HEADER_HEIGHT} px="md" justify="space-between" wrap="nowrap">
-              {wordmark}
+    <>
+      <AppShell
+        header={{ height: stacked ? HEADER_HEIGHT_STACKED : HEADER_HEIGHT }}
+        // breakpoint 0 on both = never let AppShell switch them into its own
+        // "mobile" mode, where a navbar/aside becomes 100% wide, drops its
+        // Main offset, and so covers the content outright (position: fixed).
+        // That's exactly what used to hide the table on a narrow window: the
+        // aside painted over the whole of Main. Narrow is handled by
+        // `stacked` below instead -- the icon rail just stays a rail, and
+        // the aside is dropped rather than overlaid.
+        navbar={{ width: 68, breakpoint: 0 }}
+        // No aside on a visual page either: a map of every place at once
+        // isn't another way of looking at one selected record, so there's
+        // nothing for the detail panes to show beside it, and the plot wants
+        // the width. Clicking a marker or a dot navigates to that record in
+        // Places or Events, where they take over again.
+        aside={stacked || visualKey ? undefined : { width: "50%", breakpoint: 0 }}
+        // Stacked: no docked footer either. A permanently pinned 36px strip
+        // is a poor trade for vertical space that's already scarce, and it's
+        // what pane 3 was ending up jammed against -- the same StatusBar
+        // renders at the end of Main instead, scrolling in when wanted.
+        footer={stacked ? undefined : { height: FOOTER_HEIGHT }}
+        padding="md"
+      >
+        <AppShell.Header>
+          {stacked ? (
+            // Two rows. Side by side, the wordmark + seven menus + avatar
+            // stop fitting somewhere around 650px, and a Group answers that
+            // by wrapping -- straight down through the header's fixed height
+            // and behind the search box below it. Give the bar a row of its
+            // own instead (HEADER_HEIGHT_STACKED covers both).
+            <Stack gap={0} h="100%">
+              <Group h={HEADER_HEIGHT} px="md" justify="space-between" wrap="nowrap">
+                {wordmark}
+                <UserMenu />
+              </Group>
+              {/* Seven menus still outgrow a phone-width row, so that row
+                  scrolls sideways -- MenuBar itself never wraps. */}
+              <Box
+                px="md"
+                style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", overflowX: "auto" }}
+              >
+                <MenuBar draftStack={draftStack} />
+              </Box>
+            </Stack>
+          ) : (
+            <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+              <Group gap="lg" wrap="nowrap">
+                {wordmark}
+                <MenuBar draftStack={draftStack} />
+              </Group>
               <UserMenu />
             </Group>
-            {/* Seven menus still outgrow a phone-width row, so that row
-                scrolls sideways -- MenuBar itself never wraps. */}
+          )}
+        </AppShell.Header>
+
+        <AppShell.Navbar>
+          <Sidebar activeKey={activeKey} onSelect={setActiveKey} />
+        </AppShell.Navbar>
+
+        <AppShell.Main>
+          {/* A visual page instead of the table and its panes -- one plot,
+              the height of the window (see visualHeight above), with the
+              footer below it as usual. Mounted only while it's the active
+              route: each holds a derived copy of a few thousand rows, and the
+              map a live WebGL context, so leaving one shouldn't leave that
+              sitting in the tree. */}
+          {visualKey === "map" && <Box style={{ height: visualHeight }}><MapView subject={visualSubject} /></Box>}
+          {visualKey === "timeline" && (
+            <Box style={{ height: visualHeight }}><TimelineView subject={visualSubject} /></Box>
+          )}
+          {/* Keyed by view.key so switching views remounts fresh local state
+              (filter input/error, scroll position) rather than carrying it
+              over from the previous view. Prefixed distinctly per element --
+              React requires keys to be unique only among *siblings*, and
+              these two are both direct children of the same fragment; reusing
+              the bare view.key for both produced a real bug (a "duplicate
+              key" warning, and FilterBar instances piling up instead of
+              unmounting) caught by an end-to-end smoke test. */}
+          {view && <FilterBar key={`filter-${view.key}`} view={view} />}
+          {view?.key === "messages" && <MessageComposer key={`compose-${view.key}`} />}
+          {view && <DataTable key={`table-${view.key}`} view={view} />}
+          {/* Stacked layout only -- the same panes the aside holds when
+              there's width for it, but in `flow` mode: no height of their
+              own, no scrollbars of their own, just as tall as their content
+              needs with the page carrying all of it. Bordered to match the
+              table above it, since inside Main they no longer have the
+              aside's own edge to separate them. */}
+          {stacked && view && (
             <Box
-              px="md"
-              style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", overflowX: "auto" }}
+              mt="md"
+              style={{ border: "1px solid var(--mantine-color-default-border)" }}
             >
-              <MenuBar />
+              <AsideSplit key={`detail-${view.key}`} view={view} flow />
             </Box>
-          </Stack>
-        ) : (
-          <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-            <Group gap="lg" wrap="nowrap">
-              {wordmark}
-              <MenuBar />
-            </Group>
-            <UserMenu />
-          </Group>
-        )}
-      </AppShell.Header>
+          )}
+          {/* In flow rather than docked (see the footer config above), and
+              bled back out through Main's padding so it still reads as the
+              same full-width strip. It ends up at the foot of a page as long
+              as the panes make it, which is the trade being made: load
+              progress and sync state stop occupying 36px of a narrow
+              viewport permanently, and are read by scrolling to the end. */}
+          {stacked && (
+            <Box
+              style={{
+                height: FOOTER_HEIGHT,
+                marginTop: "var(--mantine-spacing-md)",
+                marginInline: "calc(var(--mantine-spacing-md) * -1)",
+                borderTop: "1px solid var(--mantine-color-default-border)",
+              }}
+            >
+              <StatusBar view={statusView} liveSyncStatus={liveSyncStatus} />
+            </Box>
+          )}
+        </AppShell.Main>
 
-      <AppShell.Navbar>
-        <Sidebar activeKey={activeKey} onSelect={setActiveKey} />
-      </AppShell.Navbar>
+        {!stacked && view && (
+          <AppShell.Aside>
+            <AsideSplit key={`detail-${view.key}`} view={view} />
+          </AppShell.Aside>
+        )}
 
-      <AppShell.Main>
-        {/* A visual page instead of the table and its panes -- one plot,
-            the height of the window (see visualHeight above), with the
-            footer below it as usual. Mounted only while it's the active
-            route: each holds a derived copy of a few thousand rows, and the
-            map a live WebGL context, so leaving one shouldn't leave that
-            sitting in the tree. */}
-        {visualKey === "map" && <Box style={{ height: visualHeight }}><MapView subject={visualSubject} /></Box>}
-        {visualKey === "timeline" && (
-          <Box style={{ height: visualHeight }}><TimelineView subject={visualSubject} /></Box>
-        )}
-        {/* Keyed by view.key so switching views remounts fresh local state
-            (filter input/error, scroll position) rather than carrying it
-            over from the previous view. Prefixed distinctly per element --
-            React requires keys to be unique only among *siblings*, and
-            these two are both direct children of the same fragment; reusing
-            the bare view.key for both produced a real bug (a "duplicate
-            key" warning, and FilterBar instances piling up instead of
-            unmounting) caught by an end-to-end smoke test. */}
-        {view && <FilterBar key={`filter-${view.key}`} view={view} />}
-        {view?.key === "messages" && <MessageComposer key={`compose-${view.key}`} />}
-        {view && <DataTable key={`table-${view.key}`} view={view} />}
-        {/* Stacked layout only -- the same panes the aside holds when
-            there's width for it, but in `flow` mode: no height of their
-            own, no scrollbars of their own, just as tall as their content
-            needs with the page carrying all of it. Bordered to match the
-            table above it, since inside Main they no longer have the
-            aside's own edge to separate them. */}
-        {stacked && view && (
-          <Box
-            mt="md"
-            style={{ border: "1px solid var(--mantine-color-default-border)" }}
-          >
-            <AsideSplit key={`detail-${view.key}`} view={view} flow />
-          </Box>
-        )}
-        {/* In flow rather than docked (see the footer config above), and
-            bled back out through Main's padding so it still reads as the
-            same full-width strip. It ends up at the foot of a page as long
-            as the panes make it, which is the trade being made: load
-            progress and sync state stop occupying 36px of a narrow
-            viewport permanently, and are read by scrolling to the end. */}
-        {stacked && (
-          <Box
-            style={{
-              height: FOOTER_HEIGHT,
-              marginTop: "var(--mantine-spacing-md)",
-              marginInline: "calc(var(--mantine-spacing-md) * -1)",
-              borderTop: "1px solid var(--mantine-color-default-border)",
-            }}
-          >
+        {!stacked && (
+          <AppShell.Footer>
             <StatusBar view={statusView} liveSyncStatus={liveSyncStatus} />
-          </Box>
+          </AppShell.Footer>
         )}
-      </AppShell.Main>
-
-      {!stacked && view && (
-        <AppShell.Aside>
-          <AsideSplit key={`detail-${view.key}`} view={view} />
-        </AppShell.Aside>
-      )}
-
-      {!stacked && (
-        <AppShell.Footer>
-          <StatusBar view={statusView} liveSyncStatus={liveSyncStatus} />
-        </AppShell.Footer>
-      )}
-    </AppShell>
+      </AppShell>
+      {/* Lives outside AppShell, not inside either MenuBar instance --
+          see draftStack's doc comment above for why. */}
+      <EditDialogs draftStack={draftStack} />
+    </>
   );
 }
