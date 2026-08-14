@@ -2,6 +2,7 @@ import { getToken, hasPermissions } from "../../../auth/auth";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { CITATION_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
+import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
 import type { SectionProps } from "../types";
 
@@ -13,7 +14,9 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
   const canAttach = hasPermissions("EditObject");
   if (rows.length === 0 && !canAttach) return null;
 
-  async function handleRemove(handle: string) {
+  async function handleRemove(handle: string, target: unknown) {
+    const summary = summaryLine("citation", target) || "this citation";
+    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the citation itself.`)) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "citation_list", handle);
     onRefetch?.();
@@ -28,7 +31,7 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
           handle={handle}
           obj={target}
           onNavigate={onNavigate}
-          onRemove={canAttach ? () => handleRemove(handle) : undefined}
+          onRemove={canAttach ? () => handleRemove(handle, target) : undefined}
         />
       ))}
       {canAttach && (

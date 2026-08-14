@@ -19,7 +19,8 @@ export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProp
   const canAttach = hasPermissions("EditObject");
   if (rows.length === 0 && !canAttach) return null;
 
-  async function handleRemove(handle: string) {
+  async function handleRemove(handle: string, name: string) {
+    if (!window.confirm(`Remove the tag "${name}" from this ${view.key}? This does not delete the tag itself.`)) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "tag_list", handle);
     onRefetch?.();
@@ -44,7 +45,7 @@ export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProp
                   size={14}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleRemove(handle);
+                    handleRemove(handle, target?.name ?? handle);
                   }}
                 />
               ) : undefined

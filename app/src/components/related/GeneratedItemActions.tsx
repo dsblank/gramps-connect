@@ -79,7 +79,7 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
         }
       }
 
-      if (isExport && window.confirm("Delete the export?")) {
+      if (isExport && window.confirm(`Delete the export "${fileName ?? detail.handle}"? There is no undo.`)) {
         await deleteMedia(token, detail.handle);
         setDeleted(true);
       }

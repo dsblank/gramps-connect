@@ -70,7 +70,9 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   const messageRows = rows.filter(({ target }) => isMessage(target));
   const canAttach = hasPermissions("EditObject");
 
-  async function handleRemove(handle: string) {
+  async function handleRemove(handle: string, target: RawNote) {
+    const summary = summaryLine("note", target) || "this note";
+    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the note itself.`)) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "note_list", handle);
     onRefetch?.();
@@ -87,7 +89,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
               handle={handle}
               obj={target}
               onNavigate={onNavigate}
-              onRemove={canAttach ? () => handleRemove(handle) : undefined}
+              onRemove={canAttach ? () => handleRemove(handle, target) : undefined}
             />
           ))}
           {canAttach && (

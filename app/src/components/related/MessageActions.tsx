@@ -4,6 +4,7 @@ import { getToken } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
 import { toggleMessageDone, deleteMessage } from "../../store/notesApi";
 import type { ObjectDetail } from "../../store/objectDetail";
+import { summaryLine } from "./summary";
 import { zipHandles } from "./sections/shared";
 
 /** Mark done/Reopen + delete for a message, in RelatedPanel's
@@ -38,7 +39,8 @@ export function MessageActions({ detail, onToggled }: { detail: ObjectDetail; on
   }
 
   async function handleDelete() {
-    if (!window.confirm("Delete this message?")) return;
+    const summary = summaryLine("messages", detail) || "this message";
+    if (!window.confirm(`Delete ${summary}? There is no undo.`)) return;
     setError(null);
     try {
       const token = await getToken();
