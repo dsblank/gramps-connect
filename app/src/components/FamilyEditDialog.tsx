@@ -4,6 +4,7 @@ import {
 } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "./CircleGlyphButton";
+import { AttributeListField, type Attribute } from "./EmbeddedListFields";
 import { fetchPage, type QueryItem } from "../store/api";
 import { buildPersonSearchExpr } from "../store/personSearch";
 import { PERSON_VIEW } from "../store/views";
@@ -379,11 +380,17 @@ export function FamilyEditDialog({
           {showDetails ? "▾" : "▸"} Details
         </Anchor>
         <Collapse in={showDetails}>
-          <Switch
-            label="Private"
-            checked={Boolean(draft.data.private)}
-            onChange={(e) => onChange({ private: e.currentTarget.checked })}
-          />
+          <Stack gap="md">
+            <Switch
+              label="Private"
+              checked={Boolean(draft.data.private)}
+              onChange={(e) => onChange({ private: e.currentTarget.checked })}
+            />
+            <AttributeListField
+              items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
+              onChange={(items) => onChange({ attribute_list: items })}
+            />
+          </Stack>
         </Collapse>
 
         {error && (

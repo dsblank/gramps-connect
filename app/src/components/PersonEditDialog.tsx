@@ -8,6 +8,9 @@ import { createHandle, fetchPlainObject } from "../store/objectsApi";
 import { EVENT_VIEW } from "../store/views";
 import type { DraftEntry } from "../store/draftStack";
 import { SimpleDateInput } from "./SimpleDateInput";
+import {
+  AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
+} from "./EmbeddedListFields";
 
 // Person.{FEMALE,MALE,UNKNOWN,OTHER} (gramps/gen/lib/person.py) -- gender is
 // a plain integer on the wire, not a GrampsType struct.
@@ -235,6 +238,18 @@ export function PersonEditDialog({
               label="Private"
               checked={Boolean(draft.data.private)}
               onChange={(e) => onChange({ private: e.currentTarget.checked })}
+            />
+            <AttributeListField
+              items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
+              onChange={(items) => onChange({ attribute_list: items })}
+            />
+            <AddressListField
+              items={(draft.data.address_list as Address[] | undefined) ?? []}
+              onChange={(items) => onChange({ address_list: items })}
+            />
+            <UrlListField
+              items={(draft.data.urls as Url[] | undefined) ?? []}
+              onChange={(items) => onChange({ urls: items })}
             />
           </Stack>
         </Collapse>

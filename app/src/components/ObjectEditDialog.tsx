@@ -10,6 +10,9 @@ import { PLACE_VIEW, SOURCE_VIEW } from "../store/views";
 import { DRAFT_TYPE_LABELS, type DraftEntry, type DraftType } from "../store/draftStack";
 import { SimpleDateInput } from "./SimpleDateInput";
 import { RecordPicker } from "./RecordPicker";
+import {
+  AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
+} from "./EmbeddedListFields";
 import type { ViewConfig } from "../store/views";
 
 type FieldSpec =
@@ -20,17 +23,25 @@ type FieldSpec =
   | { kind: "date"; key: string; label: string }
   | { kind: "placeName"; label: string }
   | { kind: "styledText"; key: string; label: string }
-  | { kind: "reference"; key: string; label: string; refView: ViewConfig; refField: string; required?: boolean };
+  | { kind: "reference"; key: string; label: string; refView: ViewConfig; refField: string; required?: boolean }
+  | { kind: "attributeList"; key: string; label: string }
+  | { kind: "addressList"; key: string; label: string }
+  | { kind: "urlList"; key: string; label: string };
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 
 // One entry per type ObjectEditDialog handles -- Person/Family have their
 // own bespoke dialogs (PersonEditDialog.tsx/FamilyEditDialog.tsx) and are
-// never routed here (see EditDialogs.tsx). Every field here is a flat
+// never routed here (see EditDialogs.tsx). Most fields here are a flat
 // scalar or a single optional/required reference; reference-*list* fields
-// (citations, notes, media, attributes, addresses, urls, tags on any of
-// these types) are out of scope for this "basic dialog" round -- see the
-// plan. GrampsType fields (Event.type, Place.place_type, Repository.type,
+// to other top-level objects (citations, notes, media, tags on any of
+// these types) stay out of scope -- those go through RelatedPanel's
+// attach/detach instead (AttachControl.tsx/refListApi.ts), since they point
+// at a separately-existing record. Attribute/Address/Url are the exception:
+// they're inline structs with no handle of their own, so attach/detach
+// doesn't apply to them -- attributeList/addressList/urlList kinds below
+// edit those lists directly (see EmbeddedListFields.tsx and the plan).
+// GrampsType fields (Event.type, Place.place_type, Repository.type,
 // Note.type) are plain text, not curated dropdowns: gramps-web-api's
 // fix_object_dict turns any string into a valid custom-or-known type
 // server-side (same pattern already used for Family's relationship type),
@@ -45,6 +56,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "date", key: "date", label: "Date" },
       { kind: "reference", key: "place", label: "Place", refView: PLACE_VIEW, refField: "title" },
       { kind: "switch", key: "private", label: "Private" },
+      { kind: "attributeList", key: "attribute_list", label: "Attributes" },
     ],
   },
   place: {
@@ -54,6 +66,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "lat", label: "Latitude" },
       { kind: "text", key: "long", label: "Longitude" },
       { kind: "switch", key: "private", label: "Private" },
+      { kind: "urlList", key: "urls", label: "Web links" },
     ],
   },
   source: {
@@ -65,6 +78,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "pubinfo", label: "Publication info" },
       { kind: "text", key: "abbrev", label: "Abbreviation" },
       { kind: "switch", key: "private", label: "Private" },
+      { kind: "attributeList", key: "attribute_list", label: "Attributes" },
     ],
   },
   repository: {
@@ -72,7 +86,11 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "name", label: "Name" },
       { kind: "text", key: "type", label: "Type", placeholder: TYPE_HINT },
     ],
-    details: [{ kind: "switch", key: "private", label: "Private" }],
+    details: [
+      { kind: "switch", key: "private", label: "Private" },
+      { kind: "addressList", key: "address_list", label: "Addresses" },
+      { kind: "urlList", key: "urls", label: "Web links" },
+    ],
   },
   citation: {
     quick: [
@@ -86,6 +104,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "date", key: "date", label: "Date" },
       { kind: "number", key: "confidence", label: "Confidence", min: 0, max: 4 },
       { kind: "switch", key: "private", label: "Private" },
+      { kind: "attributeList", key: "attribute_list", label: "Attributes" },
     ],
   },
   note: {
@@ -182,6 +201,11 @@ export function ObjectEditDialog({
   const typeLabel = DRAFT_TYPE_LABELS[draft.type];
   const title = draft.mode === "edit" ? `Edit ${typeLabel}` : `New ${typeLabel}`;
   const spec = FIELD_SPECS[draft.type];
+  // Note is the only type with a styledText field -- the rest are all
+  // short scalar/reference fields that are fine in the default-width
+  // modal. Widened here (rather than just the Textarea) since a wide
+  // textarea inside a narrow modal would just wrap awkwardly.
+  const modalSize = draft.type === "note" ? "xl" : "md";
 
   // Same fix as FamilyEditDialog.tsx's father/mother seeding effect: an
   // edit draft's already-set reference field comes straight off the
@@ -216,7 +240,7 @@ export function ObjectEditDialog({
 
   if (draft.status === "loading") {
     return (
-      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle}>
+      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
         <Group justify="center" py="md">
           <Loader size="sm" />
         </Group>
@@ -225,7 +249,7 @@ export function ObjectEditDialog({
   }
   if (draft.status === "error") {
     return (
-      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle}>
+      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
         <Stack gap="md">
           <Alert color="red" title="Could not load">{draft.loadError}</Alert>
           <Group justify="flex-end">
@@ -241,7 +265,7 @@ export function ObjectEditDialog({
     // but keeps this component total rather than crashing if that ever
     // drifts out of sync.
     return (
-      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle}>
+      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
         <Alert color="red" title="No fields defined">Unknown object type "{draft.type}".</Alert>
       </Modal>
     );
@@ -320,7 +344,9 @@ export function ObjectEditDialog({
           <Textarea
             key={f.key}
             label={f.label}
-            minRows={3}
+            autosize
+            minRows={12}
+            maxRows={30}
             value={value}
             onChange={(e) => onChange({ [f.key]: { _class: "StyledText", ...text, string: e.currentTarget.value } })}
           />
@@ -342,6 +368,30 @@ export function ObjectEditDialog({
           />
         );
       }
+      case "attributeList":
+        return (
+          <AttributeListField
+            key={f.key}
+            items={(draft.data[f.key] as Attribute[] | undefined) ?? []}
+            onChange={(items) => onChange({ [f.key]: items })}
+          />
+        );
+      case "addressList":
+        return (
+          <AddressListField
+            key={f.key}
+            items={(draft.data[f.key] as Address[] | undefined) ?? []}
+            onChange={(items) => onChange({ [f.key]: items })}
+          />
+        );
+      case "urlList":
+        return (
+          <UrlListField
+            key={f.key}
+            items={(draft.data[f.key] as Url[] | undefined) ?? []}
+            onChange={(items) => onChange({ [f.key]: items })}
+          />
+        );
     }
   }
 
