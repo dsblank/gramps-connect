@@ -7,6 +7,8 @@
 // git history) -- this is the production copy now; see PLAN.md.
 import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
 import { splitAuthorMessage } from "./authoredText";
+import { buildPersonSearchExpr } from "./personSearch";
+import { buildSimpleSearchExpr } from "./simpleSearch";
 import iconPerson from "../assets/icons/gramps-person.svg";
 import iconFamily from "../assets/icons/gramps-family.svg";
 import iconEvent from "../assets/icons/gramps-event.svg";
@@ -104,6 +106,19 @@ export interface ViewConfig {
   opfsFilename: string;
   columns: ColumnConfig[];
   wherePlaceholder: string;
+  /** A second, plain-text search mode alongside the raw where_expr box --
+   * FilterBar shows a checkbox ("Use Gramps Object Query Language") that
+   * switches between `buildExpr`'s translation of free text and the where
+   * language itself. Every view sets this; Person's is its own builder
+   * (personSearch.ts, shared with the FamilyEditDialog parent picker,
+   * since a name search splits given/surname rather than OR-ing one
+   * contains-match), the rest use simpleSearch.ts's generic
+   * buildSimpleSearchExpr over whichever fields read as "the everyday
+   * search" for that object type. */
+  simpleSearch?: {
+    placeholder: string;
+    buildExpr: (query: string) => string | null;
+  };
 }
 
 function formatGrampsDateJson(json: unknown): string {
@@ -179,6 +194,10 @@ export const PERSON_VIEW: ViewConfig = {
   orderBy: [{ column: "surname", direction: "asc" }],
   opfsFilename: "app-cache-person.sqlite",
   wherePlaceholder: 'e.g. gender == 1 and surname == "Ancestor"',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or a name…",
+    buildExpr: buildPersonSearchExpr,
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "surname", label: "Surname", select: "surname", sqlType: "TEXT" },
@@ -226,6 +245,12 @@ export const FAMILY_VIEW: ViewConfig = {
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-family.sqlite",
   wherePlaceholder: 'e.g. gramps_id == "F00001"',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or a parent's name…",
+    buildExpr: buildSimpleSearchExpr([
+      "gramps_id", "father.surname", "father.given_name", "mother.surname", "mother.given_name",
+    ]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
@@ -297,6 +322,10 @@ export const EVENT_VIEW: ViewConfig = {
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-event.sqlite",
   wherePlaceholder: 'e.g. type.value == 12',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, description, or place…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "description", "place.title"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
@@ -337,6 +366,10 @@ export const PLACE_VIEW: ViewConfig = {
   orderBy: [{ column: "title", direction: "asc" }],
   opfsFilename: "app-cache-place.sqlite",
   wherePlaceholder: 'e.g. like(title, "%, TX")',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or a place name…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "title"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "title", label: "Title", select: "title", sqlType: "TEXT" },
@@ -365,6 +398,10 @@ export const REPOSITORY_VIEW: ViewConfig = {
   orderBy: [{ column: "name", direction: "asc" }],
   opfsFilename: "app-cache-repository.sqlite",
   wherePlaceholder: 'e.g. like(name, "%Library%")',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or a name…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "name"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "name", label: "Name", select: "name", sqlType: "TEXT" },
@@ -380,6 +417,10 @@ export const SOURCE_VIEW: ViewConfig = {
   orderBy: [{ column: "title", direction: "asc" }],
   opfsFilename: "app-cache-source.sqlite",
   wherePlaceholder: 'e.g. like(author, "%Smith%")',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, title, or author…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "title", "author"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "title", label: "Title", select: "title", sqlType: "TEXT" },
@@ -406,6 +447,10 @@ export const CITATION_VIEW: ViewConfig = {
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-citation.sqlite",
   wherePlaceholder: "e.g. confidence == 4",
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, page, or source title…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "page", "source.title"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
@@ -429,6 +474,10 @@ export const MEDIA_VIEW: ViewConfig = {
   orderBy: [{ column: "desc", direction: "asc" }],
   opfsFilename: "app-cache-media.sqlite",
   wherePlaceholder: 'e.g. like(mime, "image/%")',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, description, or filename…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "desc", "path"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
@@ -460,6 +509,10 @@ export const GENERATED_VIEW: ViewConfig = {
   orderBy: [{ column: "change", direction: "desc" }],
   opfsFilename: "app-cache-generated.sqlite",
   wherePlaceholder: 'e.g. like(desc, "%Descendant%")',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or a description…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "desc"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
@@ -502,6 +555,10 @@ export const MESSAGES_VIEW: ViewConfig = {
   orderBy: [{ column: "change", direction: "desc" }],
   opfsFilename: "app-cache-messages.sqlite",
   wherePlaceholder: 'e.g. "urgent" in text.string',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or message text…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "text.string"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     // "By" and "Message" both read the exact same text.string json_path --
@@ -530,6 +587,10 @@ export const NOTE_VIEW: ViewConfig = {
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-note.sqlite",
   wherePlaceholder: 'e.g. "TODO" in text.string',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or note text…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "text.string"]),
+  },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
@@ -553,6 +614,11 @@ export const TAG_VIEW: ViewConfig = {
   orderBy: [{ column: "name", direction: "asc" }],
   opfsFilename: "app-cache-tag.sqlite",
   wherePlaceholder: 'e.g. like(name, "%todo%")',
+  // No gramps_id field to fall back on -- see the comment above.
+  simpleSearch: {
+    placeholder: "Enter a tag name…",
+    buildExpr: buildSimpleSearchExpr(["name"]),
+  },
   columns: [
     { key: "name", label: "Name", select: "name", sqlType: "TEXT" },
     { key: "color", label: "Color", select: "color", sqlType: "TEXT" },
