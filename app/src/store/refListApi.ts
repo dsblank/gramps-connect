@@ -44,3 +44,26 @@ export async function detachRefListEntry(
   obj[listField] = list.filter((entry) => entryHandle(entry) !== targetHandle);
   await updateObject(token, view, objectHandle, obj);
 }
+
+/** Merges `fieldPatch` onto whichever entry of `objectHandle`'s `listField`
+ * points at `targetHandle` -- e.g. changing a ChildRef's frel/mrel or an
+ * EventRef's role, as opposed to attach/detach's whole-entry add/remove.
+ * `listField`'s entries must already be ref structs (not bare handles --
+ * unlike attach/detach, there's no per-field metadata to patch on a plain
+ * handle), so this is only ever called for child_ref_list/event_ref_list/
+ * person_ref_list/reporef_list, never note_list/citation_list/tag_list. */
+export async function patchRefListEntry(
+  token: string,
+  view: ViewConfig,
+  objectHandle: string,
+  listField: string,
+  targetHandle: string,
+  fieldPatch: Record<string, unknown>
+): Promise<void> {
+  const obj = await fetchPlainObject(token, view, objectHandle);
+  const list = ((obj[listField] as Record<string, unknown>[] | undefined) ?? []) as Record<string, unknown>[];
+  obj[listField] = list.map((entry) =>
+    entry.ref === targetHandle ? { ...entry, ...fieldPatch } : entry
+  );
+  await updateObject(token, view, objectHandle, obj);
+}

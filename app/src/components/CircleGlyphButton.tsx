@@ -3,7 +3,18 @@ import type { MouseEvent } from "react";
 import { Group, Text, Tooltip, UnstyledButton } from "@mantine/core";
 
 interface CircleGlyphButtonProps {
-  glyph: "+" | "−";
+  /** A plain text glyph, not restricted to a fixed set -- "+"/"−" for
+   * attach/detach (see this component's own doc comment), "🔗" for RefRow's
+   * "edit this reference's relationship metadata" (RefEditDialog.tsx). An
+   * emoji here, not a thin single character like "↔": at this button's
+   * small size a line-based glyph was visually indistinguishable from the
+   * "−" remove button next to it (confirmed live) -- 🔗's shape and color
+   * read clearly even at 16px, and DeleteButton.tsx's "🗑" already
+   * establishes emoji as this codebase's answer for "needs to be
+   * unambiguous at a glance", not just plain text (EditButton.tsx's "✎"
+   * gets away with plain text only because nothing else in its header row
+   * is glyph-shaped enough to confuse it with). */
+  glyph: string;
   label: string;
   onClick: (e: MouseEvent) => void;
   size?: number;

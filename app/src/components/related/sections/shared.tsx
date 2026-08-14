@@ -63,7 +63,7 @@ function TypeIcon({ type }: { type: string }) {
  * always through the `onNavigate` callback RelatedPanel was given, so the
  * same row works whether it's mounted in the top pane (sets sub-selection)
  * or the bottom pane (promotes to a real view switch). */
-export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onRemove }: {
+export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onEdit, onRemove }: {
   type: string;
   handle: string;
   obj: unknown;
@@ -74,6 +74,13 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onRemove
    * FamiliesSection showing just the *other* spouse's name rather than
    * both family members). */
   label?: string;
+  /** Opens RefEditDialog.tsx to edit this *reference's own* relationship
+   * metadata (a ChildRef's frel/mrel, an EventRef's role, ...) -- distinct
+   * from RelatedPanel's header EditButton, which edits the target object
+   * itself. Only set by sections whose ref type carries editable metadata
+   * (Children/Events/Participants/Associations/Repositories), already
+   * permission-gated by the caller the same way onRemove is. */
+  onEdit?: () => void;
   /** Detaches this reference from the record being viewed (not a delete of
    * the target object itself) -- only set by sections with an
    * AttachControl (Notes/Citations), already permission-gated by the
@@ -105,6 +112,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onRemove
             {text}
           </Anchor>
         )}
+        {onEdit && <CircleGlyphButton glyph="🔗" label="Edit relationship" onClick={onEdit} size={16} />}
         {onRemove && <CircleGlyphButton glyph="−" label="Remove" onClick={onRemove} size={16} />}
       </Group>
       <RefMetaRow refMeta={refMeta} />
