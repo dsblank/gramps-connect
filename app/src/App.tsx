@@ -220,9 +220,22 @@ function AuthenticatedApp() {
               the bare view.key for both produced a real bug (a "duplicate
               key" warning, and FilterBar instances piling up instead of
               unmounting) caught by an end-to-end smoke test. */}
-          {view && <FilterBar key={`filter-${view.key}`} view={view} />}
-          {view?.key === "messages" && <MessageComposer key={`compose-${view.key}`} />}
-          {view && <DataTable key={`table-${view.key}`} view={view} />}
+          {/* Bounded to visualHeight (same formula the map/timeline Box above
+              uses) and laid out as a flex column so DataTable's own wrapper
+              (flex: 1; min-height: 0 -- see DataTable.module.css) fills
+              whatever's left under FilterBar/MessageComposer, instead of the
+              table guessing its own height via a magic-number vh calc. Only
+              done when !stacked: stacked lets the whole page scroll instead
+              (panes flow below the table, footer inline at the end), so the
+              table there keeps CSS's own 45dvh media override rather than
+              being bounded to the pane. */}
+          {view && (
+            <Box style={stacked ? undefined : { height: visualHeight, display: "flex", flexDirection: "column" }}>
+              <FilterBar key={`filter-${view.key}`} view={view} />
+              {view.key === "messages" && <MessageComposer key={`compose-${view.key}`} />}
+              <DataTable key={`table-${view.key}`} view={view} />
+            </Box>
+          )}
           {/* Stacked layout only -- the same panes the aside holds when
               there's width for it, but in `flow` mode: no height of their
               own, no scrollbars of their own, just as tall as their content

@@ -7,8 +7,14 @@
    without scrolling right first. */
 .tableWrapper {
   overflow: auto;
-  height: calc(100vh - 260px);
-  min-height: 300px;
+  /* Fills whatever's left of App.tsx's flex-column pane wrapper (the Box
+     around FilterBar/MessageComposer/DataTable, height: visualHeight) once
+     FilterBar (and, on the Messages view, MessageComposer) have taken their
+     own content height -- see App.tsx. Only meaningful inside that flex
+     column; the @media override below replaces it outright below the
+     stacked breakpoint, where this wrapper isn't inside one. */
+  flex: 1;
+  min-height: 0;
   border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
   position: relative;
 }
@@ -43,6 +49,13 @@
 
 .tableWrapper::-webkit-scrollbar-track {
   background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+}
+
+/* Default corner (where the two scrollbars meet) is opaque white in
+   Chromium/Safari regardless of theme -- make it transparent so it doesn't
+   flash white against a dark track/background. */
+.tableWrapper::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* Gray rectangle inset in a white gutter: the border is drawn in the
