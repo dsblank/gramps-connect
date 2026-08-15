@@ -57,8 +57,16 @@ datas = [
 # via a direct file-path importlib spec (see the module docstring above),
 # not a normal dotted import modulegraph would follow on its own, so their
 # own *dependencies* (like libformatting) need to be force-included too.
-hiddenimports = collect_submodules("gramps") + [
-    "celery",
+hiddenimports = collect_submodules("gramps") + collect_submodules("celery") + [
+    # Not celery itself (collect_submodules above) -- celery.Task.__call__
+    # lazily finalizes celery's default app on first real task invocation
+    # (import/export run synchronously in-process here since CELERY_CONFIG
+    # is empty, see api/tasks.py's run_task()), which resolves its loader
+    # class via a dynamic, string-based import ("celery.loaders.default")
+    # that plain hiddenimports/modulegraph traversal can't see -- hence
+    # collect_submodules instead of another one-off entry here, since any
+    # of celery's other loader/backend/scheduler submodules could turn out
+    # to be reached the same way by some other task.
     "redis",
     "waitress",
     "flask_smorest",
