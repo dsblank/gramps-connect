@@ -95,6 +95,15 @@ hiddenimports = collect_submodules("gramps") + [
 
 datas += collect_data_files("gramps_webapi")
 
+# pywebview locates its injected JS bridge (webview/js/*.js) and, on
+# Windows, its WebView2 interop DLLs (webview/lib/**) via paths relative to
+# its own package __file__ at runtime -- collect_data_files preserves that
+# same relative layout under _MEIPASS, so both resolve unchanged whether
+# frozen or not. Universal across all three platform legs (this one spec
+# builds all of them): the Windows-only DLLs are a few extra MB of dead
+# weight on Linux/macOS, not worth a platform conditional for.
+datas += collect_data_files("webview")
+
 # Every one of these is an optional, lazily-imported gramps-web-api feature
 # that this build ships without -- AI chat, semantic ("AI") search, face
 # detection in photos, S3-backed media storage, OCR, DNA/Y-DNA matching, and

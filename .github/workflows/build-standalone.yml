@@ -116,6 +116,14 @@ jobs:
           python gramps-connect/deploy/webapi-requirements.py gramps-web-api/pyproject.toml > requirements.txt
           cat requirements.txt
           pip install -r requirements.txt psycopg2-binary
+          # Opens the demo in a native window (WebView2/WKWebView/GTK3+
+          # WebKit2) instead of a browser tab. Its Windows (pythonnet) and
+          # macOS (pyobjc-*) backend deps are pulled in automatically by
+          # pywebview's own platform-conditional requires-dist markers; on
+          # Linux there's no equivalent bundled backend (see the .spec's
+          # gi-stub comment), so launcher.py falls back to a browser tab at
+          # runtime there instead.
+          pip install pywebview
 
       - name: Build with PyInstaller
         working-directory: gramps-connect/standalone
