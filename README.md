@@ -41,6 +41,58 @@ might be headed, or want to help figure that out, read on.
 
 <img width="1489" height="704" alt="image" src="https://github.com/user-attachments/assets/1183bb72-520f-44fb-ace7-d88c84724697" />
 
+## FAQ
+
+**How does the standalone (AIO) install differ from the server-based
+deployment?**
+
+The standalone download (see Installing, below) is a demo, not the real
+deployment shape: one file bundles `app/`'s frontend and `gramps-web-api`'s
+backend together with SQLite, runs entirely on your own machine, and only
+listens on `127.0.0.1` — nothing about it is reachable over a network, and
+it always has exactly one hardcoded user (`admin`/`admin`). It's for trying
+Gramps Connect risk-free, not for sharing a tree with anyone else.
+
+`deploy/` (see Deploying, below) is the real thing: a containerized `app/`
++ `gramps-web-api` backed by real Postgres, fronted by Caddy for TLS,
+meant to actually be hosted somewhere and used by more than one person —
+real secrets, a real domain/certificate, and multiple users each with
+their own login. It's also the only way to see the project's actual point
+(live collaboration) in action — the standalone demo is single-user by
+design, so there's no one else's edits to watch appear.
+
+**How does the standalone demo compare to Gramps Desktop?**
+
+Closer than "server-based deployment" above might suggest — both are
+single-user, local-only apps built on the same underlying Gramps
+database. Today, Desktop is far ahead on functionality: decades of
+native tools, gramplets, and reports that `gramps-web-api`'s REST layer
+doesn't (yet) cover, so this isn't a drop-in replacement. But nothing
+about the standalone build limits it to a demo role permanently — a
+faster, browser-based UI over the same data is a real candidate to
+eventually rival Desktop for day-to-day use, independent of whether the
+collaboration experiment (the project's actual current focus) pans out.
+
+**Will my data or anything I do in the standalone demo get sent
+anywhere?**
+
+No. It only listens on `127.0.0.1`, telemetry is disabled, and everything
+it stores lives in `~/.gramps-connect-demo` on your own machine.
+
+**Can I import my real family tree into the standalone demo?**
+
+Yes — Family Trees → Import... takes a Gramps XML (`.gramps`) or GEDCOM
+(`.ged`) file, same as the real deployment. Just don't treat it as your
+only copy: this is still an early-stage research project (see Overview,
+above), not a finished product, so there's no guarantee any particular
+version's data format sticks around unchanged across releases.
+
+**Does upgrading to a newer standalone release wipe my data?**
+
+No — `~/.gramps-connect-demo` is separate from the app binary, so
+installing a newer version reuses whatever's already there. Delete that
+folder yourself if you want a clean slate.
+
 ## Installing
 
 **Want to try it without building anything?** Every current download lives
