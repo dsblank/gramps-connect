@@ -311,7 +311,7 @@ jobs:
         run: |
           for label in windows macos-arm64 macos-intel; do
             mv "artifacts/gramps-connect-demo-$label" artifacts/gramps-connect-demo
-            (cd artifacts && zip -q -r "../gramps-connect-demo-$label.zip" gramps-connect-demo)
+            (cd artifacts && zip -q -r "gramps-connect-demo-$label.zip" gramps-connect-demo)
             rm -rf artifacts/gramps-connect-demo
           done
           ls artifacts/gramps-connect-demo-linux
