@@ -106,10 +106,11 @@ above, but download `gramps-connect-demo-macos-intel.zip` instead.
    warn that the package isn't signed — expected, see Troubleshooting).
 3. Run `gramps-connect-demo` from a terminal, or find "Gramps Connect Demo"
    in your applications menu.
-4. Unlike Windows/macOS, this opens in a **browser tab**, not its own
-   window — GTK/WebKit2, which would be needed for a native window, is
-   deliberately not bundled or required by this package (see
-   Troubleshooting). Log in as `admin` / `admin`.
+4. This opens in its own **native window**, using GTK3 + WebKit2 already on
+   your system (common on Linux desktops — many apps depend on them
+   already; neither is bundled by this package). If your system doesn't
+   have them, it opens in a **browser tab** instead (see Troubleshooting).
+   Log in as `admin` / `admin`.
 5. To uninstall: `sudo apt remove gramps-connect-demo`.
 
 ### Linux (.rpm — Fedora, RHEL, AlmaLinux, and derivatives)
@@ -123,8 +124,8 @@ above, but download `gramps-connect-demo-macos-intel.zip` instead.
    warn that the package isn't signed — expected.
 3. Run `gramps-connect-demo` from a terminal, or find "Gramps Connect Demo"
    in your applications menu.
-4. This opens in a **browser tab**, not its own window — same reason as the
-   `.deb` above. Log in as `admin` / `admin`.
+4. This opens in its own **native window** (or falls back to a browser tab)
+   — same as the `.deb` above. Log in as `admin` / `admin`.
 5. To uninstall: `sudo dnf remove gramps-connect-demo`.
 
 ## Troubleshooting
@@ -154,12 +155,15 @@ above, but download `gramps-connect-demo-macos-intel.zip` instead.
 - **The app won't start / port already in use** — only one instance can run
   at a time (it's hardcoded to `127.0.0.1:5050`). Close any other running
   copy, or anything else using port 5050, and try again.
-- **Windows/macOS open a browser tab instead of a native window** — this is
-  the same automatic fallback Linux always uses, just triggered
-  unexpectedly; it means the OS's built-in web view component (WebView2 on
-  Windows, present by default on Windows 10/11; WKWebView on macOS, always
-  present) couldn't be reached. The app still works fully in the browser
-  tab — this only affects how it's presented, not what it can do.
+- **A browser tab opens instead of a native window** — the app always
+  tries a native window first and falls back automatically if it can't:
+  WebView2 on Windows (present by default on Windows 10/11) or WKWebView
+  on macOS (always present) couldn't be reached, or on Linux, GTK3 +
+  WebKit2 aren't installed system-wide (install `python3-gi`,
+  `gir1.2-gtk-3.0`, and `gir1.2-webkit2-4.1`, or your distro's
+  equivalents, and relaunch to get a native window instead). The app
+  still works fully in the browser tab either way — this only affects how
+  it's presented, not what it can do.
 - **Start over from a blank tree** — delete the `.gramps-connect-demo`
   folder in your home directory, then relaunch.
 - **Looking for a real multi-user deployment instead of this single-user
