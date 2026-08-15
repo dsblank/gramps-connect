@@ -139,6 +139,11 @@ above, but download `gramps-connect-demo-macos-intel.zip` instead.
   check** — expected. These packages are built by this repo's own CI, not
   published to a signed distro repository, so installing them from a local
   file always looks this way; it doesn't mean anything is wrong.
+- **`dnf: command not found` / `rpm: command not found`** — your distro is
+  Debian/Ubuntu-based (or otherwise doesn't ship `rpm`), so the `.rpm`
+  package is the wrong download. Grab the `.deb` file instead and install it
+  with `sudo apt install ./gramps-connect-demo_*_amd64.deb` (see the `.deb`
+  section above).
 - **No window or browser tab appears on any platform** — the app always
   tries to open one automatically once its server is up; if that somehow
   fails, open `http://127.0.0.1:5050` yourself. If nothing is listening
