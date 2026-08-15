@@ -13,7 +13,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # macos-latest is Apple Silicon (arm64) as of the macos-14 image;
+        # macos-13 is the last Intel (x86_64) image GitHub hosts, needed
+        # because PyInstaller bundles a native binary for the runner's own
+        # arch only -- an arm64 build errors "bad CPU type in executable"
+        # on Intel Macs. `label` names the upload artifact / zip so it
+        # stays stable even if GitHub re-points macos-latest again.
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+          - os: macos-latest
+            label: macos-arm64
+          - os: macos-13
+            label: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out gramps-connect
@@ -109,6 +123,6 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gramps-connect-demo-${{ matrix.os }}
+          name: gramps-connect-demo-${{ matrix.label }}
           path: gramps-connect/standalone/dist/gramps-connect-demo
           if-no-files-found: error
