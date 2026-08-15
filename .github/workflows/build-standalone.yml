@@ -31,7 +31,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out gramps-connect
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: gramps-connect
 
@@ -45,7 +45,7 @@ jobs:
       # build uses a separate jhbuild toolchain instead -- is never needed
       # at all here.
       - name: Check out gramps (maintenance/gramps60)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: gramps-project/gramps
           ref: maintenance/gramps60
@@ -57,21 +57,21 @@ jobs:
       # than the dsblank/gramps-web-api feat/object-query-endpoints branch
       # it used to (matches deploy/Dockerfile's own switch).
       - name: Check out gramps-web-api (master)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: gramps-project/gramps-web-api
           ref: master
           path: gramps-web-api
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Build app/ frontend
         working-directory: gramps-connect
@@ -121,7 +121,7 @@ jobs:
         run: pyinstaller gramps-connect-demo.spec --noconfirm
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gramps-connect-demo-${{ matrix.label }}
           path: gramps-connect/standalone/dist/gramps-connect-demo
