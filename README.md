@@ -41,6 +41,12 @@ might be headed, or want to help figure that out, read on.
 
 <img width="1349" height="852" alt="image" src="https://github.com/user-attachments/assets/58242257-a619-44e0-8cb8-3576c50677fe" />
 
+**Want to try it without building anything?** The
+[standalone demo releases](https://github.com/dsblank/gramps-connect/releases)
+are a single downloadable app (Windows/macOS/Linux) — no install, server, or
+database setup, log in as `admin`/`admin`. It's the same experimental
+prototype described above, not a finished product or the real deployment
+shape (see Deploying below for that).
 
 ## For Developers
 
