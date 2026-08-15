@@ -39,7 +39,7 @@ you're just looking to use Gramps, [gramps-web](https://github.com/gramps-projec
 where you want to be today. If you're curious about where the project
 might be headed, or want to help figure that out, read on.
 
-<img width="1349" height="852" alt="image" src="https://github.com/user-attachments/assets/58242257-a619-44e0-8cb8-3576c50677fe" />
+<img width="1489" height="704" alt="image" src="https://github.com/user-attachments/assets/1183bb72-520f-44fb-ace7-d88c84724697" />
 
 **Want to try it without building anything?** The
 [standalone demo releases](https://github.com/dsblank/gramps-connect/releases)
