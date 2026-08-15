@@ -41,12 +41,124 @@ might be headed, or want to help figure that out, read on.
 
 <img width="1489" height="704" alt="image" src="https://github.com/user-attachments/assets/1183bb72-520f-44fb-ace7-d88c84724697" />
 
-**Want to try it without building anything?** The
-[standalone demo releases](https://github.com/dsblank/gramps-connect/releases)
-are a single downloadable app (Windows/macOS/Linux) — no install, server, or
-database setup, log in as `admin`/`admin`. It's the same experimental
-prototype described above, not a finished product or the real deployment
-shape (see Deploying below for that).
+## Installing
+
+**Want to try it without building anything?** Every current download lives
+on the **[latest release](https://github.com/dsblank/gramps-connect/releases/latest)**
+— pick the section below for your platform. All of them are the same
+experimental prototype described above, not a finished product or the real
+deployment shape (see [Deploying](#deploying) below for that): a single
+downloadable app or package, no separate install, server, or database setup
+beyond what's noted per platform. Every variant starts with an empty tree —
+import your own Gramps XML (`.gramps`) or GEDCOM (`.ged`) file via the app's
+own Family Trees → Import... screen once it's running — and shares one
+login: **`admin`** / **`admin`**.
+
+First run creates a small data directory in your home folder
+(`.gramps-connect-demo`) holding that tree; later runs reuse it. Delete that
+folder to reset back to a blank slate. The app only listens on `127.0.0.1`
+(your own machine) — it isn't reachable from other devices on your network.
+These are unsigned, x86_64-only builds, hence the OS warnings described
+below — expected for an experimental build like this, not a sign anything
+is wrong.
+
+### Windows
+
+1. Download `gramps-connect-demo-windows.zip` from the
+   [latest release](https://github.com/dsblank/gramps-connect/releases/latest)
+   and unzip it (right-click → Extract All).
+2. Open the extracted folder and double-click `gramps-connect-demo.exe`.
+3. Windows will likely show a **SmartScreen** warning ("Windows protected
+   your PC") because this isn't a signed executable. Click **More info**,
+   then **Run anyway**.
+4. A window opens automatically, running the app. Log in as `admin` /
+   `admin`.
+
+### macOS (Apple Silicon)
+
+For M1/M2/M3/M4 Macs.
+
+1. Download `gramps-connect-demo-macos-arm64.zip` from the
+   [latest release](https://github.com/dsblank/gramps-connect/releases/latest)
+   and unzip it (double-click, or right-click → Open, depending on your
+   Mac's settings).
+2. Open Terminal, `cd` into the extracted folder, and run
+   `./gramps-connect-demo`.
+   - Double-clicking the executable directly from Finder will likely be
+     blocked by **Gatekeeper** ("cannot be opened because the developer
+     cannot be verified") since it isn't signed/notarized — running it from
+     Terminal avoids that dialog, or you can right-click the file → Open →
+     Open Anyway if you'd rather not use Terminal.
+3. A window opens automatically, running the app. Log in as `admin` /
+   `admin`.
+
+### macOS (Intel)
+
+For older Intel-based Macs (pre-Apple Silicon). Same steps as Apple Silicon
+above, but download `gramps-connect-demo-macos-intel.zip` instead.
+
+### Linux (.deb — Debian, Ubuntu, and derivatives)
+
+1. Download the `.deb` file (`gramps-connect-demo_*_amd64.deb`) from the
+   [latest release](https://github.com/dsblank/gramps-connect/releases/latest).
+2. Install it: `sudo apt install ./gramps-connect-demo_*_amd64.deb`
+   (installing from a local file rather than a repo, so apt will likely
+   warn that the package isn't signed — expected, see Troubleshooting).
+3. Run `gramps-connect-demo` from a terminal, or find "Gramps Connect Demo"
+   in your applications menu.
+4. Unlike Windows/macOS, this opens in a **browser tab**, not its own
+   window — GTK/WebKit2, which would be needed for a native window, is
+   deliberately not bundled or required by this package (see
+   Troubleshooting). Log in as `admin` / `admin`.
+5. To uninstall: `sudo apt remove gramps-connect-demo`.
+
+### Linux (.rpm — Fedora, RHEL, AlmaLinux, and derivatives)
+
+1. Download the `.rpm` file (`gramps-connect-demo-*.x86_64.rpm`) from the
+   [latest release](https://github.com/dsblank/gramps-connect/releases/latest).
+2. Install it: `sudo dnf install ./gramps-connect-demo-*.x86_64.rpm` (on a
+   system without `dnf`, `sudo rpm -i gramps-connect-demo-*.x86_64.rpm`
+   works too, just without automatic dependency resolution). As with the
+   `.deb` above, installing from a local file means dnf/rpm will likely
+   warn that the package isn't signed — expected.
+3. Run `gramps-connect-demo` from a terminal, or find "Gramps Connect Demo"
+   in your applications menu.
+4. This opens in a **browser tab**, not its own window — same reason as the
+   `.deb` above. Log in as `admin` / `admin`.
+5. To uninstall: `sudo dnf remove gramps-connect-demo`.
+
+## Troubleshooting
+
+- **Windows SmartScreen ("Windows protected your PC")** — expected, since
+  this build isn't code-signed. Click **More info** → **Run anyway**.
+- **macOS Gatekeeper ("cannot be opened because the developer cannot be
+  verified")** — expected, since this build isn't signed/notarized. Run it
+  from Terminal instead of double-clicking, or right-click → Open → Open
+  Anyway.
+- **apt/dnf warns the `.deb`/`.rpm` isn't signed, or skips an OpenPGP
+  check** — expected. These packages are built by this repo's own CI, not
+  published to a signed distro repository, so installing them from a local
+  file always looks this way; it doesn't mean anything is wrong.
+- **No window or browser tab appears on any platform** — the app always
+  tries to open one automatically once its server is up; if that somehow
+  fails, open `http://127.0.0.1:5050` yourself. If nothing is listening
+  there either, something crashed before reaching that point — check the
+  terminal output (Windows: run `gramps-connect-demo.exe` from a `cmd`/
+  PowerShell window instead of double-clicking, so you can see it) for an
+  error, and consider opening an issue with that output.
+- **The app won't start / port already in use** — only one instance can run
+  at a time (it's hardcoded to `127.0.0.1:5050`). Close any other running
+  copy, or anything else using port 5050, and try again.
+- **Windows/macOS open a browser tab instead of a native window** — this is
+  the same automatic fallback Linux always uses, just triggered
+  unexpectedly; it means the OS's built-in web view component (WebView2 on
+  Windows, present by default on Windows 10/11; WKWebView on macOS, always
+  present) couldn't be reached. The app still works fully in the browser
+  tab — this only affects how it's presented, not what it can do.
+- **Start over from a blank tree** — delete the `.gramps-connect-demo`
+  folder in your home directory, then relaunch.
+- **Looking for a real multi-user deployment instead of this single-user
+  local demo?** See [Deploying](#deploying) below.
 
 ## For Developers
 
