@@ -17,19 +17,25 @@ export async function loadFromOpfs(filename: string): Promise<Uint8Array | null>
 }
 
 export async function saveToOpfs(filename: string, data: Uint8Array) {
-  const root = await navigator.storage.getDirectory();
-  const fileHandle = await root.getFileHandle(filename, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(data as BufferSource);
-  await writable.close();
+  try {
+    const root = await navigator.storage.getDirectory();
+    const fileHandle = await root.getFileHandle(filename, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(data as BufferSource);
+    await writable.close();
+  } catch {
+    // OPFS unavailable (e.g. WebKitGTK's standalone build) -- caching is
+    // purely an optimization, so skip it rather than fail the caller.
+  }
 }
 
 export async function clearOpfs(filename: string) {
-  const root = await navigator.storage.getDirectory();
   try {
+    const root = await navigator.storage.getDirectory();
     await root.removeEntry(filename);
   } catch {
-    // nothing to remove
+    // Nothing to remove, or OPFS unavailable entirely -- either way there's
+    // nothing stale left to worry about.
   }
 }
 
