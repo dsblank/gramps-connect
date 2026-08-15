@@ -14,11 +14,12 @@ jobs:
       fail-fast: false
       matrix:
         # macos-latest is Apple Silicon (arm64) as of the macos-14 image;
-        # macos-13 is the last Intel (x86_64) image GitHub hosts, needed
-        # because PyInstaller bundles a native binary for the runner's own
-        # arch only -- an arm64 build errors "bad CPU type in executable"
-        # on Intel Macs. `label` names the upload artifact / zip so it
-        # stays stable even if GitHub re-points macos-latest again.
+        # macos-15-intel is the Intel (x86_64) image GitHub hosts (macos-13
+        # was retired Dec 2025), needed because PyInstaller bundles a native
+        # binary for the runner's own arch only -- an arm64 build errors
+        # "bad CPU type in executable" on Intel Macs. `label` names the
+        # upload artifact / zip so it stays stable even if GitHub re-points
+        # macos-latest again.
         include:
           - os: ubuntu-latest
             label: linux
@@ -26,7 +27,7 @@ jobs:
             label: windows
           - os: macos-latest
             label: macos-arm64
-          - os: macos-13
+          - os: macos-15-intel
             label: macos-intel
     runs-on: ${{ matrix.os }}
     steps:
