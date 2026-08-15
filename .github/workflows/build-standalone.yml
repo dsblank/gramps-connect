@@ -6,7 +6,19 @@ name: Build standalone demo
 # cross-compile, so producing those binaries requires actually running on
 # those OSes, which no local dev machine in this project has.
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Publish a GitHub release from this build (in addition to building)"
+        type: boolean
+        default: false
+      whats_new:
+        description: >-
+          User-facing "What's new" bullets (Markdown, one "- " per line).
+          Only used if create_release is checked. Keep it UX-level -- no
+          dev-only/internal changes.
+        type: string
+        default: ""
 
 jobs:
   build:
@@ -268,3 +280,96 @@ jobs:
             gramps-connect/standalone/*.deb
             gramps-connect/standalone/*.rpm
           if-no-files-found: error
+
+  # Optional, gated by the create_release input -- separate from `build`/
+  # `build-linux` above so this workflow can still be run for a plain test
+  # build (create_release left unchecked) without publishing anything.
+  # Reproduces by hand what used to be a manual `gh release create` --
+  # download every leg's artifact, zip the raw Windows/macOS folders (the
+  # .deb/.rpm from build-linux need no further packaging), tag the release
+  # off app/package.json's version, mark the previous standalone-demo-v*
+  # release [superseded], and publish.
+  release:
+    needs: [build, build-linux]
+    if: ${{ inputs.create_release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out gramps-connect
+        uses: actions/checkout@v7
+        with:
+          path: gramps-connect
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Zip Windows/macOS artifacts
+        shell: bash
+        run: |
+          for label in windows macos-arm64 macos-intel; do
+            mv "artifacts/gramps-connect-demo-$label" artifacts/gramps-connect-demo
+            (cd artifacts && zip -q -r "../gramps-connect-demo-$label.zip" gramps-connect-demo)
+            rm -rf artifacts/gramps-connect-demo
+          done
+          ls artifacts/gramps-connect-demo-linux
+
+      - name: Determine version
+        run: echo "VERSION=$(node -p "require('./gramps-connect/app/package.json').version")" >> "$GITHUB_ENV"
+
+      # Best-effort -- there may be no prior standalone-demo-v* release yet
+      # (e.g. the very first one), which is fine, not an error.
+      - name: Mark previous release as superseded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ALL=$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName,name,createdAt --limit 100)
+          PREV=$(echo "$ALL" | jq --arg cur "standalone-demo-v$VERSION" '
+            [.[] | select((.tagName | startswith("standalone-demo-v")) and .tagName != $cur)]
+            | sort_by(.createdAt) | last')
+          PREV_TAG=$(echo "$PREV" | jq -r '.tagName // empty')
+          PREV_NAME=$(echo "$PREV" | jq -r '.name // empty')
+          if [ -n "$PREV_TAG" ] && [[ "$PREV_NAME" != *"[superseded]"* ]]; then
+            gh release edit "$PREV_TAG" --repo "$GITHUB_REPOSITORY" --title "$PREV_NAME [superseded]"
+          fi
+
+      - name: Write release notes
+        env:
+          # Piped through env rather than interpolated directly into the
+          # script -- this is a workflow_dispatch input (arbitrary text
+          # from whoever triggers the run), and $-substituting it straight
+          # into `run:` would let shell metacharacters in it escape into
+          # the script.
+          WHATS_NEW: ${{ inputs.whats_new }}
+        run: |
+          {
+            echo "## Gramps Connect -- standalone demo (experimental)"
+            echo
+            echo "**This is an early-stage research prototype, not a finished product.** See the [main README](https://github.com/$GITHUB_REPOSITORY#readme) for what this project actually is."
+            echo
+            echo "For install instructions and troubleshooting for your platform, see the [Installing](https://github.com/$GITHUB_REPOSITORY#installing) and [Troubleshooting](https://github.com/$GITHUB_REPOSITORY#troubleshooting) sections of the README."
+            if [ -n "$WHATS_NEW" ]; then
+              echo
+              echo "### What's new"
+              echo
+              echo "$WHATS_NEW"
+            fi
+          } > notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "standalone-demo-v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Standalone demo v$VERSION (experimental)" \
+            --prerelease \
+            --target main \
+            --notes-file notes.md \
+            artifacts/gramps-connect-demo-windows.zip \
+            artifacts/gramps-connect-demo-macos-arm64.zip \
+            artifacts/gramps-connect-demo-macos-intel.zip \
+            artifacts/gramps-connect-demo-linux/*.deb \
+            artifacts/gramps-connect-demo-linux/*.rpm
