@@ -127,9 +127,25 @@ def main() -> None:
     # webview needs the main thread for its native event loop (required on
     # macOS/Cocoa, and pywebview enforces it on every platform for
     # consistency).
+    #
+    # threaded=False (Werkzeug's own default, spelled out here to be
+    # explicit) is deliberate, not a missed perf knob: Gramps' sqlite DBAPI
+    # backend (gramps/gen/db/generic.py's close()) calls
+    # self._set_all_metadata() -- a write -- *before* self._close(), with
+    # no try/finally between them. Two connections racing under a threaded
+    # server (e.g. a large import's teardown overlapping the page reload's
+    # own requests) can make that metadata write hit SQLite's "database is
+    # locked", which raises out of close() before self._close() ever runs
+    # -- leaking that connection's lock permanently, wedging the tree for
+    # every future request until the whole process is killed. Confirmed
+    # live: a real ~10k-object import followed immediately by the client's
+    # post-import reload reproduced exactly this, and it never recovered.
+    # This is a single-user local demo with no need for concurrent
+    # request handling, so serializing every request through one thread
+    # sidesteps the race entirely rather than patching around it here.
     server_thread = Thread(
         target=app.run,
-        kwargs={"host": HOST, "port": PORT, "threaded": True},
+        kwargs={"host": HOST, "port": PORT, "threaded": False},
         daemon=True,
     )
     server_thread.start()
@@ -137,13 +153,39 @@ def main() -> None:
     print(f"Gramps Connect demo running at http://{HOST}:{PORT}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
 
+    # pywebview defaults ALLOW_DOWNLOADS to False, which on the GTK backend
+    # means it never even connects WebKit's download-started signal --
+    # clicking a report/export "Download" link still gets marked for
+    # download internally (on_navigation's decide-policy handler calls
+    # decision.download() regardless), but nothing is listening for it, so
+    # it just silently vanishes with no error, dialog, or file. Enabling
+    # this makes pywebview wire up a native GTK save-file dialog instead
+    # (webview/platforms/gtk.py's on_download_decide_destination).
+    webview.settings["ALLOW_DOWNLOADS"] = True
+
     webview.create_window(APP_NAME, f"http://{HOST}:{PORT}")
     try:
         # webview.start() resolves the platform backend (GTK/Qt on Linux,
         # WKWebView on macOS, WebView2 on Windows) before showing anything --
         # it raises WebViewException synchronously if none is found, so this
         # is a safe point to fall back rather than a partial/failed launch.
-        webview.start()
+        #
+        # private_mode=False: pywebview defaults to private_mode=True, which
+        # on the GTK backend explicitly disables WebKit's local storage/
+        # IndexedDB (enable_html5_local_storage=False) -- not flaky, just
+        # off. That breaks anything using localStorage with no defensive
+        # try/catch (confirmed live: browserNotifications.ts's
+        # notifyBrowser(), fired on report/job completion, throws
+        # "Can't find variable: localStorage" since the API isn't merely
+        # empty but doesn't exist as a global at all), and silently no-ops
+        # column-width/search-state/map-viewport persistence besides. This
+        # is a single-user local app that already persists real data to
+        # disk (GRAMPSHOME under DATA_DIR) -- there's no incognito-style
+        # privacy need here, so private browsing was actively working
+        # against the app's own design. storage_path keeps the resulting
+        # WebKit profile under DATA_DIR too, consistent with "delete this
+        # folder to reset" covering everything, not just the tree.
+        webview.start(private_mode=False, storage_path=data_path("webkit-storage"))
     except webview.WebViewException:
         print("No native webview backend found -- opening in your browser instead.")
         webbrowser.open(f"http://{HOST}:{PORT}")
