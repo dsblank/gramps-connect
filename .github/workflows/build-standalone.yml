@@ -19,10 +19,10 @@ jobs:
         # binary for the runner's own arch only -- an arm64 build errors
         # "bad CPU type in executable" on Intel Macs. `label` names the
         # upload artifact / zip so it stays stable even if GitHub re-points
-        # macos-latest again.
+        # macos-latest again. Linux has its own job below (build-linux) --
+        # it needs a completely different toolchain (see that job's
+        # comments), not just a different `os:`.
         include:
-          - os: ubuntu-latest
-            label: linux
           - os: windows-latest
             label: windows
           - os: macos-latest
@@ -134,4 +134,137 @@ jobs:
         with:
           name: gramps-connect-demo-${{ matrix.label }}
           path: gramps-connect/standalone/dist/gramps-connect-demo
+          if-no-files-found: error
+
+  # Packaged as .deb/.rpm rather than a raw portable binary (unlike the
+  # Windows/macOS legs above) -- proper install location, a menu entry, and
+  # clean apt/dnf install-or-uninstall, instead of an unpacked folder the
+  # tester has to manage by hand. Native-window support (see pywebview in
+  # launcher.py) still isn't available on Linux either way: the frozen
+  # bundle's own gi-stub (runtime_hooks/rthook_gi_stub.py) blocks it
+  # regardless of what's installed on the target system, so this
+  # deliberately does NOT declare a GTK3/WebKit2 package dependency -- it
+  # would just make apt install libraries this build can't actually reach.
+  # Falls back to a browser tab there, same as the raw binary would.
+  build-linux:
+    runs-on: ubuntu-latest
+    # AlmaLinux 8 base -- glibc 2.28, forward-compatible with essentially
+    # every non-EOL glibc-based distro (Ubuntu 20.04+, Debian 10+, RHEL/
+    # Alma/Rocky 8+, ...), unlike a binary built directly on ubuntu-latest
+    # (glibc 2.39), which only runs on systems with equal-or-newer glibc --
+    # i.e. not even this project's own dev machines. This container only
+    # exists for the CI build; end users installing the resulting .deb/.rpm
+    # never see or need Docker themselves.
+    container: quay.io/pypa/manylinux_2_28_x86_64
+    steps:
+      - name: Check out gramps-connect
+        uses: actions/checkout@v7
+        with:
+          path: gramps-connect
+
+      - name: Check out gramps (maintenance/gramps60)
+        uses: actions/checkout@v7
+        with:
+          repository: gramps-project/gramps
+          ref: maintenance/gramps60
+          path: gramps
+
+      - name: Check out gramps-web-api (master)
+        uses: actions/checkout@v7
+        with:
+          repository: gramps-project/gramps-web-api
+          ref: master
+          path: gramps-web-api
+
+      # No actions/setup-python or actions/setup-node here (unlike the
+      # Windows/macOS job) -- this container needs its own toolchain built
+      # up by hand instead:
+      #   - manylinux's own /opt/python/cp312-cp312/ interpreter is
+      #     deliberately built *without* --enable-shared (it exists for
+      #     building portable wheels, not for embedding), and PyInstaller
+      #     needs libpython3.12.so -- so build a real one via pyenv. This is
+      #     the known community-standard fix for this exact combination
+      #     (see e.g. oleksis/pyinstaller-manylinux); confirmed locally,
+      #     ~1 minute even for a full CPython compile from source.
+      #   - Node and Ruby (for fpm, below) aren't in the base image at all;
+      #     install via dnf module streams rather than a third-party repo.
+      - name: Install build toolchain (Python, Node, Ruby)
+        shell: bash
+        run: |
+          dnf module install -y nodejs:22/common ruby:3.3/common
+          dnf install -y rpm-build bzip2-devel libffi-devel ncurses-devel \
+            readline-devel sqlite-devel xz-devel tk-devel openssl-devel
+
+          git clone --depth 1 https://github.com/pyenv/pyenv.git /opt/pyenv
+          export PYENV_ROOT=/opt/pyenv
+          export PATH="$PYENV_ROOT/bin:$PATH"
+          eval "$(pyenv init -)"
+          PYTHON_CONFIGURE_OPTS='--enable-shared' pyenv install 3.12.8
+
+          echo "/opt/pyenv/versions/3.12.8/bin" >> "$GITHUB_PATH"
+
+      - name: Build app/ frontend
+        working-directory: gramps-connect
+        env:
+          VITE_API_BASE: ""
+        run: |
+          npm install
+          npm run build -w app
+
+      - name: Copy frontend into standalone/
+        shell: bash
+        run: |
+          rm -rf gramps-connect/standalone/frontend
+          cp -r gramps-connect/app/dist gramps-connect/standalone/frontend
+
+      - name: Install gramps + gramps-web-api (editable, from source)
+        shell: bash
+        run: |
+          python3 -m venv /tmp/venv
+          echo "VIRTUAL_ENV=/tmp/venv" >> "$GITHUB_ENV"
+          echo "/tmp/venv/bin" >> "$GITHUB_PATH"
+          /tmp/venv/bin/python -m pip install --upgrade pip
+          /tmp/venv/bin/pip install -e gramps --no-deps
+          /tmp/venv/bin/pip install -e gramps-web-api --no-deps
+
+      - name: Install remaining Python dependencies
+        shell: bash
+        run: |
+          pip install pyinstaller pyinstaller-hooks-contrib
+          python gramps-connect/deploy/webapi-requirements.py gramps-web-api/pyproject.toml > requirements.txt
+          cat requirements.txt
+          pip install -r requirements.txt psycopg2-binary
+          pip install pywebview
+
+      - name: Build with PyInstaller
+        working-directory: gramps-connect/standalone
+        run: pyinstaller gramps-connect-demo.spec --noconfirm
+
+      - name: Package .deb and .rpm
+        working-directory: gramps-connect/standalone
+        shell: bash
+        run: |
+          gem install --no-document fpm
+          VERSION=$(node -p "require('../app/package.json').version")
+          for target in deb rpm; do
+            fpm -s dir -t "$target" \
+              -n gramps-connect-demo \
+              -v "$VERSION" \
+              --license AGPL-3.0-or-later \
+              --description "Standalone Gramps Connect demo -- local-first genealogy client + bundled server, no separate install required." \
+              --url "https://github.com/dsblank/gramps-connect" \
+              --force \
+              dist/gramps-connect-demo/=/opt/gramps-connect-demo/ \
+              packaging/gramps-connect-demo.desktop=/usr/share/applications/gramps-connect-demo.desktop \
+              packaging/gramps-connect-demo=/usr/bin/gramps-connect-demo \
+              ../app/public/apple-touch-icon.png=/usr/share/pixmaps/gramps-connect-demo.png
+          done
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: gramps-connect-demo-linux
+          path: |
+            gramps-connect/standalone/*.deb
+            gramps-connect/standalone/*.rpm
           if-no-files-found: error
