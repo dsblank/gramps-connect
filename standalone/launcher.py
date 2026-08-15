@@ -15,10 +15,13 @@ directory to start over.
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import time
 import webbrowser
 from threading import Thread
+
+import webview
 
 APP_NAME = "gramps-connect-demo"
 TREE_NAME = "gramps-connect-demo"
@@ -78,6 +81,16 @@ def build_config() -> dict:
     }
 
 
+def wait_for_server() -> None:
+    """Block until the Flask server's socket is accepting connections, so
+    the webview doesn't navigate to it before it's ready."""
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            if sock.connect_ex((HOST, PORT)) == 0:
+                return
+        time.sleep(0.05)
+
+
 def first_run_setup(app) -> None:
     from gramps_webapi.auth import add_user, user_db
     from gramps_webapi.auth.const import ROLE_OWNER
@@ -97,11 +110,6 @@ def first_run_setup(app) -> None:
         dbstate.db.close()
 
 
-def open_browser_later() -> None:
-    time.sleep(1.5)
-    webbrowser.open(f"http://{HOST}:{PORT}")
-
-
 def main() -> None:
     first_run = not os.path.isdir(data_path())
     ensure_gramps_dirs()
@@ -115,11 +123,32 @@ def main() -> None:
         print(f"First run -- setting up demo tree in {data_path()} ...")
         first_run_setup(app)
 
-    Thread(target=open_browser_later, daemon=True).start()
+    # Flask's dev server blocks, so it runs on a background thread; the
+    # webview needs the main thread for its native event loop (required on
+    # macOS/Cocoa, and pywebview enforces it on every platform for
+    # consistency).
+    server_thread = Thread(
+        target=app.run,
+        kwargs={"host": HOST, "port": PORT, "threaded": True},
+        daemon=True,
+    )
+    server_thread.start()
+    wait_for_server()
     print(f"Gramps Connect demo running at http://{HOST}:{PORT}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
-    print("Press Control+C to quit")
-    app.run(host=HOST, port=PORT, threaded=True)
+
+    webview.create_window(APP_NAME, f"http://{HOST}:{PORT}")
+    try:
+        # webview.start() resolves the platform backend (GTK/Qt on Linux,
+        # WKWebView on macOS, WebView2 on Windows) before showing anything --
+        # it raises WebViewException synchronously if none is found, so this
+        # is a safe point to fall back rather than a partial/failed launch.
+        webview.start()
+    except webview.WebViewException:
+        print("No native webview backend found -- opening in your browser instead.")
+        webbrowser.open(f"http://{HOST}:{PORT}")
+        print("Press Control+C to quit")
+        server_thread.join()
 
 
 if __name__ == "__main__":
