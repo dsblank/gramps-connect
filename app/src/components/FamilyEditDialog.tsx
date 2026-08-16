@@ -143,10 +143,7 @@ function ChildrenField({ refs, labels, onAdd, onRemove }: ChildrenFieldProps) {
           }}
         />
       ) : (
-        <Group gap="xs">
-          <CircleGlyphButton glyph="+" label="Add child" onClick={() => setSearching(true)} />
-          <Text size="sm" c="dimmed">Add child</Text>
-        </Group>
+        <CircleGlyphButton glyph="+" label="Add child" textLabel="Add child" onClick={() => setSearching(true)} />
       )}
     </Stack>
   );

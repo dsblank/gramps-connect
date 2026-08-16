@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Anchor, Button, Card, Collapse, Group, Modal, Select, Stack, Switch, TextInput } from "@mantine/core";
+import { Anchor, Button, Card, Collapse, Group, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { SimpleDateInput } from "./SimpleDateInput";
 import { ListShell } from "./EmbeddedListFields";
@@ -120,15 +120,18 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
                   />
                 </Group>
                 <Group gap="xs" wrap="nowrap" justify="space-between">
-                  <Select
-                    placeholder="Origin"
-                    aria-label="Surname origin"
-                    data={ORIGIN_TYPE_OPTIONS.map((o) => ({ value: o, label: o || "(none)" }))}
-                    value={surname.origintype ?? ""}
-                    onChange={(next) => onPatch({ origintype: next ?? "" })}
-                    comboboxProps={{ withinPortal: true }}
-                    style={{ flex: 1 }}
-                  />
+                  <Group gap={6} wrap="nowrap" style={{ flex: 1 }}>
+                    <Text size="sm" c="dimmed">Surname type:</Text>
+                    <Select
+                      placeholder="Origin"
+                      aria-label="Surname origin"
+                      data={ORIGIN_TYPE_OPTIONS.map((o) => ({ value: o, label: o || "(none)" }))}
+                      value={surname.origintype ?? ""}
+                      onChange={(next) => onPatch({ origintype: next ?? "" })}
+                      comboboxProps={{ withinPortal: true }}
+                      style={{ flex: 1 }}
+                    />
+                  </Group>
                   {/* Toggling one surname's primary flag on clears it from
                    * every other row -- SurnameBase expects exactly one
                    * primary surname, not a per-row independent switch. */}

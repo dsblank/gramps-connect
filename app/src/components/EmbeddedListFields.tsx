@@ -46,10 +46,12 @@ export function ListShell<T>({ label, addLabel, items, onChange, makeNew, render
           />
         </Group>
       ))}
-      <Group gap="xs">
-        <CircleGlyphButton glyph="+" label={addLabel} onClick={() => onChange([...items, makeNew()])} />
-        <Text size="sm" c="dimmed">{addLabel}</Text>
-      </Group>
+      <CircleGlyphButton
+        glyph="+"
+        label={addLabel}
+        textLabel={addLabel}
+        onClick={() => onChange([...items, makeNew()])}
+      />
     </Stack>
   );
 }
