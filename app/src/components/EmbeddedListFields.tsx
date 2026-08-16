@@ -15,7 +15,7 @@ import { CircleGlyphButton } from "./CircleGlyphButton";
 // AddressesSection/UrlsSection this mirrors, which already key by index.
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 
-interface ListShellProps<T> {
+export interface ListShellProps<T> {
   label: string;
   addLabel: string;
   items: T[];
@@ -24,7 +24,10 @@ interface ListShellProps<T> {
   renderRow: (item: T, onPatch: (patch: Partial<T>) => void) => React.ReactNode;
 }
 
-function ListShell<T>({ label, addLabel, items, onChange, makeNew, renderRow }: ListShellProps<T>) {
+/** Exported for NameEditDialog.tsx's Surnames sub-list -- same "no handle,
+ * no backend record, no search endpoint" shape as Attribute/Address/Url
+ * below, just nested one level deeper (inside a Name inside a Person). */
+export function ListShell<T>({ label, addLabel, items, onChange, makeNew, renderRow }: ListShellProps<T>) {
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>

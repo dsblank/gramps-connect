@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Alert, Anchor, Button, Collapse, Group, Loader, Modal, Select, Stack, Switch, TextInput,
+  Alert, Anchor, Button, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
@@ -11,6 +11,8 @@ import { SimpleDateInput } from "./SimpleDateInput";
 import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
+import { NameEditDialog } from "./NameEditDialog";
+import { CircleGlyphButton } from "./CircleGlyphButton";
 
 // Person.{FEMALE,MALE,UNKNOWN,OTHER} (gramps/gen/lib/person.py) -- gender is
 // a plain integer on the wire, not a GrampsType struct.
@@ -65,6 +67,33 @@ export function PersonEditDialog({
   const [pendingBirthHandle, setPendingBirthHandle] = useState<string | null>(null);
   const [pendingDeathHandle, setPendingDeathHandle] = useState<string | null>(null);
   const [eventsLoaded, setEventsLoaded] = useState(false);
+
+  const [primaryNameOpen, setPrimaryNameOpen] = useState(false);
+  // `altIds` is the live id-per-entry mapping, in lockstep with
+  // draft.data.alternate_names (same length/order) -- it shrinks when an
+  // alternate name is removed. `everAltIds` only ever grows: it's what
+  // decides which NameEditDialog Modals get rendered at all, since a Modal
+  // registered with Mantine's ModalStack can never be safely unmounted once
+  // rendered (see draftStack.ts's DraftEntry.active doc comment) -- a
+  // removed alternate name's dialog stays mounted forever, just permanently
+  // closed and orphaned from `altIds`.
+  const [altIds, setAltIds] = useState<string[]>([]);
+  const [everAltIds, setEverAltIds] = useState<string[]>([]);
+  const [openAltIds, setOpenAltIds] = useState<string[]>([]);
+  const [altSeeded, setAltSeeded] = useState(false);
+
+  // One-time assignment of a local id to each of an edit draft's existing
+  // alternate_names, once its GET has resolved -- mirrors eventsLoaded
+  // below. A "new" draft starts with an empty alternate_names, so needs no
+  // seeding.
+  useEffect(() => {
+    if (draft.mode !== "edit" || draft.status !== "ready" || altSeeded) return;
+    setAltSeeded(true);
+    const alt = (draft.data.alternate_names as Record<string, unknown>[] | undefined) ?? [];
+    const ids = alt.map(() => createHandle());
+    setAltIds(ids);
+    setEverAltIds(ids);
+  }, [draft.mode, draft.status, altSeeded]);
 
   // One-time fetch of the existing birth/death Event(s), once an edit
   // draft's own Person GET has resolved. Kept separate from draftStack's
@@ -155,7 +184,7 @@ export function PersonEditDialog({
 
   if (draft.status === "loading") {
     return (
-      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle}>
+      <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
         <Group justify="center" py="md">
           <Loader size="sm" />
         </Group>
@@ -164,7 +193,7 @@ export function PersonEditDialog({
   }
   if (draft.status === "error") {
     return (
-      <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle}>
+      <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
         <Stack gap="md">
           <Alert color="red" title="Could not load">{draft.loadError}</Alert>
           <Group justify="flex-end">
@@ -179,17 +208,14 @@ export function PersonEditDialog({
   const givenName = (name.first_name as string | undefined) ?? "";
   const surnameList = (name.surname_list as Record<string, unknown>[] | undefined) ?? [];
   const surname = (surnameList[0]?.surname as string | undefined) ?? "";
-  const title_ = (name.title as string | undefined) ?? "";
-  const suffix = (name.suffix as string | undefined) ?? "";
-  const call = (name.call as string | undefined) ?? "";
-  const nick = (name.nick as string | undefined) ?? "";
   const gender = String(draft.data.gender ?? 2);
+  const alternateNames = (draft.data.alternate_names as Record<string, unknown>[] | undefined) ?? [];
 
   /** Patches one field of primary_name, preserving every other field --
    * important in edit mode, where `name` already carries server-side
    * fields this dialog doesn't surface (group_as, sort_as, citation_list,
    * ...) that a from-scratch rebuild would silently drop. */
-  function patchName(key: "first_name" | "surname" | "title" | "suffix" | "call" | "nick", value: string) {
+  function patchName(key: "first_name" | "surname", value: string) {
     if (key === "surname") {
       const nextList = surnameList.length > 0
         ? [{ ...surnameList[0], _class: "Surname", surname: value }, ...surnameList.slice(1)]
@@ -200,75 +226,175 @@ export function PersonEditDialog({
     onChange({ primary_name: { _class: "Name", ...name, [key]: value } });
   }
 
+  /** Same "preserve every other field" merge as patchName, but for whatever
+   * key(s) the "More name details…" dialog (NameEditDialog) touches --
+   * title/suffix/call/nick/famnick/type/private/date/surname_list/
+   * group_as/sort_as/display_as -- rather than one hand-listed key at a
+   * time. */
+  function patchPrimaryName(patch: Record<string, unknown>) {
+    onChange({ primary_name: { _class: "Name", ...name, ...patch } });
+  }
+
+  function altNameLabel(n: Record<string, unknown>): string {
+    const given = (n.first_name as string | undefined) ?? "";
+    const surn = ((n.surname_list as Record<string, unknown>[] | undefined)?.[0]?.surname as string | undefined) ?? "";
+    return [given, surn].filter(Boolean).join(" ") || "(unnamed)";
+  }
+
+  function addAlternateName() {
+    const id = createHandle();
+    setAltIds((prev) => [...prev, id]);
+    setEverAltIds((prev) => [...prev, id]);
+    setOpenAltIds((prev) => [...prev, id]);
+    onChange({
+      alternate_names: [
+        ...alternateNames,
+        { _class: "Name", first_name: "", surname_list: [{ _class: "Surname", surname: "" }] },
+      ],
+    });
+  }
+
+  function removeAlternateName(id: string) {
+    const idx = altIds.indexOf(id);
+    if (idx < 0) return;
+    setAltIds((prev) => prev.filter((x) => x !== id));
+    setOpenAltIds((prev) => prev.filter((x) => x !== id));
+    onChange({ alternate_names: alternateNames.filter((_, j) => j !== idx) });
+  }
+
   return (
-    <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle}>
-      <Stack gap="md">
-        <TextInput
-          label="Given name"
-          value={givenName}
-          onChange={(e) => patchName("first_name", e.currentTarget.value)}
-          autoFocus
-        />
-        <TextInput
-          label="Surname"
-          value={surname}
-          onChange={(e) => patchName("surname", e.currentTarget.value)}
-        />
-        <Select
-          label="Gender"
-          data={GENDER_OPTIONS}
-          value={gender}
-          onChange={(next) => onChange({ gender: Number(next ?? 2) })}
-          allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
-        />
+    <>
+      <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
+        <Stack gap="md">
+          <TextInput
+            label="Given name"
+            value={givenName}
+            onChange={(e) => patchName("first_name", e.currentTarget.value)}
+            autoFocus
+          />
+          <Group gap="xs" align="flex-end" wrap="nowrap">
+            <TextInput
+              label="Surname"
+              value={surname}
+              onChange={(e) => patchName("surname", e.currentTarget.value)}
+              style={{ flex: 1 }}
+            />
+            <Button variant="default" onClick={() => setPrimaryNameOpen(true)}>
+              More…
+            </Button>
+          </Group>
+          <Select
+            label="Gender"
+            data={GENDER_OPTIONS}
+            value={gender}
+            onChange={(next) => onChange({ gender: Number(next ?? 2) })}
+            allowDeselect={false}
+            comboboxProps={{ withinPortal: true }}
+          />
 
-        <Anchor component="button" type="button" size="sm" onClick={() => setShowDetails((v) => !v)}>
-          {showDetails ? "▾" : "▸"} Details
-        </Anchor>
-        <Collapse in={showDetails}>
-          <Stack gap="md">
-            <SimpleDateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
-            <SimpleDateInput label="Death date" value={deathDate} onChange={setDeathDate} />
-            <TextInput label="Title" value={title_} onChange={(e) => patchName("title", e.currentTarget.value)} />
-            <TextInput label="Suffix" value={suffix} onChange={(e) => patchName("suffix", e.currentTarget.value)} />
-            <TextInput label="Call name" value={call} onChange={(e) => patchName("call", e.currentTarget.value)} />
-            <TextInput label="Nickname" value={nick} onChange={(e) => patchName("nick", e.currentTarget.value)} />
-            <Switch
-              label="Private"
-              checked={Boolean(draft.data.private)}
-              onChange={(e) => onChange({ private: e.currentTarget.checked })}
-            />
-            <AttributeListField
-              items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
-              onChange={(items) => onChange({ attribute_list: items })}
-            />
-            <AddressListField
-              items={(draft.data.address_list as Address[] | undefined) ?? []}
-              onChange={(items) => onChange({ address_list: items })}
-            />
-            <UrlListField
-              items={(draft.data.urls as Url[] | undefined) ?? []}
-              onChange={(items) => onChange({ urls: items })}
-            />
-          </Stack>
-        </Collapse>
+          <Anchor component="button" type="button" size="sm" onClick={() => setShowDetails((v) => !v)}>
+            {showDetails ? "▾" : "▸"} Details
+          </Anchor>
+          <Collapse in={showDetails}>
+            <Stack gap="md">
+              <SimpleDateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
+              <SimpleDateInput label="Death date" value={deathDate} onChange={setDeathDate} />
+              <Switch
+                label="Private"
+                checked={Boolean(draft.data.private)}
+                onChange={(e) => onChange({ private: e.currentTarget.checked })}
+              />
 
-        {error && (
-          <Alert color="red" title="Could not save">
-            {error}
-          </Alert>
-        )}
+              <Stack gap={4}>
+                <Text size="sm" fw={500}>Alternate names</Text>
+                {altIds.length === 0 && <Text size="xs" c="dimmed">No alternate names</Text>}
+                {altIds.map((id, i) => (
+                  <Group key={id} gap="xs">
+                    <Anchor
+                      component="button"
+                      type="button"
+                      size="sm"
+                      onClick={() => setOpenAltIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+                    >
+                      {altNameLabel(alternateNames[i] ?? {})}
+                    </Anchor>
+                    <CircleGlyphButton
+                      glyph="−"
+                      label="Remove alternate name"
+                      onClick={() => removeAlternateName(id)}
+                      size={16}
+                    />
+                  </Group>
+                ))}
+                <CircleGlyphButton
+                  glyph="+"
+                  label="Add alternate name"
+                  textLabel="Add alternate name"
+                  onClick={addAlternateName}
+                />
+              </Stack>
 
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onCancel} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={onPrimary} loading={saving}>
-            {primaryLabel}
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
+              <AttributeListField
+                items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
+                onChange={(items) => onChange({ attribute_list: items })}
+              />
+              <AddressListField
+                items={(draft.data.address_list as Address[] | undefined) ?? []}
+                onChange={(items) => onChange({ address_list: items })}
+              />
+              <UrlListField
+                items={(draft.data.urls as Url[] | undefined) ?? []}
+                onChange={(items) => onChange({ urls: items })}
+              />
+            </Stack>
+          </Collapse>
+
+          {error && (
+            <Alert color="red" title="Could not save">
+              {error}
+            </Alert>
+          )}
+
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onCancel} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={onPrimary} loading={saving}>
+              {primaryLabel}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <NameEditDialog
+        stackId={`${draft.handle}-primary-name`}
+        opened={primaryNameOpen}
+        title="Primary Name"
+        data={name}
+        onChange={patchPrimaryName}
+        onDone={() => setPrimaryNameOpen(false)}
+      />
+      {everAltIds.map((id, everIdx) => {
+        const idx = altIds.indexOf(id);
+        const data = idx >= 0 ? alternateNames[idx] : undefined;
+        return (
+          <NameEditDialog
+            key={id}
+            stackId={`${draft.handle}-alt-name-${id}`}
+            opened={idx >= 0 && openAltIds.includes(id)}
+            title={`Alternate Name ${idx >= 0 ? idx + 1 : everIdx + 1}`}
+            data={data ?? {}}
+            onChange={(patch) => {
+              if (idx < 0) return;
+              onChange({
+                alternate_names: alternateNames.map((n, j) => (j === idx ? { ...n, ...patch } : n)),
+              });
+            }}
+            onDone={() => setOpenAltIds((prev) => prev.filter((x) => x !== id))}
+            onRemove={idx >= 0 ? () => removeAlternateName(id) : undefined}
+          />
+        );
+      })}
+    </>
   );
 }
