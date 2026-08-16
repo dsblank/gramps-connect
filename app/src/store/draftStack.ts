@@ -96,6 +96,14 @@ export interface DraftEntry {
    * setExtraObjects(); untouched by openDraft/openEditDraft. */
   extraCreate: Record<string, unknown>[];
   extraUpdate: { type: DraftType; handle: string; data: Record<string, unknown> }[];
+  /** Bumped every time openEditDraft (re)initializes this handle's entry --
+   * lets a dialog component (which stays mounted, same `key={handle}`,
+   * across a Cancel + re-Edit of the same object, per EditDialogs.tsx's
+   * never-unmount rule) tell a genuinely fresh edit session apart from an
+   * ordinary re-render, and reset its own local UI state (disclosure
+   * toggles, nested "More…" dialogs, ...) accordingly -- see
+   * PersonEditDialog's session-reset effect. */
+  session: number;
 }
 
 // Gramps' own class name per type -- gramps-web-api fills in the rest of
@@ -197,7 +205,7 @@ export function useDraftStack(): UseDraftStack {
     const handle = createHandle();
     const entry: DraftEntry = {
       handle, type, mode: "new", status: "ready", data: defaultDataFor(type, handle), openedFrom, active: true,
-      extraCreate: [], extraUpdate: [],
+      extraCreate: [], extraUpdate: [], session: 0,
     };
     setStack((prev) => {
       const next = [...prev, entry];
@@ -211,11 +219,32 @@ export function useDraftStack(): UseDraftStack {
   }
 
   function openEditDraft(type: DraftType, handle: string) {
-    const entry: DraftEntry = {
-      handle, type, mode: "edit", status: "loading", data: {}, active: true, extraCreate: [], extraUpdate: [],
-    };
-    setStack((prev) => [...prev, entry]);
-    setOpenHandles((prev) => [...prev, handle]);
+    // Re-editing a handle that's already in `stack` (e.g. Cancel, then Edit
+    // the same object again) must *reset* that entry in place rather than
+    // push a second one alongside it: EditDialogs.tsx keys its Modal map by
+    // handle, and (per DraftEntry.active's doc comment) never unmounts a
+    // draft's dialog once rendered, so a duplicate entry would reactivate
+    // the stale one -- opened, with its last-cancelled data and open nested
+    // dialogs -- right alongside the fresh one. Bumping `session` lets the
+    // dialog component (also never unmounted/remounted across this) notice
+    // and clear its own local UI state.
+    setStack((prev) => {
+      const idx = prev.findIndex((d) => d.handle === handle);
+      if (idx < 0) {
+        const entry: DraftEntry = {
+          handle, type, mode: "edit", status: "loading", data: {}, active: true,
+          extraCreate: [], extraUpdate: [], session: 0,
+        };
+        return [...prev, entry];
+      }
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx], type, mode: "edit", status: "loading", data: {}, active: true,
+        extraCreate: [], extraUpdate: [], session: next[idx].session + 1,
+      };
+      return next;
+    });
+    setOpenHandles((prev) => (prev.includes(handle) ? prev : [...prev, handle]));
 
     (async () => {
       try {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert, Anchor, Button, Card, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
@@ -266,6 +266,20 @@ export function FamilyEditDialog({
 }: FamilyEditDialogProps) {
   const [pickedLabels, setPickedLabels] = useState<Record<string, string>>({});
   const [showDetails, setShowDetails] = useState(false);
+
+  // This dialog stays mounted (same `key={draft.handle}`) across a Cancel
+  // and a later re-Edit of the *same* Family -- draftStack.ts's
+  // openEditDraft bumps `session` when that happens, rather than mounting a
+  // fresh component -- so a "Details" disclosure left open from a cancelled
+  // session would otherwise still show expanded next time. See
+  // PersonEditDialog's identical session-reset effect for the fuller story.
+  const sessionRef = useRef(draft.session);
+  useEffect(() => {
+    if (draft.session === sessionRef.current) return;
+    sessionRef.current = draft.session;
+    setShowDetails(false);
+    setPickedLabels({});
+  }, [draft.session]);
 
   const childRefs = ((draft.data.child_ref_list as ChildRefLite[] | undefined) ?? []);
 

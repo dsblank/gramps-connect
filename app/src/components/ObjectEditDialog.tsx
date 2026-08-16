@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert, Anchor, Button, Collapse, ColorInput, Group, Loader, Modal, NumberInput, Stack, Switch, Text, TextInput,
   Textarea,
@@ -198,6 +198,20 @@ export function ObjectEditDialog({
 }: ObjectEditDialogProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [pickedLabels, setPickedLabels] = useState<Record<string, string>>({});
+
+  // This dialog stays mounted (same `key={draft.handle}`) across a Cancel
+  // and a later re-Edit of the *same* object -- draftStack.ts's
+  // openEditDraft bumps `session` when that happens, rather than mounting a
+  // fresh component -- so a "Details" disclosure left open from a cancelled
+  // session would otherwise still show expanded next time. See
+  // PersonEditDialog's identical session-reset effect for the fuller story.
+  const sessionRef = useRef(draft.session);
+  useEffect(() => {
+    if (draft.session === sessionRef.current) return;
+    sessionRef.current = draft.session;
+    setShowDetails(false);
+    setPickedLabels({});
+  }, [draft.session]);
 
   const typeLabel = DRAFT_TYPE_LABELS[draft.type];
   const title = draft.mode === "edit" ? `Edit ${typeLabel}` : `New ${typeLabel}`;

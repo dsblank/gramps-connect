@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Alert, Anchor, Button, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
@@ -81,6 +81,47 @@ export function PersonEditDialog({
   const [everAltIds, setEverAltIds] = useState<string[]>([]);
   const [openAltIds, setOpenAltIds] = useState<string[]>([]);
   const [altSeeded, setAltSeeded] = useState(false);
+
+  // This dialog stays mounted (same `key={draft.handle}`) across a Cancel
+  // and a later re-Edit of the *same* Person -- draftStack.ts's
+  // openEditDraft bumps `session` when that happens, rather than mounting a
+  // fresh component, so every bit of local UI state below (which otherwise
+  // just carries over from the cancelled session -- a stale "Details"
+  // disclosure or "More…" name dialog left open, stale birth/death dates,
+  // ...) has to be cleared by hand here instead of resetting for free via
+  // useState's initial value. `everAltIds` is deliberately NOT cleared: it
+  // only ever grows, since a NameEditDialog Modal already registered with
+  // Mantine's ModalStack can never be safely unmounted (see this file's own
+  // doc comment above).
+  const sessionRef = useRef(draft.session);
+  useEffect(() => {
+    if (draft.session === sessionRef.current) return;
+    sessionRef.current = draft.session;
+    setShowDetails(false);
+    setBirthDate(null);
+    setDeathDate(null);
+    setBirthEvent(null);
+    setDeathEvent(null);
+    setPendingBirthHandle(null);
+    setPendingDeathHandle(null);
+    setEventsLoaded(false);
+    setPrimaryNameOpen(false);
+    setAltIds([]);
+    setOpenAltIds([]);
+    setAltSeeded(false);
+  }, [draft.session]);
+
+  // Closing (Cancel, or Done on a nested draft) this dialog while a "More…"
+  // name dialog is open left that nested Modal as the only thing on screen
+  // -- its own stackId keeps it registered with Mantine's ModalStack
+  // independent of this Modal's `opened`, so it doesn't close on its own
+  // just because its opener did. The session-reset effect above only covers
+  // a *later* re-Edit; this covers the moment of closing itself.
+  useEffect(() => {
+    if (opened) return;
+    setPrimaryNameOpen(false);
+    setOpenAltIds([]);
+  }, [opened]);
 
   // One-time assignment of a local id to each of an edit draft's existing
   // alternate_names, once its GET has resolved -- mirrors eventsLoaded
@@ -182,28 +223,6 @@ export function PersonEditDialog({
 
   const title = draft.mode === "edit" ? "Edit Person" : "New Person";
 
-  if (draft.status === "loading") {
-    return (
-      <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
-        <Group justify="center" py="md">
-          <Loader size="sm" />
-        </Group>
-      </Modal>
-    );
-  }
-  if (draft.status === "error") {
-    return (
-      <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
-        <Stack gap="md">
-          <Alert color="red" title="Could not load">{draft.loadError}</Alert>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={onCancel}>Close</Button>
-          </Group>
-        </Stack>
-      </Modal>
-    );
-  }
-
   const name = (draft.data.primary_name ?? {}) as Record<string, unknown>;
   const givenName = (name.first_name as string | undefined) ?? "";
   const surnameList = (name.surname_list as Record<string, unknown>[] | undefined) ?? [];
@@ -262,108 +281,137 @@ export function PersonEditDialog({
     onChange({ alternate_names: alternateNames.filter((_, j) => j !== idx) });
   }
 
+  // Computed rather than three separate early `return`s -- draft.status
+  // cycles back through "loading" on a re-Edit of an already-cancelled
+  // draft (draftStack.ts's openEditDraft resets the same entry rather than
+  // creating a new one), and an early return here would drop the
+  // NameEditDialog Modals below out of the tree for that stretch, unmounting
+  // an already-registered Mantine ModalStack entry -- unsafe for the same
+  // reason EditDialogs.tsx never conditionally omits a draft's own dialog.
+  let modalBody: ReactNode;
+  if (draft.status === "loading") {
+    modalBody = (
+      <Group justify="center" py="md">
+        <Loader size="sm" />
+      </Group>
+    );
+  } else if (draft.status === "error") {
+    modalBody = (
+      <Stack gap="md">
+        <Alert color="red" title="Could not load">{draft.loadError}</Alert>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onCancel}>Close</Button>
+        </Group>
+      </Stack>
+    );
+  } else {
+    modalBody = (
+      <Stack gap="md">
+        <TextInput
+          label="Given name"
+          value={givenName}
+          onChange={(e) => patchName("first_name", e.currentTarget.value)}
+          autoFocus
+        />
+        <Group gap="xs" align="flex-end" wrap="nowrap">
+          <TextInput
+            label="Surname"
+            value={surname}
+            onChange={(e) => patchName("surname", e.currentTarget.value)}
+            style={{ flex: 1 }}
+          />
+          <Button variant="default" onClick={() => setPrimaryNameOpen(true)}>
+            More…
+          </Button>
+        </Group>
+        <Select
+          label="Gender"
+          data={GENDER_OPTIONS}
+          value={gender}
+          onChange={(next) => onChange({ gender: Number(next ?? 2) })}
+          allowDeselect={false}
+          comboboxProps={{ withinPortal: true }}
+        />
+
+        <Anchor component="button" type="button" size="sm" onClick={() => setShowDetails((v) => !v)}>
+          {showDetails ? "▾" : "▸"} Details
+        </Anchor>
+        <Collapse in={showDetails}>
+          <Stack gap="md">
+            <SimpleDateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
+            <SimpleDateInput label="Death date" value={deathDate} onChange={setDeathDate} />
+            <Switch
+              label="Private"
+              checked={Boolean(draft.data.private)}
+              onChange={(e) => onChange({ private: e.currentTarget.checked })}
+            />
+
+            <Stack gap={4}>
+              <Text size="sm" fw={500}>Alternate names</Text>
+              {altIds.length === 0 && <Text size="xs" c="dimmed">No alternate names</Text>}
+              {altIds.map((id, i) => (
+                <Group key={id} gap="xs">
+                  <Anchor
+                    component="button"
+                    type="button"
+                    size="sm"
+                    onClick={() => setOpenAltIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+                  >
+                    {altNameLabel(alternateNames[i] ?? {})}
+                  </Anchor>
+                  <CircleGlyphButton
+                    glyph="−"
+                    label="Remove alternate name"
+                    onClick={() => removeAlternateName(id)}
+                    size={16}
+                  />
+                </Group>
+              ))}
+              <CircleGlyphButton
+                glyph="+"
+                label="Add alternate name"
+                textLabel="Add alternate name"
+                onClick={addAlternateName}
+              />
+            </Stack>
+
+            <AttributeListField
+              items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
+              onChange={(items) => onChange({ attribute_list: items })}
+            />
+            <AddressListField
+              items={(draft.data.address_list as Address[] | undefined) ?? []}
+              onChange={(items) => onChange({ address_list: items })}
+            />
+            <UrlListField
+              items={(draft.data.urls as Url[] | undefined) ?? []}
+              onChange={(items) => onChange({ urls: items })}
+            />
+          </Stack>
+        </Collapse>
+
+        {error && (
+          <Alert color="red" title="Could not save">
+            {error}
+          </Alert>
+        )}
+
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onCancel} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={onPrimary} loading={saving}>
+            {primaryLabel}
+          </Button>
+        </Group>
+      </Stack>
+    );
+  }
+
   return (
     <>
       <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
-        <Stack gap="md">
-          <TextInput
-            label="Given name"
-            value={givenName}
-            onChange={(e) => patchName("first_name", e.currentTarget.value)}
-            autoFocus
-          />
-          <Group gap="xs" align="flex-end" wrap="nowrap">
-            <TextInput
-              label="Surname"
-              value={surname}
-              onChange={(e) => patchName("surname", e.currentTarget.value)}
-              style={{ flex: 1 }}
-            />
-            <Button variant="default" onClick={() => setPrimaryNameOpen(true)}>
-              More…
-            </Button>
-          </Group>
-          <Select
-            label="Gender"
-            data={GENDER_OPTIONS}
-            value={gender}
-            onChange={(next) => onChange({ gender: Number(next ?? 2) })}
-            allowDeselect={false}
-            comboboxProps={{ withinPortal: true }}
-          />
-
-          <Anchor component="button" type="button" size="sm" onClick={() => setShowDetails((v) => !v)}>
-            {showDetails ? "▾" : "▸"} Details
-          </Anchor>
-          <Collapse in={showDetails}>
-            <Stack gap="md">
-              <SimpleDateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
-              <SimpleDateInput label="Death date" value={deathDate} onChange={setDeathDate} />
-              <Switch
-                label="Private"
-                checked={Boolean(draft.data.private)}
-                onChange={(e) => onChange({ private: e.currentTarget.checked })}
-              />
-
-              <Stack gap={4}>
-                <Text size="sm" fw={500}>Alternate names</Text>
-                {altIds.length === 0 && <Text size="xs" c="dimmed">No alternate names</Text>}
-                {altIds.map((id, i) => (
-                  <Group key={id} gap="xs">
-                    <Anchor
-                      component="button"
-                      type="button"
-                      size="sm"
-                      onClick={() => setOpenAltIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
-                    >
-                      {altNameLabel(alternateNames[i] ?? {})}
-                    </Anchor>
-                    <CircleGlyphButton
-                      glyph="−"
-                      label="Remove alternate name"
-                      onClick={() => removeAlternateName(id)}
-                      size={16}
-                    />
-                  </Group>
-                ))}
-                <CircleGlyphButton
-                  glyph="+"
-                  label="Add alternate name"
-                  textLabel="Add alternate name"
-                  onClick={addAlternateName}
-                />
-              </Stack>
-
-              <AttributeListField
-                items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
-                onChange={(items) => onChange({ attribute_list: items })}
-              />
-              <AddressListField
-                items={(draft.data.address_list as Address[] | undefined) ?? []}
-                onChange={(items) => onChange({ address_list: items })}
-              />
-              <UrlListField
-                items={(draft.data.urls as Url[] | undefined) ?? []}
-                onChange={(items) => onChange({ urls: items })}
-              />
-            </Stack>
-          </Collapse>
-
-          {error && (
-            <Alert color="red" title="Could not save">
-              {error}
-            </Alert>
-          )}
-
-          <Group justify="flex-end">
-            <Button variant="default" onClick={onCancel} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={onPrimary} loading={saving}>
-              {primaryLabel}
-            </Button>
-          </Group>
-        </Stack>
+        {modalBody}
       </Modal>
 
       <NameEditDialog
