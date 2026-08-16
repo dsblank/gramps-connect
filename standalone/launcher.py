@@ -14,6 +14,7 @@ directory to start over.
 
 from __future__ import annotations
 
+import io
 import os
 import socket
 import sys
@@ -22,6 +23,7 @@ import webbrowser
 from threading import Thread
 
 import webview
+from PIL import Image
 
 APP_NAME = "gramps-connect-demo"
 TREE_NAME = "gramps-connect-demo"
@@ -91,6 +93,46 @@ def wait_for_server() -> None:
         time.sleep(0.05)
 
 
+def install_avif_transcoder(app) -> None:
+    """Rewrite image/avif responses to JPEG before they reach the webview.
+
+    gramps-web-api's thumbnail endpoints serve AVIF unless the request's
+    Accept header explicitly lists image/avif -- but Ubuntu's stock
+    WebKitGTK (confirmed on 2.52.3, no libavif/dav1d linked) both sends
+    "image/avif" in its default image Accept header (a spec-mandated
+    default, unrelated to whether the engine was actually built with an
+    AVIF decoder) and then can't decode the bytes it asked for: the
+    request 200s, and the <img> just renders blank, with no console error
+    or broken-image fallback. Server-side Accept negotiation can't fix
+    that -- the header lies about decode capability -- so this decodes
+    and re-encodes here instead, in the one process that actually has the
+    broken renderer, using the Pillow this app already depends on. Every
+    other client of gramps-web-api (browsers with real AVIF support, the
+    sync/backup tools, plain API callers) is untouched, since this hook
+    only runs inside this bundled process.
+    """
+
+    @app.after_request
+    def _transcode_avif(response):
+        if response.status_code != 200 or response.mimetype != "image/avif":
+            return response
+        response.direct_passthrough = False
+        with Image.open(io.BytesIO(response.get_data())) as img:
+            if img.mode in ("RGBA", "LA", "P"):
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                background.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
+                img = background
+            else:
+                img = img.convert("RGB")
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=85)
+        response.set_data(buffer.getvalue())
+        response.headers["Content-Type"] = "image/jpeg"
+        if "ETag" in response.headers:
+            response.headers["ETag"] = response.headers["ETag"].rstrip('"') + '-jpeg"'
+        return response
+
+
 def first_run_setup(app) -> None:
     from gramps_webapi.auth import add_user, user_db
     from gramps_webapi.auth.const import ROLE_OWNER
@@ -118,6 +160,7 @@ def main() -> None:
     from gramps_webapi.app import create_app
 
     app = create_app(config=config, config_from_env=False)
+    install_avif_transcoder(app)
 
     if first_run:
         print(f"First run -- setting up demo tree in {data_path()} ...")
