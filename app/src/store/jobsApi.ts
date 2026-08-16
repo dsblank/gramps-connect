@@ -67,7 +67,15 @@ export async function downloadProcessedFile(
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await parseErrorMessage(res));
-  const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
+  // Strip any "; charset=..." (or other) parameters: gramps-web-api's own
+  // report-download endpoint sets its Content-Type from the stdlib
+  // mimetypes module rather than its MIME_TYPES const, so text-based
+  // report outputs (.txt, .html, ...) come back as e.g.
+  // "text/plain; charset=utf-8". Relaying that verbatim to
+  // uploadMedia()/POST /api/media/ makes the server's get_extension() fail
+  // to match it and raise "MIME type not recognized" (500).
+  const rawContentType = res.headers.get("Content-Type") ?? "application/octet-stream";
+  const contentType = rawContentType.split(";")[0].trim();
   return { blob: await res.blob(), contentType };
 }
 
