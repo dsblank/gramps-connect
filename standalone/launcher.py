@@ -186,8 +186,16 @@ def main() -> None:
         # WebKit profile under DATA_DIR too, consistent with "delete this
         # folder to reset" covering everything, not just the tree.
         webview.start(private_mode=False, storage_path=data_path("webkit-storage"))
-    except webview.WebViewException:
-        print("No native webview backend found -- opening in your browser instead.")
+    except Exception as exc:
+        # webview.WebViewException covers "no backend found at all", but a
+        # host whose real GTK/WebKit2 gi bindings import fine (see
+        # rthook_gi_stub.py's _try_real_gi()) yet fail at actual use --
+        # e.g. an ABI/library-version mismatch -- surfaces as some other
+        # exception type from deep inside pywebview's GTK backend (seen in
+        # practice: gi.repository.GLib.GError from a failed native call).
+        # Anything here means no working native window either way, so fall
+        # back the same way rather than crashing.
+        print(f"Native webview backend unavailable ({exc}) -- opening in your browser instead.")
         webbrowser.open(f"http://{HOST}:{PORT}")
         print("Press Control+C to quit")
         server_thread.join()

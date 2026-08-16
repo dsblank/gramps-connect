@@ -266,6 +266,23 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+# PyInstaller's binary walker pulls in a libstdc++.so.6 from the *build*
+# machine as a transitive dependency of some bundled extension (not GTK --
+# real gi is excluded from Analysis, see rthook_gi_stub.py). On a Linux
+# desktop that has real system GTK3/WebKit2 gi bindings for a native window
+# (see that runtime hook), this bundled libstdc++.so.6 sits in _internal/,
+# which the dynamic linker searches *before* system library paths -- so a
+# libstdc++.so.6 built on an older base image (e.g. manylinux_2_28, only up
+# to GLIBCXX_3.4.25) shadows the host's newer one and breaks loading
+# /usr/lib/x86_64-linux-gnu/libwebkit2gtk-4.1.so.0 (needs GLIBCXX_3.4.26+),
+# even though the app itself never asked for libstdc++ to be bundled at all.
+# Dropping it from the COLLECT'd binaries makes the loader fall back to the
+# host's own (always newer, on any real desktop) libstdc++ instead.
+if sys.platform.startswith("linux"):
+    a.binaries = [
+        b for b in a.binaries if os.path.basename(b[0]) != "libstdc++.so.6"
+    ]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
