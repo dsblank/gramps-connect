@@ -65,9 +65,13 @@ export interface DraftEntry {
   handle: string;
   type: DraftType;
   /** "new": save creates it (POST /api/objects/). "edit": save PUTs the
-   * whole object back. Mixed create+edit (an edit draft spawning a nested
-   * "+ New Person") is deferred -- see the plan -- so an "edit" draft never
-   * has `openedFrom` and never appears in another draft's extraCreate. */
+   * whole object back. Mixed create+edit -- an "edit" draft with its own
+   * `openedFrom` (or one spawning a nested "+ New Person") -- is deferred
+   * for Person/Family's own parent/child slots (see the plan); Place's
+   * reference-field "+ New"/"✎ Edit" (ObjectEditDialog.tsx) is the one
+   * exception, so an "edit" draft *can* carry `openedFrom` now -- see
+   * openEditDraft's own doc comment. Either way, an "edit" draft never
+   * appears in another draft's extraCreate (only "new" drafts do). */
   mode: "new" | "edit";
   /** "loading" only while an edit draft's initial GET is in flight;
    * "error" if that GET failed (loadError carries the message) -- either
@@ -168,9 +172,14 @@ export interface UseDraftStack {
   openHandles: string[];
   openDraft: (type: DraftType, openedFrom?: DraftEntry["openedFrom"]) => string;
   /** Opens a draft for editing an existing object: fetches its current
-   * plain (non-extended) dict and fills the draft in once it lands. Always
-   * top-level (no `openedFrom` param) -- mixed create+edit is deferred. */
-  openEditDraft: (type: DraftType, handle: string) => void;
+   * plain (non-extended) dict and fills the draft in once it lands.
+   * `openedFrom`, when given, nests this edit the same way `openDraft`'s
+   * own `openedFrom` nests a "new" draft -- Cancel cascades and clears the
+   * parent's field, and EditDialogs.tsx's isTopLevel/primaryLabel treat it
+   * as "Done", not "Save" (see PlaceEditDialog's own doc comment for why
+   * this is Place-only for now; Person/Family's own child/parent flows stay
+   * "new"-only, mixed create+edit still deferred there). */
+  openEditDraft: (type: DraftType, handle: string, openedFrom?: DraftEntry["openedFrom"]) => void;
   showDraft: (handle: string) => void;
   hideDraft: (handle: string) => void;
   updateDraft: (handle: string, patch: Record<string, unknown>) => void;
@@ -182,8 +191,13 @@ export interface UseDraftStack {
     extra: { create: Record<string, unknown>[]; update: DraftEntry["extraUpdate"] }
   ) => void;
   /** Discards a draft and, recursively, every draft opened from it (marks
-   * them inactive and hides them); if it was itself opened from a parent
-   * field, clears that field back out. */
+   * them inactive and hides them); if it was itself a "new" draft opened
+   * from a parent field, also clears that field back out -- there's nothing
+   * left to reference once an unsaved draft is abandoned. An "edit" draft
+   * with `openedFrom` (Place's nested "✎ Edit", see ObjectEditDialog.tsx)
+   * leaves the parent's field alone instead: it already points at the real,
+   * untouched-on-server object, so closing just discards whatever local
+   * edits were in progress rather than de-referencing it. */
   closeDraft: (handle: string) => void;
   /** Saves every *active* draft. "new" drafts go together in one atomic
    * POST /api/objects/, in dependency order; each "edit" draft is its own
@@ -218,7 +232,7 @@ export function useDraftStack(): UseDraftStack {
     return handle;
   }
 
-  function openEditDraft(type: DraftType, handle: string) {
+  function openEditDraft(type: DraftType, handle: string, openedFrom?: DraftEntry["openedFrom"]) {
     // Re-editing a handle that's already in `stack` (e.g. Cancel, then Edit
     // the same object again) must *reset* that entry in place rather than
     // push a second one alongside it: EditDialogs.tsx keys its Modal map by
@@ -232,14 +246,14 @@ export function useDraftStack(): UseDraftStack {
       const idx = prev.findIndex((d) => d.handle === handle);
       if (idx < 0) {
         const entry: DraftEntry = {
-          handle, type, mode: "edit", status: "loading", data: {}, active: true,
+          handle, type, mode: "edit", status: "loading", data: {}, openedFrom, active: true,
           extraCreate: [], extraUpdate: [], session: 0,
         };
         return [...prev, entry];
       }
       const next = [...prev];
       next[idx] = {
-        ...next[idx], type, mode: "edit", status: "loading", data: {}, active: true,
+        ...next[idx], type, mode: "edit", status: "loading", data: {}, openedFrom, active: true,
         extraCreate: [], extraUpdate: [], session: next[idx].session + 1,
       };
       return next;
@@ -292,7 +306,7 @@ export function useDraftStack(): UseDraftStack {
       const closed = prev.find((d) => d.handle === handle);
       return prev.map((d) => {
         if (toDeactivate.has(d.handle)) return { ...d, active: false };
-        if (closed?.openedFrom && d.handle === closed.openedFrom.handle) {
+        if (closed?.mode === "new" && closed.openedFrom && d.handle === closed.openedFrom.handle) {
           return { ...d, data: { ...d.data, [closed.openedFrom.field]: null } };
         }
         return d;

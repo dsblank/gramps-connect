@@ -365,6 +365,12 @@ export function FamilyEditDialog({
   return (
     <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
       <Stack gap="lg">
+        <TextInput
+          label="Gramps ID"
+          placeholder="auto-assigned"
+          value={(draft.data.gramps_id as string | undefined) ?? ""}
+          onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
+        />
         <ParentSlot {...slotProps("father_handle", "Father")} />
         <ParentSlot {...slotProps("mother_handle", "Mother")} />
 

@@ -12,6 +12,7 @@ import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
 import { NameEditDialog } from "./NameEditDialog";
+import { EventPlaceField, type EventPlaceValue } from "./EventPlaceField";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 
 // Person.{FEMALE,MALE,UNKNOWN,OTHER} (gramps/gen/lib/person.py) -- gender is
@@ -66,6 +67,8 @@ export function PersonEditDialog({
   // keystroke).
   const [pendingBirthHandle, setPendingBirthHandle] = useState<string | null>(null);
   const [pendingDeathHandle, setPendingDeathHandle] = useState<string | null>(null);
+  const [birthPlace, setBirthPlace] = useState<EventPlaceValue | null>(null);
+  const [deathPlace, setDeathPlace] = useState<EventPlaceValue | null>(null);
   const [eventsLoaded, setEventsLoaded] = useState(false);
 
   const [primaryNameOpen, setPrimaryNameOpen] = useState(false);
@@ -104,6 +107,8 @@ export function PersonEditDialog({
     setDeathEvent(null);
     setPendingBirthHandle(null);
     setPendingDeathHandle(null);
+    setBirthPlace(null);
+    setDeathPlace(null);
     setEventsLoaded(false);
     setPrimaryNameOpen(false);
     setAltIds([]);
@@ -153,21 +158,25 @@ export function PersonEditDialog({
         const data = await fetchPlainObject(token, EVENT_VIEW, eventRefs[birthIdx].ref);
         setBirthEvent({ handle: eventRefs[birthIdx].ref, data });
         setBirthDate((data.date as GrampsDate | undefined) ?? null);
+        const placeHandle = data.place as string | undefined;
+        if (placeHandle) setBirthPlace({ handle: placeHandle });
       }
       if (deathIdx >= 0 && eventRefs[deathIdx]) {
         const data = await fetchPlainObject(token, EVENT_VIEW, eventRefs[deathIdx].ref);
         setDeathEvent({ handle: eventRefs[deathIdx].ref, data });
         setDeathDate((data.date as GrampsDate | undefined) ?? null);
+        const placeHandle = data.place as string | undefined;
+        if (placeHandle) setDeathPlace({ handle: placeHandle });
       }
     })();
   }, [draft.mode, draft.status, eventsLoaded]);
 
   // Derives extraCreate/extraUpdate (draftStack.ts) plus, when a brand-new
   // Event needs linking, a patch to the Person's own event_ref_list/
-  // birth_ref_index/death_ref_index -- from birth/deathDate and what's
-  // already known about an existing/pending Event, not from draft.data
-  // (which this effect itself writes back via onChange -- including it in
-  // the dependency list would create a feedback loop).
+  // birth_ref_index/death_ref_index -- from birth/deathDate, birth/deathPlace,
+  // and what's already known about an existing/pending Event, not from
+  // draft.data (which this effect itself writes back via onChange --
+  // including it in the dependency list would create a feedback loop).
   useEffect(() => {
     const create: Record<string, unknown>[] = [];
     const update: DraftEntry["extraUpdate"] = [];
@@ -176,36 +185,53 @@ export function PersonEditDialog({
     let deathRefIndex = typeof draft.data.death_ref_index === "number" ? draft.data.death_ref_index : -1;
     let refsChanged = false;
 
-    if (birthDate && birthEvent) {
-      update.push({ type: "event", handle: birthEvent.handle, data: { ...birthEvent.data, date: birthDate } });
-    } else if (birthDate && !birthEvent) {
+    // A birth/death Event is now also worth creating/keeping around for a
+    // place alone, not just a date -- recording where without exactly when
+    // is a normal case genealogists hit constantly.
+    const hasBirthInfo = Boolean(birthDate) || Boolean(birthPlace);
+    if (hasBirthInfo && birthEvent) {
+      update.push({
+        type: "event",
+        handle: birthEvent.handle,
+        data: { ...birthEvent.data, date: birthDate, place: birthPlace?.handle ?? "" },
+      });
+      if (birthPlace?.pendingData) create.push(birthPlace.pendingData);
+    } else if (hasBirthInfo && !birthEvent) {
       const handle = pendingBirthHandle ?? createHandle();
       if (!pendingBirthHandle) setPendingBirthHandle(handle);
-      create.push({ _class: "Event", handle, type: "Birth", date: birthDate });
+      create.push({ _class: "Event", handle, type: "Birth", date: birthDate, place: birthPlace?.handle ?? "" });
+      if (birthPlace?.pendingData) create.push(birthPlace.pendingData);
       if (birthRefIndex < 0) {
         eventRefList = [...eventRefList, { _class: "EventRef", ref: handle, role: "Primary" }];
         birthRefIndex = eventRefList.length - 1;
         refsChanged = true;
       }
-    } else if (!birthDate && !birthEvent && pendingBirthHandle) {
+    } else if (!hasBirthInfo && pendingBirthHandle) {
       eventRefList = eventRefList.filter((r) => r.ref !== pendingBirthHandle);
       birthRefIndex = -1;
       refsChanged = true;
       setPendingBirthHandle(null);
     }
 
-    if (deathDate && deathEvent) {
-      update.push({ type: "event", handle: deathEvent.handle, data: { ...deathEvent.data, date: deathDate } });
-    } else if (deathDate && !deathEvent) {
+    const hasDeathInfo = Boolean(deathDate) || Boolean(deathPlace);
+    if (hasDeathInfo && deathEvent) {
+      update.push({
+        type: "event",
+        handle: deathEvent.handle,
+        data: { ...deathEvent.data, date: deathDate, place: deathPlace?.handle ?? "" },
+      });
+      if (deathPlace?.pendingData) create.push(deathPlace.pendingData);
+    } else if (hasDeathInfo && !deathEvent) {
       const handle = pendingDeathHandle ?? createHandle();
       if (!pendingDeathHandle) setPendingDeathHandle(handle);
-      create.push({ _class: "Event", handle, type: "Death", date: deathDate });
+      create.push({ _class: "Event", handle, type: "Death", date: deathDate, place: deathPlace?.handle ?? "" });
+      if (deathPlace?.pendingData) create.push(deathPlace.pendingData);
       if (deathRefIndex < 0) {
         eventRefList = [...eventRefList, { _class: "EventRef", ref: handle, role: "Primary" }];
         deathRefIndex = eventRefList.length - 1;
         refsChanged = true;
       }
-    } else if (!deathDate && !deathEvent && pendingDeathHandle) {
+    } else if (!hasDeathInfo && pendingDeathHandle) {
       eventRefList = eventRefList.filter((r) => r.ref !== pendingDeathHandle);
       deathRefIndex = -1;
       refsChanged = true;
@@ -219,7 +245,7 @@ export function PersonEditDialog({
     // draft.data/onChange/onSetExtraObjects deliberately excluded -- see
     // the comment above this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [birthDate, deathDate, birthEvent, deathEvent, pendingBirthHandle, pendingDeathHandle]);
+  }, [birthDate, deathDate, birthEvent, deathEvent, pendingBirthHandle, pendingDeathHandle, birthPlace, deathPlace]);
 
   const title = draft.mode === "edit" ? "Edit Person" : "New Person";
 
@@ -308,6 +334,12 @@ export function PersonEditDialog({
     modalBody = (
       <Stack gap="md">
         <TextInput
+          label="Gramps ID"
+          placeholder="auto-assigned"
+          value={(draft.data.gramps_id as string | undefined) ?? ""}
+          onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
+        />
+        <TextInput
           label="Given name"
           value={givenName}
           onChange={(e) => patchName("first_name", e.currentTarget.value)}
@@ -339,7 +371,19 @@ export function PersonEditDialog({
         <Collapse in={showDetails}>
           <Stack gap="md">
             <SimpleDateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
+            <EventPlaceField
+              label="Birth place"
+              id={`${draft.handle}-birth-place`}
+              value={birthPlace}
+              onChange={setBirthPlace}
+            />
             <SimpleDateInput label="Death date" value={deathDate} onChange={setDeathDate} />
+            <EventPlaceField
+              label="Death place"
+              id={`${draft.handle}-death-place`}
+              value={deathPlace}
+              onChange={setDeathPlace}
+            />
             <Switch
               label="Private"
               checked={Boolean(draft.data.private)}

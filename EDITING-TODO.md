@@ -7,35 +7,50 @@ Partially editable, by type
 ┌────────────┬───────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────┐
 │    Type    │                Covered                │                                  Missing                                   │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│            │ given/surname, gender,                │ alternate names, birth/death event's place/description/other fields, any   │
-│ Person     │ title/suffix/call/nickname, private,  │ other event (marriage, occupation, ...), associations, LDS ordinances,     │
-│            │ birth & death date, attributes,       │ multiple surnames / surname prefix-connector-origin, gramps_id             │
+│            │ given/surname, gender, gramps_id,     │ birth/death event's description/other fields (place is now covered);       │
+│ Person     │ title/suffix/call/nickname, private,  │ associations, LDS ordinances                                               │
+│            │ birth & death date + place, alternate │                                                                            │
+│            │ names, multiple surnames / surname    │                                                                            │
+│            │ prefix-connector-origin, attributes,  │                                                                            │
 │            │ addresses, urls                       │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Family     │ father, mother, relationship type,    │ any event (marriage, divorce, ...), LDS ordinances, gramps_id; a child's   │
-│            │ private, children (add/remove         │ frel/mrel always defaults to Birth/Birth, and attaching a brand-new        │
-│            │ existing only), attributes            │ (not-yet-saved) Person as a child isn't supported, only an existing one   │
+│ Family     │ father, mother, relationship type,    │ LDS ordinances; a child's frel/mrel always defaults to Birth/Birth, and    │
+│            │ private, children (add/remove         │ attaching a brand-new (not-yet-saved) Person as a child isn't supported,   │
+│            │ existing only), attributes, gramps_id │ only an existing one                                                       │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Event      │ type, description, date, place,       │ gramps_id; date is year/month/day only                                    │
-│            │ private, attributes                   │                                                                            │
+│ Event      │ type, description, date, place,       │ date is year/month/day only                                                │
+│            │ private, attributes, gramps_id        │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
 │            │ name, type, latitude, longitude,      │ enclosing/parent place hierarchy, alternate names, historical locations,   │
-│ Place      │ private, urls                         │ code, name's own language/date, gramps_id                                  │
+│ Place      │ private, urls, gramps_id              │ code, name's own language/date                                             │
 │            │                                       │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Repository │ name, type, private, addresses, urls  │ gramps_id                                                                  │
+│ Repository │ name, type, private, addresses, urls, │ — nothing left; Repository's whole schema is covered                       │
+│            │ gramps_id                             │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Source     │ title, author, publication info,      │ repository links (can't attach a Source to where it's held), gramps_id     │
-│            │ abbreviation, private, attributes     │                                                                            │
+│ Source     │ title, author, publication info,      │ repository links (can't attach a Source to where it's held)                │
+│            │ abbreviation, private, attributes,    │                                                                            │
+│            │ gramps_id                             │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Citation   │ source (required), page, date,        │ gramps_id; date is year/month/day only                                    │
-│            │ confidence, private, attributes       │                                                                            │
+│ Citation   │ source (required), page, date,        │ date is year/month/day only                                                │
+│            │ confidence, private, attributes,      │                                                                            │
+│            │ gramps_id                             │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Note       │ text, type, private                   │ text formatting/links (plain text only), format (Flowed/Formatted),        │
-│            │                                       │ gramps_id                                                                  │
+│ Note       │ text, type, private, gramps_id        │ text formatting/links (plain text only), format (Flowed/Formatted)         │
+│            │                                       │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
 │ Tag        │ name, color, priority                 │ — this is the one type with nothing left; Tag's whole schema is covered    │
 └────────────┴───────────────────────────────────────┴────────────────────────────────────────────────────────────────────────────┘
+
+Person and Family also gained a "+ New Event" in their Events section (RelatedPanel,
+not the create/edit dialog) -- EventCreateDialog.tsx creates a brand-new Event
+(type/description/date/place/role/private) and links it via EventRef, covering any
+event beyond birth/death (marriage, occupation, ...) without needing a separate
+"create the Event, then attach it" round trip. Person's birth/death Event place
+(and any Event-typed reference field's Place, e.g. Event's own "place" in the
+generic ObjectEditDialog) can now be created or edited inline via a reusable
+stacked dialog (PlaceEditDialog.tsx / EventPlaceField.tsx) rather than needing a
+separate trip to the Places view first.
 
 Every type RELATED_CONFIG lists a Notes/Citations/Media/Tags section for (that's
 nearly all of them — see components/related/config.ts) can now attach an existing
@@ -60,7 +75,6 @@ no separate record to search for.
 Gaps that cut across every type
 
 - No merge for duplicate records.
-- gramps_id is never user-editable (always server-assigned).
 - Dates only support a plain year/month/day — no BEFORE/AFTER/ABOUT modifiers, ranges/spans, non-Gregorian calendars, or estimated/calculated quality.
 - GrampsType fields are free text, not dropdowns (Event/Place/Repository/Note's type, Family's relationship type is the one exception with a real dropdown, and now Attribute/Url's own `type` field too) — functionally editable, just no autocomplete/validation against the known list.
 

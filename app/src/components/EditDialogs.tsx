@@ -30,8 +30,8 @@ interface EditDialogsProps {
  * convention every other dialog here follows. */
 export function EditDialogs({ draftStack }: EditDialogsProps) {
   const {
-    stack, openHandles, openDraft, showDraft, hideDraft, updateDraft, setExtraObjects, closeDraft, saveAll, saving,
-    error,
+    stack, openHandles, openDraft, openEditDraft, showDraft, hideDraft, updateDraft, setExtraObjects, closeDraft,
+    saveAll, saving, error,
   } = draftStack;
 
   return (
@@ -84,7 +84,13 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
             key={handle}
             draft={draft}
             opened={opened}
+            stack={stack}
+            openHandles={openHandles}
             onChange={(patch) => updateDraft(handle, patch)}
+            onOpenDraft={(type, field) => openDraft(type, { handle, field })}
+            onOpenEditDraft={(type, targetHandle, field) => openEditDraft(type, targetHandle, { handle, field })}
+            onShowDraft={showDraft}
+            onCloseDraft={closeDraft}
             onCancel={() => closeDraft(handle)}
             primaryLabel={primaryLabel}
             onPrimary={onPrimary}

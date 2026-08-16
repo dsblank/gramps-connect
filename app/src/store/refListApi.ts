@@ -8,7 +8,13 @@
 import { fetchPlainObject, updateObject } from "./objectsApi";
 import type { ViewConfig } from "./views";
 
-export type RefListEntry = string | { _class: string; ref: string };
+// The extra index signature (rather than plain `{_class: string; ref:
+// string}`) lets a caller pass a ref struct with its own metadata fields
+// too -- e.g. EventCreateDialog.tsx's `{_class: "EventRef", ref, role}` --
+// without a cast, same as ChildRef's frel/mrel or a MediaRef's call_number
+// already carry once attached (attach itself never needs to read them, just
+// pass them through verbatim).
+export type RefListEntry = string | ({ _class: string; ref: string } & Record<string, unknown>);
 
 function entryHandle(entry: RefListEntry): string {
   return typeof entry === "string" ? entry : entry.ref;

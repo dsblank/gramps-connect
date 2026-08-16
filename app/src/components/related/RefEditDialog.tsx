@@ -12,7 +12,10 @@ import type { ViewConfig } from "../../store/views";
 // FamilyRelType, applied here to a *ref's* own frel/mrel/role/media_type
 // instead of a whole object's type.
 const CHILD_REL_OPTIONS = ["Birth", "Adopted", "Stepchild", "Sponsored", "Foster", "Unknown"];
-const EVENT_ROLE_OPTIONS = [
+// Exported for EventCreateDialog.tsx's own role Select -- same built-in
+// values, no reason to duplicate the list for a second "new EventRef"
+// dialog rather than an "edit an existing one" dialog.
+export const EVENT_ROLE_OPTIONS = [
   "Primary", "Clergy", "Celebrant", "Aide", "Bride", "Groom", "Witness", "Family",
   "Informant", "Godparent", "Father", "Mother", "Parent", "Child", "Multiple birth",
   "Friend", "Neighbor", "Officiator",

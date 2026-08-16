@@ -31,16 +31,20 @@ export type RelatedSection =
 
 // Within each type's list, sections whose rows are edited in place -- via a
 // (+) Add button and per-row edit/delete (see AttachControl in sections/
-// shared.tsx: citations, notes, media, tags) -- are ordered *after* every
-// section whose content can only be changed by editing the object itself
-// (parents, events, attributes, ...). Keeping that split consistent makes it
-// visually obvious, without reading each section, which parts of the panel
-// you can act on directly versus which require opening the edit dialog.
-// "backlinks" ("Referenced by") is neither -- purely read-only, nothing here
-// points at it -- so it sits last of all, after even the (+) Add sections.
+// shared.tsx: citations, notes, media, tags -- and, for Person/Family,
+// EventsSection.tsx's own "+ New Event", EventCreateDialog.tsx) -- are
+// ordered *after* every section whose content can only be changed by
+// editing the object itself (parents, attributes, ...). Keeping that split
+// consistent makes it visually obvious, without reading each section, which
+// parts of the panel you can act on directly versus which require opening
+// the edit dialog. "backlinks" ("Referenced by") is neither -- purely
+// read-only, nothing here points at it -- so it sits last of all, after
+// even the (+) Add sections. Events sits on Person/Family only (Event's own
+// entry below has no `events` of its own) -- both share EventBase's
+// event_ref_list.
 export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
-  person: ["parents", "families", "associations", "events", "attributes", "addresses", "urls", "ldsOrdinances", "citations", "notes", "media", "tags", "backlinks"],
-  family: ["parents", "children", "events", "attributes", "ldsOrdinances", "citations", "notes", "media", "tags", "backlinks"],
+  person: ["parents", "families", "associations", "attributes", "addresses", "urls", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],
+  family: ["parents", "children", "attributes", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],
   event: ["place", "participants", "attributes", "citations", "notes", "media", "tags", "backlinks"],
   place: ["parentPlaces", "urls", "citations", "notes", "media", "tags", "backlinks"],
   repository: ["addresses", "urls", "notes", "tags", "backlinks"],
