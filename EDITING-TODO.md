@@ -18,7 +18,7 @@ Partially editable, by type
 │            │ private, children (add/remove         │ attaching a brand-new (not-yet-saved) Person as a child isn't supported,   │
 │            │ existing only), attributes, gramps_id │ only an existing one                                                       │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Event      │ type, description, date, place,       │ date is year/month/day only                                                │
+│ Event      │ type, description, date, place,       │ —                                                                          │
 │            │ private, attributes, gramps_id        │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
 │            │ name, type, latitude, longitude,      │ enclosing/parent place hierarchy, alternate names, historical locations,   │
@@ -32,7 +32,7 @@ Partially editable, by type
 │            │ abbreviation, private, attributes,    │                                                                            │
 │            │ gramps_id                             │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Citation   │ source (required), page, date,        │ date is year/month/day only                                                │
+│ Citation   │ source (required), page, date,        │ —                                                                          │
 │            │ confidence, private, attributes,      │                                                                            │
 │            │ gramps_id                             │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
@@ -75,7 +75,6 @@ no separate record to search for.
 Gaps that cut across every type
 
 - No merge for duplicate records.
-- Dates only support a plain year/month/day — no BEFORE/AFTER/ABOUT modifiers, ranges/spans, non-Gregorian calendars, or estimated/calculated quality.
 - GrampsType fields are free text, not dropdowns (Event/Place/Repository/Note's type, Family's relationship type is the one exception with a real dropdown, and now Attribute/Url's own `type` field too) — functionally editable, just no autocomplete/validation against the known list.
 
 The biggest remaining structural gap: no merge tooling for duplicate records, and Media still has no edit dialog at all (see the top of this doc).

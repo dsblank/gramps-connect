@@ -7,7 +7,7 @@ import { getToken } from "../auth/auth";
 import { createHandle, fetchPlainObject } from "../store/objectsApi";
 import { EVENT_VIEW } from "../store/views";
 import type { DraftEntry } from "../store/draftStack";
-import { SimpleDateInput } from "./SimpleDateInput";
+import { DateInput } from "./DateInput";
 import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
@@ -370,14 +370,14 @@ export function PersonEditDialog({
         </Anchor>
         <Collapse in={showDetails}>
           <Stack gap="md">
-            <SimpleDateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
+            <DateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
             <EventPlaceField
               label="Birth place"
               id={`${draft.handle}-birth-place`}
               value={birthPlace}
               onChange={setBirthPlace}
             />
-            <SimpleDateInput label="Death date" value={deathDate} onChange={setDeathDate} />
+            <DateInput label="Death date" value={deathDate} onChange={setDeathDate} />
             <EventPlaceField
               label="Death place"
               id={`${draft.handle}-death-place`}

@@ -8,7 +8,7 @@ import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
 import { PLACE_VIEW, SOURCE_VIEW } from "../store/views";
 import { DRAFT_TYPE_LABELS, type DraftEntry, type DraftType } from "../store/draftStack";
-import { SimpleDateInput } from "./SimpleDateInput";
+import { DateInput } from "./DateInput";
 import { RecordPicker } from "./RecordPicker";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { withGrampsId } from "./related/summary";
@@ -427,7 +427,7 @@ export function ObjectEditDialog({
         );
       case "date":
         return (
-          <SimpleDateInput
+          <DateInput
             key={f.key}
             label={f.label}
             value={(draft.data[f.key] as GrampsDate | undefined) ?? null}

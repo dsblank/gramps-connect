@@ -181,10 +181,19 @@ export function swedishYmd(sdn: number): [number, number, number] {
   return julianYmd(sdn);
 }
 
-/** Convert any of the five supported calendars' (year, month, day) to an
- * SDN. Zero-adjusts partial dates (year/month/day unset -> 1) so a
+/** Convert (year, month, day) to an SDN, for any of the seven Gramps
+ * calendars. Zero-adjusts partial dates (year/month/day unset -> 1) so a
  * partial date still round-trips through a real SDN for validation
- * purposes -- see isValidCalendarDate. */
+ * purposes -- see isValidCalendarDate.
+ *
+ * Hebrew/Persian have no SDN conversion implemented here (see this
+ * file's header) -- rather than throw (a real date in either calendar,
+ * e.g. one entered in Gramps desktop, must still be editable here even
+ * though this package can't compute its sortval), this returns 0. That's
+ * safe: gramps-web-api recomputes `sortval` from `dateval` on every
+ * write (server-side, using real Gramps calendar code), so a client-side
+ * placeholder is only ever transient, never persisted as the final
+ * answer -- see recalc_date_sortvals in gramps-web-api's api/util.py. */
 export function dateToSdn(calendar: Calendar, year: number, month: number, day: number): number {
   if (year === 0 && month === 0 && day === 0) return 0;
   const y = year !== 0 ? year : 1;
@@ -201,6 +210,9 @@ export function dateToSdn(calendar: Calendar, year: number, month: number, day: 
       return islamicSdn(y, m, d);
     case Calendar.SWEDISH:
       return swedishSdn(y, m, d);
+    case Calendar.HEBREW:
+    case Calendar.PERSIAN:
+      return 0;
     default:
       throw new Error(`Calendar ${calendar} not implemented`);
   }

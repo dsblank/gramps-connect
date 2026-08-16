@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Anchor, Button, Card, Collapse, Group, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
-import { SimpleDateInput } from "./SimpleDateInput";
+import { DateInput } from "./DateInput";
 import { ListShell } from "./EmbeddedListFields";
 
 // NameType (gramps/gen/lib/nametype.py) -- plain English strings, same
@@ -187,7 +187,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
           />
         </Group>
 
-        <SimpleDateInput label="Date" value={date} onChange={(next) => onChange({ date: next })} />
+        <DateInput label="Date" value={date} onChange={(next) => onChange({ date: next })} />
 
         <Anchor component="button" type="button" size="sm" onClick={() => setShowSorting((v) => !v)}>
           {showSorting ? "▾" : "▸"} Sorting & display

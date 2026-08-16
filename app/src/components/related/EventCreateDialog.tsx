@@ -5,7 +5,7 @@ import { getToken } from "../../auth/auth";
 import { createHandle, createObjects } from "../../store/objectsApi";
 import { attachRefListEntry } from "../../store/refListApi";
 import type { ViewConfig } from "../../store/views";
-import { SimpleDateInput } from "../SimpleDateInput";
+import { DateInput } from "../DateInput";
 import { EventPlaceField, type EventPlaceValue } from "../EventPlaceField";
 import { EVENT_ROLE_OPTIONS } from "./RefEditDialog";
 
@@ -85,7 +85,7 @@ export function EventCreateDialog({ opened, onClose, view, objectHandle, onSaved
           autoFocus
         />
         <TextInput label="Description" value={description} onChange={(e) => setDescription(e.currentTarget.value)} />
-        <SimpleDateInput label="Date" value={date} onChange={setDate} />
+        <DateInput label="Date" value={date} onChange={setDate} />
         <EventPlaceField label="Place" id={`${objectHandle}-new-event-place`} value={place} onChange={setPlace} />
         <Select
           label="Role"
