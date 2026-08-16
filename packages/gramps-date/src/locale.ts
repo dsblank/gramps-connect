@@ -1,12 +1,15 @@
-// Locale plugin architecture for date display -- mirrors the shape of
-// Gramps' own DateStrings (gen/datehandler/_datestrings.py) plus the
-// handful of DateDisplay subclass hooks locales actually override (see
-// _datedisplay.py's DateDisplay base class), enough to plug in a new
-// language's strings without touching display.ts. Only "en" ships in this
-// package (registered below, unconditionally -- it's this package's
+// Locale plugin architecture for date display *and* parsing -- mirrors the
+// shape of Gramps' own DateStrings (gen/datehandler/_datestrings.py) plus
+// the handful of DateDisplay/DateParser subclass hooks locales actually
+// override (see _datedisplay.py's DateDisplay and _dateparser.py's
+// DateParser base classes), enough to plug in a new language's strings
+// without touching display.ts/parse.ts. Only "en" ships in this package
+// (registered below, unconditionally -- it's this package's
 // always-available default, not an opt-in extra); add more the same way
 // (a new locales/<code>.ts implementing DateLocale, registered via
 // registerLocale()).
+
+import type { Calendar, Modifier, NewYear, Quality } from "./types";
 
 /** A month-name table, index 0 unused (Gramps' own 1-based month
  * convention) -- 13 entries for calendars with an intercalary/leap month
@@ -58,6 +61,49 @@ export interface DateLocale {
   numericFormat: string;
 
   bceFormat: string; // e.g. "%s B.C.E." -- %s replaced with the formatted date
+
+  // --- Parser-side (parse.ts): the free-text quick-entry counterparts to
+  // the display-side strings above. Keys are matched case-insensitively,
+  // so any casing works here; ports of _dateparser.py's own class-attribute
+  // dicts (modifier_to_int, quality_to_int, etc.) on DateParser's base
+  // (English) implementation -- a locale-specific DateParser subclass in
+  // Gramps only ever *overrides* a subset of these, so a new locale here
+  // only needs to supply what actually differs from "en" once more than
+  // one locale ships; for now each locale supplies its own complete set.
+
+  /** Modifier words appearing *before* the date ("about 1960"). Port of
+   * `modifier_to_int`. */
+  modifierWords: Readonly<Record<string, Modifier>>;
+
+  /** Modifier words appearing *after* the date instead (a Finnish-style
+   * locale's `modifier_after_to_int`) -- empty for English, which has none. */
+  modifierWordsAfterDate: Readonly<Record<string, Modifier>>;
+
+  /** Port of `quality_to_int` ("estimated", "calc.", ...). */
+  qualityWords: Readonly<Record<string, Quality>>;
+
+  /** Port of the `bce` list ("BC", "B.C.E.", ...), longest-first matching
+   * handled by parse.ts, not by ordering here. */
+  bceWords: readonly string[];
+
+  /** Calendar-name words for the `"(Julian)"` / `"(Hebrew,Jan1)"` suffix
+   * syntax. Port of `calendar_to_int` -- unlike `calendarNames` above
+   * (display-only, Gregorian's slot is `""`), this includes "gregorian"
+   * since a user can explicitly type `"(Gregorian)"`. */
+  calendarWords: Readonly<Record<string, Calendar>>;
+
+  /** New-year-code words ("Jan1"/"Mar1"/"Mar25"/"Sep1") for the newyear
+   * suffix syntax and the New Year field. Port of `newyear_to_int`. */
+  newyearWords: Readonly<Record<string, NewYear>>;
+
+  /** Day/month/year ordering for ambiguous bare-numeric input like
+   * `"3/4/1960"`, and for the two-groups-of-digits `text2`-style
+   * "day month-name year" vs "year month-name day" choice. Port of
+   * `DateParser.__init__`'s `dmy`/`ymd` booleans (derived there from the
+   * locale's `dhformat`) -- "en" here is `"mdy"`, matching this package's
+   * existing US-ordering simplification (see `numericFormat` above and
+   * display.ts's own doc comment). */
+  numericOrder: "dmy" | "mdy" | "ymd";
 }
 
 const registry = new Map<string, DateLocale>();

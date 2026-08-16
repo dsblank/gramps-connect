@@ -7,13 +7,16 @@
 // approach gramps/gen/lib/gcalendar.py's own edit-dialog code uses --
 // see calendar.ts's header for the original Python copyright/license.
 //
-// This does *not* attempt to port gramps/gen/datehandler/_dateparser.py
-// (free-text date parsing, e.g. typing "before 1960" and having it
-// structured automatically) -- that's a large, separate regex-based
-// grammar. Structured entry (explicit day/month/year/modifier/quality/
-// calendar fields, the same shape Gramps' own "expanded" date editor
-// uses) covers date entry without it; text parsing can be added later if
-// actually needed.
+// Free-text date parsing (typing "before 1960" and having it structured
+// automatically) lives in parse.ts, a port of
+// gramps/gen/datehandler/_dateparser.py -- kept separate from this file's
+// explicit-component entry since it's a large, separate regex-based
+// grammar built on top of makeDate here, not a replacement for it.
+//
+// newyearToInputStr/newyearFromInputStr are translated from date.py's
+// Date.newyear_to_str/Date.newyear_to_code -- the New Year field's own
+// plain value ("Mar25", "3-25"), distinct from display.ts's formatExtras
+// which produces the "(Julian, Mar25)" *suffix* string.
 
 import { Calendar, Modifier, NewYear, Quality, type DatePart, type GrampsDate, type NewYearValue } from "./types";
 import { dateToSdn, isValidCalendarDate } from "./calendar";
@@ -143,4 +146,38 @@ export function makeDate(input: DateInput): GrampsDate {
 
 export function emptyDate(): GrampsDate {
   return makeDate({});
+}
+
+/** The New Year field's own displayed value: "" for the default (Jan 1),
+ * "Mar1"/"Mar25"/"Sep1" for the other three named starts, or "M-D" for a
+ * custom one. Mirrors Date.newyear_to_str(). */
+export function newyearToInputStr(value: NewYearValue): string {
+  if (Array.isArray(value)) return `${value[0]}-${value[1]}`;
+  switch (value) {
+    case NewYear.JAN1: return "";
+    case NewYear.MAR1: return "Mar1";
+    case NewYear.MAR25: return "Mar25";
+    case NewYear.SEP1: return "Sep1";
+    default: return "Err";
+  }
+}
+
+/** Parse the New Year field's own value back into a NewYearValue -- "",
+ * "jan1", "mar1", "mar25", "sep1" (case-insensitive), or "M-D" for a
+ * custom start. Anything else (including a malformed "M-D") falls back to
+ * Jan 1, matching Date.newyear_to_code()'s own `code = 0` fallback. */
+export function newyearFromInputStr(input: string): NewYearValue {
+  const s = input.trim().toLowerCase();
+  if (s === "" || s === "jan1") return NewYear.JAN1;
+  if (s === "mar1") return NewYear.MAR1;
+  if (s === "mar25") return NewYear.MAR25;
+  if (s === "sep1") return NewYear.SEP1;
+  if (s.includes("-")) {
+    const parts = s.split("-").map(Number);
+    if (parts.length === 2 && parts.every((n) => Number.isInteger(n))) {
+      return [parts[0], parts[1]];
+    }
+    return NewYear.JAN1;
+  }
+  return NewYear.JAN1;
 }

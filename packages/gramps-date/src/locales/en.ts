@@ -1,9 +1,12 @@
-// English date-display strings.
+// English date-display *and* date-parsing strings.
 //
-// Translated from gramps/gen/datehandler/_datestrings.py (string tables)
-// and _datedisplay.py (the "" Gregorian-name-suppressed-in-display
-// convention, the B.C.E. format, and DateDisplay's en_GB numeric-format
-// fallback).
+// Translated from gramps/gen/datehandler/_datestrings.py (string tables),
+// _datedisplay.py (the "" Gregorian-name-suppressed-in-display convention,
+// the B.C.E. format, and DateDisplay's en_GB numeric-format fallback), and
+// _dateparser.py's base DateParser class (English is Gramps' own base/
+// default locale for parsing, so these are its class-attribute dicts
+// directly -- modifier_to_int, quality_to_int, bce, newyear_to_int -- not a
+// locale-specific override).
 //
 // Original:
 //   Gramps - a GTK+/GNOME based genealogy program
@@ -11,10 +14,14 @@
 //   Copyright (C) 2004-2006  Donald N. Allingham
 //   Copyright (C) 2013       Vassilii Khachaturov
 //   Copyright (C) 2014-2018  Paul Franklin      (_datedisplay.py)
+//   Copyright (C) 2004-2006  Donald N. Allingham
+//   Copyright (C) 2017       Paul Franklin
+//   Copyright (c) 2020       Steve Youngs        (_dateparser.py)
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/tree/master/gramps/gen/datehandler
 
 import type { DateLocale } from "../locale";
+import { Calendar, Modifier, NewYear, Quality } from "../types";
 
 export const en: DateLocale = {
   code: "en",
@@ -68,4 +75,49 @@ export const en: DateLocale = {
   numericFormat: "%m/%d/%Y",
 
   bceFormat: "%s B.C.E.",
+
+  // Port of DateParser's modifier_to_int -- modifiers before the date.
+  modifierWords: {
+    before: Modifier.BEFORE, bef: Modifier.BEFORE, "bef.": Modifier.BEFORE,
+    after: Modifier.AFTER, aft: Modifier.AFTER, "aft.": Modifier.AFTER,
+    about: Modifier.ABOUT, "abt.": Modifier.ABOUT, abt: Modifier.ABOUT,
+    circa: Modifier.ABOUT, "c.": Modifier.ABOUT, around: Modifier.ABOUT,
+    from: Modifier.FROM, to: Modifier.TO,
+  },
+
+  // English has no after-date modifiers (that's a Finnish-style locale's
+  // modifier_after_to_int, which is empty on DateParser's own base class too).
+  modifierWordsAfterDate: {},
+
+  // Port of quality_to_int.
+  qualityWords: {
+    estimated: Quality.ESTIMATED, "est.": Quality.ESTIMATED, est: Quality.ESTIMATED,
+    "calc.": Quality.CALCULATED, calc: Quality.CALCULATED, calculated: Quality.CALCULATED,
+  },
+
+  // Port of the bce list.
+  bceWords: ["B.C.E.", "B.C.E", "BCE", "B.C.", "B.C", "BC"],
+
+  // Port of calendar_to_int -- includes "gregorian" (unlike calendarNames
+  // above, which is display-only and suppresses it) since a user can type
+  // "(Gregorian)" explicitly.
+  calendarWords: {
+    gregorian: Calendar.GREGORIAN,
+    julian: Calendar.JULIAN,
+    hebrew: Calendar.HEBREW,
+    "french republican": Calendar.FRENCH,
+    persian: Calendar.PERSIAN,
+    islamic: Calendar.ISLAMIC,
+    swedish: Calendar.SWEDISH,
+  },
+
+  // Port of newyear_to_int.
+  newyearWords: {
+    jan1: NewYear.JAN1,
+    mar1: NewYear.MAR1,
+    mar25: NewYear.MAR25,
+    sep1: NewYear.SEP1,
+  },
+
+  numericOrder: "mdy",
 };

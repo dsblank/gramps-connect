@@ -1,17 +1,23 @@
-import { useRef } from "react";
-import { ActionIcon, Group, NumberInput, Select, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { useEffect, useRef, useState } from "react";
+import { ActionIcon, Anchor, Collapse, Group, NumberInput, Select, Stack, Switch, Text, TextInput, Tooltip } from "@mantine/core";
 import {
   Calendar,
   EMPTY_DATE_PART,
   Modifier,
+  NewYear,
   Quality,
+  formatDate,
   getStartDate,
   getStopDate,
   isCompound,
   makeDate,
+  newyearFromInputStr,
+  newyearToInputStr,
+  parseDate,
   validateDate,
   type DatePart,
   type GrampsDate,
+  type NewYearValue,
 } from "@gramps-connect/gramps-date";
 
 interface DateInputProps {
@@ -53,6 +59,15 @@ const CALENDAR_OPTIONS = [
   { value: String(Calendar.SWEDISH), label: "Swedish" },
 ];
 
+// New Year is only user-editable for the three calendars whose new year
+// isn't culturally fixed -- port of Gramps desktop's own
+// calendar_has_fixed_newyear (editdate.py), inverted: Hebrew/French
+// Republican/Persian/Islamic all have their own inherent new year and
+// disable the field entirely there.
+function newyearEditable(calendar: Calendar): boolean {
+  return calendar === Calendar.GREGORIAN || calendar === Calendar.JULIAN || calendar === Calendar.SWEDISH;
+}
+
 // Material Design Icons' "calendar" glyph (Apache-2.0) -- the same icon
 // gramps-web's own date-picker button uses (mdiCalendar in @mdi/js).
 // Inlined as a path string rather than pulling in @mdi/js for one icon.
@@ -86,6 +101,47 @@ function fromNativeValue(v: string, slash: boolean): DatePart {
   return [d || 0, m || 0, y || 0, slash];
 }
 
+/** A single hidden `<input type="date">` plus the calendar-icon button
+ * that opens it -- shared by the compact quick-entry row (feeding the
+ * start date) and each structured DatePartRow. */
+function NativeDatePickerButton({
+  part,
+  onChange,
+  enabled,
+}: {
+  part: DatePart;
+  onChange: (part: DatePart) => void;
+  enabled: boolean;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <Tooltip label={enabled ? "Pick a date" : "Only available for the Gregorian calendar"}>
+        <ActionIcon
+          variant="default"
+          size="lg"
+          disabled={!enabled}
+          onClick={() => pickerRef.current?.showPicker()}
+          aria-label="Pick a date"
+        >
+          <CalendarIcon />
+        </ActionIcon>
+      </Tooltip>
+      {/* Visually hidden, not display:none -- Chrome/Firefox refuse
+       * .showPicker() on a display:none input. */}
+      <input
+        ref={pickerRef}
+        type="date"
+        tabIndex={-1}
+        aria-hidden
+        value={toNativeValue(part)}
+        onChange={(e) => onChange(fromNativeValue(e.target.value, part[3]))}
+        style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 0, height: 0, border: 0 }}
+      />
+    </>
+  );
+}
+
 interface DatePartRowProps {
   part: DatePart;
   onChange: (part: DatePart) => void;
@@ -95,7 +151,6 @@ interface DatePartRowProps {
 
 function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartRowProps) {
   const [day, month, year, slash] = part;
-  const pickerRef = useRef<HTMLInputElement>(null);
 
   function setField(next: { day?: number; month?: number; year?: number }) {
     onChange([next.day ?? day, next.month ?? month, next.year ?? year, slash]);
@@ -136,56 +191,45 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
         max={31}
         w={80}
       />
-      <Tooltip label={nativePickerEnabled ? "Pick a date" : "Only available for the Gregorian calendar"}>
-        <ActionIcon
-          variant="default"
-          size="lg"
-          disabled={!nativePickerEnabled}
-          onClick={() => pickerRef.current?.showPicker()}
-          aria-label="Pick a date"
-        >
-          <CalendarIcon />
-        </ActionIcon>
-      </Tooltip>
-      {/* Visually hidden, not display:none -- Chrome/Firefox refuse
-       * .showPicker() on a display:none input. */}
-      <input
-        ref={pickerRef}
-        type="date"
-        tabIndex={-1}
-        aria-hidden
-        value={toNativeValue(part)}
-        onChange={(e) => onChange(fromNativeValue(e.target.value, slash))}
-        style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 0, height: 0, border: 0 }}
-      />
+      <NativeDatePickerButton part={part} onChange={onChange} enabled={nativePickerEnabled} />
     </Group>
   );
 }
 
-/** Full structured Gramps date entry: modifier (before/after/about/range/
- * span/from/to/text-only), quality (estimated/calculated), calendar
- * (Gregorian/Julian/French Republican/Islamic/Swedish), a year/month/day
- * triple per endpoint (a second one for range/span) with an optional
- * native date-picker shortcut, and a free-text field for text-only dates.
- * Modeled on gramps-web's own GrampsjsFormSelectDate -- same modifier/
- * quality vocabulary and the same `dateIsEmpty`-style "all zero -> null"
- * convention -- built on top of `@gramps-connect/gramps-date`'s existing
- * makeDate/validateDate rather than reimplementing that logic here. */
+/** Full Gramps date entry, matching Gramps desktop's own two-tier UX
+ * (gui/widgets/monitoredwidgets.py's MonitoredDate + gui/editors/editdate.py):
+ *
+ * - A compact quick-entry text field, always visible, showing the
+ *   formatted date and re-parsed via `@gramps-connect/gramps-date`'s
+ *   parseDate() on blur/Enter -- the *primary* way to enter a date here,
+ *   same as Gramps desktop's own default. Unparseable text becomes a
+ *   Text-only date carrying the raw string, exactly like Gramps desktop's
+ *   own quick-entry field never rejects input.
+ * - "More…" (collapsed by default), containing the expanded structured
+ *   editor: modifier/quality/calendar/dual-dated/new-year and explicit
+ *   year/month/day fields (a second row for range/span), plus the
+ *   always-available "Text comment" annotation field -- for anything the
+ *   quick parser can't express or the user prefers not to type. */
 export function DateInput({ label, value, onChange }: DateInputProps) {
   const modifier = value?.modifier ?? Modifier.NONE;
   const quality = value?.quality ?? Quality.NONE;
   const calendar = value?.calendar ?? Calendar.GREGORIAN;
+  const newyear = value?.newyear ?? NewYear.JAN1;
   const text = value?.text ?? "";
   const start = value ? getStartDate(value) : EMPTY_DATE_PART;
   const stop = value && isCompound(value) ? getStopDate(value) : EMPTY_DATE_PART;
   const compound = modifier === Modifier.RANGE || modifier === Modifier.SPAN;
   const textOnly = modifier === Modifier.TEXTONLY;
+  const dualDated = start[3];
   const validation = value && !textOnly ? validateDate(value) : null;
+
+  const [showMore, setShowMore] = useState(false);
 
   function commit(next: {
     modifier?: Modifier;
     quality?: Quality;
     calendar?: Calendar;
+    newyear?: NewYearValue;
     text?: string;
     start?: DatePart;
     stop?: DatePart;
@@ -219,11 +263,31 @@ export function DateInput({ label, value, onChange }: DateInputProps) {
         modifier: nextModifier,
         quality: nextQuality,
         calendar: next.calendar ?? calendar,
+        newyear: next.newyear ?? newyear,
         text: nextText,
         start: nextStart,
         stop: nextCompound ? nextStop : undefined,
       })
     );
+  }
+
+  function setDualDated(next: boolean) {
+    // Port of editdate.py's switch_dual_dated: turning it on represents
+    // the date in the Julian calendar (so the day/month don't shift) and
+    // locks the calendar selector; turning it off just unlocks it again
+    // without resetting the calendar away from Julian.
+    commit({
+      start: [start[0], start[1], start[2], next],
+      stop: [stop[0], stop[1], stop[2], next],
+      calendar: next ? Calendar.JULIAN : calendar,
+    });
+  }
+
+  function setCalendar(nextCalendar: Calendar) {
+    // Port of editdate.py's align_newyear_ui_with_calendar: switching to
+    // a calendar with its own fixed new year clears whatever custom new
+    // year was set, since the field becomes non-editable for it.
+    commit({ calendar: nextCalendar, newyear: newyearEditable(nextCalendar) ? newyear : NewYear.JAN1 });
   }
 
   const errorMessage = !validation || validation.valid
@@ -241,76 +305,195 @@ export function DateInput({ label, value, onChange }: DateInputProps) {
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
-      <Group gap="xs" wrap="wrap">
-        <Select
-          aria-label={`${label} type`}
-          data={MODIFIER_OPTIONS}
-          value={String(modifier)}
-          onChange={(v) => commit({ modifier: (Number(v) as Modifier) ?? Modifier.NONE })}
-          allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
-          w={120}
-        />
-        <Select
-          aria-label={`${label} quality`}
-          data={QUALITY_OPTIONS}
-          value={String(quality)}
-          onChange={(v) => commit({ quality: (Number(v) as Quality) ?? Quality.NONE })}
-          allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
-          w={120}
-        />
-        {!textOnly && (
-          <Select
-            aria-label={`${label} calendar`}
-            data={CALENDAR_OPTIONS}
-            value={String(calendar)}
-            onChange={(v) => commit({ calendar: (Number(v) as Calendar) ?? Calendar.GREGORIAN })}
-            allowDeselect={false}
-            comboboxProps={{ withinPortal: true }}
-            w={150}
-          />
-        )}
-      </Group>
 
-      {!textOnly && (
-        <Stack gap={4}>
-          <DatePartRow
-            part={start}
-            onChange={(p) => commit({ start: p })}
-            nativePickerEnabled={calendar === Calendar.GREGORIAN}
-            invalid={validation?.date1Invalid}
-          />
-          {compound && (
-            <Group gap="xs" wrap="nowrap">
-              <Text size="sm" c="dimmed">to</Text>
-              <DatePartRow
-                part={stop}
-                onChange={(p) => commit({ stop: p })}
-                nativePickerEnabled={calendar === Calendar.GREGORIAN}
-                invalid={validation ? validation.date2Empty || validation.date2Invalid || validation.date2OrderInvalid : false}
+      <QuickEntryField label={label} value={value} onChange={onChange} onCommitStart={(p) => commit({ start: p })} start={start} calendar={calendar} />
+
+      <Anchor component="button" type="button" size="xs" onClick={() => setShowMore((v) => !v)}>
+        {showMore ? "▾" : "▸"} More…
+      </Anchor>
+
+      <Collapse in={showMore}>
+        <Stack gap={4} pt={4}>
+          <Group gap="xs" wrap="wrap">
+            <Select
+              aria-label={`${label} type`}
+              data={MODIFIER_OPTIONS}
+              value={String(modifier)}
+              onChange={(v) => commit({ modifier: (Number(v) as Modifier) ?? Modifier.NONE })}
+              allowDeselect={false}
+              comboboxProps={{ withinPortal: true }}
+              w={120}
+            />
+            <Select
+              aria-label={`${label} quality`}
+              data={QUALITY_OPTIONS}
+              value={String(quality)}
+              onChange={(v) => commit({ quality: (Number(v) as Quality) ?? Quality.NONE })}
+              allowDeselect={false}
+              comboboxProps={{ withinPortal: true }}
+              w={120}
+            />
+            {!textOnly && (
+              <Select
+                aria-label={`${label} calendar`}
+                data={CALENDAR_OPTIONS}
+                value={String(calendar)}
+                onChange={(v) => setCalendar((Number(v) as Calendar) ?? Calendar.GREGORIAN)}
+                allowDeselect={false}
+                disabled={dualDated}
+                comboboxProps={{ withinPortal: true }}
+                w={150}
               />
-            </Group>
-          )}
-          {errorMessage && (
-            <Text size="xs" c="red">{errorMessage}</Text>
-          )}
-        </Stack>
-      )}
+            )}
+          </Group>
 
-      {/* Always available, not just for Text only -- matches Gramps'
-       * own date editor (editdate.glade's "Text comment:" entry, always
-       * visible): doubles as the free-text value when the type is Text
-       * only, and as an optional annotation alongside a structured date
-       * otherwise (GrampsDate's `text` field is never restricted to
-       * MOD_TEXTONLY on the wire -- see types.ts). */}
-      <TextInput
-        aria-label={textOnly ? label : `${label} text comment`}
-        label={textOnly ? undefined : "Text comment"}
-        placeholder={textOnly ? 'Free-text date, e.g. "circa the 1920s"' : "Optional comment alongside the date above"}
-        value={text}
-        onChange={(e) => commit({ text: e.currentTarget.value })}
-      />
+          {!textOnly && (
+            <Stack gap={4}>
+              <DatePartRow
+                part={start}
+                onChange={(p) => commit({ start: p })}
+                nativePickerEnabled={calendar === Calendar.GREGORIAN}
+                invalid={validation?.date1Invalid}
+              />
+              {compound && (
+                <Group gap="xs" wrap="nowrap">
+                  <Text size="sm" c="dimmed">to</Text>
+                  <DatePartRow
+                    part={stop}
+                    onChange={(p) => commit({ stop: p })}
+                    nativePickerEnabled={calendar === Calendar.GREGORIAN}
+                    invalid={validation ? validation.date2Empty || validation.date2Invalid || validation.date2OrderInvalid : false}
+                  />
+                </Group>
+              )}
+              {errorMessage && (
+                <Text size="xs" c="red">{errorMessage}</Text>
+              )}
+              <Group gap="md" wrap="wrap" align="flex-end">
+                <Switch
+                  label="Dual dated (e.g. 1745/6)"
+                  checked={dualDated}
+                  onChange={(e) => setDualDated(e.currentTarget.checked)}
+                />
+                <NewYearField
+                  label={label}
+                  value={newyear}
+                  onChange={(next) => commit({ newyear: next })}
+                  disabled={!newyearEditable(calendar)}
+                />
+              </Group>
+            </Stack>
+          )}
+
+          {/* Always available, not just for Text only -- matches Gramps'
+           * own date editor (editdate.glade's "Text comment:" entry,
+           * always visible): doubles as the free-text value when the
+           * type is Text only, and as an optional annotation alongside a
+           * structured date otherwise (GrampsDate's `text` field is
+           * never restricted to MOD_TEXTONLY on the wire -- see types.ts). */}
+          <TextInput
+            aria-label={textOnly ? label : `${label} text comment`}
+            label={textOnly ? undefined : "Text comment"}
+            placeholder={textOnly ? 'Free-text date, e.g. "circa the 1920s"' : "Optional comment alongside the date above"}
+            value={text}
+            onChange={(e) => commit({ text: e.currentTarget.value })}
+          />
+        </Stack>
+      </Collapse>
     </Stack>
+  );
+}
+
+/** The compact quick-entry row: a text buffer initialized from
+ * `formatDate(value)` and re-synced whenever `value` changes externally
+ * (e.g. an edit made via "More…", or a Live Sync push from another
+ * client) -- but only while the field isn't focused, so an in-progress
+ * edit here is never clobbered out from under the user. Parses via
+ * parseDate() on blur/Enter, matching Gramps desktop's own MonitoredDate
+ * ("content-changed", not per-keystroke). */
+function QuickEntryField({
+  label,
+  value,
+  onChange,
+  onCommitStart,
+  start,
+  calendar,
+}: {
+  label: string;
+  value: GrampsDate | null;
+  onChange: (date: GrampsDate | null) => void;
+  onCommitStart: (part: DatePart) => void;
+  start: DatePart;
+  calendar: Calendar;
+}) {
+  const [buffer, setBuffer] = useState(() => (value ? formatDate(value) : ""));
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) setBuffer(value ? formatDate(value) : "");
+  }, [value]);
+
+  function commitBuffer() {
+    const trimmed = buffer.trim();
+    if (!trimmed) {
+      onChange(null);
+      return;
+    }
+    onChange(parseDate(trimmed));
+  }
+
+  return (
+    <Group gap="xs" wrap="nowrap">
+      <TextInput
+        style={{ flex: 1 }}
+        aria-label={label}
+        placeholder='about Jan 1983, before 1960, 1745/6…'
+        value={buffer}
+        onChange={(e) => setBuffer(e.currentTarget.value)}
+        onFocus={() => { focusedRef.current = true; }}
+        onBlur={() => { focusedRef.current = false; commitBuffer(); }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      />
+      <NativeDatePickerButton part={start} onChange={onCommitStart} enabled={calendar === Calendar.GREGORIAN} />
+    </Group>
+  );
+}
+
+/** The New Year field's own local text buffer, same rationale as
+ * QuickEntryField above: newyearFromInputStr() falls back to "Jan 1" for
+ * anything it can't parse (including a string still mid-typed, like
+ * "Mar" before the "25"), so committing on every keystroke would erase
+ * whatever the user's typing until they finish a recognized word. */
+function NewYearField({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: NewYearValue;
+  onChange: (next: NewYearValue) => void;
+  disabled: boolean;
+}) {
+  const [buffer, setBuffer] = useState(() => newyearToInputStr(value));
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) setBuffer(newyearToInputStr(value));
+  }, [value]);
+
+  return (
+    <TextInput
+      label="New year begins"
+      aria-label={`${label} new year`}
+      placeholder="Jan1"
+      disabled={disabled}
+      value={disabled ? "" : buffer}
+      onChange={(e) => setBuffer(e.currentTarget.value)}
+      onFocus={() => { focusedRef.current = true; }}
+      onBlur={() => { focusedRef.current = false; onChange(newyearFromInputStr(buffer)); }}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      w={140}
+    />
   );
 }

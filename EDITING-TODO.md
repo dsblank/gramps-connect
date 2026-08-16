@@ -72,6 +72,19 @@ attribute"/"Add address"/"Add web link" row-list inside each dialog's own "> Det
 section (EmbeddedListFields.tsx), not through RelatedPanel's attach/detach — there's
 no separate record to search for.
 
+Every date field (DateInput.tsx) is now full Gramps-desktop-compatible date
+entry, not just year/month/day: a compact quick-entry text field (the primary
+entry path, matching Gramps desktop's own MonitoredDate widget) parses free
+text -- modifiers, quality, calendar/newyear suffixes, ranges/spans, BCE,
+dual-dated slash years, French Republican quarters -- via parse.ts, a port of
+gramps' own gen/datehandler/_dateparser.py (English locale only; the
+locale.ts DateLocale interface carries what a future non-English locale would
+need, but none is populated yet). A "▸ More…" toggle reveals the full
+structured editor (modifier/quality/calendar/dual-dated/new-year dropdowns
+plus explicit year/month/day, a second row for range/span) for anything the
+parser can't express or the user prefers not to type, plus the always-present
+"Text comment" annotation field.
+
 Gaps that cut across every type
 
 - No merge for duplicate records.
