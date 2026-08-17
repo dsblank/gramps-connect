@@ -7,16 +7,18 @@ Partially editable, by type
 ┌────────────┬───────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────┐
 │    Type    │                Covered                │                                  Missing                                   │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│            │ given/surname, gender, gramps_id,     │ birth/death event's description/other fields (place is now covered);       │
-│ Person     │ title/suffix/call/nickname, private,  │ associations, LDS ordinances                                               │
+│            │ given/surname, gender, gramps_id,     │ LDS ordinances: fully read-only, no edit/add/detach at all                 │
+│ Person     │ title/suffix/call/nickname, private,  │                                                                            │
 │            │ birth & death date + place, alternate │                                                                            │
 │            │ names, multiple surnames / surname    │                                                                            │
 │            │ prefix-connector-origin, attributes,  │                                                                            │
-│            │ addresses, urls                       │                                                                            │
+│            │ addresses, urls, associations (add/   │                                                                            │
+│            │ edit rel text/detach)                 │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Family     │ father, mother, relationship type,    │ LDS ordinances; a child's frel/mrel always defaults to Birth/Birth, and    │
-│            │ private, children (add/remove         │ attaching a brand-new (not-yet-saved) Person as a child isn't supported,   │
-│            │ existing only), attributes, gramps_id │ only an existing one                                                       │
+│ Family     │ father, mother, relationship type,    │ LDS ordinances; a child's frel/mrel always defaults to Birth/Birth        │
+│            │ private, children (add existing or    │                                                                            │
+│            │ brand-new/remove), attributes,        │                                                                            │
+│            │ gramps_id                             │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
 │ Event      │ type, description, date, place,       │ —                                                                          │
 │            │ private, attributes, gramps_id        │                                                                            │
@@ -54,16 +56,22 @@ separate trip to the Places view first.
 
 Every type RELATED_CONFIG lists a Notes/Citations/Media/Tags section for (that's
 nearly all of them — see components/related/config.ts) can now attach an existing
-Note/Citation/Tag and detach one already attached via a "+"/"×" in that section's
-own header/rows in the record's detail pane (RelatedPanel, not the create/edit
-dialog); Media is attach-only there, no per-item detach yet. Two deliberate scope
-cuts, not oversights:
-- No inline "+ New Note/Citation/Tag" while attaching — existing records only, same
-  precedent as Family's children (mixed create+edit stays deferred everywhere).
-- Media has no per-item detach yet — its section renders as a compact gallery
-  teaser (one thumbnail + count), not a per-item list, specifically to avoid
-  hundreds of simultaneous thumbnail loads; adding detach means restructuring that
-  into a real per-item list first.
+Note/Citation/Tag/media item and detach one already attached via a "+"/"×" in that
+section's own header/rows in the record's detail pane (RelatedPanel, not the
+create/edit dialog). Media's optional visual gallery teaser/link (one thumbnail +
+count, handing off to ReferenceDetail's full grid) stays opt-in and thumbnail-light
+as before, but the section's actual list is now a plain text-label RefRow list
+underneath (same shape as Notes/Citations), which is what makes per-item detach
+possible without the hundreds-of-simultaneous-thumbnail-loads problem that list
+shape was originally deferred to avoid.
+
+One deliberate scope cut, not an oversight:
+- No inline "+ New Note/Citation/Tag" while attaching — existing records only.
+  (Family's children now *does* support "+ New Person", the same nested-draft
+  pattern its own father/mother slots already had — see below — but that's the
+  FamilyEditDialog create/edit dialog itself, not a RelatedPanel attach control
+  like this one; the two aren't the same kind of "add," and this cut is about
+  the latter specifically.)
 
 Attributes/addresses/urls (Attribute/Address/Url — an inline embedded-object shape,
 not a reference to another Gramps object, unlike Note/Citation/Media/Tag's plain
