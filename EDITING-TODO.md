@@ -15,10 +15,10 @@ Partially editable, by type
 │            │ addresses, urls, associations (add/   │                                                                            │
 │            │ edit rel text/detach)                 │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ Family     │ father, mother, relationship type,    │ LDS ordinances; a child's frel/mrel always defaults to Birth/Birth        │
+│ Family     │ father, mother, relationship type,    │ LDS ordinances                                                            │
 │            │ private, children (add existing or    │                                                                            │
-│            │ brand-new/remove), attributes,        │                                                                            │
-│            │ gramps_id                             │                                                                            │
+│            │ brand-new/remove, with frel/mrel set  │                                                                            │
+│            │ at add time), attributes, gramps_id   │                                                                            │
 ├────────────┼───────────────────────────────────────┼────────────────────────────────────────────────────────────────────────────┤
 │ Event      │ type, description, date, place,       │ —                                                                          │
 │            │ private, attributes, gramps_id        │                                                                            │

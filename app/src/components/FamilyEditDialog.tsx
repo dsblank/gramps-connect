@@ -10,6 +10,7 @@ import { fetchPage, type QueryItem } from "../store/api";
 import { buildPersonSearchExpr } from "../store/personSearch";
 import { PERSON_VIEW } from "../store/views";
 import { withGrampsId } from "./related/summary";
+import { CHILD_REL_OPTIONS } from "./related/RefEditDialog";
 import type { DraftEntry } from "../store/draftStack";
 
 // FamilyRelType's built-in values (gramps/gen/lib/familyreltype.py) as plain
@@ -117,7 +118,7 @@ interface ChildRefLite {
 interface ChildrenFieldProps {
   refs: ChildRefLite[];
   labels: Record<string, string>;
-  onAdd: (item: QueryItem) => void;
+  onAdd: (item: QueryItem, frel: string, mrel: string) => void;
   onRemove: (handle: string) => void;
   /** Active "new"-mode Person drafts opened from this Family's children
    * (see FamilyEditDialog's handleAddNewChildPerson) -- keyed by handle, so
@@ -130,7 +131,7 @@ interface ChildrenFieldProps {
    * already applies to its own "+ New Person" (mixed create+edit stays
    * deferred; see that component's own doc comment). */
   allowNewPerson: boolean;
-  onAddNewPerson: () => void;
+  onAddNewPerson: (frel: string, mrel: string) => void;
   onReopenChildDraft: (handle: string) => void;
   onRemoveChildDraft: (handle: string) => void;
 }
@@ -140,14 +141,19 @@ interface ChildrenFieldProps {
  * "+ New Person" -- see FamilyEditDialog's handleAddNewChildPerson for how
  * a *list* of these coexists with draftStack's single-field `openedFrom`,
  * which father_handle/mother_handle use directly since they're each just
- * one field). frel/mrel (relationship to father/mother) default to Gramps'
- * own default ("Birth") rather than exposing them, same MVP scope as the
- * parent slots not exposing every ChildRef field either. */
+ * one field). frel/mrel (relationship to father/mother) are set *before*
+ * adding -- the two Selects below, defaulting to Gramps' own default
+ * ("Birth") -- rather than only afterward via a child row's own "✎ Edit"
+ * (RefEditDialog, still there for changing one later). Not shown per
+ * existing-child row here, same MVP scope as the parent slots not showing
+ * every ChildRef field either. */
 function ChildrenField({
   refs, labels, onAdd, onRemove, childDraftsByHandle, openHandles, allowNewPerson,
   onAddNewPerson, onReopenChildDraft, onRemoveChildDraft,
 }: ChildrenFieldProps) {
   const [searching, setSearching] = useState(false);
+  const [frel, setFrel] = useState("Birth");
+  const [mrel, setMrel] = useState("Birth");
   const pickedHandles = new Set(refs.map((r) => r.ref));
 
   return (
@@ -184,18 +190,42 @@ function ChildrenField({
         <PersonSearch
           onPick={(item) => {
             setSearching(false);
-            if (!pickedHandles.has(item.handle)) onAdd(item);
+            if (!pickedHandles.has(item.handle)) onAdd(item, frel, mrel);
           }}
         />
       ) : (
-        <Group gap="xs">
-          <CircleGlyphButton glyph="+" label="Add child" textLabel="Add child" onClick={() => setSearching(true)} />
-          {allowNewPerson && (
-            <Button variant="default" size="xs" onClick={onAddNewPerson}>
-              + New Person
-            </Button>
-          )}
-        </Group>
+        <Stack gap={4}>
+          <Group gap="xs">
+            <Select
+              label="Relationship to father"
+              data={CHILD_REL_OPTIONS}
+              value={frel}
+              onChange={(next) => setFrel(next ?? "Birth")}
+              allowDeselect={false}
+              size="xs"
+              w={150}
+              comboboxProps={{ withinPortal: true }}
+            />
+            <Select
+              label="Relationship to mother"
+              data={CHILD_REL_OPTIONS}
+              value={mrel}
+              onChange={(next) => setMrel(next ?? "Birth")}
+              allowDeselect={false}
+              size="xs"
+              w={150}
+              comboboxProps={{ withinPortal: true }}
+            />
+          </Group>
+          <Group gap="xs">
+            <CircleGlyphButton glyph="+" label="Add child" textLabel="Add child" onClick={() => setSearching(true)} />
+            {allowNewPerson && (
+              <Button variant="default" size="xs" onClick={() => onAddNewPerson(frel, mrel)}>
+                + New Person
+              </Button>
+            )}
+          </Group>
+        </Stack>
       )}
     </Stack>
   );
@@ -438,7 +468,7 @@ export function FamilyEditDialog({
       .map((d) => [d.handle, d] as const)
   );
 
-  function handleAddNewChildPerson() {
+  function handleAddNewChildPerson(frel: string, mrel: string) {
     const field = `${NEW_CHILD_FIELD_PREFIX}${createHandle()}`;
     const handle = onOpenPersonDraft(field);
     // openDraft's own effect just wrote {[field]: handle} onto this Family
@@ -450,7 +480,7 @@ export function FamilyEditDialog({
     // it out of what actually reaches the server.
     onChange({
       [field]: undefined,
-      child_ref_list: [...childRefs, { _class: "ChildRef", ref: handle, frel: "Birth", mrel: "Birth" }],
+      child_ref_list: [...childRefs, { _class: "ChildRef", ref: handle, frel, mrel }],
     });
   }
 
@@ -515,10 +545,10 @@ export function FamilyEditDialog({
         <ChildrenField
           refs={childRefs}
           labels={pickedLabels}
-          onAdd={(item) => {
+          onAdd={(item, frel, mrel) => {
             setPickedLabels((prev) => ({ ...prev, [item.handle]: personLabel(item) }));
             onChange({
-              child_ref_list: [...childRefs, { _class: "ChildRef", ref: item.handle, frel: "Birth", mrel: "Birth" }],
+              child_ref_list: [...childRefs, { _class: "ChildRef", ref: item.handle, frel, mrel }],
             });
           }}
           onRemove={(handle) => onChange({ child_ref_list: childRefs.filter((r) => r.ref !== handle) })}

@@ -11,7 +11,11 @@ import type { ViewConfig } from "../../store/views";
 // FamilyEditDialog's REL_TYPE_OPTIONS doc comment already explains for
 // FamilyRelType, applied here to a *ref's* own frel/mrel/role/media_type
 // instead of a whole object's type.
-const CHILD_REL_OPTIONS = ["Birth", "Adopted", "Stepchild", "Sponsored", "Foster", "Unknown"];
+// Exported for FamilyEditDialog.tsx's own "add child" Selects (set frel/mrel
+// up front, rather than only after the fact via this dialog) -- same
+// built-in values, no reason to duplicate the list for a second "new
+// ChildRef" spot rather than an "edit an existing one" dialog.
+export const CHILD_REL_OPTIONS = ["Birth", "Adopted", "Stepchild", "Sponsored", "Foster", "Unknown"];
 // Exported for EventCreateDialog.tsx's own role Select -- same built-in
 // values, no reason to duplicate the list for a second "new EventRef"
 // dialog rather than an "edit an existing one" dialog.
