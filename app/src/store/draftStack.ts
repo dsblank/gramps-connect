@@ -161,6 +161,19 @@ function orderedForSave(drafts: DraftEntry[]): DraftEntry[] {
   return ordered;
 }
 
+/** One saved draft's identity, handed back by saveAll() so the caller
+ * (EditDialogs.tsx) can announce it -- a toast with a link to the object's
+ * view -- without draftStack.ts itself reaching into components/related's
+ * summary-building code (store/ stays free of that import direction; see
+ * jobsCallbacks.ts for the precedent of a *callback's* home showing
+ * notifications directly, which EditDialogs.tsx's handler now follows). */
+export interface SavedDraft {
+  type: DraftType;
+  mode: "new" | "edit";
+  handle: string;
+  data: Record<string, unknown>;
+}
+
 export interface UseDraftStack {
   /** Every draft opened this session, active or cancelled -- see
    * DraftEntry.active's doc comment for why a cancelled one stays here
@@ -203,8 +216,10 @@ export interface UseDraftStack {
    * POST /api/objects/, in dependency order; each "edit" draft is its own
    * PUT (preceded by its own extraCreate/extraUpdate), sequentially. Not
    * scoped to whichever dialog's Save button was clicked -- there's only
-   * ever one pending save, covering every open draft. */
-  saveAll: () => Promise<void>;
+   * ever one pending save, covering every open draft. Resolves with the
+   * drafts that were actually saved (empty on failure -- `error` carries
+   * the reason) for the caller to announce; never rejects. */
+  saveAll: () => Promise<SavedDraft[]>;
   saving: boolean;
   error: string | null;
 }
@@ -315,7 +330,7 @@ export function useDraftStack(): UseDraftStack {
     setOpenHandles((prev) => prev.filter((h) => h !== handle));
   }
 
-  async function saveAll() {
+  async function saveAll(): Promise<SavedDraft[]> {
     setSaving(true);
     setError(null);
     try {
@@ -347,10 +362,15 @@ export function useDraftStack(): UseDraftStack {
       );
       if (touchedEvents) touchedTypes.add("event");
       for (const type of touchedTypes) getViewStore(type).requeryDebounced();
+      const saved = [...newDrafts, ...editDrafts].map((d) => ({
+        type: d.type, mode: d.mode, handle: d.handle, data: d.data,
+      }));
       setStack([]);
       setOpenHandles([]);
+      return saved;
     } catch (err: any) {
       setError(err.message ?? String(err));
+      return [];
     } finally {
       setSaving(false);
     }

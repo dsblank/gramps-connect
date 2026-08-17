@@ -1,8 +1,33 @@
-import { Modal } from "@mantine/core";
-import type { UseDraftStack } from "../store/draftStack";
+import { Anchor, Modal } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { DRAFT_TYPE_LABELS, type SavedDraft, type UseDraftStack } from "../store/draftStack";
+import { formatHash } from "../hash";
+import { summaryLine } from "./related/summary";
 import { PersonEditDialog } from "./PersonEditDialog";
 import { FamilyEditDialog } from "./FamilyEditDialog";
 import { ObjectEditDialog } from "./ObjectEditDialog";
+
+/** Toast per object saveAll() actually saved -- a link (via formatHash,
+ * same in-app hash nav as HomeView's own Anchor rows) straight to that
+ * object on its view, so "I just added/edited X" has somewhere to go
+ * without hunting for it in the table. Fired here rather than inside
+ * draftStack.ts itself: summaryLine's label-building code lives under
+ * components/, and store/ doesn't reach up into components/ (see
+ * SavedDraft's doc comment). */
+function announceSaved(saved: SavedDraft[]) {
+  for (const entry of saved) {
+    const verb = entry.mode === "new" ? "added" : "updated";
+    notifications.show({
+      color: entry.mode === "new" ? "green" : "blue",
+      title: `${DRAFT_TYPE_LABELS[entry.type]} ${verb}`,
+      message: (
+        <Anchor component="a" href={formatHash({ viewKey: entry.type, handle: entry.handle })} underline="never">
+          {summaryLine(entry.type, entry.data)}
+        </Anchor>
+      ),
+    });
+  }
+}
 
 interface EditDialogsProps {
   draftStack: UseDraftStack;
@@ -34,6 +59,10 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
     saveAll, saving, error,
   } = draftStack;
 
+  async function handleSaveAll() {
+    announceSaved(await saveAll());
+  }
+
   return (
     <Modal.Stack>
       {stack.map((draft) => {
@@ -41,7 +70,7 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
         const opened = openHandles.includes(handle);
         const isTopLevel = !draft.openedFrom;
         const primaryLabel = isTopLevel ? "Save" : "Done";
-        const onPrimary = isTopLevel ? saveAll : () => hideDraft(handle);
+        const onPrimary = isTopLevel ? handleSaveAll : () => hideDraft(handle);
 
         if (draft.type === "person") {
           return (
