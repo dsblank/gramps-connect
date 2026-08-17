@@ -429,6 +429,7 @@ export function ObjectEditDialog({
         return (
           <DateInput
             key={f.key}
+            id={`${draft.handle}-${f.key}`}
             label={f.label}
             value={(draft.data[f.key] as GrampsDate | undefined) ?? null}
             onChange={(date) => onChange({ [f.key]: date })}

@@ -187,7 +187,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
           />
         </Group>
 
-        <DateInput label="Date" value={date} onChange={(next) => onChange({ date: next })} />
+        <DateInput id={`${stackId}-date`} label="Date" value={date} onChange={(next) => onChange({ date: next })} />
 
         <Anchor component="button" type="button" size="sm" onClick={() => setShowSorting((v) => !v)}>
           {showSorting ? "▾" : "▸"} Sorting & display

@@ -352,9 +352,7 @@ export function PersonEditDialog({
             onChange={(e) => patchName("surname", e.currentTarget.value)}
             style={{ flex: 1 }}
           />
-          <Button variant="default" onClick={() => setPrimaryNameOpen(true)}>
-            More…
-          </Button>
+          <CircleGlyphButton glyph="»" label="Edit full name details" onClick={() => setPrimaryNameOpen(true)} size={34} />
         </Group>
         <Select
           label="Gender"
@@ -370,14 +368,14 @@ export function PersonEditDialog({
         </Anchor>
         <Collapse in={showDetails}>
           <Stack gap="md">
-            <DateInput label="Birth date" value={birthDate} onChange={setBirthDate} />
+            <DateInput id={`${draft.handle}-birth-date`} label="Birth date" value={birthDate} onChange={setBirthDate} />
             <EventPlaceField
               label="Birth place"
               id={`${draft.handle}-birth-place`}
               value={birthPlace}
               onChange={setBirthPlace}
             />
-            <DateInput label="Death date" value={deathDate} onChange={setDeathDate} />
+            <DateInput id={`${draft.handle}-death-date`} label="Death date" value={deathDate} onChange={setDeathDate} />
             <EventPlaceField
               label="Death place"
               id={`${draft.handle}-death-place`}

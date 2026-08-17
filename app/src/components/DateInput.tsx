@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { ActionIcon, Anchor, Collapse, Group, NumberInput, Select, Stack, Switch, Text, TextInput, Tooltip } from "@mantine/core";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ActionIcon, Button, Group, Modal, NumberInput, Select, Stack, Switch, Text, TextInput, Tooltip } from "@mantine/core";
+import { CircleGlyphButton } from "./CircleGlyphButton";
 import {
   Calendar,
   EMPTY_DATE_PART,
@@ -22,6 +23,13 @@ import {
 
 interface DateInputProps {
   label: string;
+  /** Unique per mounted instance -- becomes the nested "More…" dialog's
+   * stackId, same convention as EventPlaceField's own `id` prop (its
+   * PlaceEditDialog is the other nested-Modal precedent). `label` alone
+   * isn't enough: multiple drafts/rows can each have their own "Date"
+   * field open at once, and Mantine's ModalStack needs distinct stackIds
+   * across all of them, not just within one dialog. */
+  id: string;
   value: GrampsDate | null;
   onChange: (date: GrampsDate | null) => void;
 }
@@ -160,40 +168,42 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
   }
 
   return (
-    <Group gap="xs" wrap="nowrap">
-      <NumberInput
-        placeholder="Year"
-        value={year || ""}
-        onChange={(v) => setField({ year: Number(v) || 0 })}
-        hideControls
-        allowDecimal={false}
-        error={invalid}
-        w={90}
-      />
-      <NumberInput
-        placeholder="Month"
-        value={month || ""}
-        onChange={(v) => setField({ month: Number(v) || 0 })}
-        hideControls
-        allowDecimal={false}
-        allowNegative={false}
-        error={invalid}
-        min={1}
-        max={12}
-        w={80}
-      />
-      <NumberInput
-        placeholder="Day"
-        value={day || ""}
-        onChange={(v) => setField({ day: Number(v) || 0 })}
-        hideControls
-        allowDecimal={false}
-        allowNegative={false}
-        error={invalid}
-        min={1}
-        max={31}
-        w={80}
-      />
+    <Group gap="xs" wrap="nowrap" align="flex-end" style={{ flex: 1 }}>
+      <Group grow gap="xs" style={{ flex: 1 }}>
+        <NumberInput
+          label="Year"
+          placeholder="Year"
+          value={year || ""}
+          onChange={(v) => setField({ year: Number(v) || 0 })}
+          hideControls
+          allowDecimal={false}
+          error={invalid}
+        />
+        <NumberInput
+          label="Month"
+          placeholder="Month"
+          value={month || ""}
+          onChange={(v) => setField({ month: Number(v) || 0 })}
+          hideControls
+          allowDecimal={false}
+          allowNegative={false}
+          error={invalid}
+          min={1}
+          max={12}
+        />
+        <NumberInput
+          label="Day"
+          placeholder="Day"
+          value={day || ""}
+          onChange={(v) => setField({ day: Number(v) || 0 })}
+          hideControls
+          allowDecimal={false}
+          allowNegative={false}
+          error={invalid}
+          min={1}
+          max={31}
+        />
+      </Group>
       <NativeDatePickerButton part={part} onChange={onChange} enabled={nativePickerEnabled} />
     </Group>
   );
@@ -208,12 +218,14 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
  *   same as Gramps desktop's own default. Unparseable text becomes a
  *   Text-only date carrying the raw string, exactly like Gramps desktop's
  *   own quick-entry field never rejects input.
- * - "More…" (collapsed by default), containing the expanded structured
- *   editor: modifier/quality/calendar/dual-dated/new-year and explicit
- *   year/month/day fields (a second row for range/span), plus the
- *   always-available "Text comment" annotation field -- for anything the
- *   quick parser can't express or the user prefers not to type. */
-export function DateInput({ label, value, onChange }: DateInputProps) {
+ * - A "»" CircleGlyphButton on that same row, opening a stacked dialog
+ *   (same Modal.Stack mechanism as NameEditDialog/PlaceEditDialog) with the
+ *   expanded structured editor:
+ *   modifier/quality/calendar/dual-dated/new-year and explicit year/month/
+ *   day fields (a second row for range/span), plus the always-available
+ *   "Text comment" annotation field -- for anything the quick parser can't
+ *   express or the user prefers not to type. */
+export function DateInput({ label, id, value, onChange }: DateInputProps) {
   const modifier = value?.modifier ?? Modifier.NONE;
   const quality = value?.quality ?? Quality.NONE;
   const calendar = value?.calendar ?? Calendar.GREGORIAN;
@@ -226,7 +238,7 @@ export function DateInput({ label, value, onChange }: DateInputProps) {
   const dualDated = start[3];
   const validation = value && !textOnly ? validateDate(value) : null;
 
-  const [showMore, setShowMore] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   function commit(next: {
     modifier?: Modifier;
@@ -309,43 +321,55 @@ export function DateInput({ label, value, onChange }: DateInputProps) {
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
 
-      <QuickEntryField label={label} value={value} onChange={onChange} onCommitStart={(p) => commit({ start: p })} start={start} calendar={calendar} />
+      <QuickEntryField
+        label={label}
+        value={value}
+        onChange={onChange}
+        onCommitStart={(p) => commit({ start: p })}
+        start={start}
+        calendar={calendar}
+        trailing={
+          <CircleGlyphButton
+            glyph="»"
+            label={`Edit full ${label.toLowerCase()} details`}
+            onClick={() => setDetailsOpen(true)}
+            size={34}
+          />
+        }
+      />
 
-      <Anchor component="button" type="button" size="xs" onClick={() => setShowMore((v) => !v)}>
-        {showMore ? "▾" : "▸"} More…
-      </Anchor>
+      {errorMessage && (
+        <Text size="xs" c="red">{errorMessage}</Text>
+      )}
 
-      <Collapse in={showMore}>
-        <Stack gap={4} pt={4}>
-          <Group gap="xs" wrap="wrap">
+      <Modal opened={detailsOpen} onClose={() => setDetailsOpen(false)} title={label} size="lg" stackId={id}>
+        <Stack gap={4}>
+          <Group grow gap="xs" wrap="nowrap">
             <Select
-              aria-label={`${label} type`}
+              label="Type"
               data={MODIFIER_OPTIONS}
               value={String(modifier)}
               onChange={(v) => commit({ modifier: (Number(v) as Modifier) ?? Modifier.NONE })}
               allowDeselect={false}
               comboboxProps={{ withinPortal: true }}
-              w={120}
             />
             <Select
-              aria-label={`${label} quality`}
+              label="Quality"
               data={QUALITY_OPTIONS}
               value={String(quality)}
               onChange={(v) => commit({ quality: (Number(v) as Quality) ?? Quality.NONE })}
               allowDeselect={false}
               comboboxProps={{ withinPortal: true }}
-              w={120}
             />
             {!textOnly && (
               <Select
-                aria-label={`${label} calendar`}
+                label="Calendar"
                 data={CALENDAR_OPTIONS}
                 value={String(calendar)}
                 onChange={(v) => setCalendar((Number(v) as Calendar) ?? Calendar.GREGORIAN)}
                 allowDeselect={false}
                 disabled={dualDated}
                 comboboxProps={{ withinPortal: true }}
-                w={150}
               />
             )}
           </Group>
@@ -359,8 +383,8 @@ export function DateInput({ label, value, onChange }: DateInputProps) {
                 invalid={validation?.date1Invalid}
               />
               {compound && (
-                <Group gap="xs" wrap="nowrap">
-                  <Text size="sm" c="dimmed">to</Text>
+                <Group gap="xs" wrap="nowrap" align="flex-end">
+                  <Text size="sm" c="dimmed" pb={8}>to</Text>
                   <DatePartRow
                     part={stop}
                     onChange={(p) => commit({ stop: p })}
@@ -369,10 +393,7 @@ export function DateInput({ label, value, onChange }: DateInputProps) {
                   />
                 </Group>
               )}
-              {errorMessage && (
-                <Text size="xs" c="red">{errorMessage}</Text>
-              )}
-              <Group gap="md" wrap="wrap" align="flex-end">
+              <Group gap="md" wrap="nowrap" align="flex-end" justify="space-between">
                 <Switch
                   label="Dual dated (e.g. 1745/6)"
                   checked={dualDated}
@@ -401,8 +422,12 @@ export function DateInput({ label, value, onChange }: DateInputProps) {
             value={text}
             onChange={(e) => commit({ text: e.currentTarget.value })}
           />
+
+          <Group justify="flex-end">
+            <Button onClick={() => setDetailsOpen(false)}>Done</Button>
+          </Group>
         </Stack>
-      </Collapse>
+      </Modal>
     </Stack>
   );
 }
@@ -421,6 +446,7 @@ function QuickEntryField({
   onCommitStart,
   start,
   calendar,
+  trailing,
 }: {
   label: string;
   value: GrampsDate | null;
@@ -428,6 +454,10 @@ function QuickEntryField({
   onCommitStart: (part: DatePart) => void;
   start: DatePart;
   calendar: Calendar;
+  /** Rendered after the native-picker button, on the same line -- the
+   * "expand to full edit" trigger (a CircleGlyphButton in DateInput's own
+   * return) lives here rather than on its own row below. */
+  trailing?: ReactNode;
 }) {
   const [buffer, setBuffer] = useState(() => (value ? formatDate(value) : ""));
   const focusedRef = useRef(false);
@@ -458,6 +488,7 @@ function QuickEntryField({
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
       />
       <NativeDatePickerButton part={start} onChange={onCommitStart} enabled={calendar === Calendar.GREGORIAN} />
+      {trailing}
     </Group>
   );
 }

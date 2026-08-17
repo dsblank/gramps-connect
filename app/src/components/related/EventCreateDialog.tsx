@@ -85,7 +85,7 @@ export function EventCreateDialog({ opened, onClose, view, objectHandle, onSaved
           autoFocus
         />
         <TextInput label="Description" value={description} onChange={(e) => setDescription(e.currentTarget.value)} />
-        <DateInput label="Date" value={date} onChange={setDate} />
+        <DateInput id={`${objectHandle}-new-event-date`} label="Date" value={date} onChange={setDate} />
         <EventPlaceField label="Place" id={`${objectHandle}-new-event-place`} value={place} onChange={setPlace} />
         <Select
           label="Role"
