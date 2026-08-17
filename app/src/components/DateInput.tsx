@@ -115,7 +115,7 @@ function NativeDatePickerButton({
 }) {
   const pickerRef = useRef<HTMLInputElement>(null);
   return (
-    <>
+    <span style={{ position: "relative", display: "inline-block" }}>
       <Tooltip label={enabled ? "Pick a date" : "Only available for the Gregorian calendar"}>
         <ActionIcon
           variant="default"
@@ -128,7 +128,10 @@ function NativeDatePickerButton({
         </ActionIcon>
       </Tooltip>
       {/* Visually hidden, not display:none -- Chrome/Firefox refuse
-       * .showPicker() on a display:none input. */}
+       * .showPicker() on a display:none input. Sized to exactly cover
+       * the button (rather than width/height 0) so the browser anchors
+       * the native picker popup to the button instead of the viewport
+       * corner. */}
       <input
         ref={pickerRef}
         type="date"
@@ -136,9 +139,9 @@ function NativeDatePickerButton({
         aria-hidden
         value={toNativeValue(part)}
         onChange={(e) => onChange(fromNativeValue(e.target.value, part[3]))}
-        style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 0, height: 0, border: 0 }}
+        style={{ position: "absolute", inset: 0, opacity: 0, pointerEvents: "none", border: 0 }}
       />
-    </>
+    </span>
   );
 }
 
