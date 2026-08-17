@@ -51,7 +51,14 @@ export const DETAIL_FIELDS: Record<string, DetailField[]> = {
     { label: "Abbreviation", value: (d) => (d.abbrev as string | undefined) ?? "" },
   ],
   citation: [
+    { label: "Page", value: (d) => (d.page as string | undefined) ?? "" },
+    { label: "Date", value: (d) => displayDate(d.date) },
     { label: "Confidence", value: (d) => displayConfidence(d.confidence) },
+  ],
+  event: [
+    { label: "Type", value: (d) => (d.type as string | undefined) ?? "" },
+    { label: "Date", value: (d) => displayDate(d.date) },
+    { label: "Description", value: (d) => (d.description as string | undefined) ?? "" },
   ],
   media: [
     { label: "Date", value: (d) => displayDate(d.date) },
@@ -69,5 +76,8 @@ export const DETAIL_FIELDS: Record<string, DetailField[]> = {
   // else to live.
   tag: [
     { label: "Priority", value: (d) => (typeof d.priority === "number" ? String(d.priority) : "") },
+  ],
+  note: [
+    { label: "Type", value: (d) => (d.type as string | undefined) ?? "" },
   ],
 };
