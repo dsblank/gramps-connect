@@ -3,7 +3,9 @@
 // announced identically however it was found: App.tsx starts the
 // server-driven catch-up sweep with these, and ReportDialog.tsx hands the
 // same object to trackJob() for a report it just dispatched itself.
+import { Anchor } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { formatHash } from "../hash";
 import type { JobsPollCallbacks } from "./jobsPoll";
 import type { JobKind } from "./jobsPromote";
 import { notifyBrowser } from "./browserNotifications";
@@ -23,7 +25,20 @@ export function notifyJobStarted(kind: JobKind, what: string): void {
 export const jobsPollCallbacks: JobsPollCallbacks = {
   onPromoted: (result, kind) => {
     const title = kind === "report" ? "Report ready" : "Export ready";
-    notifications.show({ color: "green", title, message: result.desc });
+    // Links into the Output view (GENERATED_VIEW, key "generated") at the
+    // promoted Media object itself -- same formatHash-Anchor shape as
+    // EditDialogs.tsx's own save toast. notifyBrowser gets the plain desc:
+    // an OS notification has no room for a link, and clicking one doesn't
+    // focus this tab/route anyway.
+    notifications.show({
+      color: "green",
+      title,
+      message: (
+        <Anchor component="a" href={formatHash({ viewKey: "generated", handle: result.handle })} underline="never">
+          {result.desc}
+        </Anchor>
+      ),
+    });
     notifyBrowser(title, result.desc);
   },
   onFailed: (kind, message) => {
