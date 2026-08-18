@@ -16,9 +16,10 @@ import type { ViewConfig } from "../../store/views";
 // built-in values, no reason to duplicate the list for a second "new
 // ChildRef" spot rather than an "edit an existing one" dialog.
 export const CHILD_REL_OPTIONS = ["Birth", "Adopted", "Stepchild", "Sponsored", "Foster", "Unknown"];
-// Exported for EventCreateDialog.tsx's own role Select -- same built-in
-// values, no reason to duplicate the list for a second "new EventRef"
-// dialog rather than an "edit an existing one" dialog.
+// Exported for RefPickerField.tsx's own EventsField (Person/Family's own
+// "+ New Event"/"select existing" Role Select) -- same built-in values, no
+// reason to duplicate the list for a second "new EventRef" spot rather
+// than an "edit an existing one" dialog.
 export const EVENT_ROLE_OPTIONS = [
   "Primary", "Clergy", "Celebrant", "Aide", "Bride", "Groom", "Witness", "Family",
   "Informant", "Godparent", "Father", "Mother", "Parent", "Child", "Multiple birth",

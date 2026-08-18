@@ -1,23 +1,21 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Group, Loader, NavLink, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Button, Card, Group, Loader, NavLink, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
 import type { ViewConfig } from "../store/views";
 import { withGrampsId } from "./related/summary";
 
 // Capped rather than raised when a search is too broad: a picker that can
-// return hundreds of matches needs a narrower query, not a longer dropdown
-// (same reasoning as FamilyEditDialog.tsx's PersonSearch).
+// return hundreds of matches needs a narrower query, not a longer dropdown.
 const RESULT_LIMIT = 20;
 
 interface RecordPickerProps {
   view: ViewConfig;
   /** The flat column to search, prefix-matched (`like(<field>, '<term>%')`)
-   * -- e.g. "title" for Place/Source. A plain prefix match is enough for
-   * every reference field ObjectEditDialog.tsx needs a picker for; nothing
-   * here needs FamilyEditDialog's name-specific parsing (comma order,
-   * multi-word given/surname), so this stays its own, simpler component
-   * rather than generalizing that one. */
+   * by default -- e.g. "title" for Place/Source. A caller with its own
+   * multi-field search logic (Family's Person picker's comma-order/
+   * multi-word given+surname parsing) overrides this via `buildExpr`
+   * instead, rather than this component needing to know about it. */
   searchField: string;
   placeholder: string;
   onPick: (item: QueryItem) => void;
@@ -40,18 +38,26 @@ interface RecordPickerProps {
    * those aren't a separate "confirm this" dialog the way AttachControl's
    * is. */
   confirmWithButton?: boolean;
+  /** e.g. "Person"/"Place" -- shown in the "not finding it?" bridge below,
+   * only rendered once a query's been typed and `onCreateNew` is given (see
+   * that prop's own doc comment). */
+  createLabel?: string;
+  /** Opts this picker into the "not finding it? create new" bridge -- a
+   * search that doesn't turn up the right record shouldn't be a dead end
+   * that has to be backed out of first. Omitted entirely by callers whose
+   * reference type doesn't support creating one yet. */
+  onCreateNew?: () => void;
 }
 
-/** A generic single-field "pick an existing record" search, used by
- * ObjectEditDialog.tsx's reference fields (Event's Place, Citation's
- * Source) and AttachControl.tsx's attach dialogs. Same debounced-search/
- * result-list shape as FamilyEditDialog.tsx's PersonSearch, built
- * separately rather than shared -- see this file's own doc comment on why.
- * An empty search browses the view's default-ordered list immediately
- * (no where_expr at all) rather than showing nothing until 2+ characters
- * are typed -- there's something to pick from the moment this opens. */
+/** A generic single-field "pick an existing record" search -- the shared
+ * search half of RefPickerField.tsx's RefSlot/SearchOrCreate (Family's
+ * parent/child slots, Event's Place, Citation's Source) and of
+ * AttachControl.tsx's own attach dialogs. An empty search browses the
+ * view's default-ordered list immediately (no where_expr at all) rather
+ * than showing nothing until 2+ characters are typed -- there's something
+ * to pick from the moment this opens. */
 export function RecordPicker({
-  view, searchField, placeholder, onPick, buildExpr, renderLabel, confirmWithButton,
+  view, searchField, placeholder, onPick, buildExpr, renderLabel, confirmWithButton, createLabel, onCreateNew,
 }: RecordPickerProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QueryItem[]>([]);
@@ -137,6 +143,14 @@ export function RecordPicker({
         <Text size="xs" c="dimmed">
           Showing {results.length} of {totalCount} — refine your search to narrow this down.
         </Text>
+      )}
+      {onCreateNew && query.trim().length > 0 && (
+        <Group gap={4}>
+          <Text size="xs" c="dimmed">Not finding it?</Text>
+          <Anchor component="button" type="button" size="xs" onClick={onCreateNew}>
+            + Create new {createLabel}…
+          </Anchor>
+        </Group>
       )}
       {confirmWithButton && (
         <Group justify="flex-end">

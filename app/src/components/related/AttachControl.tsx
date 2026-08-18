@@ -4,40 +4,9 @@ import { getToken, hasPermissions } from "../../auth/auth";
 import { attachRefListEntry } from "../../store/refListApi";
 import { CircleGlyphButton } from "../CircleGlyphButton";
 import { RecordPicker } from "../RecordPicker";
-import { withGrampsId } from "./summary";
+import { pickerResultLabel } from "../RefPickerField";
 import type { QueryItem } from "../../store/api";
 import type { ViewConfig } from "../../store/views";
-
-/** A result's display label, built from the *query-list* shape fetchPage
- * actually returns (each pickerView's own flat `columns`, e.g. Citation's
- * "source_title" -- see views.ts) -- deliberately not summary.ts's
- * summaryLine(), which reads a record's *extended* detail shape
- * (`obj.extended?.source?.title`, only present on a RelatedPanel fetch).
- * Using summaryLine here silently fell through to a bare Gramps ID (or
- * "(citation)") for every result, since a QueryItem never has `.extended`
- * at all. Only ever called with one of the four picker views this file
- * uses (note/citation/tag/media), matching their exact column keys. Still
- * leads with the gramps_id, same as summaryLine, via the shared
- * withGrampsId() helper -- Tag is the one type with no gramps_id at all, so
- * its id comes back undefined and withGrampsId leaves the label alone. */
-function pickerResultLabel(type: string, item: QueryItem): string {
-  const id = item.gramps_id as string | undefined;
-  switch (type) {
-    case "note":
-      return withGrampsId(id, (item.text as string | undefined) || "(untitled)");
-    case "citation": {
-      const title = (item.source_title as string | undefined) ?? "";
-      const page = (item.page as string | undefined) ?? "";
-      return withGrampsId(id, [title, page].filter(Boolean).join(", ") || "(untitled)");
-    }
-    case "tag":
-      return (item.name as string | undefined) || "(untitled)";
-    case "media":
-      return withGrampsId(id, (item.desc as string | undefined) || (item.path as string | undefined) || "(untitled)");
-    default:
-      return withGrampsId(id, item.handle);
-  }
-}
 
 interface AttachControlProps {
   /** The currently-displayed record's own view -- attach PUTs back to

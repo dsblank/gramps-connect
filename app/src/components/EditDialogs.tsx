@@ -78,8 +78,13 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
               key={handle}
               draft={draft}
               opened={opened}
+              stack={stack}
               onChange={(patch) => updateDraft(handle, patch)}
               onSetExtraObjects={(extra) => setExtraObjects(handle, extra)}
+              onOpenDraft={(type, field) => openDraft(type, { handle, field })}
+              onOpenEditDraft={(type, targetHandle, field) => openEditDraft(type, targetHandle, { handle, field })}
+              onShowDraft={showDraft}
+              onCloseDraft={closeDraft}
               onCancel={() => closeDraft(handle)}
               primaryLabel={primaryLabel}
               onPrimary={onPrimary}
@@ -95,9 +100,9 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
               draft={draft}
               opened={opened}
               stack={stack}
-              openHandles={openHandles}
               onChange={(patch) => updateDraft(handle, patch)}
-              onOpenPersonDraft={(field) => openDraft("person", { handle, field })}
+              onOpenDraft={(type, field) => openDraft(type, { handle, field })}
+              onOpenEditDraft={(type, targetHandle, field) => openEditDraft(type, targetHandle, { handle, field })}
               onShowDraft={showDraft}
               onCloseDraft={closeDraft}
               onCancel={() => closeDraft(handle)}
@@ -114,7 +119,6 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
             draft={draft}
             opened={opened}
             stack={stack}
-            openHandles={openHandles}
             onChange={(patch) => updateDraft(handle, patch)}
             onOpenDraft={(type, field) => openDraft(type, { handle, field })}
             onOpenEditDraft={(type, targetHandle, field) => openEditDraft(type, targetHandle, { handle, field })}

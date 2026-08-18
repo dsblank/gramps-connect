@@ -189,13 +189,18 @@ export interface UseDraftStack {
   /** Opens a draft for editing an existing object: fetches its current
    * plain (non-extended) dict and fills the draft in once it lands.
    * `openedFrom`, when given, nests this edit the same way `openDraft`'s
-   * own `openedFrom` nests a "new" draft -- Cancel cascades and clears the
-   * parent's field, and EditDialogs.tsx's isTopLevel/primaryLabel treat it
-   * as "Done", not "Save" (see PlaceEditDialog's own doc comment for why
-   * this nested-*edit* form is Place-only for now; Person/Family's own
-   * child/parent flows only ever nest "new" drafts via `openDraft`, never
-   * an `openEditDraft` of an already-picked person -- picking an existing
-   * person just sets the field directly, no nested dialog). */
+   * own `openedFrom` nests a "new" draft for the *stacking* mechanics
+   * (Modal.Stack layering, EditDialogs.tsx's isTopLevel/primaryLabel
+   * treating it as "Done", not "Save") -- but Cancel behaves differently:
+   * closeDraft only clears the parent's field back to `null` for a
+   * `mode: "new"` draft (there's nothing left to reference once an unsaved
+   * one is abandoned); a nested *edit* draft's Cancel just discards
+   * whatever local changes were in progress, leaving the parent's field
+   * alone, since it already points at the real, untouched-on-server
+   * object. Used by Place's reference field (ObjectEditDialog.tsx) and,
+   * via the shared RefPickerField.tsx component, by Family's own
+   * Father/Mother/Children too -- an already-picked value is editable
+   * the same way everywhere this component's used, not just Place. */
   openEditDraft: (type: DraftType, handle: string, openedFrom?: DraftEntry["openedFrom"]) => void;
   showDraft: (handle: string) => void;
   hideDraft: (handle: string) => void;

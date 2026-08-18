@@ -10,10 +10,15 @@ import type { ViewConfig } from "./views";
 
 // The extra index signature (rather than plain `{_class: string; ref:
 // string}`) lets a caller pass a ref struct with its own metadata fields
-// too -- e.g. EventCreateDialog.tsx's `{_class: "EventRef", ref, role}` --
-// without a cast, same as ChildRef's frel/mrel or a MediaRef's call_number
-// already carry once attached (attach itself never needs to read them, just
-// pass them through verbatim).
+// too -- e.g. a ChildRef's frel/mrel, an EventRef's role, or a MediaRef's
+// call_number -- without a cast (attach itself never needs to read them,
+// just pass them through verbatim). Every metadata-carrying ref type now
+// attaches through its own edit dialog's nested-draft mechanism instead of
+// this live-attach path (RefPickerField.tsx's RefListField/EventsField/
+// AssociationsField), so no current caller actually exercises this beyond
+// a plain handle or a bare MediaRef -- kept general rather than narrowed,
+// since AttachControl.tsx (still alive for media/generated) could still
+// need it for a future metadata-carrying type.
 export type RefListEntry = string | ({ _class: string; ref: string } & Record<string, unknown>);
 
 function entryHandle(entry: RefListEntry): string {

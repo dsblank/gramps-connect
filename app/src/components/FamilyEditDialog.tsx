@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Alert, Anchor, Button, Card, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
-} from "@mantine/core";
+import { Alert, Anchor, Button, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { createHandle } from "../store/objectsApi";
-import { CircleGlyphButton } from "./CircleGlyphButton";
 import { AttributeListField, type Attribute } from "./EmbeddedListFields";
 import { fetchPage, type QueryItem } from "../store/api";
-import { buildPersonSearchExpr } from "../store/personSearch";
-import { PERSON_VIEW } from "../store/views";
-import { withGrampsId } from "./related/summary";
+import { CITATION_VIEW, EVENT_VIEW, MEDIA_VIEW, NOTE_VIEW, PERSON_VIEW, TAG_VIEW } from "../store/views";
+import type { ViewConfig } from "../store/views";
 import { CHILD_REL_OPTIONS } from "./related/RefEditDialog";
-import type { DraftEntry } from "../store/draftStack";
+import {
+  EventsField, MediaListField, OccupiedRefRow, RefListField, RefSlot, SearchOrCreate, cancelledNewDraftHandles,
+  findEditDraft, nestedDraftLabel, newDraftsByHandle, openNewListItemPatch, personLabel, pickerResultLabel,
+  type EventRefLite,
+} from "./RefPickerField";
+import type { DraftEntry, DraftType } from "../store/draftStack";
 
 // FamilyRelType's built-in values (gramps/gen/lib/familyreltype.py) as plain
 // English strings -- gramps-web-api's fix_object_dict() turns a `type`
@@ -21,92 +22,34 @@ const REL_TYPE_OPTIONS = ["Married", "Unmarried", "Civil Union", "Unknown"];
 
 type ParentField = "father_handle" | "mother_handle";
 
-// Synthetic per-child `openedFrom.field` names for a new-person child draft
-// -- see handleAddNewChildPerson's own doc comment for why these exist at
-// all (draftStack's openedFrom is a single-field mechanism; a list needs
-// one synthetic field per entry, cleaned up as each is used).
+// Synthetic per-child `openedFrom.field` names -- draftStack's openedFrom is
+// a single-field mechanism (one parent field -> one nested draft); a *list*
+// like child_ref_list needs one synthetic field per entry it's currently
+// tracking a nested draft for. Two prefixes, two different needs:
+//  - NEW: minted fresh (createHandle()) on every "+ New Person" click, since
+//    each new child is its own draft with its own eventual handle -- see
+//    handleAddNewChildPerson's own doc comment for the rest of that story.
+//  - EDIT: derived deterministically from the child's own (already-real)
+//    handle, since editing an existing child always means the same field
+//    name for that child every time -- no minting, no bookkeeping to clean
+//    up afterward (openEditDraft never writes back to the parent's data the
+//    way openDraft does, so there's no stray key left behind on Cancel).
 const NEW_CHILD_FIELD_PREFIX = "__newChild_";
+const EDIT_CHILD_FIELD_PREFIX = "__editChild_";
 
-function personLabel(item: QueryItem): string {
-  const given = (item.given_name as string | undefined) ?? "";
-  const surname = (item.surname as string | undefined) ?? "";
-  const name = [given, surname].filter(Boolean).join(" ") || "(unnamed)";
-  return withGrampsId(item.gramps_id as string | undefined, name);
-}
-
-// Capped rather than raised when a search is too broad: a picker that can
-// return hundreds of matches needs a narrower query, not a longer dropdown.
-const RESULT_LIMIT = 20;
-
-/** Search box for "Select existing" -- the picker's own results list, using
- * the same buildPersonSearchExpr as FilterBar's Person-view simple search. */
-function PersonSearch({ onPick }: { onPick: (item: QueryItem) => void }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<QueryItem[]>([]);
-  const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const whereExpr = buildPersonSearchExpr(query);
-    if (!whereExpr) {
-      setResults([]);
-      setTotalCount(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      const token = await getToken();
-      const { page, totalCount: count } = await fetchPage(
-        PERSON_VIEW, token, null, true, whereExpr, PERSON_VIEW.orderBy, RESULT_LIMIT
-      );
-      if (!cancelled) {
-        setResults(page.items);
-        setTotalCount(count);
-      }
-    })()
-      .catch(() => {
-        if (!cancelled) {
-          setResults([]);
-          setTotalCount(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [query]);
-
-  return (
-    <Stack gap="xs">
-      <TextInput
-        placeholder="Search by name…"
-        value={query}
-        onChange={(e) => setQuery(e.currentTarget.value)}
-        rightSection={loading ? <Loader size="xs" /> : null}
-        autoFocus
-      />
-      {results.length > 0 && (
-        <Card withBorder padding="xs">
-          <Stack gap={4}>
-            {results.map((item) => (
-              <Anchor key={item.handle} component="button" type="button" size="sm" onClick={() => onPick(item)}>
-                {personLabel(item)}
-              </Anchor>
-            ))}
-          </Stack>
-        </Card>
-      )}
-      {totalCount !== null && totalCount > results.length && (
-        <Text size="xs" c="dimmed">
-          Showing {results.length} of {totalCount} — refine your search to narrow this down.
-        </Text>
-      )}
-    </Stack>
-  );
-}
+// Same synthetic-field mechanism, generalized to Family's own Citations/
+// Notes/Tags list fields (Media excluded -- see MediaListField.tsx's own
+// doc comment for why Media never has a "new draft" to nest) -- see
+// PersonEditDialog.tsx's identical set for Notes/Citations/Tags/
+// Associations, the same pattern applied there first.
+const CITATION_FIELD_PREFIX = "__citation_";
+const CITATION_EDIT_FIELD_PREFIX = "__citation_edit_";
+const NOTE_FIELD_PREFIX = "__note_";
+const NOTE_EDIT_FIELD_PREFIX = "__note_edit_";
+const TAG_FIELD_PREFIX = "__tag_";
+const TAG_EDIT_FIELD_PREFIX = "__tag_edit_";
+const EVENT_FIELD_PREFIX = "__event_";
+const EVENT_EDIT_FIELD_PREFIX = "__event_edit_";
 
 interface ChildRefLite {
   _class: "ChildRef";
@@ -122,12 +65,14 @@ interface ChildrenFieldProps {
   onRemove: (handle: string) => void;
   /** Active "new"-mode Person drafts opened from this Family's children
    * (see FamilyEditDialog's handleAddNewChildPerson) -- keyed by handle, so
-   * a child row whose Person hasn't been saved yet renders like ParentSlot's
-   * own childDraft branch (live draft name, reopen, remove-the-draft)
-   * instead of a plain label + remove-the-reference. */
+   * a child row whose Person hasn't been saved yet renders from the draft
+   * itself instead of a plain label + detach. */
   childDraftsByHandle: Map<string, DraftEntry>;
-  openHandles: string[];
+  /** Active "edit"-mode draft for one existing child, if its own &#9998;
+   * Edit has been clicked -- see EDIT_CHILD_FIELD_PREFIX above. */
+  findChildEditDraft: (refHandle: string) => DraftEntry | undefined;
   onAddNewPerson: (frel: string, mrel: string) => void;
+  onOpenEditChildDraft: (refHandle: string) => void;
   onReopenChildDraft: (handle: string) => void;
   onRemoveChildDraft: (handle: string) => void;
 }
@@ -140,14 +85,14 @@ interface ChildrenFieldProps {
  * one field). frel/mrel (relationship to father/mother) are set *before*
  * adding -- the two Selects below, defaulting to Gramps' own default
  * ("Birth") -- rather than only afterward via a child row's own "✎ Edit"
- * (RefEditDialog, still there for changing one later). Not shown per
- * existing-child row here, same MVP scope as the parent slots not showing
- * every ChildRef field either. */
+ * (RefEditDialog, still there for changing one later, on frel/mrel
+ * specifically -- this dialog's own &#9998; opens a nested edit of the
+ * child Person itself). Not shown per existing-child row here, same MVP
+ * scope as the parent slots not showing every ChildRef field either. */
 function ChildrenField({
-  refs, labels, onAdd, onRemove, childDraftsByHandle, openHandles,
-  onAddNewPerson, onReopenChildDraft, onRemoveChildDraft,
+  refs, labels, onAdd, onRemove, childDraftsByHandle, findChildEditDraft, onAddNewPerson, onOpenEditChildDraft,
+  onReopenChildDraft, onRemoveChildDraft,
 }: ChildrenFieldProps) {
-  const [searching, setSearching] = useState(false);
   const [frel, setFrel] = useState("Birth");
   const [mrel, setMrel] = useState("Birth");
   const pickedHandles = new Set(refs.map((r) => r.ref));
@@ -157,150 +102,66 @@ function ChildrenField({
       <Text size="sm" fw={500}>Children</Text>
       {refs.length === 0 && <Text size="xs" c="dimmed">No children</Text>}
       {refs.map((ref) => {
-        const childDraft = childDraftsByHandle.get(ref.ref);
-        if (childDraft) {
-          const name = (childDraft.data.primary_name ?? {}) as {
-            first_name?: string;
-            surname_list?: { surname?: string }[];
-          };
-          const draftLabel = [name.first_name, name.surname_list?.[0]?.surname].filter(Boolean).join(" ") || "(unnamed)";
-          const isOpen = openHandles.includes(childDraft.handle);
+        const nestedDraft = childDraftsByHandle.get(ref.ref) ?? findChildEditDraft(ref.ref);
+        if (nestedDraft) {
           return (
-            <Group key={ref.ref} gap="xs">
-              <Anchor component="button" type="button" size="sm" onClick={() => onReopenChildDraft(childDraft.handle)}>
-                New Person: {draftLabel}
-              </Anchor>
-              {!isOpen && <Text size="xs" c="dimmed">(hidden -- click name to edit)</Text>}
-              <CircleGlyphButton glyph="−" label="Remove" onClick={() => onRemoveChildDraft(childDraft.handle)} size={16} />
-            </Group>
+            <OccupiedRefRow
+              key={ref.ref}
+              label={nestedDraftLabel(nestedDraft)}
+              isNew={nestedDraft.mode === "new"}
+              onEdit={() => onReopenChildDraft(nestedDraft.handle)}
+              onRemove={() => onRemoveChildDraft(nestedDraft.handle)}
+              removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
+            />
           );
         }
         return (
-          <Group key={ref.ref} gap="xs">
-            <Text size="sm">{labels[ref.ref] ?? ref.ref}</Text>
-            <CircleGlyphButton glyph="−" label="Remove child" onClick={() => onRemove(ref.ref)} size={16} />
-          </Group>
+          <OccupiedRefRow
+            key={ref.ref}
+            label={labels[ref.ref] ?? ref.ref}
+            isNew={false}
+            onEdit={() => onOpenEditChildDraft(ref.ref)}
+            onRemove={() => onRemove(ref.ref)}
+            removeLabel="Remove child"
+          />
         );
       })}
-      {searching ? (
-        <PersonSearch
+      <Stack gap={4}>
+        <Group gap="xs">
+          <Select
+            label="Relationship to father"
+            data={CHILD_REL_OPTIONS}
+            value={frel}
+            onChange={(next) => setFrel(next ?? "Birth")}
+            allowDeselect={false}
+            size="xs"
+            w={150}
+            comboboxProps={{ withinPortal: true }}
+          />
+          <Select
+            label="Relationship to mother"
+            data={CHILD_REL_OPTIONS}
+            value={mrel}
+            onChange={(next) => setMrel(next ?? "Birth")}
+            allowDeselect={false}
+            size="xs"
+            w={150}
+            comboboxProps={{ withinPortal: true }}
+          />
+        </Group>
+        <SearchOrCreate
+          view={PERSON_VIEW}
+          searchField="gramps_id"
+          buildExpr={PERSON_VIEW.simpleSearch?.buildExpr}
+          renderLabel={personLabel}
+          placeholder={PERSON_VIEW.simpleSearch?.placeholder}
           onPick={(item) => {
-            setSearching(false);
             if (!pickedHandles.has(item.handle)) onAdd(item, frel, mrel);
           }}
+          onOpenNew={() => onAddNewPerson(frel, mrel)}
+          createLabel="Person"
         />
-      ) : (
-        <Stack gap={4}>
-          <Group gap="xs">
-            <Select
-              label="Relationship to father"
-              data={CHILD_REL_OPTIONS}
-              value={frel}
-              onChange={(next) => setFrel(next ?? "Birth")}
-              allowDeselect={false}
-              size="xs"
-              w={150}
-              comboboxProps={{ withinPortal: true }}
-            />
-            <Select
-              label="Relationship to mother"
-              data={CHILD_REL_OPTIONS}
-              value={mrel}
-              onChange={(next) => setMrel(next ?? "Birth")}
-              allowDeselect={false}
-              size="xs"
-              w={150}
-              comboboxProps={{ withinPortal: true }}
-            />
-          </Group>
-          <Group gap="xs">
-            <CircleGlyphButton glyph="+" label="Add child" textLabel="Add child" onClick={() => setSearching(true)} />
-            <Button variant="default" size="xs" onClick={() => onAddNewPerson(frel, mrel)}>
-              + New Person
-            </Button>
-          </Group>
-        </Stack>
-      )}
-    </Stack>
-  );
-}
-
-interface ParentSlotProps {
-  label: string;
-  field: ParentField;
-  handle: string | null;
-  /** The stack draft this handle points at, if it's a not-yet-saved "New
-   * Person" (rather than an existing person picked by search). */
-  childDraft: DraftEntry | undefined;
-  isChildOpen: boolean;
-  pickedLabel: string | null;
-  onOpenNewPerson: () => void;
-  onPickExisting: (item: QueryItem) => void;
-  onRemoveChildDraft: () => void;
-  onRemovePicked: () => void;
-  onReopenChildDraft: () => void;
-}
-
-function ParentSlot({
-  label, field: _field, handle, childDraft, isChildOpen, pickedLabel,
-  onOpenNewPerson, onPickExisting, onRemoveChildDraft, onRemovePicked, onReopenChildDraft,
-}: ParentSlotProps) {
-  const [searching, setSearching] = useState(false);
-
-  if (childDraft) {
-    const name = (childDraft.data.primary_name ?? {}) as {
-      first_name?: string;
-      surname_list?: { surname?: string }[];
-    };
-    const draftLabel = [name.first_name, name.surname_list?.[0]?.surname].filter(Boolean).join(" ") || "(unnamed)";
-    return (
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>{label}</Text>
-        <Group gap="xs">
-          <Anchor component="button" type="button" size="sm" onClick={onReopenChildDraft}>
-            New Person: {draftLabel}
-          </Anchor>
-          {!isChildOpen && (
-            <Text size="xs" c="dimmed">(hidden -- click name to edit)</Text>
-          )}
-          <CircleGlyphButton glyph="−" label="Remove" onClick={onRemoveChildDraft} size={16} />
-        </Group>
       </Stack>
-    );
-  }
-
-  if (handle && pickedLabel) {
-    return (
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>{label}</Text>
-        <Group gap="xs">
-          <Text size="sm">{pickedLabel}</Text>
-          <CircleGlyphButton glyph="−" label="Remove" onClick={onRemovePicked} size={16} />
-        </Group>
-      </Stack>
-    );
-  }
-
-  return (
-    <Stack gap={4}>
-      <Text size="sm" fw={500}>{label}</Text>
-      {searching ? (
-        <PersonSearch
-          onPick={(item) => {
-            setSearching(false);
-            onPickExisting(item);
-          }}
-        />
-      ) : (
-        <Group gap="xs">
-          <Button variant="default" size="xs" onClick={() => setSearching(true)}>
-            Select existing…
-          </Button>
-          <Button variant="default" size="xs" onClick={onOpenNewPerson}>
-            + New Person
-          </Button>
-        </Group>
-      )}
     </Stack>
   );
 }
@@ -309,14 +170,16 @@ interface FamilyEditDialogProps {
   draft: DraftEntry;
   opened: boolean;
   stack: DraftEntry[];
-  openHandles: string[];
   onChange: (patch: Record<string, unknown>) => void;
-  /** Returns the newly-created draft's handle (openDraft's own return
-   * value, threaded straight through -- see EditDialogs.tsx's wiring). A
-   * plain `string` field rather than `ParentField`: ChildrenField's own
-   * "+ New Person" needs a fresh, unique field name per child (see
-   * NEW_CHILD_FIELD_PREFIX below), not one of the two fixed parent slots. */
-  onOpenPersonDraft: (field: string) => string;
+  /** Spawns a nested "new" draft for any list field -- father/mother/
+   * children's own Person drafts, and (since phase 4) Citations/Notes/Tags
+   * too, each type passing its own synthetic field name (see
+   * NEW_CHILD_FIELD_PREFIX and friends above). Returns the new draft's
+   * handle synchronously (openDraft's own return value). Same shape as
+   * ObjectEditDialog.tsx/PersonEditDialog.tsx's own `onOpenDraft`. */
+  onOpenDraft: (type: DraftType, field: string) => string;
+  /** Spawns a nested "edit" draft for an already-picked list entry. */
+  onOpenEditDraft: (type: DraftType, handle: string, field: string) => void;
   onShowDraft: (handle: string) => void;
   onCloseDraft: (handle: string) => void;
   onCancel: () => void;
@@ -329,15 +192,19 @@ interface FamilyEditDialogProps {
 /** The "New Family"/"Edit Family" dialog, depending on `draft.mode` --
  * quick fields (father, mother, relationship type) plus a "> Details"
  * disclosure (currently just privacy). Each parent slot can point at an
- * existing Person (picked via PersonSearch) or spawn its own "New Person"
- * dialog in the stack (draftStack.ts's openDraft with openedFrom), whether
- * this Family draft itself is "new" or "edit" -- see the plan's Save flow
- * for why Cancel here cascades to any such child drafts but Done on a
- * child draft doesn't. Mixing an "edit" Family with a nested "new" Person
- * works because saveAll() always POSTs every active "new" draft (in
- * dependency order) before it PUTs any "edit" draft, so the new parent/
- * child already exists by the time the Family's own PUT references its
- * handle. Children get the same "+ New Person" option
+ * existing Person (picked via search) or spawn its own "New Person" dialog
+ * in the stack (draftStack.ts's openDraft with openedFrom), whether this
+ * Family draft itself is "new" or "edit" -- see the plan's Save flow for
+ * why Cancel here cascades to any such child drafts but Done on a child
+ * draft doesn't. Mixing an "edit" Family with a nested "new" Person works
+ * because saveAll() always POSTs every active "new" draft (in dependency
+ * order) before it PUTs any "edit" draft, so the new parent/child already
+ * exists by the time the Family's own PUT references its handle. An
+ * already-picked parent or child is equally editable, via the same
+ * `openEditDraft` mechanism Place already proved out for Event's own
+ * reference field (ObjectEditDialog.tsx) -- see RefPickerField.tsx's
+ * RefSlot/OccupiedRefRow for the shared rendering both this dialog and
+ * that one now use. Children get the same "+ New Person" option
  * (handleAddNewChildPerson below), wired differently: draftStack's
  * openedFrom only ever writes *one* field (`{[field]: handle}`), which is
  * exactly what father_handle/mother_handle need and exactly not what a
@@ -349,9 +216,12 @@ interface FamilyEditDialogProps {
  * ChildRef this appends to child_ref_list immediately (using the handle
  * openDraft already returns synchronously) and the cleanup effect below,
  * which prunes that ChildRef back out if the nested Person draft is later
- * cancelled. */
+ * cancelled. Since phase 4, Family also carries Citations/Notes/Media/Tags
+ * fields the same way (RefListField/MediaListField, RefPickerField.tsx) --
+ * `onOpenDraft`/`onOpenEditDraft` are generic (type is always "person" for
+ * father/mother/children, but "citation"/"note"/"tag" for those). */
 export function FamilyEditDialog({
-  draft, opened, stack, openHandles, onChange, onOpenPersonDraft, onShowDraft, onCloseDraft, onCancel,
+  draft, opened, stack, onChange, onOpenDraft, onOpenEditDraft, onShowDraft, onCloseDraft, onCancel,
   primaryLabel, onPrimary, saving, error,
 }: FamilyEditDialogProps) {
   const [pickedLabels, setPickedLabels] = useState<Record<string, string>>({});
@@ -372,86 +242,134 @@ export function FamilyEditDialog({
   }, [draft.session]);
 
   const childRefs = ((draft.data.child_ref_list as ChildRefLite[] | undefined) ?? []);
+  const citationRefs = (draft.data.citation_list as string[] | undefined) ?? [];
+  const noteRefs = (draft.data.note_list as string[] | undefined) ?? [];
+  const tagRefs = (draft.data.tag_list as string[] | undefined) ?? [];
+  const mediaRefsRaw = (draft.data.media_list as { _class: "MediaRef"; ref: string }[] | undefined) ?? [];
+  const mediaRefs = mediaRefsRaw.map((r) => r.ref);
+  const eventRefs = (draft.data.event_ref_list as EventRefLite[] | undefined) ?? [];
 
   // A freshly-opened edit draft's father_handle/mother_handle/child_ref_list
-  // come straight off the server GET -- pickedLabels (only ever populated by
-  // an in-session PersonSearch pick) has no entry for any of them yet, which
-  // without this effect left ParentSlot showing "Select existing..." for an
+  // (and, since phase 4, citation_list/note_list/media_list/tag_list) come
+  // straight off the server GET -- pickedLabels (only ever populated by an
+  // in-session search pick) has no entry for any of them yet, which
+  // without this effect left RefSlot showing "Select existing..." for an
   // *already set* parent (falls through to the no-handle branch below, since
   // that branch keys on pickedLabel being present, not on `handle` alone) --
   // indistinguishable from an actually-empty slot, and one edit away from
-  // silently overwriting the wrong parent -- and left every existing child
-  // showing its bare handle instead of a name. Fetches a label for whichever
-  // of these isn't already known, once.
+  // silently overwriting the wrong parent -- and left every existing
+  // reference showing its bare handle instead of a name. Fetches a label
+  // for whichever of these isn't already known, once, from whichever view
+  // each list's handles actually belong to.
   useEffect(() => {
     if (draft.mode !== "edit" || draft.status !== "ready") return;
-    const childHandles = ((draft.data.child_ref_list as ChildRefLite[] | undefined) ?? []).map((r) => r.ref);
-    // Nested "+ New Person" drafts (father/mother/child) point at a handle
-    // that only exists client-side until saveAll() -- fetching a label for
-    // one would just waste a request (ParentSlot/ChildrenField already
-    // render those from the draft itself, never from pickedLabels).
+    const childHandles = childRefs.map((r) => r.ref);
+    // Nested "+ New X" drafts point at a handle that only exists
+    // client-side until saveAll() -- fetching a label for one would just
+    // waste a request (every field here already renders those from the
+    // draft itself, never from pickedLabels).
     const draftHandles = new Set(
       stack.filter((d) => d.active && d.openedFrom?.handle === draft.handle).map((d) => d.handle)
     );
-    const handles = [draft.data.father_handle, draft.data.mother_handle, ...childHandles].filter(
-      (h): h is string => typeof h === "string" && h.length > 0 && !(h in pickedLabels) && !draftHandles.has(h)
-    );
-    if (handles.length === 0) return;
+    const pending: { handle: string; view: ViewConfig; type: string }[] = [];
+    function collect(handles: string[], view: ViewConfig, type: string) {
+      for (const h of handles) {
+        if (h && !(h in pickedLabels) && !draftHandles.has(h)) pending.push({ handle: h, view, type });
+      }
+    }
+    collect([draft.data.father_handle, draft.data.mother_handle].filter((h): h is string => typeof h === "string"), PERSON_VIEW, "person");
+    collect(childHandles, PERSON_VIEW, "person");
+    collect(citationRefs, CITATION_VIEW, "citation");
+    collect(noteRefs, NOTE_VIEW, "note");
+    collect(mediaRefs, MEDIA_VIEW, "media");
+    collect(tagRefs, TAG_VIEW, "tag");
+    collect(eventRefs.map((r) => r.ref), EVENT_VIEW, "event");
+    if (pending.length === 0) return;
     (async () => {
       const token = await getToken();
-      for (const h of handles) {
-        const { page } = await fetchPage(PERSON_VIEW, token, null, false, `handle == "${h}"`);
+      for (const { handle, view, type } of pending) {
+        const { page } = await fetchPage(view, token, null, false, `handle == "${handle}"`);
         const item = page.items[0];
-        if (item) setPickedLabels((prev) => ({ ...prev, [h]: personLabel(item) }));
+        if (!item) continue;
+        const label = type === "person" ? personLabel(item) : pickerResultLabel(type, item);
+        setPickedLabels((prev) => ({ ...prev, [handle]: label }));
       }
     })();
     // pickedLabels deliberately excluded -- see the comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     draft.mode, draft.status, draft.handle, draft.data.father_handle, draft.data.mother_handle,
-    draft.data.child_ref_list, stack,
+    draft.data.child_ref_list, draft.data.citation_list, draft.data.note_list, draft.data.media_list,
+    draft.data.tag_list, draft.data.event_ref_list, stack,
   ]);
 
-  // Two related bits of cleanup for the "+ New Person" child mechanism
-  // (handleAddNewChildPerson's own doc comment explains the synthetic
-  // fields this reacts to):
-  //  1. Prunes child_ref_list once a pending child's own nested draft gets
+  // Two related bits of cleanup for every "+ New X" list field's synthetic-
+  // field mechanism (handleAddNewChildPerson's own doc comment explains the
+  // child_ref_list case in full; Citations/Notes/Tags work the same way):
+  //  1. Prunes a list once one of its pending items' own nested draft gets
   //     cancelled (its own dialog's Cancel, or this dialog's remove
   //     control -- both funnel through draftStack's closeDraft, which just
-  //     marks the draft inactive; this is what turns that into "the
-  //     ChildRef pointing at it disappears too").
-  //  2. Strips any stray "__newChild_..." key back out of this Family
-  //     draft's own data: handleAddNewChildPerson already neutralizes the
-  //     one openDraft just wrote (to `undefined`, dropped by
-  //     JSON.stringify), but closeDraft's own cascade writes `null` there
-  //     on cancellation -- JSON.stringify does *not* drop `null` -- so
-  //     without this, a cancelled child would leave a meaningless key in
+  //     marks the draft inactive; this is what turns that into "the entry
+  //     pointing at it disappears too"). Scoped to mode === "new"
+  //     cancellations only -- cancelling an *edit* of an existing entry
+  //     leaves the list untouched, since openEditDraft never wrote
+  //     anything into it in the first place.
+  //  2. Strips any stray "__newChild_.../__citation_.../..." key back out
+  //     of this Family draft's own data: each "+ New X" handler already
+  //     neutralizes the one openDraft just wrote (to `undefined`, dropped
+  //     by JSON.stringify), but closeDraft's own cascade writes `null`
+  //     there on cancellation -- JSON.stringify does *not* drop `null` --
+  //     so without this, a cancelled entry would leave a meaningless key in
   //     whatever gets sent to the server.
   // Both guarded so this settles after one run rather than looping: once
   // there's nothing left to prune or strip, the effect is a no-op on every
   // subsequent render.
   useEffect(() => {
     const familyData = draft.data as Record<string, unknown>;
+    const newFieldPrefixes = [
+      NEW_CHILD_FIELD_PREFIX, CITATION_FIELD_PREFIX, NOTE_FIELD_PREFIX, TAG_FIELD_PREFIX, EVENT_FIELD_PREFIX,
+    ];
     const strayFields = Object.keys(familyData).filter(
-      (k) => k.startsWith(NEW_CHILD_FIELD_PREFIX) && familyData[k] !== undefined
+      (k) => newFieldPrefixes.some((p) => k.startsWith(p)) && familyData[k] !== undefined
     );
-    const cancelledHandles = stack
-      .filter(
-        (d) =>
-          d.type === "person" && d.mode === "new" && !d.active &&
-          d.openedFrom?.handle === draft.handle && d.openedFrom.field.startsWith(NEW_CHILD_FIELD_PREFIX)
-      )
-      .map((d) => d.handle);
-    const currentRefs = (familyData.child_ref_list as ChildRefLite[] | undefined) ?? [];
-    const needsPruning = cancelledHandles.length > 0 && currentRefs.some((r) => cancelledHandles.includes(r.ref));
-    if (strayFields.length === 0 && !needsPruning) return;
     const patch: Record<string, unknown> = {};
     for (const field of strayFields) patch[field] = undefined;
-    if (needsPruning) patch.child_ref_list = currentRefs.filter((r) => !cancelledHandles.includes(r.ref));
-    onChange(patch);
+    let changed = strayFields.length > 0;
+
+    const childCancelled = cancelledNewDraftHandles(stack, draft.handle, "person", NEW_CHILD_FIELD_PREFIX);
+    if (childCancelled.length > 0 && childRefs.some((r) => childCancelled.includes(r.ref))) {
+      patch.child_ref_list = childRefs.filter((r) => !childCancelled.includes(r.ref));
+      changed = true;
+    }
+    const citationCancelled = cancelledNewDraftHandles(stack, draft.handle, "citation", CITATION_FIELD_PREFIX);
+    if (citationCancelled.length > 0 && citationRefs.some((h) => citationCancelled.includes(h))) {
+      patch.citation_list = citationRefs.filter((h) => !citationCancelled.includes(h));
+      changed = true;
+    }
+    const noteCancelled = cancelledNewDraftHandles(stack, draft.handle, "note", NOTE_FIELD_PREFIX);
+    if (noteCancelled.length > 0 && noteRefs.some((h) => noteCancelled.includes(h))) {
+      patch.note_list = noteRefs.filter((h) => !noteCancelled.includes(h));
+      changed = true;
+    }
+    const tagCancelled = cancelledNewDraftHandles(stack, draft.handle, "tag", TAG_FIELD_PREFIX);
+    if (tagCancelled.length > 0 && tagRefs.some((h) => tagCancelled.includes(h))) {
+      patch.tag_list = tagRefs.filter((h) => !tagCancelled.includes(h));
+      changed = true;
+    }
+    const eventCancelled = cancelledNewDraftHandles(stack, draft.handle, "event", EVENT_FIELD_PREFIX);
+    if (eventCancelled.length > 0 && eventRefs.some((r) => eventCancelled.includes(r.ref))) {
+      patch.event_ref_list = eventRefs.filter((r) => !eventCancelled.includes(r.ref));
+      changed = true;
+    }
+
+    if (changed) onChange(patch);
   }, [stack, draft.handle, draft.data, onChange]);
 
-  function findChildDraft(field: ParentField): DraftEntry | undefined {
+  // Covers both "new" and "edit" nested drafts for father_handle/
+  // mother_handle -- no mode filter needed since a field only ever has one
+  // active nested draft at a time (an existing pick shows "+New Person"
+  // when empty, or "✎ Edit" when set; never both at once).
+  function findNestedDraft(field: ParentField): DraftEntry | undefined {
     return stack.find((d) => d.active && d.openedFrom?.handle === draft.handle && d.openedFrom.field === field);
   }
 
@@ -469,9 +387,17 @@ export function FamilyEditDialog({
       .map((d) => [d.handle, d] as const)
   );
 
+  function findChildEditDraft(refHandle: string): DraftEntry | undefined {
+    return stack.find(
+      (d) =>
+        d.active && d.mode === "edit" && d.openedFrom?.handle === draft.handle &&
+        d.openedFrom.field === `${EDIT_CHILD_FIELD_PREFIX}${refHandle}`
+    );
+  }
+
   function handleAddNewChildPerson(frel: string, mrel: string) {
     const field = `${NEW_CHILD_FIELD_PREFIX}${createHandle()}`;
-    const handle = onOpenPersonDraft(field);
+    const handle = onOpenDraft("person", field);
     // openDraft's own effect just wrote {[field]: handle} onto this Family
     // draft's data (its normal single-field behavior) -- undefined here
     // instead of using that value directly (already have `handle`, straight
@@ -483,6 +409,45 @@ export function FamilyEditDialog({
       [field]: undefined,
       child_ref_list: [...childRefs, { _class: "ChildRef", ref: handle, frel, mrel }],
     });
+  }
+
+  // Shared by Citations/Notes/Tags -- all three are plain handle lists with
+  // no per-entry metadata of their own (same reasoning as
+  // PersonEditDialog.tsx's identical set of helpers).
+  function addExistingToPlainList(listKey: string, currentRefs: string[], item: QueryItem, type: string) {
+    setPickedLabels((prev) => ({ ...prev, [item.handle]: pickerResultLabel(type, item) }));
+    onChange({ [listKey]: [...currentRefs, item.handle] });
+  }
+  function removeFromPlainList(listKey: string, currentRefs: string[], handle: string) {
+    onChange({ [listKey]: currentRefs.filter((h) => h !== handle) });
+  }
+  function openEditListItem(type: DraftType, editFieldPrefix: string, refHandle: string) {
+    onOpenEditDraft(type, refHandle, `${editFieldPrefix}${refHandle}`);
+  }
+
+  function handleMediaAddExisting(item: QueryItem) {
+    setPickedLabels((prev) => ({ ...prev, [item.handle]: pickerResultLabel("media", item) }));
+    onChange({ media_list: [...mediaRefsRaw, { _class: "MediaRef", ref: item.handle }] });
+  }
+  function handleMediaAdded(handle: string, label: string) {
+    setPickedLabels((prev) => ({ ...prev, [handle]: label }));
+    onChange({ media_list: [...mediaRefsRaw, { _class: "MediaRef", ref: handle }] });
+  }
+  function handleMediaRemove(handle: string) {
+    onChange({ media_list: mediaRefsRaw.filter((r) => r.ref !== handle) });
+  }
+
+  function handleEventAddExisting(item: QueryItem, role: string) {
+    setPickedLabels((prev) => ({ ...prev, [item.handle]: pickerResultLabel("event", item) }));
+    onChange({ event_ref_list: [...eventRefs, { _class: "EventRef", ref: item.handle, role }] });
+  }
+  function handleAddNewEvent(role: string) {
+    const field = `${EVENT_FIELD_PREFIX}${createHandle()}`;
+    const handle = onOpenDraft("event", field);
+    onChange({ [field]: undefined, event_ref_list: [...eventRefs, { _class: "EventRef", ref: handle, role }] });
+  }
+  function handleEventRemove(handle: string) {
+    onChange({ event_ref_list: eventRefs.filter((r) => r.ref !== handle) });
   }
 
   const title = draft.mode === "edit" ? "Edit Family" : "New Family";
@@ -511,22 +476,27 @@ export function FamilyEditDialog({
 
   function slotProps(field: ParentField, label: string) {
     const handle = (draft.data[field] as string | null) ?? null;
-    const childDraft = findChildDraft(field);
+    const nestedDraft = findNestedDraft(field);
     return {
       label,
-      field,
       handle,
-      childDraft,
-      isChildOpen: childDraft ? openHandles.includes(childDraft.handle) : false,
       pickedLabel: handle ? (pickedLabels[handle] ?? null) : null,
-      onOpenNewPerson: () => onOpenPersonDraft(field),
-      onPickExisting: (item: QueryItem) => {
+      nestedDraft,
+      onReopenNested: () => nestedDraft && onShowDraft(nestedDraft.handle),
+      onCancelNested: () => nestedDraft && onCloseDraft(nestedDraft.handle),
+      onOpenNew: () => onOpenDraft("person", field),
+      onOpenEdit: handle ? () => onOpenEditDraft("person", handle, field) : undefined,
+      onPick: (item: QueryItem) => {
         setPickedLabels((prev) => ({ ...prev, [item.handle]: personLabel(item) }));
         onChange({ [field]: item.handle });
       },
-      onRemoveChildDraft: () => childDraft && onCloseDraft(childDraft.handle),
       onRemovePicked: () => onChange({ [field]: null }),
-      onReopenChildDraft: () => childDraft && onShowDraft(childDraft.handle),
+      createLabel: "Person",
+      view: PERSON_VIEW,
+      searchField: "gramps_id",
+      buildExpr: PERSON_VIEW.simpleSearch?.buildExpr,
+      renderLabel: personLabel,
+      placeholder: PERSON_VIEW.simpleSearch?.placeholder,
     };
   }
 
@@ -539,8 +509,8 @@ export function FamilyEditDialog({
           value={(draft.data.gramps_id as string | undefined) ?? ""}
           onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
         />
-        <ParentSlot {...slotProps("father_handle", "Father")} />
-        <ParentSlot {...slotProps("mother_handle", "Mother")} />
+        <RefSlot {...slotProps("father_handle", "Father")} />
+        <RefSlot {...slotProps("mother_handle", "Mother")} />
 
         <ChildrenField
           refs={childRefs}
@@ -553,8 +523,11 @@ export function FamilyEditDialog({
           }}
           onRemove={(handle) => onChange({ child_ref_list: childRefs.filter((r) => r.ref !== handle) })}
           childDraftsByHandle={childDraftsByHandle}
-          openHandles={openHandles}
+          findChildEditDraft={findChildEditDraft}
           onAddNewPerson={handleAddNewChildPerson}
+          onOpenEditChildDraft={(refHandle) =>
+            onOpenEditDraft("person", refHandle, `${EDIT_CHILD_FIELD_PREFIX}${refHandle}`)
+          }
           onReopenChildDraft={onShowDraft}
           onRemoveChildDraft={onCloseDraft}
         />
@@ -581,6 +554,90 @@ export function FamilyEditDialog({
             <AttributeListField
               items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
               onChange={(items) => onChange({ attribute_list: items })}
+            />
+
+            <RefListField
+              label="Citations"
+              refs={citationRefs}
+              labels={pickedLabels}
+              newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "citation", CITATION_FIELD_PREFIX)}
+              findEditDraft={(h) => findEditDraft(stack, draft.handle, CITATION_EDIT_FIELD_PREFIX, h)}
+              onAddExisting={(item) => addExistingToPlainList("citation_list", citationRefs, item, "citation")}
+              onAddNew={() =>
+                onChange(openNewListItemPatch(onOpenDraft, "citation", CITATION_FIELD_PREFIX, "citation_list", citationRefs))
+              }
+              onRemoveExisting={(h) => removeFromPlainList("citation_list", citationRefs, h)}
+              onOpenEditDraft={(h) => openEditListItem("citation", CITATION_EDIT_FIELD_PREFIX, h)}
+              onReopenDraft={onShowDraft}
+              onCancelDraft={onCloseDraft}
+              view={CITATION_VIEW}
+              searchField="gramps_id"
+              buildExpr={CITATION_VIEW.simpleSearch?.buildExpr}
+              renderLabel={(item) => pickerResultLabel("citation", item)}
+              placeholder={CITATION_VIEW.simpleSearch?.placeholder}
+              createLabel="Citation"
+            />
+
+            <RefListField
+              label="Notes"
+              refs={noteRefs}
+              labels={pickedLabels}
+              newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "note", NOTE_FIELD_PREFIX)}
+              findEditDraft={(h) => findEditDraft(stack, draft.handle, NOTE_EDIT_FIELD_PREFIX, h)}
+              onAddExisting={(item) => addExistingToPlainList("note_list", noteRefs, item, "note")}
+              onAddNew={() => onChange(openNewListItemPatch(onOpenDraft, "note", NOTE_FIELD_PREFIX, "note_list", noteRefs))}
+              onRemoveExisting={(h) => removeFromPlainList("note_list", noteRefs, h)}
+              onOpenEditDraft={(h) => openEditListItem("note", NOTE_EDIT_FIELD_PREFIX, h)}
+              onReopenDraft={onShowDraft}
+              onCancelDraft={onCloseDraft}
+              view={NOTE_VIEW}
+              searchField="gramps_id"
+              buildExpr={NOTE_VIEW.simpleSearch?.buildExpr}
+              renderLabel={(item) => pickerResultLabel("note", item)}
+              placeholder={NOTE_VIEW.simpleSearch?.placeholder}
+              createLabel="Note"
+            />
+
+            <MediaListField
+              label="Media"
+              refs={mediaRefs}
+              labels={pickedLabels}
+              onAddExisting={handleMediaAddExisting}
+              onAdded={handleMediaAdded}
+              onRemove={handleMediaRemove}
+            />
+
+            <RefListField
+              label="Tags"
+              refs={tagRefs}
+              labels={pickedLabels}
+              newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "tag", TAG_FIELD_PREFIX)}
+              findEditDraft={(h) => findEditDraft(stack, draft.handle, TAG_EDIT_FIELD_PREFIX, h)}
+              onAddExisting={(item) => addExistingToPlainList("tag_list", tagRefs, item, "tag")}
+              onAddNew={() => onChange(openNewListItemPatch(onOpenDraft, "tag", TAG_FIELD_PREFIX, "tag_list", tagRefs))}
+              onRemoveExisting={(h) => removeFromPlainList("tag_list", tagRefs, h)}
+              onOpenEditDraft={(h) => openEditListItem("tag", TAG_EDIT_FIELD_PREFIX, h)}
+              onReopenDraft={onShowDraft}
+              onCancelDraft={onCloseDraft}
+              view={TAG_VIEW}
+              searchField="name"
+              buildExpr={TAG_VIEW.simpleSearch?.buildExpr}
+              renderLabel={(item) => pickerResultLabel("tag", item)}
+              placeholder={TAG_VIEW.simpleSearch?.placeholder}
+              createLabel="Tag"
+            />
+
+            <EventsField
+              refs={eventRefs}
+              labels={pickedLabels}
+              newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "event", EVENT_FIELD_PREFIX)}
+              findEditDraft={(h) => findEditDraft(stack, draft.handle, EVENT_EDIT_FIELD_PREFIX, h)}
+              onAdd={handleEventAddExisting}
+              onAddNew={handleAddNewEvent}
+              onRemove={handleEventRemove}
+              onOpenEditDraft={(h) => openEditListItem("event", EVENT_EDIT_FIELD_PREFIX, h)}
+              onReopenDraft={onShowDraft}
+              onCancelDraft={onCloseDraft}
             />
           </Stack>
         </Collapse>

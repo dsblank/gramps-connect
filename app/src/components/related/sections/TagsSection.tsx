@@ -1,6 +1,7 @@
 import { Badge, Group } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { detachRefListEntry } from "../../../store/refListApi";
+import { EDITABLE_TYPES, type DraftType } from "../../../store/draftStack";
 import { TAG_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
@@ -14,9 +15,11 @@ import type { SectionProps } from "../types";
  * still navigates like any other reference. Detach uses a small
  * CircleGlyphButton inside the badge's rightSection rather than RefRow's
  * "−", since there's no RefRow here to hang it off. */
-export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
+export function TagsSection({ type, view, detail, onNavigate, onRefetch }: SectionProps) {
   const rows = zipHandles<{ handle: string; name: string; color?: string }>(detail.tag_list, detail.extended?.tags);
-  const canAttach = hasPermissions("EditObject");
+  // See NotesSection.tsx's identical gate -- every editable type's own
+  // Tags now live in its own edit dialog's field.
+  const canAttach = hasPermissions("EditObject") && !EDITABLE_TYPES.includes(type as DraftType);
   if (rows.length === 0 && !canAttach) return null;
 
   async function handleRemove(handle: string, name: string) {

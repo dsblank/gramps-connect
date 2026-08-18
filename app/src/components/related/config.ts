@@ -29,19 +29,20 @@ export type RelatedSection =
   | "ldsOrdinances"
   | "backlinks";
 
-// Within each type's list, sections whose rows are edited in place -- via a
-// (+) Add button and per-row edit/delete (see AttachControl in sections/
-// shared.tsx: citations, notes, media, tags -- and, for Person/Family,
-// EventsSection.tsx's own "+ New Event", EventCreateDialog.tsx) -- are
-// ordered *after* every section whose content can only be changed by
-// editing the object itself (parents, attributes, ...). Keeping that split
-// consistent makes it visually obvious, without reading each section, which
-// parts of the panel you can act on directly versus which require opening
-// the edit dialog. "backlinks" ("Referenced by") is neither -- purely
-// read-only, nothing here points at it -- so it sits last of all, after
-// even the (+) Add sections. Events sits on Person/Family only (Event's own
-// entry below has no `events` of its own) -- both share EventBase's
-// event_ref_list.
+// Ordering within each type's list is a holdover from when citations/
+// notes/media/tags/events were edited in place here via a (+) Add button
+// and per-row edit/delete (AttachControl, sections/shared.tsx) -- every
+// editable type now manages those lists through its own edit dialog
+// instead (PersonEditDialog.tsx/FamilyEditDialog.tsx/ObjectEditDialog.tsx's
+// RefListField/MediaListField/EventsField, RefPickerField.tsx), so this
+// whole panel is read-only for them. AttachControl survives only for
+// media/generated, which can never get an edit dialog of their own
+// (creating a Media object is a file upload, not a form) -- see
+// MediaSection.tsx/NotesSection.tsx/CitationsSection.tsx/TagsSection.tsx's
+// own `EDITABLE_TYPES` gate. "backlinks" ("Referenced by") stays purely
+// read-only regardless, and last in every list. Events sits on Person/
+// Family only (Event's own entry below has no `events` of its own) -- both
+// share EventBase's event_ref_list.
 export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   person: ["parents", "families", "associations", "attributes", "addresses", "urls", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],
   family: ["parents", "children", "attributes", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],

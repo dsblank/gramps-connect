@@ -12,9 +12,9 @@ export interface EventPlaceValue {
   /** Set only while this points at a not-yet-saved "+ New Place" -- the
    * caller is expected to fold it into whatever create batch also creates
    * the Event this place belongs to (see PersonEditDialog.tsx's birth/death
-   * extraCreate effect, or EventCreateDialog.tsx's own submit). Absent once
-   * it names an existing, already-saved Place (picked via "Select
-   * existing…", or once "✎ Edit"'s own immediate PUT below has landed). */
+   * extraCreate effect). Absent once it names an existing, already-saved
+   * Place (picked via "Select existing…", or once "✎ Edit"'s own immediate
+   * PUT below has landed). */
   pendingData?: Record<string, unknown>;
 }
 
@@ -30,14 +30,14 @@ interface EventPlaceFieldProps {
   onChange: (value: EventPlaceValue | null) => void;
 }
 
-/** An Event's own Place picker, for the two corners that need one without
+/** An Event's own Place picker, for the one corner that needs one without
  * going through ObjectEditDialog.tsx's draftStack-mediated ReferenceField
  * (see PlaceEditDialog.tsx's own doc comment on why that's the third
  * reusable shape): PersonEditDialog.tsx's bespoke birth/death Event fields
- * (predates draftStack's nested-draft support) and RelatedPanel's
- * EventCreateDialog.tsx (self-contained, no draftStack draft at all -- an
- * Event created there is linked to an already-saved Person/Family
- * immediately, not deferred to some other dialog's Save).
+ * (predates draftStack's nested-draft support, and still doesn't route
+ * through it -- birth/death stay their own small two-phase extraCreate/
+ * extraUpdate flow, distinct from the generic Events field a Person's
+ * *other* events use).
  *
  * "+ New Place" holds its data locally (`value.pendingData`) until the
  * caller's own save/submit actually creates it; "✎ Edit" on an

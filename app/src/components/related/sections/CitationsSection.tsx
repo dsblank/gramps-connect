@@ -1,5 +1,6 @@
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { detachRefListEntry } from "../../../store/refListApi";
+import { EDITABLE_TYPES, type DraftType } from "../../../store/draftStack";
 import { CITATION_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
@@ -9,9 +10,11 @@ import type { SectionProps } from "../types";
 /** CitationBase.citation_list -- a plain handle list (no per-item ref
  * metadata; a citation reference is just "this object cites that citation",
  * nothing more), present on nearly every object type. */
-export function CitationsSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
+export function CitationsSection({ type, view, detail, onNavigate, onRefetch }: SectionProps) {
   const rows = zipHandles(detail.citation_list, detail.extended?.citations);
-  const canAttach = hasPermissions("EditObject");
+  // See NotesSection.tsx's identical gate -- every editable type's own
+  // Citations now live in its own edit dialog's field.
+  const canAttach = hasPermissions("EditObject") && !EDITABLE_TYPES.includes(type as DraftType);
   if (rows.length === 0 && !canAttach) return null;
 
   async function handleRemove(handle: string, target: unknown) {

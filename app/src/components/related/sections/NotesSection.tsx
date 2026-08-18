@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { getTagHandleCached, MESSAGE_TAG, TODO_DONE_TAG } from "../../../store/notesApi";
 import { detachRefListEntry } from "../../../store/refListApi";
+import { EDITABLE_TYPES, type DraftType } from "../../../store/draftStack";
 import { NOTE_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
@@ -61,14 +62,21 @@ function useKnownTagHandles(): { message: string | null; done: string | null } {
  * -- otherwise a click lands on the general Notes view instead of Messages
  * and loses MessageActions (Mark done/Reopen/Delete) -- and get a "done"
  * indicator ordinary notes have no equivalent of. */
-export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
+export function NotesSection({ type, view, detail, onNavigate, onRefetch }: SectionProps) {
   const { message: messageTag, done: doneTag } = useKnownTagHandles();
 
   const rows = zipHandles<RawNote>(detail.note_list, detail.extended?.notes);
   const isMessage = (target: RawNote) => Boolean(messageTag && target?.tag_list?.includes(messageTag));
   const noteRows = rows.filter(({ target }) => !isMessage(target));
   const messageRows = rows.filter(({ target }) => isMessage(target));
-  const canAttach = hasPermissions("EditObject");
+  // Every editable type's own Notes now live in its own edit dialog's
+  // Notes field (PersonEditDialog.tsx/FamilyEditDialog.tsx/
+  // ObjectEditDialog.tsx's "refList" field kind) -- editing happens only
+  // in the stacked dialog, so this section goes back to plain read-only
+  // display for any type with one. Media/generated have no edit dialog at
+  // all (EDITABLE_TYPES excludes them, see draftStack.ts's own comment on
+  // why) and so keep this live-attach as their only way to manage Notes.
+  const canAttach = hasPermissions("EditObject") && !EDITABLE_TYPES.includes(type as DraftType);
 
   async function handleRemove(handle: string, target: RawNote) {
     const summary = summaryLine("note", target) || "this note";

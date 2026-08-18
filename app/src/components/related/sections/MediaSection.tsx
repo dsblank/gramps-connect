@@ -1,9 +1,5 @@
 import { Group, Text, UnstyledButton } from "@mantine/core";
-import { getToken, hasPermissions } from "../../../auth/auth";
 import { zipRefs } from "../../../store/objectDetail";
-import { MEDIA_VIEW } from "../../../store/views";
-import { detachRefListEntry } from "../../../store/refListApi";
-import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
 import { MediaThumbnail } from "../MediaThumbnail";
 import { SectionShell, RefRow } from "./shared";
@@ -15,31 +11,24 @@ import type { SectionProps } from "../types";
  * stays opt-in and thumbnail-light for the same reason as before: a record
  * can carry hundreds of attached photos, and loading all of them just from
  * viewing this section would mean hundreds of simultaneous auth-token-
- * bearing <img> requests. But the list itself is now a plain RefRow list
- * underneath, same shape as Notes/Citations/Tags -- text labels only, no
- * per-row thumbnail, so it costs nothing extra to render even at that size,
- * and it's what makes per-item detach possible (detachRefListEntry already
- * handles MediaRef-wrapped entries -- see its own doc comment -- so no
- * store-layer change was needed here, just wiring RefRow's onRemove). */
-export function MediaSection({ view, type, detail, onNavigate, onViewGallery, onRefetch }: SectionProps) {
+ * bearing <img> requests. Read-only: every type with a "Media" section of
+ * its own (person/family/event/place/source/citation -- see
+ * RELATED_CONFIG) is now editable, and edits this list only through its
+ * own edit dialog's Media field (MediaListField, phases 3-4) -- unlike
+ * Notes/Citations/Tags, there's no type left where this section is the
+ * *only* way to manage it (Media/generated objects don't carry a
+ * media_list of their own to begin with, so this section never even
+ * renders for them). */
+export function MediaSection({ type, detail, onNavigate, onViewGallery }: SectionProps) {
   const rows = zipRefs<{ mime?: string }>(detail.media_list, detail.extended?.media);
-  const canAttach = hasPermissions("EditObject");
-  if (rows.length === 0 && !canAttach) return null;
+  if (rows.length === 0) return null;
 
   const teaser = rows.find((r) => r.target?.mime?.startsWith("image/"));
   const label = `${summaryLine(type, detail) || "this"}: ${rows.length} media item${rows.length > 1 ? "s" : ""}`;
 
-  async function handleRemove(handle: string, target: unknown) {
-    const summary = summaryLine("media", target) || "this media item";
-    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the media item itself.`)) return;
-    const token = await getToken();
-    await detachRefListEntry(token, view, detail.handle, "media_list", handle);
-    onRefetch?.();
-  }
-
   return (
     <SectionShell label="Media">
-      {rows.length > 0 && onViewGallery && (
+      {onViewGallery && (
         <UnstyledButton
           onClick={() => onViewGallery(rows.map((r) => ({ handle: r.ref.ref, mime: r.target?.mime })), label)}
           style={{ display: "block" }}
@@ -53,26 +42,8 @@ export function MediaSection({ view, type, detail, onNavigate, onViewGallery, on
         </UnstyledButton>
       )}
       {rows.map(({ ref, target }) => (
-        <RefRow
-          key={ref.ref}
-          type="media"
-          handle={ref.ref}
-          obj={target}
-          onNavigate={onNavigate}
-          onRemove={canAttach ? () => handleRemove(ref.ref, target) : undefined}
-        />
+        <RefRow key={ref.ref} type="media" handle={ref.ref} obj={target} onNavigate={onNavigate} />
       ))}
-      {canAttach && (
-        <AttachControl
-          targetView={view}
-          targetHandle={detail.handle}
-          pickerView={MEDIA_VIEW}
-          listField="media_list"
-          wrapRef
-          itemLabel="media"
-          onAttached={() => onRefetch?.()}
-        />
-      )}
     </SectionShell>
   );
 }

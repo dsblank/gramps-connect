@@ -6,11 +6,13 @@ import {
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
-import { PLACE_VIEW, SOURCE_VIEW } from "../store/views";
+import { CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, PLACE_VIEW, SOURCE_VIEW, TAG_VIEW } from "../store/views";
 import { DRAFT_TYPE_LABELS, type DraftEntry, type DraftType } from "../store/draftStack";
 import { DateInput } from "./DateInput";
-import { RecordPicker } from "./RecordPicker";
-import { CircleGlyphButton } from "./CircleGlyphButton";
+import {
+  MediaListField, RefListField, RefSlot, cancelledNewDraftHandles, findEditDraft, newDraftsByHandle,
+  openNewListItemPatch, pickerResultLabel,
+} from "./RefPickerField";
 import { withGrampsId } from "./related/summary";
 import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
@@ -31,13 +33,31 @@ type FieldSpec =
        * "Select existing…" -- spawning a nested draftStack DraftEntry
        * (openDraft/openEditDraft, both with `openedFrom` pointing back at
        * this field) rather than only ever picking something that already
-       * exists. Scoped to Event's `place` field only for now, not
-       * Citation's `source_handle` -- see the plan. */
+       * exists. Every reference field sets this now (Event's `place`,
+       * Citation's `source_handle`) -- omit it only for a reference type
+       * with no create/edit dialog of its own to nest. */
       nestedType?: DraftType;
     }
   | { kind: "attributeList"; key: string; label: string }
   | { kind: "addressList"; key: string; label: string }
-  | { kind: "urlList"; key: string; label: string };
+  | { kind: "urlList"; key: string; label: string }
+  | {
+      /** A plain-handle reference *list* -- Citations/Notes/Tags, phase 4's
+       * generalization of PersonEditDialog.tsx's own Notes/Citations/Tags
+       * fields (built on the same RefListField) to every other type that
+       * carries one. `refType` is what gets created/edited (openDraft's own
+       * type param); `searchField` is the flat column RecordPicker prefix-
+       * matches when `refView.simpleSearch.buildExpr` isn't already an
+       * override (same convention every other picker in this app uses). */
+      kind: "refList"; key: string; label: string; refView: ViewConfig; refType: DraftType; searchField: string;
+      createLabel: string;
+    }
+  | {
+      /** Media -- same list shape as refList, but a wrapped `{_class:
+       * "MediaRef", ref}` entry, and "+ New Media" is a file upload, not a
+       * nested draft (see MediaListField.tsx's own doc comment for why). */
+      kind: "mediaList"; key: string; label: string;
+    };
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 
@@ -67,6 +87,29 @@ const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 // this comes back empty, otherwise honors whatever's here.
 const GRAMPS_ID_FIELD: FieldSpec = { kind: "text", key: "gramps_id", label: "Gramps ID", placeholder: "auto-assigned" };
 
+// Shared refList/mediaList specs -- one object per list, reused across
+// every type that actually carries that list (per RELATED_CONFIG in
+// components/related/config.ts, which is the authority on which types
+// have which: Repository/Note/Citation/Source don't all carry the same
+// four, matching Gramps' own object model -- Source and Citation have no
+// citation_list of their own, e.g., and Repository has neither citations
+// nor media). Plain constants, not a factory: there's nothing per-type to
+// parameterize beyond which subset of these four a given type's own
+// `details` array includes.
+const CITATIONS_FIELD: FieldSpec = {
+  kind: "refList", key: "citation_list", label: "Citations", refView: CITATION_VIEW, refType: "citation",
+  searchField: "gramps_id", createLabel: "Citation",
+};
+const NOTES_FIELD: FieldSpec = {
+  kind: "refList", key: "note_list", label: "Notes", refView: NOTE_VIEW, refType: "note", searchField: "gramps_id",
+  createLabel: "Note",
+};
+const TAGS_FIELD: FieldSpec = {
+  kind: "refList", key: "tag_list", label: "Tags", refView: TAG_VIEW, refType: "tag", searchField: "name",
+  createLabel: "Tag",
+};
+const MEDIA_FIELD: FieldSpec = { kind: "mediaList", key: "media_list", label: "Media" };
+
 const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: FieldSpec[] }>> = {
   event: {
     quick: [
@@ -79,6 +122,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "reference", key: "place", label: "Place", refView: PLACE_VIEW, refField: "title", nestedType: "place" },
       { kind: "switch", key: "private", label: "Private" },
       { kind: "attributeList", key: "attribute_list", label: "Attributes" },
+      CITATIONS_FIELD, NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
     ],
   },
   place: {
@@ -89,6 +133,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "long", label: "Longitude" },
       { kind: "switch", key: "private", label: "Private" },
       { kind: "urlList", key: "urls", label: "Web links" },
+      CITATIONS_FIELD, NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
     ],
   },
   source: {
@@ -102,6 +147,10 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "abbrev", label: "Abbreviation" },
       { kind: "switch", key: "private", label: "Private" },
       { kind: "attributeList", key: "attribute_list", label: "Attributes" },
+      // No CITATIONS_FIELD -- a Source has no citation_list of its own
+      // (see components/related/config.ts's own comment on why: citations
+      // point *at* a source, not the other way around).
+      NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
     ],
   },
   repository: {
@@ -114,6 +163,9 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "switch", key: "private", label: "Private" },
       { kind: "addressList", key: "address_list", label: "Addresses" },
       { kind: "urlList", key: "urls", label: "Web links" },
+      // Repository carries neither citations nor media in Gramps' own
+      // schema -- just these two.
+      NOTES_FIELD, TAGS_FIELD,
     ],
   },
   citation: {
@@ -121,7 +173,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       GRAMPS_ID_FIELD,
       {
         kind: "reference", key: "source_handle", label: "Source", refView: SOURCE_VIEW, refField: "title",
-        required: true,
+        required: true, nestedType: "source",
       },
     ],
     details: [
@@ -130,6 +182,8 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "number", key: "confidence", label: "Confidence", min: 0, max: 4 },
       { kind: "switch", key: "private", label: "Private" },
       { kind: "attributeList", key: "attribute_list", label: "Attributes" },
+      // No CITATIONS_FIELD -- a citation doesn't cite another citation.
+      NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
     ],
   },
   note: {
@@ -137,6 +191,9 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     details: [
       { kind: "text", key: "type", label: "Type", placeholder: TYPE_HINT },
       { kind: "switch", key: "private", label: "Private" },
+      // A Note only ever carries tag_list -- no citation_list/note_list/
+      // media_list of its own.
+      TAGS_FIELD,
     ],
   },
   tag: {
@@ -153,122 +210,24 @@ function allFields(type: DraftType): FieldSpec[] {
   return spec ? [...spec.quick, ...spec.details] : [];
 }
 
-/** Best-effort display label for a nested draft that isn't saved (or hasn't
- * finished loading) yet -- there's no server row to fetch a real label from.
- * Only ever called for `place` nested drafts today (see FieldSpec's
- * `nestedType` doc comment); reads the same title/name.value shape
- * PlaceEditDialog.tsx itself patches. */
-function nestedDraftLabel(draft: DraftEntry): string {
-  if (draft.status !== "ready") return "…";
-  const name = (draft.data.name ?? {}) as Record<string, unknown>;
-  const value = (name.value as string | undefined) ?? (draft.data.title as string | undefined) ?? "";
-  return value || "(unnamed)";
-}
-
-interface ReferenceFieldProps {
-  spec: Extract<FieldSpec, { kind: "reference" }>;
-  handle: string | null;
-  label: string | null;
-  onPick: (item: QueryItem) => void;
-  onRemove: () => void;
-  /** The in-progress nested "new" or "edit" draft this field's `nestedType`
-   * spawned (openDraft/openEditDraft with `openedFrom` pointing back at
-   * this field), if any -- mirrors FamilyEditDialog's ParentSlot `childDraft`
-   * concept, generalized past "new Person" to "new-or-edit <nestedType>". */
-  nestedDraft?: DraftEntry;
-  nestedOpen?: boolean;
-  onOpenNew?: () => void;
-  onOpenEdit?: () => void;
-  onReopenNested?: () => void;
-  onRemoveNestedDraft?: () => void;
-}
-
-function ReferenceField({
-  spec, handle, label, onPick, onRemove, nestedDraft, nestedOpen, onOpenNew, onOpenEdit, onReopenNested,
-  onRemoveNestedDraft,
-}: ReferenceFieldProps) {
-  const [searching, setSearching] = useState(false);
-
-  if (nestedDraft) {
-    const verb = nestedDraft.mode === "new" ? "New" : "Editing";
-    return (
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>{spec.label}</Text>
-        <Group gap="xs">
-          <Anchor component="button" type="button" size="sm" onClick={onReopenNested}>
-            {verb} {DRAFT_TYPE_LABELS[nestedDraft.type]}: {nestedDraftLabel(nestedDraft)}
-          </Anchor>
-          {!nestedOpen && <Text size="xs" c="dimmed">(hidden -- click name to edit)</Text>}
-          <CircleGlyphButton
-            glyph="−"
-            label={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
-            onClick={() => onRemoveNestedDraft?.()}
-            size={16}
-          />
-        </Group>
-      </Stack>
-    );
-  }
-
-  if (handle && label) {
-    return (
-      <Stack gap={4}>
-        <Text size="sm" fw={500}>{spec.label}</Text>
-        <Group gap="xs">
-          <Text size="sm">{label}</Text>
-          {onOpenEdit && <CircleGlyphButton glyph="✎" label="Edit" onClick={onOpenEdit} size={16} />}
-          <Anchor component="button" type="button" size="sm" c="red" onClick={onRemove}>
-            Remove
-          </Anchor>
-        </Group>
-      </Stack>
-    );
-  }
-
-  return (
-    <Stack gap={4}>
-      <Text size="sm" fw={500}>{spec.label}{spec.required ? " (required)" : ""}</Text>
-      {searching ? (
-        <RecordPicker
-          view={spec.refView}
-          searchField={spec.refField}
-          placeholder={`Search by ${spec.refField}…`}
-          onPick={(item) => {
-            setSearching(false);
-            onPick(item);
-          }}
-        />
-      ) : (
-        <Group gap="xs">
-          <Button variant="default" size="xs" onClick={() => setSearching(true)}>
-            Select existing…
-          </Button>
-          {onOpenNew && (
-            <Button variant="default" size="xs" onClick={onOpenNew}>
-              + New {DRAFT_TYPE_LABELS[spec.nestedType!]}
-            </Button>
-          )}
-        </Group>
-      )}
-    </Stack>
-  );
-}
-
 interface ObjectEditDialogProps {
   draft: DraftEntry;
   opened: boolean;
-  /** Every draft opened this session and which of them are currently shown
-   * -- same two arrays EditDialogs.tsx already threads into
-   * FamilyEditDialog, needed here to find/reopen a `nestedType` reference
-   * field's own in-progress nested draft (see ReferenceField). */
+  /** Every draft opened this session -- same array EditDialogs.tsx already
+   * threads into FamilyEditDialog, needed here to find/reopen a
+   * `nestedType` reference field's own in-progress nested draft. */
   stack: DraftEntry[];
-  openHandles: string[];
   onChange: (patch: Record<string, unknown>) => void;
-  /** Spawns a nested "new" draft for a `nestedType` reference field
-   * (draftStack.ts's openDraft with `openedFrom` set to this field). */
-  onOpenDraft: (type: DraftType, field: string) => void;
-  /** Spawns a nested "edit" draft for a `nestedType` reference field's
-   * already-picked value (openEditDraft with `openedFrom`). */
+  /** Spawns a nested "new" draft for a `nestedType` reference field or a
+   * `refList` field's own "+ New X" (draftStack.ts's openDraft with
+   * `openedFrom` set to this field) -- returns the new draft's handle
+   * synchronously (openDraft's own return value), which a `refList` field
+   * needs to append to its own list immediately (a single `reference`
+   * field doesn't: openDraft's `openedFrom` already wrote it there
+   * directly, see FamilyEditDialog.tsx's identical distinction). */
+  onOpenDraft: (type: DraftType, field: string) => string;
+  /** Spawns a nested "edit" draft for an already-picked reference or list
+   * entry (openEditDraft with `openedFrom`). */
   onOpenEditDraft: (type: DraftType, handle: string, field: string) => void;
   onShowDraft: (handle: string) => void;
   onCloseDraft: (handle: string) => void;
@@ -286,7 +245,7 @@ interface ObjectEditDialogProps {
  * (see the plan). Same shell as PersonEditDialog.tsx/FamilyEditDialog.tsx
  * (loading/error states, "> Details" disclosure, Cancel/Save footer). */
 export function ObjectEditDialog({
-  draft, opened, stack, openHandles, onChange, onOpenDraft, onOpenEditDraft, onShowDraft, onCloseDraft, onCancel,
+  draft, opened, stack, onChange, onOpenDraft, onOpenEditDraft, onShowDraft, onCloseDraft, onCancel,
   primaryLabel, onPrimary, saving, error,
 }: ObjectEditDialogProps) {
   const [showDetails, setShowDetails] = useState(false);
@@ -315,36 +274,89 @@ export function ObjectEditDialog({
   // textarea inside a narrow modal would just wrap awkwardly.
   const modalSize = draft.type === "note" ? "xl" : "md";
 
-  // Same fix as FamilyEditDialog.tsx's father/mother seeding effect: an
-  // edit draft's already-set reference field comes straight off the
+  // Same fix as FamilyEditDialog.tsx's father/mother seeding effect,
+  // generalized across every field kind that points at another object --
+  // single `reference` fields *and*, since phase 4, `refList`/`mediaList`
+  // fields too: an edit draft's already-set value(s) come straight off the
   // server GET, with no entry yet in pickedLabels (only ever populated by
-  // an in-session RecordPicker pick) -- without this, ReferenceField would
-  // show "Select existing..." for an already-set field, indistinguishable
-  // from an empty one.
+  // an in-session pick) -- without this, RefSlot/RefListField would show
+  // an empty state for an already-set field, indistinguishable from a
+  // genuinely empty one. Each field kind labels its results differently
+  // (a `reference` field's own `refField` column vs. `pickerResultLabel`'s
+  // per-type convention for a list), so this collects `{handle, view,
+  // label}` triples up front and fetches them all the same way.
   useEffect(() => {
     if (draft.mode !== "edit" || draft.status !== "ready" || !spec) return;
-    const refFields = allFields(draft.type).filter((f): f is Extract<FieldSpec, { kind: "reference" }> =>
-      f.kind === "reference"
+    const draftHandles = new Set(
+      stack.filter((d) => d.active && d.openedFrom?.handle === draft.handle).map((d) => d.handle)
     );
-    const toFetch = refFields
-      .map((f) => ({ f, handle: draft.data[f.key] as string | undefined }))
-      .filter((x): x is { f: Extract<FieldSpec, { kind: "reference" }>; handle: string } =>
-        typeof x.handle === "string" && x.handle.length > 0 && !(x.handle in pickedLabels)
-      );
-    if (toFetch.length === 0) return;
+    const pending: { handle: string; view: ViewConfig; label: (item: QueryItem) => string }[] = [];
+    function maybeAdd(handle: string | undefined, view: ViewConfig, label: (item: QueryItem) => string) {
+      if (handle && !(handle in pickedLabels) && !draftHandles.has(handle)) pending.push({ handle, view, label });
+    }
+    for (const f of allFields(draft.type)) {
+      if (f.kind === "reference") {
+        maybeAdd(draft.data[f.key] as string | undefined, f.refView, (item) => {
+          const text = (item[f.refField] as string | undefined) ?? "";
+          return withGrampsId(item.gramps_id as string | undefined, text);
+        });
+      } else if (f.kind === "refList") {
+        const refs = (draft.data[f.key] as string[] | undefined) ?? [];
+        for (const h of refs) maybeAdd(h, f.refView, (item) => pickerResultLabel(f.refType, item));
+      } else if (f.kind === "mediaList") {
+        const refs = (draft.data[f.key] as { ref: string }[] | undefined) ?? [];
+        for (const r of refs) maybeAdd(r.ref, MEDIA_VIEW, (item) => pickerResultLabel("media", item));
+      }
+    }
+    if (pending.length === 0) return;
     (async () => {
       const token = await getToken();
-      for (const { f, handle } of toFetch) {
-        const { page } = await fetchPage(f.refView, token, null, false, `handle == "${handle}"`);
+      for (const { handle, view, label } of pending) {
+        const { page } = await fetchPage(view, token, null, false, `handle == "${handle}"`);
         const item = page.items[0];
-        const text = item ? (item[f.refField] as string | undefined) : undefined;
-        if (text) setPickedLabels((prev) => ({ ...prev, [handle]: withGrampsId(item?.gramps_id as string | undefined, text) }));
+        if (item) setPickedLabels((prev) => ({ ...prev, [handle]: label(item) }));
       }
     })();
     // pickedLabels deliberately excluded -- see FamilyEditDialog.tsx's
     // identical effect for why.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.mode, draft.status, draft.type, draft.data]);
+  }, [draft.mode, draft.status, draft.type, draft.data, stack]);
+
+  // New, since phase 4 -- ObjectEditDialog had no list fields (only single
+  // `reference` ones) before this, so no pruning was ever needed: a single
+  // field's own cancelled-draft cleanup is closeDraft's own job (nulls the
+  // field directly), but a `refList` field's underlying array needs the
+  // same two-part cleanup FamilyEditDialog.tsx's child_ref_list effect
+  // does, generalized across however many refList fields this type has.
+  useEffect(() => {
+    if (!spec) return;
+    const data = draft.data as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+    let changed = false;
+
+    const listFields = allFields(draft.type).filter(
+      (f): f is Extract<FieldSpec, { kind: "refList" }> => f.kind === "refList"
+    );
+    const fieldPrefixes = listFields.map((f) => `__${f.key}_`);
+    for (const key of Object.keys(data)) {
+      if (fieldPrefixes.some((p) => key.startsWith(p)) && data[key] !== undefined) {
+        patch[key] = undefined;
+        changed = true;
+      }
+    }
+
+    for (const f of listFields) {
+      const cancelled = cancelledNewDraftHandles(stack, draft.handle, f.refType, `__${f.key}_`);
+      if (cancelled.length === 0) continue;
+      const refs = (data[f.key] as string[] | undefined) ?? [];
+      if (refs.some((h) => cancelled.includes(h))) {
+        patch[f.key] = refs.filter((h) => !cancelled.includes(h));
+        changed = true;
+      }
+    }
+
+    if (changed) onChange(patch);
+  }, [stack, draft.handle, draft.data, draft.type, onChange]);
 
   if (draft.status === "loading") {
     return (
@@ -469,11 +481,12 @@ export function ObjectEditDialog({
         const handle = (draft.data[f.key] as string | undefined) ?? null;
         const nestedDraft = f.nestedType ? findNestedDraft(f.key) : undefined;
         return (
-          <ReferenceField
+          <RefSlot
             key={f.key}
-            spec={f}
+            label={f.label}
+            required={f.required}
             handle={handle}
-            label={handle ? (pickedLabels[handle] ?? null) : null}
+            pickedLabel={handle ? (pickedLabels[handle] ?? null) : null}
             onPick={(item) => {
               const text = (item[f.refField] as string | undefined) ?? "";
               setPickedLabels((prev) => ({
@@ -482,13 +495,16 @@ export function ObjectEditDialog({
               }));
               onChange({ [f.key]: item.handle });
             }}
-            onRemove={() => onChange({ [f.key]: null })}
+            onRemovePicked={() => onChange({ [f.key]: null })}
             nestedDraft={nestedDraft}
-            nestedOpen={nestedDraft ? openHandles.includes(nestedDraft.handle) : false}
+            onReopenNested={() => nestedDraft && onShowDraft(nestedDraft.handle)}
+            onCancelNested={() => nestedDraft && onCloseDraft(nestedDraft.handle)}
             onOpenNew={f.nestedType ? () => onOpenDraft(f.nestedType!, f.key) : undefined}
             onOpenEdit={f.nestedType && handle ? () => onOpenEditDraft(f.nestedType!, handle, f.key) : undefined}
-            onReopenNested={() => nestedDraft && onShowDraft(nestedDraft.handle)}
-            onRemoveNestedDraft={() => nestedDraft && onCloseDraft(nestedDraft.handle)}
+            createLabel={f.nestedType ? DRAFT_TYPE_LABELS[f.nestedType] : undefined}
+            view={f.refView}
+            searchField={f.refField}
+            placeholder={`Search by ${f.refField}…`}
           />
         );
       }
@@ -516,6 +532,56 @@ export function ObjectEditDialog({
             onChange={(items) => onChange({ [f.key]: items })}
           />
         );
+      case "refList": {
+        const refs = (draft.data[f.key] as string[] | undefined) ?? [];
+        const fieldPrefix = `__${f.key}_`;
+        const editFieldPrefix = `__${f.key}_edit_`;
+        return (
+          <RefListField
+            key={f.key}
+            label={f.label}
+            refs={refs}
+            labels={pickedLabels}
+            newDraftsByHandle={newDraftsByHandle(stack, draft.handle, f.refType, fieldPrefix)}
+            findEditDraft={(h) => findEditDraft(stack, draft.handle, editFieldPrefix, h)}
+            onAddExisting={(item) => {
+              setPickedLabels((prev) => ({ ...prev, [item.handle]: pickerResultLabel(f.refType, item) }));
+              onChange({ [f.key]: [...refs, item.handle] });
+            }}
+            onAddNew={() => onChange(openNewListItemPatch(onOpenDraft, f.refType, fieldPrefix, f.key, refs))}
+            onRemoveExisting={(h) => onChange({ [f.key]: refs.filter((x) => x !== h) })}
+            onOpenEditDraft={(h) => onOpenEditDraft(f.refType, h, `${editFieldPrefix}${h}`)}
+            onReopenDraft={onShowDraft}
+            onCancelDraft={onCloseDraft}
+            view={f.refView}
+            searchField={f.searchField}
+            buildExpr={f.refView.simpleSearch?.buildExpr}
+            renderLabel={(item) => pickerResultLabel(f.refType, item)}
+            placeholder={f.refView.simpleSearch?.placeholder}
+            createLabel={f.createLabel}
+          />
+        );
+      }
+      case "mediaList": {
+        const refsRaw = (draft.data[f.key] as { _class: "MediaRef"; ref: string }[] | undefined) ?? [];
+        return (
+          <MediaListField
+            key={f.key}
+            label={f.label}
+            refs={refsRaw.map((r) => r.ref)}
+            labels={pickedLabels}
+            onAddExisting={(item) => {
+              setPickedLabels((prev) => ({ ...prev, [item.handle]: pickerResultLabel("media", item) }));
+              onChange({ [f.key]: [...refsRaw, { _class: "MediaRef", ref: item.handle }] });
+            }}
+            onAdded={(handle, label) => {
+              setPickedLabels((prev) => ({ ...prev, [handle]: label }));
+              onChange({ [f.key]: [...refsRaw, { _class: "MediaRef", ref: handle }] });
+            }}
+            onRemove={(h) => onChange({ [f.key]: refsRaw.filter((r) => r.ref !== h) })}
+          />
+        );
+      }
     }
   }
 
