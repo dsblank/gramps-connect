@@ -127,10 +127,6 @@ interface ChildrenFieldProps {
    * instead of a plain label + remove-the-reference. */
   childDraftsByHandle: Map<string, DraftEntry>;
   openHandles: string[];
-  /** False while editing an existing Family -- same restriction ParentSlot
-   * already applies to its own "+ New Person" (mixed create+edit stays
-   * deferred; see that component's own doc comment). */
-  allowNewPerson: boolean;
   onAddNewPerson: (frel: string, mrel: string) => void;
   onReopenChildDraft: (handle: string) => void;
   onRemoveChildDraft: (handle: string) => void;
@@ -148,7 +144,7 @@ interface ChildrenFieldProps {
  * existing-child row here, same MVP scope as the parent slots not showing
  * every ChildRef field either. */
 function ChildrenField({
-  refs, labels, onAdd, onRemove, childDraftsByHandle, openHandles, allowNewPerson,
+  refs, labels, onAdd, onRemove, childDraftsByHandle, openHandles,
   onAddNewPerson, onReopenChildDraft, onRemoveChildDraft,
 }: ChildrenFieldProps) {
   const [searching, setSearching] = useState(false);
@@ -219,11 +215,9 @@ function ChildrenField({
           </Group>
           <Group gap="xs">
             <CircleGlyphButton glyph="+" label="Add child" textLabel="Add child" onClick={() => setSearching(true)} />
-            {allowNewPerson && (
-              <Button variant="default" size="xs" onClick={() => onAddNewPerson(frel, mrel)}>
-                + New Person
-              </Button>
-            )}
+            <Button variant="default" size="xs" onClick={() => onAddNewPerson(frel, mrel)}>
+              + New Person
+            </Button>
           </Group>
         </Stack>
       )}
@@ -240,10 +234,6 @@ interface ParentSlotProps {
   childDraft: DraftEntry | undefined;
   isChildOpen: boolean;
   pickedLabel: string | null;
-  /** False while editing an existing Family -- mixed create+edit is
-   * deferred (see the plan), so an edit draft can only reference
-   * already-existing people, not spawn a brand-new nested draft. */
-  allowNewPerson: boolean;
   onOpenNewPerson: () => void;
   onPickExisting: (item: QueryItem) => void;
   onRemoveChildDraft: () => void;
@@ -252,7 +242,7 @@ interface ParentSlotProps {
 }
 
 function ParentSlot({
-  label, field: _field, handle, childDraft, isChildOpen, pickedLabel, allowNewPerson,
+  label, field: _field, handle, childDraft, isChildOpen, pickedLabel,
   onOpenNewPerson, onPickExisting, onRemoveChildDraft, onRemovePicked, onReopenChildDraft,
 }: ParentSlotProps) {
   const [searching, setSearching] = useState(false);
@@ -306,11 +296,9 @@ function ParentSlot({
           <Button variant="default" size="xs" onClick={() => setSearching(true)}>
             Select existing…
           </Button>
-          {allowNewPerson && (
-            <Button variant="default" size="xs" onClick={onOpenNewPerson}>
-              + New Person
-            </Button>
-          )}
+          <Button variant="default" size="xs" onClick={onOpenNewPerson}>
+            + New Person
+          </Button>
         </Group>
       )}
     </Stack>
@@ -341,24 +329,27 @@ interface FamilyEditDialogProps {
 /** The "New Family"/"Edit Family" dialog, depending on `draft.mode` --
  * quick fields (father, mother, relationship type) plus a "> Details"
  * disclosure (currently just privacy). Each parent slot can point at an
- * existing Person (picked via PersonSearch) or, only while creating a new
- * Family, spawn its own "New Person" dialog in the stack (draftStack.ts's
- * openDraft with openedFrom) -- see the plan's Save flow for why Cancel
- * here cascades to any such child drafts but Done on a child draft
- * doesn't, and why editing an existing Family can't spawn one at all
- * (mixed create+edit is deferred). Children get the same "+ New Person"
- * option (handleAddNewChildPerson below), restricted to `mode === "new"`
- * the same way, but wired differently: draftStack's openedFrom only ever
- * writes *one* field (`{[field]: handle}`), which is exactly what
- * father_handle/mother_handle need and exactly not what a *list* like
- * child_ref_list needs. Each "+ New Person" click here mints its own
- * one-off synthetic field name (NEW_CHILD_FIELD_PREFIX + a random suffix)
- * purely so openDraft has something to write to and orderedForSave/
- * closeDraft have a handle->parent link to follow -- the synthetic field's
- * *value* is never read; the real bookkeeping is the ChildRef this appends
- * to child_ref_list immediately (using the handle openDraft already
- * returns synchronously) and the cleanup effect below, which prunes that
- * ChildRef back out if the nested Person draft is later cancelled. */
+ * existing Person (picked via PersonSearch) or spawn its own "New Person"
+ * dialog in the stack (draftStack.ts's openDraft with openedFrom), whether
+ * this Family draft itself is "new" or "edit" -- see the plan's Save flow
+ * for why Cancel here cascades to any such child drafts but Done on a
+ * child draft doesn't. Mixing an "edit" Family with a nested "new" Person
+ * works because saveAll() always POSTs every active "new" draft (in
+ * dependency order) before it PUTs any "edit" draft, so the new parent/
+ * child already exists by the time the Family's own PUT references its
+ * handle. Children get the same "+ New Person" option
+ * (handleAddNewChildPerson below), wired differently: draftStack's
+ * openedFrom only ever writes *one* field (`{[field]: handle}`), which is
+ * exactly what father_handle/mother_handle need and exactly not what a
+ * *list* like child_ref_list needs. Each "+ New Person" click here mints
+ * its own one-off synthetic field name (NEW_CHILD_FIELD_PREFIX + a random
+ * suffix) purely so openDraft has something to write to and
+ * orderedForSave/closeDraft have a handle->parent link to follow -- the
+ * synthetic field's *value* is never read; the real bookkeeping is the
+ * ChildRef this appends to child_ref_list immediately (using the handle
+ * openDraft already returns synchronously) and the cleanup effect below,
+ * which prunes that ChildRef back out if the nested Person draft is later
+ * cancelled. */
 export function FamilyEditDialog({
   draft, opened, stack, openHandles, onChange, onOpenPersonDraft, onShowDraft, onCloseDraft, onCancel,
   primaryLabel, onPrimary, saving, error,
@@ -395,8 +386,15 @@ export function FamilyEditDialog({
   useEffect(() => {
     if (draft.mode !== "edit" || draft.status !== "ready") return;
     const childHandles = ((draft.data.child_ref_list as ChildRefLite[] | undefined) ?? []).map((r) => r.ref);
+    // Nested "+ New Person" drafts (father/mother/child) point at a handle
+    // that only exists client-side until saveAll() -- fetching a label for
+    // one would just waste a request (ParentSlot/ChildrenField already
+    // render those from the draft itself, never from pickedLabels).
+    const draftHandles = new Set(
+      stack.filter((d) => d.active && d.openedFrom?.handle === draft.handle).map((d) => d.handle)
+    );
     const handles = [draft.data.father_handle, draft.data.mother_handle, ...childHandles].filter(
-      (h): h is string => typeof h === "string" && h.length > 0 && !(h in pickedLabels)
+      (h): h is string => typeof h === "string" && h.length > 0 && !(h in pickedLabels) && !draftHandles.has(h)
     );
     if (handles.length === 0) return;
     (async () => {
@@ -409,7 +407,10 @@ export function FamilyEditDialog({
     })();
     // pickedLabels deliberately excluded -- see the comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.mode, draft.status, draft.data.father_handle, draft.data.mother_handle, draft.data.child_ref_list]);
+  }, [
+    draft.mode, draft.status, draft.handle, draft.data.father_handle, draft.data.mother_handle,
+    draft.data.child_ref_list, stack,
+  ]);
 
   // Two related bits of cleanup for the "+ New Person" child mechanism
   // (handleAddNewChildPerson's own doc comment explains the synthetic
@@ -518,7 +519,6 @@ export function FamilyEditDialog({
       childDraft,
       isChildOpen: childDraft ? openHandles.includes(childDraft.handle) : false,
       pickedLabel: handle ? (pickedLabels[handle] ?? null) : null,
-      allowNewPerson: draft.mode === "new",
       onOpenNewPerson: () => onOpenPersonDraft(field),
       onPickExisting: (item: QueryItem) => {
         setPickedLabels((prev) => ({ ...prev, [item.handle]: personLabel(item) }));
@@ -554,7 +554,6 @@ export function FamilyEditDialog({
           onRemove={(handle) => onChange({ child_ref_list: childRefs.filter((r) => r.ref !== handle) })}
           childDraftsByHandle={childDraftsByHandle}
           openHandles={openHandles}
-          allowNewPerson={draft.mode === "new"}
           onAddNewPerson={handleAddNewChildPerson}
           onReopenChildDraft={onShowDraft}
           onRemoveChildDraft={onCloseDraft}

@@ -65,13 +65,15 @@ export interface DraftEntry {
   handle: string;
   type: DraftType;
   /** "new": save creates it (POST /api/objects/). "edit": save PUTs the
-   * whole object back. Mixed create+edit -- an "edit" draft with its own
-   * `openedFrom` (or one spawning a nested "+ New Person") -- is deferred
-   * for Person/Family's own parent/child slots (see the plan); Place's
-   * reference-field "+ New"/"✎ Edit" (ObjectEditDialog.tsx) is the one
-   * exception, so an "edit" draft *can* carry `openedFrom` now -- see
-   * openEditDraft's own doc comment. Either way, an "edit" draft never
-   * appears in another draft's extraCreate (only "new" drafts do). */
+   * whole object back. An "edit" draft can spawn a nested "new" draft (e.g.
+   * FamilyEditDialog's parent/child slots' "+ New Person") -- saveAll()
+   * always POSTs every active "new" draft before it PUTs any "edit" draft,
+   * so the reference already exists by the time the edit draft's own PUT
+   * goes out. An "edit" draft can also itself carry `openedFrom` -- Place's
+   * reference-field "+ New"/"✎ Edit" (ObjectEditDialog.tsx) nests an edit
+   * draft inside another draft the same way -- see openEditDraft's own doc
+   * comment. Either way, an "edit" draft never appears in another draft's
+   * extraCreate (only "new" drafts do). */
   mode: "new" | "edit";
   /** "loading" only while an edit draft's initial GET is in flight;
    * "error" if that GET failed (loadError carries the message) -- either
@@ -190,8 +192,10 @@ export interface UseDraftStack {
    * own `openedFrom` nests a "new" draft -- Cancel cascades and clears the
    * parent's field, and EditDialogs.tsx's isTopLevel/primaryLabel treat it
    * as "Done", not "Save" (see PlaceEditDialog's own doc comment for why
-   * this is Place-only for now; Person/Family's own child/parent flows stay
-   * "new"-only, mixed create+edit still deferred there). */
+   * this nested-*edit* form is Place-only for now; Person/Family's own
+   * child/parent flows only ever nest "new" drafts via `openDraft`, never
+   * an `openEditDraft` of an already-picked person -- picking an existing
+   * person just sets the field directly, no nested dialog). */
   openEditDraft: (type: DraftType, handle: string, openedFrom?: DraftEntry["openedFrom"]) => void;
   showDraft: (handle: string) => void;
   hideDraft: (handle: string) => void;
