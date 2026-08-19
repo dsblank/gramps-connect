@@ -1,6 +1,6 @@
 # Gramps Connect
 
-An experimental, faster, real-time-collaborative web frontend for
+A faster, real-time-collaborative web frontend for
 [Gramps](https://gramps-project.org/), the free genealogy software.
 
 ## Overview
@@ -8,86 +8,87 @@ An experimental, faster, real-time-collaborative web frontend for
 [Gramps](https://gramps-project.org/) is free, open-source genealogy
 software for building and researching your family tree.
 [gramps-web](https://github.com/gramps-project/gramps-web) is its
-existing web frontend — it lets you access your tree from a browser,
+established web frontend — it lets you access your tree from a browser,
 share it with family members, and collaborate on research together.
 
-Gramps Connect is an early-stage experiment exploring what a faster,
-more collaborative version of that web frontend could look like. It's
-being built alongside gramps-web, not as a finished replacement — the
-question this project is trying to answer is *whether* two specific
-ideas actually work well in practice, before committing to them:
+Gramps Connect is a newer web frontend for that same
+[gramps-web-api](https://github.com/gramps-project/gramps-web-api)
+server, built around two ideas:
 
-- **Instant browsing, even on a huge family tree.** Today, searching or
-  filtering a large tree (tens of thousands of people) can mean waiting
-  a long time — one real example took over a minute and a half for a
-  single search. Gramps Connect keeps a smart, local copy of the parts
-  of your tree you're looking at, right in your browser, so browsing,
-  sorting, and filtering feel instant — closer to searching contacts
-  already on your phone than looking someone up over a slow connection.
+- **Instant browsing, even on a huge family tree.** Searching or
+  filtering a large tree (tens of thousands of people) can otherwise mean
+  waiting a long time — one real example took over a minute and a half
+  for a single search. Gramps Connect keeps a smart, local copy of the
+  parts of your tree you're looking at, right in your browser, so
+  browsing, sorting, and filtering feel instant — closer to searching
+  contacts already on your phone than looking someone up over a slow
+  connection.
 - **Watching each other work, live.** Family history is often a group
-  effort — several people editing the same tree. Gramps Connect aims to
-  show you what other researchers are changing as they change it,
-  without needing to refresh the page, the same way collaborative
-  documents show you a co-author's edits appearing in real time.
+  effort — several people editing the same tree. Gramps Connect shows you
+  what other researchers are changing as they change it, without needing
+  to refresh the page, the same way collaborative documents show you a
+  co-author's edits appearing in real time.
 
-**This is a research project, not a product yet.** It isn't something
-to move your family tree to today — there's no finished user interface,
-no guarantee any particular part of it will end up in a real release,
-and the whole thing is still being actively built and re-shaped. If
-you're just looking to use Gramps, [gramps-web](https://github.com/gramps-project/gramps-web)
-(or the [desktop application](https://gramps-project.org/download/)) is
-where you want to be today. If you're curious about where the project
-might be headed, or want to help figure that out, read on.
+Gramps Connect is under active development. The standalone build,
+**gramps-connect-desktop**, is the easiest way to try it today (see
+[Installing](#installing), below); a containerized deployment is
+available for hosting it for a family to share (see
+[Deploying](#deploying)). If you're looking for a fully mature,
+feature-complete option right now, [gramps-web](https://github.com/gramps-project/gramps-web)
+or the [desktop application](https://gramps-project.org/download/) cover
+more ground.
+
+For a full tour of the app itself, see [docs/Overview.md](docs/Overview.md);
+for the search-box query language behind it, see [docs/GOQL.md](docs/GOQL.md).
 
 <img width="1489" height="704" alt="image" src="https://github.com/user-attachments/assets/1183bb72-520f-44fb-ace7-d88c84724697" />
 
 ## FAQ
 
-**How does the standalone (AIO) install differ from the server-based
+**How does gramps-connect-desktop differ from the server-based
 deployment?**
 
-The standalone download (see Installing, below) is a demo, not the real
-deployment shape: one file bundles `app/`'s frontend and `gramps-web-api`'s
-backend together with SQLite, runs entirely on your own machine, and only
-listens on `127.0.0.1` — nothing about it is reachable over a network, and
-it always has exactly one hardcoded user (`admin`/`admin`). It's for trying
-Gramps Connect risk-free, not for sharing a tree with anyone else.
+gramps-connect-desktop is the standalone build (see Installing, below —
+the downloads themselves are currently still packaged under an older
+name, `gramps-connect-demo`). One file bundles `app/`'s frontend and
+`gramps-web-api`'s backend together with SQLite, runs entirely on your
+own machine, and only listens on `127.0.0.1` — nothing about it is
+reachable over a network, and it always has exactly one hardcoded user
+(`admin`/`admin`). It's for trying Gramps Connect on your own machine,
+not for sharing a tree with anyone else.
 
-`deploy/` (see Deploying, below) is the real thing: a containerized `app/`
-+ `gramps-web-api` backed by real Postgres, fronted by Caddy for TLS,
-meant to actually be hosted somewhere and used by more than one person —
-real secrets, a real domain/certificate, and multiple users each with
-their own login. It's also the only way to see the project's actual point
-(live collaboration) in action — the standalone demo is single-user by
-design, so there's no one else's edits to watch appear.
+`deploy/` (see Deploying, below) is the real multi-user shape: a
+containerized `app/` + `gramps-web-api` backed by real Postgres, fronted
+by Caddy for TLS, meant to actually be hosted somewhere — real secrets, a
+real domain/certificate, and multiple users each with their own login.
+It's also the only way to see live collaboration in action — the
+standalone build is single-user by design, so there's no one else's
+edits to watch appear.
 
-**How does the standalone demo compare to Gramps Desktop?**
+**How does gramps-connect-desktop compare to Gramps Desktop?**
 
 Closer than "server-based deployment" above might suggest — both are
 single-user, local-only apps built on the same underlying Gramps
 database. Today, Desktop is far ahead on functionality: decades of
 native tools, gramplets, and reports that `gramps-web-api`'s REST layer
-doesn't (yet) cover, so this isn't a drop-in replacement. But nothing
-about the standalone build limits it to a demo role permanently — a
-faster, browser-based UI over the same data is a real candidate to
-eventually rival Desktop for day-to-day use, independent of whether the
-collaboration experiment (the project's actual current focus) pans out.
+doesn't (yet) cover, so this isn't a drop-in replacement. But a faster,
+browser-based UI over the same data is a real candidate to eventually
+rival Desktop for day-to-day use.
 
-**Will my data or anything I do in the standalone demo get sent
+**Will my data or anything I do in gramps-connect-desktop get sent
 anywhere?**
 
 No. It only listens on `127.0.0.1`, telemetry is disabled, and everything
 it stores lives in `~/.gramps-connect-demo` on your own machine.
 
-**Can I import my real family tree into the standalone demo?**
+**Can I import my real family tree into gramps-connect-desktop?**
 
 Yes — Family Trees → Import... takes a Gramps XML (`.gramps`) or GEDCOM
 (`.ged`) file, same as the real deployment. Just don't treat it as your
-only copy: this is still an early-stage research project (see Overview,
-above), not a finished product, so there's no guarantee any particular
-version's data format sticks around unchanged across releases.
+only copy — keep a backup regardless, the way you should for any tool
+still under active development.
 
-**Does upgrading to a newer standalone release wipe my data?**
+**Does upgrading gramps-connect-desktop wipe my data?**
 
 No — `~/.gramps-connect-demo` is separate from the app binary, so
 installing a newer version reuses whatever's already there. Delete that
@@ -97,22 +98,21 @@ folder yourself if you want a clean slate.
 
 **Want to try it without building anything?** Every current download lives
 on the **[latest release](https://github.com/dsblank/gramps-connect/releases/latest)**
-— pick the section below for your platform. All of them are the same
-experimental prototype described above, not a finished product or the real
-deployment shape (see [Deploying](#deploying) below for that): a single
-downloadable app or package, no separate install, server, or database setup
-beyond what's noted per platform. Every variant starts with an empty tree —
-import your own Gramps XML (`.gramps`) or GEDCOM (`.ged`) file via the app's
-own Family Trees → Import... screen once it's running — and shares one
-login: **`admin`** / **`admin`**.
+— pick the section below for your platform. All of them are
+gramps-connect-desktop (currently packaged as `gramps-connect-demo`), not
+the real multi-user deployment shape (see [Deploying](#deploying) below
+for that): a single downloadable app or package, no separate install,
+server, or database setup beyond what's noted per platform. Every variant
+starts with an empty tree — import your own Gramps XML (`.gramps`) or
+GEDCOM (`.ged`) file via the app's own Family Trees → Import... screen
+once it's running — and shares one login: **`admin`** / **`admin`**.
 
 First run creates a small data directory in your home folder
 (`.gramps-connect-demo`) holding that tree; later runs reuse it. Delete that
 folder to reset back to a blank slate. The app only listens on `127.0.0.1`
 (your own machine) — it isn't reachable from other devices on your network.
 These are unsigned, x86_64-only builds, hence the OS warnings described
-below — expected for an experimental build like this, not a sign anything
-is wrong.
+below — not a sign anything is wrong.
 
 ### Windows
 
@@ -219,19 +219,13 @@ above, but download `gramps-connect-demo-macos-intel.zip` instead.
 - **Start over from a blank tree** — delete the `.gramps-connect-demo`
   folder in your home directory, then relaunch.
 - **Looking for a real multi-user deployment instead of this single-user
-  local demo?** See [Deploying](#deploying) below.
+  local build?** See [Deploying](#deploying) below.
 
 ## For Developers
 
-### Approach
+### Architecture
 
-Rather than rewriting the frontend in one large effort, this project is
-being de-risked through small, disposable prototypes — proving each hard
-technical question in isolation before committing to it. See
-[PLAN.md](PLAN.md) for the full reasoning, the two product bets above in
-technical detail, and the layered plan each prototype followed.
-
-The two bets translate to two technical mechanisms:
+Two mechanisms make `app/` possible:
 
 1. **Local-first cache** — a WASM build of SQLite runs inside the
    browser, mirroring server data (fetched via `gramps-web-api`'s fast,
@@ -242,22 +236,16 @@ The two bets translate to two technical mechanisms:
    `GET /api/transactions/history/` endpoint (the object-edit audit/undo
    log it already ships) on a short interval, and for each object it
    reports as changed, refetches and patches just that row in the local
-   cache. No server changes, persistent connection, or Postgres-specific
-   change capture required — a plain authenticated `GET`, so it works
-   against any backend.
+   cache. No persistent connection or Postgres-specific change capture
+   required — a plain authenticated `GET`, so it works against any
+   backend.
 
 ### Repo layout
 
-- **`app/`** — the production React client (React was chosen over
-  gramps-web's Lit/Material Web Components approach — see
-  [PLAN.md](PLAN.md)'s roadmap notes for why): all ten object-type views,
+- **`app/`** — the production React client: all ten object-type views,
   `where_expr` filtering, an OPFS-persisted WASM SQLite cache, and live
   sync, behind a `useSyncExternalStore`-based store layer (`app/src/store/`)
-  with `@tanstack/react-virtual` for scrolling. Started as a port of an
-  earlier plain-TS/HTML spike (Layers 0-3 in [PLAN.md](PLAN.md)); that
-  spike code has since been removed now that `app/` fully supersedes it,
-  but the fixtures it's developed and tested against live on in
-  `dev-fixtures/` (below).
+  with `@tanstack/react-virtual` for scrolling.
 - **`dev-fixtures/`** — real `gramps-web-api` backends to run `app/`
   against locally (see Getting started below); not part of the product,
   just what makes local development possible without a hand-configured
@@ -267,15 +255,12 @@ The two bets translate to two technical mechanisms:
     `gramps-bench`-generated synthetic data (scale testing), the latter
     with Gramps' own official `example.gramps` sample database (real date
     variety — modifiers, quality, ranges/spans). Live sync works against
-    either of these too now — it's just a poll against
+    either of these too — it's just a poll against
     `/api/transactions/history/`, not tied to Postgres.
   - **`layer3-sync/`** — a real Postgres (`SharedPostgreSQL`)-backed
     instance, useful for exercising genuinely concurrent multi-writer
     edits against the same tree; what `app/.env.example`'s defaults point
-    at. No longer has any Postgres-specific change-capture wiring of its
-    own (the `pg_notify` trigger + WebSocket relay this fixture used to
-    also set up were removed once live sync moved to polling — see
-    PLAN.md's Layer 3 section).
+    at.
 - **`packages/gramps-date/`** — a TypeScript port of Gramps' `Date`
   model, calendar conversion, and locale-aware date display, used by
   `app/` (and anything else that needs to render/build a Gramps `Date`
@@ -354,14 +339,8 @@ npm run test -w packages/gramps-date
 
 ### Contributing
 
-This is still a fast-moving, early-stage prototype — expect things to
-be restructured or thrown out as the layered plan in [PLAN.md](PLAN.md)
-teaches us more. Discussion happens on the
-[Gramps Discourse forum](https://gramps.discourse.group/) (see
-[this thread](https://gramps.discourse.group/t/gramps-web-api-list-performance/9007)
-for the performance problem that originally motivated this project);
-issues and pull requests against this repo are welcome, especially ones
-that engage with the reasoning in PLAN.md rather than just the code.
+Discussion happens on the [Gramps Discourse forum](https://gramps.discourse.group/);
+issues and pull requests against this repo are welcome.
 
 ## License
 
