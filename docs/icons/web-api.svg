@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="network">
+  <circle cx="12" cy="12" r="9" fill="none" stroke="#8E6A28" stroke-width="1.7"/>
+  <ellipse cx="12" cy="12" rx="4" ry="9" fill="none" stroke="#8E6A28" stroke-width="1.7"/>
+  <line x1="3" y1="12" x2="21" y2="12" stroke="#8E6A28" stroke-width="1.7"/>
+  <path d="M4.5 7.5h15" fill="none" stroke="#8E6A28" stroke-width="1.5"/>
+  <path d="M4.5 16.5h15" fill="none" stroke="#8E6A28" stroke-width="1.5"/>
+</svg>

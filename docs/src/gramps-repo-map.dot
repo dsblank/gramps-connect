@@ -1,0 +1,266 @@
+// Gramps repo map — how the ~/gramps codebases fit together.
+//
+// Regenerate the docs image after editing this file:
+//   dot -Tsvg gramps-repo-map.dot -o ../images/gramps-repo-map.svg
+//   dot -Tpng -Gdpi=200 gramps-repo-map.dot -o ../images/gramps-repo-map.png
+//
+// Node icons live in ../icons/ (referenced as PNG only — this graphviz
+// build's "svg" loadimage plugin is broken at runtime despite `dot -v`
+// listing it, so every icon is rasterized to PNG; the .svg sources sit
+// alongside for editing). It's one level up, not next to this .dot file, so
+// the same relative path resolves both when dot runs from here and from
+// inside the rendered SVG in ../images/. gramps.png, gramps-web.png and
+// gramps-connect.png/.svg are copies of each project's own app icon/logo;
+// web-api.svg, file-formats.svg and addon.svg are hand-drawn generic glyphs
+// (globe, document, plug) for the concepts that have no project icon.
+//
+// Layout is four rows, top to bottom:
+//   1. web apps                    — gramps-web, gramps-connect (hosted)
+//   2. gramps-web-api              — the hub
+//   3. addons + shared file formats — GrampsWebApiDb, GrampsWebSync, Gramps file formats
+//   4. desktop apps                — gramps, gramps-connect (standalone — bundles its
+//                                    own gramps-web-api, drawn nested inside it)
+//
+// Colors follow the light palette used in the "Gramps Repo Map" artifact:
+//   teal  #215C51  REST API (live HTTP request/response, from a frontend)
+//   wine  #7C2F37  Desktop <-> server sync via an addon (solid = continuous,
+//                  dashed = run on demand) — double-headed: data actually
+//                  flows both directions (poll + push / diff + reconcile)
+//   blue  #3B5C7E  shared file formats (GEDCOM, Gramps XML, …) — double-headed:
+//                  both sides read AND write them
+//   gray  #6E766C  containment — an addon installs into a host process
+
+digraph gramps_repo_map {
+  graph [
+    bgcolor="#EEF1EA",
+    rankdir=TB,
+    fontname="Helvetica",
+    fontcolor="#1C2422",
+    nodesep=0.6,
+    ranksep=0.9,
+    splines=spline
+  ];
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#FBFBF7",
+    color="#C7CBB9",
+    penwidth=1.5,
+    fontname="Helvetica",
+    fontcolor="#1C2422",
+    margin=0.18
+  ];
+  edge [
+    fontname="Courier",
+    fontsize=11,
+    penwidth=2.25
+  ];
+
+  // --- nodes -----------------------------------------------------------
+
+  // row 1: web apps
+
+  gramps_web [label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+      <TR>
+        <TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/gramps-web.png" SCALE="TRUE"/></TD>
+        <TD ALIGN="LEFT" VALIGN="MIDDLE">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">gramps-web</FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>gramps-web</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" COLOR="#4B5650"><I>official web frontend</I></FONT></TD></TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >];
+
+  gramps_connect [label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+      <TR>
+        <TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/gramps-connect.png" SCALE="TRUE"/></TD>
+        <TD ALIGN="LEFT" VALIGN="MIDDLE">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">gramps-connect</FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>gramps-connect</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" COLOR="#4B5650"><I>hosted — for live collaboration</I></FONT></TD></TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >];
+
+  // row 2: the hub
+
+  gramps_web_api [
+    penwidth=2.5,
+    color="#8E6A28",
+    label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+      <TR>
+        <TD WIDTH="48" HEIGHT="48" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/web-api.png" SCALE="TRUE"/></TD>
+        <TD ALIGN="LEFT" VALIGN="MIDDLE">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">gramps-web-api</FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="23"><B>gramps-web-api</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="13" COLOR="#4B5650"><I>REST API server — the hub</I></FONT></TD></TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >];
+
+  // row 3: addons + shared file formats
+
+  gramps_web_api_db [label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+      <TR>
+        <TD WIDTH="40" HEIGHT="40" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/addon.png" SCALE="TRUE"/></TD>
+        <TD ALIGN="LEFT" VALIGN="MIDDLE">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">addons/GrampsWebApiDb</FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>GrampsWebApiDb</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" COLOR="#4B5650"><I>DB-backend addon — continuous</I></FONT></TD></TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >];
+
+  gramps_web_sync [label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+      <TR>
+        <TD WIDTH="40" HEIGHT="40" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/addon.png" SCALE="TRUE"/></TD>
+        <TD ALIGN="LEFT" VALIGN="MIDDLE">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">addons/GrampsWebSync</FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>GrampsWebSync</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" COLOR="#4B5650"><I>sync tool — on demand</I></FONT></TD></TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >];
+
+  gramps_file_formats [label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+      <TR>
+        <TD WIDTH="40" HEIGHT="40" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/file-formats.png" SCALE="TRUE"/></TD>
+        <TD ALIGN="LEFT" VALIGN="MIDDLE">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">GEDCOM · Gramps XML · media · …</FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>Gramps file formats</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" COLOR="#4B5650"><I>on-disk interchange, not a repo</I></FONT></TD></TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >];
+
+  // row 4: desktop apps
+
+  gramps [label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+      <TR>
+        <TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/gramps.png" SCALE="TRUE"/></TD>
+        <TD ALIGN="LEFT" VALIGN="MIDDLE">
+          <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">gramps</FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>gramps</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" COLOR="#4B5650"><I>desktop app + core library</I></FONT></TD></TR>
+          </TABLE>
+        </TD>
+      </TR>
+    </TABLE>
+  >];
+
+  // standalone gramps-connect, drawn as a cluster with its own bundled
+  // gramps-web-api nested inside — it's a different process/instance than
+  // the shared hub in row 2, so no edge connects the two
+  subgraph cluster_gramps_connect_standalone {
+    style="rounded,filled";
+    color="#C7CBB9";
+    fillcolor="#F1F3EC";
+    penwidth=1.5;
+    margin=20;
+    labeljust="l";
+    labelloc="t";
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+        <TR>
+          <TD WIDTH="44" HEIGHT="44" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/gramps-connect.png" SCALE="TRUE"/></TD>
+          <TD ALIGN="LEFT" VALIGN="MIDDLE">
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+              <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="10" COLOR="#4B5650">gramps-connect</FONT></TD></TR>
+              <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>gramps-connect-desktop</B></FONT></TD></TR>
+              <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="11" COLOR="#4B5650">standalone — one-process desktop app</FONT></TD></TR>
+            </TABLE>
+          </TD>
+        </TR>
+      </TABLE>
+    >;
+
+    gramps_web_api_bundled [
+      penwidth=2.5,
+      color="#8E6A28",
+      label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="4">
+        <TR>
+          <TD WIDTH="40" HEIGHT="40" FIXEDSIZE="TRUE" VALIGN="MIDDLE"><IMG SRC="../icons/web-api.png" SCALE="TRUE"/></TD>
+          <TD ALIGN="LEFT" VALIGN="MIDDLE">
+            <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="1">
+              <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="19"><B>gramps-web-api</B></FONT></TD></TR>
+              <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" COLOR="#4B5650"><I>bundled instance + SQLite</I></FONT></TD></TR>
+            </TABLE>
+          </TD>
+        </TR>
+      </TABLE>
+    >];
+  }
+
+  // --- layout hints ------------------------------------------------------
+
+  { rank=same; gramps_web; gramps_connect; }
+  { rank=same; gramps_web_api_db; gramps_web_sync; gramps_file_formats; }
+
+  // invisible edges purely to pin row order (gramps-web-api above row 3,
+  // row 3 above row 4), since the real addon/file-format <-> api edges are
+  // drawn reversed, and the standalone cluster has no real edge to anchor it.
+  // (A rank=same between a cluster's node and an outside node makes dot
+  // drop the cluster's border, so row 4 alignment is pinned via edges only.)
+  gramps_web_api -> gramps_web_api_db [style=invis];
+  gramps_web_api -> gramps_web_sync [style=invis];
+  gramps_web_api -> gramps_file_formats [style=invis];
+  gramps_file_formats -> gramps_web_api_bundled [style=invis];
+
+  // --- edges -------------------------------------------------------------
+
+  gramps_web -> gramps_web_api [
+    label="REST API", color="#215C51", fontcolor="#215C51"
+  ];
+  gramps_connect -> gramps_web_api [
+    label="REST API + /query/", color="#215C51", fontcolor="#215C51"
+  ];
+  gramps_web_api_db -> gramps_web_api [
+    label="live sync, poll + push", color="#7C2F37", fontcolor="#7C2F37",
+    dir=both, constraint=false
+  ];
+  gramps_web_sync -> gramps_web_api [
+    label="on-demand diff sync", color="#7C2F37", fontcolor="#7C2F37",
+    style=dashed, dir=both, constraint=false
+  ];
+  gramps_file_formats -> gramps_web_api [
+    label="read + write", color="#3B5C7E", fontcolor="#3B5C7E",
+    dir=both, constraint=false
+  ];
+  gramps_file_formats -> gramps [
+    label="read + write", color="#3B5C7E", fontcolor="#3B5C7E",
+    dir=both
+  ];
+  gramps_web_api_db -> gramps [
+    label="plugin", color="#6E766C", fontcolor="#6E766C", style=dotted
+  ];
+  gramps_web_sync -> gramps [
+    label="plugin", color="#6E766C", fontcolor="#6E766C", style=dotted
+  ];
+}

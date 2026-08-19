@@ -1,0 +1,367 @@
+<title>Gramps Repo Map</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#EEF1EA;
+    --surface:#FBFBF7;
+    --ink:#1C2422;
+    --ink-soft:#4B5650;
+    --line:#C7CBB9;
+    --accent-gold:#8E6A28;
+    --accent-teal:#215C51;
+    --accent-wine:#7C2F37;
+    --accent-neutral:#6E766C;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#131A18;
+      --surface:#1D2724;
+      --ink:#ECE8DC;
+      --ink-soft:#AEB5A9;
+      --line:#3A443E;
+      --accent-gold:#D3A85A;
+      --accent-teal:#5FAE9E;
+      --accent-wine:#C77179;
+      --accent-neutral:#8B948A;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#131A18;
+    --surface:#1D2724;
+    --ink:#ECE8DC;
+    --ink-soft:#AEB5A9;
+    --line:#3A443E;
+    --accent-gold:#D3A85A;
+    --accent-teal:#5FAE9E;
+    --accent-wine:#C77179;
+    --accent-neutral:#8B948A;
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Public Sans", ui-sans-serif, system-ui, sans-serif;
+    line-height:1.55;
+  }
+  .page{
+    max-width:1180px;
+    margin:0 auto;
+    padding:64px 32px 80px;
+  }
+  .prose{ max-width:680px; }
+  .eyebrow{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-size:0.72rem;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--accent-teal);
+    margin:0 0 14px;
+  }
+  h1{
+    font-family:"Fraunces", Georgia, serif;
+    font-weight:600;
+    font-optical-sizing:auto;
+    font-size:clamp(1.9rem, 3.4vw, 2.7rem);
+    line-height:1.12;
+    letter-spacing:-0.01em;
+    text-wrap:balance;
+    margin:0 0 18px;
+  }
+  .dek{
+    font-size:1.05rem;
+    color:var(--ink-soft);
+    margin:0;
+    text-wrap:pretty;
+  }
+  .dek code{
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-size:0.92em;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:0.05em 0.35em;
+  }
+
+  figure{ margin:52px 0 0; }
+  .diagram-frame{
+    overflow-x:auto;
+    border:1px solid var(--line);
+    border-radius:14px;
+    background:var(--surface);
+    padding:8px;
+  }
+  svg.diagram{
+    display:block;
+    width:100%;
+    min-width:920px;
+    height:auto;
+  }
+  .card-title{ font-family:"Fraunces", Georgia, serif; font-weight:600; }
+  .card-tab{ font-family:"IBM Plex Mono", ui-monospace, monospace; letter-spacing:0.01em; }
+  .card-tagline{ font-family:"Public Sans", sans-serif; font-style:italic; }
+  .edge-label{ font-family:"IBM Plex Mono", ui-monospace, monospace; }
+  .arrowhead-gold{ fill:var(--accent-gold); }
+  .arrowhead-teal{ fill:var(--accent-teal); }
+  .arrowhead-wine{ fill:var(--accent-wine); }
+  .arrowhead-neutral{ fill:var(--accent-neutral); }
+
+  figcaption{
+    max-width:680px;
+    margin:20px auto 0;
+    font-size:0.94rem;
+    color:var(--ink-soft);
+  }
+
+  .legend{
+    max-width:680px;
+    margin:36px auto 0;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    font-size:0.88rem;
+    color:var(--ink-soft);
+  }
+  .legend-row{ display:flex; align-items:center; gap:12px; }
+  .legend-swatch{ flex:none; width:28px; height:0; border-top-width:2.5px; border-top-style:solid; }
+  .legend-swatch.dashed{ border-top-style:dashed; }
+  .legend-swatch.gold{ border-color:var(--accent-gold); }
+  .legend-swatch.teal{ border-color:var(--accent-teal); }
+  .legend-swatch.wine{ border-color:var(--accent-wine); }
+  .legend-swatch.neutral{ border-color:var(--accent-neutral); }
+
+  .index{
+    max-width:820px;
+    margin:56px auto 0;
+  }
+  .index h2{
+    font-family:"Fraunces", Georgia, serif;
+    font-weight:600;
+    font-size:1.15rem;
+    margin:0 0 4px;
+  }
+  .index-sub{ color:var(--ink-soft); font-size:0.9rem; margin:0 0 20px; }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:0.92rem;
+  }
+  thead th{
+    text-align:left;
+    font-family:"IBM Plex Mono", ui-monospace, monospace;
+    font-size:0.7rem;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    font-weight:500;
+    padding:0 12px 10px 0;
+    border-bottom:1px solid var(--line);
+  }
+  tbody td{
+    padding:14px 12px 14px 0;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  td.repo{ font-family:"Fraunces", Georgia, serif; font-weight:600; white-space:nowrap; }
+  td.path{ font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:0.82rem; color:var(--ink-soft); white-space:nowrap; }
+  td.role{ color:var(--ink); }
+
+  .table-wrap{ overflow-x:auto; }
+
+  footer{
+    max-width:680px;
+    margin:56px auto 0;
+    font-size:0.82rem;
+    color:var(--ink-soft);
+    border-top:1px solid var(--line);
+    padding-top:18px;
+  }
+</style>
+
+<div class="page">
+
+  <div class="prose">
+    <p class="eyebrow">Repo map · ~/gramps</p>
+    <h1>How the Gramps codebases fit together</h1>
+    <p class="dek">Six repositories on disk, and three kinds of relationship between them: a Python import, a
+      shared REST API, and two Gramps addons that connect Desktop to a server — one continuous, one run on
+      demand.</p>
+  </div>
+
+  <figure>
+    <div class="diagram-frame">
+      <svg class="diagram" role="img" aria-label="gramps-web-api sits at the center, importing the gramps core library and serving both gramps-web and gramps-connect over REST. Gramps Desktop reaches the same server two ways, each through its own addon: GrampsWebSync, run on demand to diff and reconcile changes, and GrampsWebApiDb, which installs as a database backend and keeps a local SQLite mirror continuously live via the transaction-history feed." viewBox="0.00 0.00 1352.00 371.50" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 367.5)">
+<title>gramps_repo_map</title>
+<polygon fill="none" stroke="transparent" points="-4,4 -4,-367.5 1348,-367.5 1348,4 -4,4"/>
+<!-- gramps_web -->
+<g id="node1" class="node">
+<title>gramps_web</title>
+<path fill="var(--surface)" stroke="var(--line)" stroke-width="1.5" d="M152,-265C152,-265 12,-265 12,-265 6,-265 0,-259 0,-253 0,-253 0,-190 0,-190 0,-184 6,-178 12,-178 12,-178 152,-178 152,-178 158,-178 164,-184 164,-190 164,-190 164,-253 164,-253 164,-259 158,-265 152,-265"/>
+<text text-anchor="start" x="16" y="-240.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="var(--ink-soft)">gramps/gramps&#45;web</text>
+<text text-anchor="start" x="16" y="-218.3" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="19.00" fill="var(--ink)">gramps&#45;web</text>
+<text text-anchor="start" x="16" y="-197.9" font-family="Helvetica,sans-Serif" font-style="italic" font-size="12.00" fill="var(--ink-soft)">official web frontend</text>
+</g>
+<!-- gramps_web_api -->
+<g id="node3" class="node">
+<title>gramps_web_api</title>
+<path fill="var(--surface)" stroke="var(--accent-gold)" stroke-width="2.5" d="M725.5,-92C725.5,-92 506.5,-92 506.5,-92 500.5,-92 494.5,-86 494.5,-80 494.5,-80 494.5,-12 494.5,-12 494.5,-6 500.5,0 506.5,0 506.5,0 725.5,0 725.5,0 731.5,0 737.5,-6 737.5,-12 737.5,-12 737.5,-80 737.5,-80 737.5,-86 731.5,-92 725.5,-92"/>
+<text text-anchor="start" x="511" y="-68" font-family="Helvetica,sans-Serif" font-size="10.00" fill="var(--ink-soft)">gramps/gramps&#45;web&#45;api</text>
+<text text-anchor="start" x="511" y="-42.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="23.00" fill="var(--ink)">gramps&#45;web&#45;api</text>
+<text text-anchor="start" x="511" y="-20.6" font-family="Helvetica,sans-Serif" font-style="italic" font-size="13.00" fill="var(--ink-soft)">REST API server — the hub</text>
+</g>
+<!-- gramps_web&#45;&gt;gramps_web_api -->
+<g id="edge2" class="edge">
+<title>gramps_web&#45;&gt;gramps_web_api</title>
+<path fill="none" stroke="var(--accent-teal)" stroke-width="2.25" d="M164.07,-178.66C171.08,-175.58 178.12,-172.64 185,-170 283.26,-132.23 398.04,-100.03 484.43,-78.06"/>
+<polygon fill="var(--accent-teal)" stroke="var(--accent-teal)" stroke-width="2.25" points="485.45,-81.41 494.29,-75.57 483.73,-74.63 485.45,-81.41"/>
+<text text-anchor="middle" x="341.5" y="-128.2" font-family="Courier,monospace" font-size="11.00" fill="var(--accent-teal)">REST API</text>
+</g>
+<!-- gramps_connect -->
+<g id="node2" class="node">
+<title>gramps_connect</title>
+<path fill="var(--surface)" stroke="var(--line)" stroke-width="1.5" d="M445,-273C445,-273 219,-273 219,-273 213,-273 207,-267 207,-261 207,-261 207,-182 207,-182 207,-176 213,-170 219,-170 219,-170 445,-170 445,-170 451,-170 457,-176 457,-182 457,-182 457,-261 457,-261 457,-267 451,-273 445,-273"/>
+<text text-anchor="start" x="223" y="-248.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="var(--ink-soft)">gramps/gramps&#45;connect</text>
+<text text-anchor="start" x="223" y="-226.3" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="19.00" fill="var(--ink)">gramps&#45;connect</text>
+<text text-anchor="start" x="223" y="-205.7" font-family="Helvetica,sans-Serif" font-size="11.00" fill="var(--ink-soft)">hosted — for live collaboration</text>
+<text text-anchor="start" x="223" y="-188.7" font-family="Helvetica,sans-Serif" font-size="11.00" fill="var(--ink-soft)">standalone — one&#45;process desktop app</text>
+</g>
+<!-- gramps_connect&#45;&gt;gramps_web_api -->
+<g id="edge3" class="edge">
+<title>gramps_connect&#45;&gt;gramps_web_api</title>
+<path fill="none" stroke="var(--accent-teal)" stroke-width="2.25" d="M411.81,-169.78C435.01,-155.2 460.45,-139.35 484,-125 498.82,-115.97 514.65,-106.48 530.02,-97.35"/>
+<polygon fill="var(--accent-teal)" stroke="var(--accent-teal)" stroke-width="2.25" points="532.19,-100.13 539.01,-92.02 528.62,-94.11 532.19,-100.13"/>
+<text text-anchor="middle" x="545" y="-128.2" font-family="Courier,monospace" font-size="11.00" fill="var(--accent-teal)">REST API + /query/</text>
+</g>
+<!-- gramps -->
+<g id="node4" class="node">
+<title>gramps</title>
+<path fill="var(--surface)" stroke="var(--line)" stroke-width="1.5" d="M1332,-265C1332,-265 1164,-265 1164,-265 1158,-265 1152,-259 1152,-253 1152,-253 1152,-190 1152,-190 1152,-184 1158,-178 1164,-178 1164,-178 1332,-178 1332,-178 1338,-178 1344,-184 1344,-190 1344,-190 1344,-253 1344,-253 1344,-259 1338,-265 1332,-265"/>
+<text text-anchor="start" x="1168" y="-240.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="var(--ink-soft)">gramps/gramps</text>
+<text text-anchor="start" x="1168" y="-218.3" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="19.00" fill="var(--ink)">gramps</text>
+<text text-anchor="start" x="1168" y="-197.9" font-family="Helvetica,sans-Serif" font-style="italic" font-size="12.00" fill="var(--ink-soft)">desktop app + core library</text>
+</g>
+<!-- gramps&#45;&gt;gramps_web_api -->
+<g id="edge1" class="edge">
+<title>gramps&#45;&gt;gramps_web_api</title>
+<path fill="none" stroke="var(--accent-gold)" stroke-width="2.25" d="M1151.98,-190.35C1089.07,-170.92 1004.91,-145.54 930,-125 870.34,-108.64 803.89,-91.92 747.54,-78.18"/>
+<polygon fill="var(--accent-gold)" stroke="var(--accent-gold)" stroke-width="2.25" points="748.05,-74.7 737.51,-75.74 746.4,-81.5 748.05,-74.7"/>
+<text text-anchor="middle" x="1026" y="-128.2" font-family="Courier,monospace" font-size="11.00" fill="var(--accent-gold)">imports gramps.gen</text>
+</g>
+<!-- gramps_web_api_db -->
+<g id="node5" class="node">
+<title>gramps_web_api_db</title>
+<path fill="var(--surface)" stroke="var(--line)" stroke-width="1.5" d="M719.5,-265C719.5,-265 512.5,-265 512.5,-265 506.5,-265 500.5,-259 500.5,-253 500.5,-253 500.5,-190 500.5,-190 500.5,-184 506.5,-178 512.5,-178 512.5,-178 719.5,-178 719.5,-178 725.5,-178 731.5,-184 731.5,-190 731.5,-190 731.5,-253 731.5,-253 731.5,-259 725.5,-265 719.5,-265"/>
+<text text-anchor="start" x="517" y="-240.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="var(--ink-soft)">addons&#45;source/GrampsWebApiDb</text>
+<text text-anchor="start" x="517" y="-218.3" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="19.00" fill="var(--ink)">GrampsWebApiDb</text>
+<text text-anchor="start" x="517" y="-197.9" font-family="Helvetica,sans-Serif" font-style="italic" font-size="12.00" fill="var(--ink-soft)">DB&#45;backend addon — continuous</text>
+</g>
+<!-- gramps_web_api_db&#45;&gt;gramps_web_api -->
+<g id="edge4" class="edge">
+<title>gramps_web_api_db&#45;&gt;gramps_web_api</title>
+<path fill="none" stroke="var(--accent-wine)" stroke-width="2.25" d="M616,-177.61C616,-154.87 616,-126.67 616,-102.3"/>
+<polygon fill="var(--accent-wine)" stroke="var(--accent-wine)" stroke-width="2.25" points="619.5,-102.12 616,-92.12 612.5,-102.12 619.5,-102.12"/>
+<text text-anchor="middle" x="690.5" y="-128.2" font-family="Courier,monospace" font-size="11.00" fill="var(--accent-wine)">live sync, poll + push</text>
+</g>
+<!-- gramps_web_api_db&#45;&gt;gramps -->
+<g id="edge6" class="edge">
+<title>gramps_web_api_db&#45;&gt;gramps</title>
+<path fill="none" stroke="var(--accent-neutral)" stroke-width="2.25" stroke-dasharray="1,5" d="M721.16,-265.09C798.48,-291.91 906.32,-318.44 1002,-303 1049.18,-295.39 1099.56,-280.06 1142.36,-264.73"/>
+<polygon fill="var(--accent-neutral)" stroke="var(--accent-neutral)" stroke-width="2.25" points="1143.73,-267.96 1151.93,-261.26 1141.34,-261.38 1143.73,-267.96"/>
+<text text-anchor="middle" x="941" y="-309.2" font-family="Courier,monospace" font-size="11.00" fill="var(--accent-neutral)">installs as plugin</text>
+</g>
+<!-- gramps_web_sync -->
+<g id="node6" class="node">
+<title>gramps_web_sync</title>
+<path fill="var(--surface)" stroke="var(--line)" stroke-width="1.5" d="M975,-265C975,-265 787,-265 787,-265 781,-265 775,-259 775,-253 775,-253 775,-190 775,-190 775,-184 781,-178 787,-178 787,-178 975,-178 975,-178 981,-178 987,-184 987,-190 987,-190 987,-253 987,-253 987,-259 981,-265 975,-265"/>
+<text text-anchor="start" x="791" y="-240.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="var(--ink-soft)">addons&#45;source/GrampsWebSync</text>
+<text text-anchor="start" x="791" y="-218.3" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="19.00" fill="var(--ink)">GrampsWebSync</text>
+<text text-anchor="start" x="791" y="-197.9" font-family="Helvetica,sans-Serif" font-style="italic" font-size="12.00" fill="var(--ink-soft)">sync tool — on demand</text>
+</g>
+<!-- gramps_web_sync&#45;&gt;gramps_web_api -->
+<g id="edge5" class="edge">
+<title>gramps_web_sync&#45;&gt;gramps_web_api</title>
+<path fill="none" stroke="var(--accent-wine)" stroke-width="2.25" stroke-dasharray="5,2" d="M839.17,-177.88C820.52,-160.22 797.67,-140.33 775,-125 760.17,-114.97 743.87,-105.47 727.52,-96.77"/>
+<polygon fill="var(--accent-wine)" stroke="var(--accent-wine)" stroke-width="2.25" points="728.93,-93.56 718.44,-92.03 725.68,-99.76 728.93,-93.56"/>
+<text text-anchor="middle" x="855.5" y="-128.2" font-family="Courier,monospace" font-size="11.00" fill="var(--accent-wine)">on&#45;demand diff sync</text>
+</g>
+<!-- gramps_web_sync&#45;&gt;gramps -->
+<g id="edge7" class="edge">
+<title>gramps_web_sync&#45;&gt;gramps</title>
+<path fill="none" stroke="var(--accent-neutral)" stroke-width="2.25" stroke-dasharray="1,5" d="M987.15,-221.5C1035.67,-221.5 1093.02,-221.5 1141.58,-221.5"/>
+<polygon fill="var(--accent-neutral)" stroke="var(--accent-neutral)" stroke-width="2.25" points="1141.8,-225 1151.8,-221.5 1141.8,-218 1141.8,-225"/>
+<text text-anchor="middle" x="1069.5" y="-227.7" font-family="Courier,monospace" font-size="11.00" fill="var(--accent-neutral)">installs as plugin</text>
+</g>
+</g>
+</svg>
+    </div>
+    <figcaption>gramps-web-api sits at the center: it imports gramps's core library directly, and both web
+      frontends — gramps-web and gramps-connect — call it over the same REST API. gramps-connect can point
+      at a hosted gramps-web-api for real multi-user collaboration, or run standalone, bundling its own
+      gramps-web-api and SQLite into one single-user desktop process. Gramps Desktop itself never talks to a
+      server directly — it reaches gramps-web-api through one of two addons that install into it:
+      GrampsWebSync, run by hand to diff and reconcile changes with the server, or GrampsWebApiDb, which
+      installs as a database backend and keeps a local SQLite mirror continuously live via the
+      transaction-history feed.</figcaption>
+  </figure>
+
+  <div class="legend">
+    <div class="legend-row"><span class="legend-swatch gold"></span> Python import — compile-time library dependency</div>
+    <div class="legend-row"><span class="legend-swatch teal"></span> REST API — live HTTP request/response, from a frontend</div>
+    <div class="legend-row"><span class="legend-swatch wine"></span> Desktop ↔ server sync, via an addon — solid = continuous (GrampsWebApiDb), <span class="legend-swatch wine dashed" style="margin-left:2px"></span> dashed = run on demand (GrampsWebSync)</div>
+    <div class="legend-row"><span class="legend-swatch neutral dashed"></span> plugin containment — installs into the host process</div>
+  </div>
+
+  <div class="index">
+    <h2>Repository index</h2>
+    <p class="index-sub">Same six nodes, with the one-line role each plays.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Repo</th><th>Path</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="repo">gramps</td>
+            <td class="path">~/gramps/gramps</td>
+            <td class="role">Desktop app and the <code style="font-family:'IBM Plex Mono',monospace;font-size:0.85em;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px;">gramps.gen</code> core library — data model, DB backends, import/export, report engine — that every other project here builds on.</td>
+          </tr>
+          <tr>
+            <td class="repo">gramps-web-api</td>
+            <td class="path">~/gramps/gramps-web-api</td>
+            <td class="role">A Flask REST API that imports <code style="font-family:'IBM Plex Mono',monospace;font-size:0.85em;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px;">gramps.gen</code> directly and opens a family tree over HTTP: search, editing, media, DNA, AI chat, and the transaction-history feed live sync depends on.</td>
+          </tr>
+          <tr>
+            <td class="repo">gramps-web</td>
+            <td class="path">~/gramps/gramps-web</td>
+            <td class="role">The production web client — browse and collaboratively edit a tree from any device. Lit-based; a REST client of gramps-web-api.</td>
+          </tr>
+          <tr>
+            <td class="repo">gramps-connect</td>
+            <td class="path">~/gramps/gramps-connect</td>
+            <td class="role">A second web frontend built for instant local browsing and live multi-user editing. Same REST surface as gramps-web, plus fast <code style="font-family:'IBM Plex Mono',monospace;font-size:0.85em;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px;">/query/</code> endpoints. Runs two ways: hosted (<code style="font-family:'IBM Plex Mono',monospace;font-size:0.85em;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px;">deploy/</code>) against a shared gramps-web-api server for real collaboration, or standalone as a single-user desktop app that bundles its own gramps-web-api + SQLite into one process.</td>
+          </tr>
+          <tr>
+            <td class="repo">GrampsWebApiDb</td>
+            <td class="path">~/gramps/addons-source/GrampsWebApiDb</td>
+            <td class="role">A plugin for gramps that makes a gramps-web-api server usable as Desktop's live database: reads come from a local SQLite mirror kept current by polling the transaction-history feed, writes push straight back to the server.</td>
+          </tr>
+          <tr>
+            <td class="repo">GrampsWebSync</td>
+            <td class="path">~/gramps/addons-source/GrampsWebSync</td>
+            <td class="role">A Gramps tool, run on demand, that diffs a local tree against a gramps-web-api server and reconciles the two — bidirectionally by default, or resetting one side wholesale. Talks to the same REST API as the web frontends; unlike GrampsWebApiDb, nothing stays open or polls between runs.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    Two addons exist for a reason: GrampsWebSync runs when you ask it to, diffs both sides, and reconciles them
+    — the way syncing has always worked here. GrampsWebApiDb is the newer alternative: open the tree and it
+    stays current in both directions, continuously, without a manual step.
+  </footer>
+
+</div>
