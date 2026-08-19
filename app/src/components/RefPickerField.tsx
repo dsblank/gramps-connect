@@ -8,7 +8,7 @@ import { CircleGlyphButton } from "./CircleGlyphButton";
 import { RecordPicker } from "./RecordPicker";
 import { withGrampsId } from "./related/summary";
 import { EVENT_ROLE_OPTIONS } from "./related/RefEditDialog";
-import { EVENT_VIEW, MEDIA_VIEW, formatEventType } from "../store/views";
+import { EVENT_VIEW, MEDIA_VIEW, formatEventType, displayName } from "../store/views";
 import type { QueryItem } from "../store/api";
 import type { DraftEntry, DraftType } from "../store/draftStack";
 import type { ViewConfig } from "../store/views";
@@ -55,6 +55,29 @@ export function pickerResultLabel(type: string, item: QueryItem): string {
       const eventType = raw == null ? "" : formatEventType(typeof raw === "string" ? raw : JSON.stringify(raw));
       const desc = (item.description as string | undefined) ?? "";
       return withGrampsId(id, [eventType, desc].filter(Boolean).join(": ") || "(untitled)");
+    }
+    // Same label as every other "pick an existing Person" surface --
+    // AssociationsSection.tsx/ChildrenSection.tsx's own AttachControl are
+    // the first live-attach callers to search PERSON_VIEW, so this and the
+    // "repository"/"place"/"source" cases below were picker types still
+    // falling through to the raw-handle default until RelatedPanel's
+    // sections started live-picking them too (RepositoriesSection.tsx/
+    // ParentsSection.tsx/PlaceSection.tsx/SourceSection.tsx).
+    case "person":
+      return personLabel(item);
+    case "repository":
+      return withGrampsId(id, (item.name as string | undefined) || "(untitled)");
+    case "place":
+      return withGrampsId(id, (item.title as string | undefined) || "(untitled)");
+    case "source":
+      return withGrampsId(id, (item.title as string | undefined) || "(untitled)");
+    case "family": {
+      // father_name/mother_name are FAMILY_VIEW's json_path columns (views.ts)
+      // -- raw JSON-serialized Name structs on a live query result, same as
+      // event_type above, not the plain string a full-object GET returns.
+      const father = displayName(item.father_name) || "?";
+      const mother = displayName(item.mother_name) || "?";
+      return withGrampsId(id, `${father} & ${mother}`);
     }
     default:
       return withGrampsId(id, item.handle);

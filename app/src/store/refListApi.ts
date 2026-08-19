@@ -78,3 +78,21 @@ export async function patchRefListEntry(
   );
   await updateObject(token, view, objectHandle, obj);
 }
+
+/** Sets a *singular* ref field (Family's father_handle/mother_handle,
+ * Event's place, Citation's source_handle) to `value` -- attach/detach's
+ * list-splice counterpart for a field that holds one handle, not an array.
+ * `value` is "" to clear it, gramps-web-api's own convention for an unset
+ * singular ref (confirmed against a live event with `place: ""` --
+ * PlaceSection.tsx's doc comment). */
+export async function setRefField(
+  token: string,
+  view: ViewConfig,
+  objectHandle: string,
+  field: string,
+  value: string
+): Promise<void> {
+  const obj = await fetchPlainObject(token, view, objectHandle);
+  obj[field] = value;
+  await updateObject(token, view, objectHandle, obj);
+}

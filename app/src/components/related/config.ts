@@ -30,19 +30,20 @@ export type RelatedSection =
   | "backlinks";
 
 // Ordering within each type's list is a holdover from when citations/
-// notes/media/tags/events were edited in place here via a (+) Add button
-// and per-row edit/delete (AttachControl, sections/shared.tsx) -- every
-// editable type now manages those lists through its own edit dialog
-// instead (PersonEditDialog.tsx/FamilyEditDialog.tsx/ObjectEditDialog.tsx's
-// RefListField/MediaListField/EventsField, RefPickerField.tsx), so this
-// whole panel is read-only for them. AttachControl survives only for
-// media/generated, which can never get an edit dialog of their own
-// (creating a Media object is a file upload, not a form) -- see
-// MediaSection.tsx/NotesSection.tsx/CitationsSection.tsx/TagsSection.tsx's
-// own `EDITABLE_TYPES` gate. "backlinks" ("Referenced by") stays purely
-// read-only regardless, and last in every list. Events sits on Person/
-// Family only (Event's own entry below has no `events` of its own) -- both
-// share EventBase's event_ref_list.
+// notes/media/tags were edited in place here via a (+) Add button and
+// per-row edit/delete (AttachControl, sections/shared.tsx); that live
+// attach/detach is back for those four (Notes/Citations/Tags/Media, see
+// each section's own `canAttach` and AttachControl.tsx) as a quicker path
+// alongside the full edit dialog (PersonEditDialog.tsx/
+// FamilyEditDialog.tsx/ObjectEditDialog.tsx's RefListField/MediaListField/
+// EventsField, RefPickerField.tsx), not a replacement for it -- other
+// sections (Children/Events/Associations/Repositories/parents/place/
+// source/families/participants) are gaining the same "+"/"−" too, each
+// via its own live attach/detach or set/clear against refListApi.ts.
+// "backlinks" ("Referenced by") stays purely read-only regardless -- a
+// reverse ref isn't owned by the displayed object -- and last in every
+// list. Events sits on Person/Family only (Event's own entry below has no
+// `events` of its own) -- both share EventBase's event_ref_list.
 export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   person: ["parents", "families", "associations", "attributes", "addresses", "urls", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],
   family: ["parents", "children", "attributes", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],

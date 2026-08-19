@@ -177,10 +177,15 @@ function formatChange(unixSeconds: unknown): string {
 // A father/mother's primary_name select entry returns the full Name
 // struct (first_name, surname_list[0].surname, ...) -- the same shape
 // personToRow already parses in schema.ts, applied here instead to a
-// stored (not top-level-fetched) name.
-function displayName(json: unknown): string {
+// stored (not top-level-fetched) name. `json` is a JSON-serialized string
+// when this runs as a local-cache column's toDisplay (this column's own
+// `toSql: toSqlJson`), but an already-parsed object when RefPickerField.tsx's
+// pickerResultLabel calls it directly on a live fetchPage result instead
+// (api.ts never serializes what the server already sent as JSON) -- accept
+// either rather than requiring every caller to know which.
+export function displayName(json: unknown): string {
   if (!json) return "";
-  const name = JSON.parse(json as string);
+  const name = typeof json === "string" ? JSON.parse(json) : json;
   const surname = name.surname_list?.[0]?.surname ?? "";
   const given = name.first_name ?? "";
   return [given, surname].filter(Boolean).join(" ") || "(unnamed)";

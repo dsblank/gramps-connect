@@ -1,7 +1,11 @@
 import { Stack, Text } from "@mantine/core";
+import { getToken, hasPermissions } from "../../../auth/auth";
 import type { RawRef } from "../../../store/objectDetail";
+import { setRefField } from "../../../store/refListApi";
+import { PERSON_VIEW } from "../../../store/views";
+import { SetFieldControl } from "../AttachControl";
 import { SectionShell, RefRow, PairGroup } from "./shared";
-import { withGrampsId } from "../summary";
+import { summaryLine, withGrampsId } from "../summary";
 import type { OnNavigate, SectionProps } from "../types";
 
 interface FamilyProfile {
@@ -70,18 +74,62 @@ function ParentFamilyPair({ profileFamily, rawFamily, childHandle, onNavigate }:
  * above doesn't have this problem: you're already looking at the family,
  * so drilling into a specific parent as an individual is a real "go
  * deeper" step, not a circular one. */
-export function ParentsSection({ type, detail, onNavigate }: SectionProps) {
+export function ParentsSection({ type, view, detail, onNavigate, onRefetch }: SectionProps) {
   if (type === "family") {
     // `{}` rather than absent when a family has no father/mother -- see
     // PlaceSection's doc comment on this gramps-web-api convention.
     const father = detail.extended?.father as { handle?: string } | undefined;
     const mother = detail.extended?.mother as { handle?: string } | undefined;
-    if (!father?.handle && !mother?.handle) return null;
+    const canEdit = hasPermissions("EditObject");
+    if (!father?.handle && !mother?.handle && !canEdit) return null;
+
+    async function handleClear(field: "father_handle" | "mother_handle", roleLabel: string, target: { handle?: string } | undefined) {
+      const summary = summaryLine("person", target) || roleLabel;
+      if (!window.confirm(`Remove ${summary} as ${roleLabel.toLowerCase()} of this family? This does not delete the person themselves.`)) return;
+      const token = await getToken();
+      await setRefField(token, view, detail.handle, field, "");
+      onRefetch?.();
+    }
+
     return (
       <SectionShell label="Parents">
         <PairGroup>
-          {father?.handle && <RefRow type="person" handle={father.handle} obj={father} onNavigate={onNavigate} />}
-          {mother?.handle && <RefRow type="person" handle={mother.handle} obj={mother} onNavigate={onNavigate} />}
+          {father?.handle ? (
+            <RefRow
+              type="person"
+              handle={father.handle}
+              obj={father}
+              onNavigate={onNavigate}
+              onRemove={canEdit ? () => handleClear("father_handle", "Father", father) : undefined}
+            />
+          ) : canEdit ? (
+            <SetFieldControl
+              targetView={view}
+              targetHandle={detail.handle}
+              pickerView={PERSON_VIEW}
+              field="father_handle"
+              itemLabel="a father"
+              onSet={() => onRefetch?.()}
+            />
+          ) : null}
+          {mother?.handle ? (
+            <RefRow
+              type="person"
+              handle={mother.handle}
+              obj={mother}
+              onNavigate={onNavigate}
+              onRemove={canEdit ? () => handleClear("mother_handle", "Mother", mother) : undefined}
+            />
+          ) : canEdit ? (
+            <SetFieldControl
+              targetView={view}
+              targetHandle={detail.handle}
+              pickerView={PERSON_VIEW}
+              field="mother_handle"
+              itemLabel="a mother"
+              onSet={() => onRefetch?.()}
+            />
+          ) : null}
         </PairGroup>
       </SectionShell>
     );
