@@ -48,9 +48,8 @@ for the search-box query language behind it, see [docs/GOQL.md](docs/GOQL.md).
 **How does gramps-connect-desktop differ from the server-based
 deployment?**
 
-gramps-connect-desktop is the standalone build (see Installing, below —
-the downloads themselves are currently still packaged under an older
-name, `gramps-connect-demo`). One file bundles `app/`'s frontend and
+gramps-connect-desktop is the standalone build (see Installing, below).
+One file bundles `app/`'s frontend and
 `gramps-web-api`'s backend together with SQLite, runs entirely on your
 own machine, and only listens on `127.0.0.1` — nothing about it is
 reachable over a network, and it always has exactly one hardcoded user
@@ -79,7 +78,7 @@ rival Desktop for day-to-day use.
 anywhere?**
 
 No. It only listens on `127.0.0.1`, telemetry is disabled, and everything
-it stores lives in `~/.gramps-connect-demo` on your own machine.
+it stores lives in `~/.gramps-connect-desktop` on your own machine.
 
 **Can I import my real family tree into gramps-connect-desktop?**
 
@@ -90,7 +89,7 @@ still under active development.
 
 **Does upgrading gramps-connect-desktop wipe my data?**
 
-No — `~/.gramps-connect-demo` is separate from the app binary, so
+No — `~/.gramps-connect-desktop` is separate from the app binary, so
 installing a newer version reuses whatever's already there. Delete that
 folder yourself if you want a clean slate.
 
@@ -99,16 +98,16 @@ folder yourself if you want a clean slate.
 **Want to try it without building anything?** Every current download lives
 on the **[latest release](https://github.com/dsblank/gramps-connect/releases/latest)**
 — pick the section below for your platform. All of them are
-gramps-connect-desktop (currently packaged as `gramps-connect-demo`), not
-the real multi-user deployment shape (see [Deploying](#deploying) below
-for that): a single downloadable app or package, no separate install,
+gramps-connect-desktop, not the real multi-user deployment shape (see
+[Deploying](#deploying) below for that): a single downloadable app or
+package, no separate install,
 server, or database setup beyond what's noted per platform. Every variant
 starts with an empty tree — import your own Gramps XML (`.gramps`) or
 GEDCOM (`.ged`) file via the app's own Family Trees → Import... screen
 once it's running — and shares one login: **`admin`** / **`admin`**.
 
 First run creates a small data directory in your home folder
-(`.gramps-connect-demo`) holding that tree; later runs reuse it. Delete that
+(`.gramps-connect-desktop`) holding that tree; later runs reuse it. Delete that
 folder to reset back to a blank slate. The app only listens on `127.0.0.1`
 (your own machine) — it isn't reachable from other devices on your network.
 These are unsigned, x86_64-only builds, hence the OS warnings described
@@ -116,10 +115,10 @@ below — not a sign anything is wrong.
 
 ### Windows
 
-1. Download `gramps-connect-demo-windows.zip` from the
+1. Download `gramps-connect-desktop-windows.zip` from the
    [latest release](https://github.com/dsblank/gramps-connect/releases/latest)
    and unzip it (right-click → Extract All).
-2. Open the extracted folder and double-click `gramps-connect-demo.exe`.
+2. Open the extracted folder and double-click `gramps-connect-desktop.exe`.
 3. Windows will likely show a **SmartScreen** warning ("Windows protected
    your PC") because this isn't a signed executable. Click **More info**,
    then **Run anyway**.
@@ -130,12 +129,12 @@ below — not a sign anything is wrong.
 
 For M1/M2/M3/M4 Macs.
 
-1. Download `gramps-connect-demo-macos-arm64.zip` from the
+1. Download `gramps-connect-desktop-macos-arm64.zip` from the
    [latest release](https://github.com/dsblank/gramps-connect/releases/latest)
    and unzip it (double-click, or right-click → Open, depending on your
    Mac's settings).
 2. Open Terminal, `cd` into the extracted folder, and run
-   `./gramps-connect-demo`.
+   `./gramps-connect-desktop`.
    - Double-clicking the executable directly from Finder will likely be
      blocked by **Gatekeeper** ("cannot be opened because the developer
      cannot be verified") since it isn't signed/notarized — running it from
@@ -147,38 +146,38 @@ For M1/M2/M3/M4 Macs.
 ### macOS (Intel)
 
 For older Intel-based Macs (pre-Apple Silicon). Same steps as Apple Silicon
-above, but download `gramps-connect-demo-macos-intel.zip` instead.
+above, but download `gramps-connect-desktop-macos-intel.zip` instead.
 
 ### Linux (.deb — Debian, Ubuntu, and derivatives)
 
-1. Download the `.deb` file (`gramps-connect-demo_*_amd64.deb`) from the
+1. Download the `.deb` file (`gramps-connect-desktop_*_amd64.deb`) from the
    [latest release](https://github.com/dsblank/gramps-connect/releases/latest).
-2. Install it: `sudo apt install ./gramps-connect-demo_*_amd64.deb`
+2. Install it: `sudo apt install ./gramps-connect-desktop_*_amd64.deb`
    (installing from a local file rather than a repo, so apt will likely
    warn that the package isn't signed — expected, see Troubleshooting).
-3. Run `gramps-connect-demo` from a terminal, or find "Gramps Connect Demo"
+3. Run `gramps-connect-desktop` from a terminal, or find "Gramps Connect Desktop"
    in your applications menu.
 4. This opens in its own **native window**, using GTK3 + WebKit2 already on
    your system (common on Linux desktops — many apps depend on them
    already; neither is bundled by this package). If your system doesn't
    have them, it opens in a **browser tab** instead (see Troubleshooting).
    Log in as `admin` / `admin`.
-5. To uninstall: `sudo apt remove gramps-connect-demo`.
+5. To uninstall: `sudo apt remove gramps-connect-desktop`.
 
 ### Linux (.rpm — Fedora, RHEL, AlmaLinux, and derivatives)
 
-1. Download the `.rpm` file (`gramps-connect-demo-*.x86_64.rpm`) from the
+1. Download the `.rpm` file (`gramps-connect-desktop-*.x86_64.rpm`) from the
    [latest release](https://github.com/dsblank/gramps-connect/releases/latest).
-2. Install it: `sudo dnf install ./gramps-connect-demo-*.x86_64.rpm` (on a
-   system without `dnf`, `sudo rpm -i gramps-connect-demo-*.x86_64.rpm`
+2. Install it: `sudo dnf install ./gramps-connect-desktop-*.x86_64.rpm` (on a
+   system without `dnf`, `sudo rpm -i gramps-connect-desktop-*.x86_64.rpm`
    works too, just without automatic dependency resolution). As with the
    `.deb` above, installing from a local file means dnf/rpm will likely
    warn that the package isn't signed — expected.
-3. Run `gramps-connect-demo` from a terminal, or find "Gramps Connect Demo"
+3. Run `gramps-connect-desktop` from a terminal, or find "Gramps Connect Desktop"
    in your applications menu.
 4. This opens in its own **native window** (or falls back to a browser tab)
    — same as the `.deb` above. Log in as `admin` / `admin`.
-5. To uninstall: `sudo dnf remove gramps-connect-demo`.
+5. To uninstall: `sudo dnf remove gramps-connect-desktop`.
 
 ## Troubleshooting
 
@@ -195,13 +194,13 @@ above, but download `gramps-connect-demo-macos-intel.zip` instead.
 - **`dnf: command not found` / `rpm: command not found`** — your distro is
   Debian/Ubuntu-based (or otherwise doesn't ship `rpm`), so the `.rpm`
   package is the wrong download. Grab the `.deb` file instead and install it
-  with `sudo apt install ./gramps-connect-demo_*_amd64.deb` (see the `.deb`
+  with `sudo apt install ./gramps-connect-desktop_*_amd64.deb` (see the `.deb`
   section above).
 - **No window or browser tab appears on any platform** — the app always
   tries to open one automatically once its server is up; if that somehow
   fails, open `http://127.0.0.1:5050` yourself. If nothing is listening
   there either, something crashed before reaching that point — check the
-  terminal output (Windows: run `gramps-connect-demo.exe` from a `cmd`/
+  terminal output (Windows: run `gramps-connect-desktop.exe` from a `cmd`/
   PowerShell window instead of double-clicking, so you can see it) for an
   error, and consider opening an issue with that output.
 - **The app won't start / port already in use** — only one instance can run
@@ -216,7 +215,7 @@ above, but download `gramps-connect-demo-macos-intel.zip` instead.
   equivalents, and relaunch to get a native window instead). The app
   still works fully in the browser tab either way — this only affects how
   it's presented, not what it can do.
-- **Start over from a blank tree** — delete the `.gramps-connect-demo`
+- **Start over from a blank tree** — delete the `.gramps-connect-desktop`
   folder in your home directory, then relaunch.
 - **Looking for a real multi-user deployment instead of this single-user
   local build?** See [Deploying](#deploying) below.

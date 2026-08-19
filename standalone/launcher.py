@@ -25,8 +25,8 @@ from threading import Thread
 import webview
 from PIL import Image
 
-APP_NAME = "gramps-connect-demo"
-TREE_NAME = "gramps-connect-demo"
+APP_NAME = "gramps-connect-desktop"
+TREE_NAME = "gramps-connect-desktop"
 ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"
 HOST = "127.0.0.1"
@@ -46,8 +46,8 @@ def data_path(*parts: str) -> str:
 
 # GRAMPSHOME must be set before the first `import gramps` anywhere in the
 # process (gramps.gen.const computes USER_HOME/USER_DATA at import time) --
-# this isolates the demo's data from any real Gramps install on the tester's
-# machine, so it's safe to try and safe to delete.
+# this isolates gramps-connect-desktop's data from any real Gramps install
+# on the tester's machine, so it's safe to try and safe to delete.
 os.environ["GRAMPSHOME"] = data_path()
 
 # Only meaningful for a source checkout (see gramps.gen.utils.resourcepath) --
@@ -73,7 +73,7 @@ def build_config() -> dict:
     os.makedirs(data_path("media"), exist_ok=True)
     return {
         "TREE": TREE_NAME,
-        "SECRET_KEY": "gramps-connect-demo-not-a-real-secret",
+        "SECRET_KEY": "gramps-connect-desktop-not-a-real-secret",
         "USER_DB_URI": f"sqlite:///{data_path('users.sqlite')}",
         "STATIC_PATH": resource_path("frontend"),
         "MEDIA_BASE_DIR": data_path("media"),
@@ -143,7 +143,7 @@ def first_run_setup(app) -> None:
         add_user(
             ADMIN_USER,
             ADMIN_PASSWORD,
-            fullname="Demo Admin",
+            fullname="Admin",
             role=ROLE_OWNER,
             tree=None,
         )
@@ -163,7 +163,7 @@ def main() -> None:
     install_avif_transcoder(app)
 
     if first_run:
-        print(f"First run -- setting up demo tree in {data_path()} ...")
+        print(f"First run -- setting up tree in {data_path()} ...")
         first_run_setup(app)
 
     # Flask's dev server blocks, so it runs on a background thread; the
@@ -183,7 +183,7 @@ def main() -> None:
     # every future request until the whole process is killed. Confirmed
     # live: a real ~10k-object import followed immediately by the client's
     # post-import reload reproduced exactly this, and it never recovered.
-    # This is a single-user local demo with no need for concurrent
+    # This is a single-user local app with no need for concurrent
     # request handling, so serializing every request through one thread
     # sidesteps the race entirely rather than patching around it here.
     server_thread = Thread(
@@ -193,7 +193,7 @@ def main() -> None:
     )
     server_thread.start()
     wait_for_server()
-    print(f"Gramps Connect demo running at http://{HOST}:{PORT}")
+    print(f"Gramps Connect Desktop running at http://{HOST}:{PORT}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
 
     # pywebview defaults ALLOW_DOWNLOADS to False, which on the GTK backend

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Gramps Connect Desktop
+Comment=Standalone Gramps Connect app -- local-first genealogy client, no separate install required
+Exec=gramps-connect-desktop
+Icon=gramps-connect-desktop
+Terminal=false
+Categories=Office;

@@ -1,7 +1,7 @@
-name: Build standalone demo
+name: Build gramps-connect-desktop
 
-# Manual trigger only -- this is an experimental PyInstaller build (see
-# standalone/), not part of the normal dev workflow, and Windows/macOS
+# Manual trigger only -- this is a PyInstaller build (see standalone/), not
+# part of the normal dev workflow, and Windows/macOS
 # runners are the whole point of running it here: PyInstaller can't
 # cross-compile, so producing those binaries requires actually running on
 # those OSes, which no local dev machine in this project has.
@@ -128,7 +128,7 @@ jobs:
           python gramps-connect/deploy/webapi-requirements.py gramps-web-api/pyproject.toml > requirements.txt
           cat requirements.txt
           pip install -r requirements.txt psycopg2-binary
-          # Opens the demo in a native window (WebView2/WKWebView/GTK3+
+          # Opens the app in a native window (WebView2/WKWebView/GTK3+
           # WebKit2) instead of a browser tab. Its Windows (pythonnet) and
           # macOS (pyobjc-*) backend deps are pulled in automatically by
           # pywebview's own platform-conditional requires-dist markers; on
@@ -139,13 +139,13 @@ jobs:
 
       - name: Build with PyInstaller
         working-directory: gramps-connect/standalone
-        run: pyinstaller gramps-connect-demo.spec --noconfirm
+        run: pyinstaller gramps-connect-desktop.spec --noconfirm
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: gramps-connect-demo-${{ matrix.label }}
-          path: gramps-connect/standalone/dist/gramps-connect-demo
+          name: gramps-connect-desktop-${{ matrix.label }}
+          path: gramps-connect/standalone/dist/gramps-connect-desktop
           if-no-files-found: error
 
   # Packaged as .deb/.rpm rather than a raw portable binary (unlike the
@@ -250,7 +250,7 @@ jobs:
 
       - name: Build with PyInstaller
         working-directory: gramps-connect/standalone
-        run: pyinstaller gramps-connect-demo.spec --noconfirm
+        run: pyinstaller gramps-connect-desktop.spec --noconfirm
 
       - name: Package .deb and .rpm
         working-directory: gramps-connect/standalone
@@ -260,22 +260,22 @@ jobs:
           VERSION=$(node -p "require('../app/package.json').version")
           for target in deb rpm; do
             fpm -s dir -t "$target" \
-              -n gramps-connect-demo \
+              -n gramps-connect-desktop \
               -v "$VERSION" \
               --license AGPL-3.0-or-later \
-              --description "Standalone Gramps Connect demo -- local-first genealogy client + bundled server, no separate install required." \
+              --description "gramps-connect-desktop -- local-first genealogy client + bundled server, no separate install required." \
               --url "https://github.com/dsblank/gramps-connect" \
               --force \
-              dist/gramps-connect-demo/=/opt/gramps-connect-demo/ \
-              packaging/gramps-connect-demo.desktop=/usr/share/applications/gramps-connect-demo.desktop \
-              packaging/gramps-connect-demo=/usr/bin/gramps-connect-demo \
-              ../app/public/apple-touch-icon.png=/usr/share/pixmaps/gramps-connect-demo.png
+              dist/gramps-connect-desktop/=/opt/gramps-connect-desktop/ \
+              packaging/gramps-connect-desktop.desktop=/usr/share/applications/gramps-connect-desktop.desktop \
+              packaging/gramps-connect-desktop=/usr/bin/gramps-connect-desktop \
+              ../app/public/apple-touch-icon.png=/usr/share/pixmaps/gramps-connect-desktop.png
           done
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: gramps-connect-demo-linux
+          name: gramps-connect-desktop-linux
           path: |
             gramps-connect/standalone/*.deb
             gramps-connect/standalone/*.rpm
@@ -287,7 +287,7 @@ jobs:
   # Reproduces by hand what used to be a manual `gh release create` --
   # download every leg's artifact, zip the raw Windows/macOS folders (the
   # .deb/.rpm from build-linux need no further packaging), tag the release
-  # off app/package.json's version, mark the previous standalone-demo-v*
+  # off app/package.json's version, mark the previous gramps-connect-desktop-v*
   # release [superseded], and publish.
   release:
     needs: [build, build-linux]
@@ -310,24 +310,25 @@ jobs:
         shell: bash
         run: |
           for label in windows macos-arm64 macos-intel; do
-            mv "artifacts/gramps-connect-demo-$label" artifacts/gramps-connect-demo
-            (cd artifacts && zip -q -r "gramps-connect-demo-$label.zip" gramps-connect-demo)
-            rm -rf artifacts/gramps-connect-demo
+            mv "artifacts/gramps-connect-desktop-$label" artifacts/gramps-connect-desktop
+            (cd artifacts && zip -q -r "gramps-connect-desktop-$label.zip" gramps-connect-desktop)
+            rm -rf artifacts/gramps-connect-desktop
           done
-          ls artifacts/gramps-connect-demo-linux
+          ls artifacts/gramps-connect-desktop-linux
 
       - name: Determine version
         run: echo "VERSION=$(node -p "require('./gramps-connect/app/package.json').version")" >> "$GITHUB_ENV"
 
-      # Best-effort -- there may be no prior standalone-demo-v* release yet
-      # (e.g. the very first one), which is fine, not an error.
+      # Best-effort -- there may be no prior gramps-connect-desktop-v* release
+      # yet (e.g. the very first one, or the first one since this tag scheme
+      # replaced the old standalone-demo-v* one), which is fine, not an error.
       - name: Mark previous release as superseded
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ALL=$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName,name,createdAt --limit 100)
-          PREV=$(echo "$ALL" | jq --arg cur "standalone-demo-v$VERSION" '
-            [.[] | select((.tagName | startswith("standalone-demo-v")) and .tagName != $cur)]
+          PREV=$(echo "$ALL" | jq --arg cur "gramps-connect-desktop-v$VERSION" '
+            [.[] | select((.tagName | startswith("gramps-connect-desktop-v")) and .tagName != $cur)]
             | sort_by(.createdAt) | last')
           PREV_TAG=$(echo "$PREV" | jq -r '.tagName // empty')
           PREV_NAME=$(echo "$PREV" | jq -r '.name // empty')
@@ -345,9 +346,9 @@ jobs:
           WHATS_NEW: ${{ inputs.whats_new }}
         run: |
           {
-            echo "## Gramps Connect -- standalone demo (experimental)"
+            echo "## gramps-connect-desktop v$VERSION"
             echo
-            echo "**This is an early-stage research prototype, not a finished product.** See the [main README](https://github.com/$GITHUB_REPOSITORY#readme) for what this project actually is."
+            echo "The standalone build of Gramps Connect -- see the [main README](https://github.com/$GITHUB_REPOSITORY#readme) for what this project is."
             echo
             echo "For install instructions and troubleshooting for your platform, see the [Installing](https://github.com/$GITHUB_REPOSITORY#installing) and [Troubleshooting](https://github.com/$GITHUB_REPOSITORY#troubleshooting) sections of the README."
             if [ -n "$WHATS_NEW" ]; then
@@ -362,14 +363,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "standalone-demo-v$VERSION" \
+          gh release create "gramps-connect-desktop-v$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Standalone demo v$VERSION (experimental)" \
+            --title "gramps-connect-desktop v$VERSION" \
             --prerelease \
             --target main \
             --notes-file notes.md \
-            artifacts/gramps-connect-demo-windows.zip \
-            artifacts/gramps-connect-demo-macos-arm64.zip \
-            artifacts/gramps-connect-demo-macos-intel.zip \
-            artifacts/gramps-connect-demo-linux/*.deb \
-            artifacts/gramps-connect-demo-linux/*.rpm
+            artifacts/gramps-connect-desktop-windows.zip \
+            artifacts/gramps-connect-desktop-macos-arm64.zip \
+            artifacts/gramps-connect-desktop-macos-intel.zip \
+            artifacts/gramps-connect-desktop-linux/*.deb \
+            artifacts/gramps-connect-desktop-linux/*.rpm

@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for the standalone Gramps Connect demo.
+"""PyInstaller spec for gramps-connect-desktop, the standalone build.
 
 Gramps discovers its plugins (docgen, importers/exporters, quick reports,
 ...) by walking gramps/plugins/*.gpr.py on disk at runtime and loading each
@@ -34,7 +34,7 @@ datas = [
     # nothing more than the raw git checkouts. Cost: no compiled
     # translations (English only) and no offline docs -- both bundled from
     # build/ output that a bare checkout doesn't have; acceptable for a
-    # beta demo.
+    # beta build.
     (os.path.join(GRAMPS_ROOT, "data"), "gramps-resources/gramps"),
 ]
 
@@ -290,7 +290,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="gramps-connect-demo",
+    name="gramps-connect-desktop",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -306,5 +306,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="gramps-connect-demo",
+    name="gramps-connect-desktop",
 )

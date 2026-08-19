@@ -1,6 +1,6 @@
 #!/bin/sh
-# Thin wrapper so `gramps-connect-demo` is on PATH -- the real executable
+# Thin wrapper so `gramps-connect-desktop` is on PATH -- the real executable
 # and its bundled _internal/ live under /opt (see the .deb/.rpm's fpm
 # invocation), not /usr/bin, since PyInstaller's COLLECT output is a whole
 # directory tree, not a single relocatable binary.
-exec /opt/gramps-connect-demo/gramps-connect-demo "$@"
+exec /opt/gramps-connect-desktop/gramps-connect-desktop "$@"
