@@ -25,13 +25,25 @@ const BOX_WIDTH = 190;
 const BOX_HEIGHT = 90;
 const PADDING = 20;
 const GAP_X = 60;
-const GAP_Y = 8;
+// gramps-web's own default (charts/TreeChart.js) -- the vertical gap
+// between sibling boxes in the same generation/column, which is what
+// nodeSize's x-step below controls. Was 8; the extra 3px per row adds up
+// across a full generation of leaf slots and was visibly looser than
+// gramps-web's own chart at the same depth.
+const GAP_Y = 5;
 const TEXT_PADDING = 12;
 const IMG_PADDING = 10;
-const IMG_RADIUS = (BOX_HEIGHT - IMG_PADDING * 2) / 2;
-/** Bitmap fetch size -- oversized relative to the ~70px display diameter
- * (2*IMG_RADIUS) the way gramps-web's own `getImageUrl(person, 100)` is,
- * so it stays crisp on a high-DPI screen or once zoomed in. */
+const IMG_SIZE = BOX_HEIGHT - IMG_PADDING * 2;
+/** A rounded-*rect* crop, not gramps-web's circle -- same call
+ * MediaThumbnail.tsx's own doc comment already made and documented ("tried
+ * a circular crop first, but a scanned document or a landscape/group photo
+ * doesn't survive being cropped to a circle the way a portrait does").
+ * Smaller than the box's own 8px corner so the thumbnail still reads as
+ * nested inside it. */
+const IMG_CORNER = 6;
+/** Bitmap fetch size -- oversized relative to the ~70px display footprint
+ * (IMG_SIZE) the way gramps-web's own `getImageUrl(person, 100)` is, so it
+ * stays crisp on a high-DPI screen or once zoomed in. */
 const IMG_FETCH_SIZE = 100;
 
 /** Slots 1 (blue) and 5 (magenta) of the validated categorical palette
@@ -207,48 +219,50 @@ function treeChartCore(
       return gender ? `${name} (${gender})` : name;
     });
 
-  // Thumbnail: a circle filled from a <pattern> holding the <image>, ported
-  // from gramps-web's own TreeChartCore rather than an SVG clip-path --
-  // that's the same technique, just without the second element a
-  // clip-path would need. IDs are namespaced per orientation: the ancestor
-  // and descendant trees are two separate hierarchies that both start
-  // their own node-id sequence at "p" (the shared root), so an unprefixed
-  // id would collide between them in this one shared <svg> document.
+  // Thumbnail: a plain <image> (preserveAspectRatio "slice", the SVG
+  // equivalent of CSS object-fit: cover) clipped to a rounded rect via a
+  // per-node <clipPath> -- not gramps-web's circle, see IMG_CORNER's own
+  // doc comment. IDs are namespaced per orientation: the ancestor and
+  // descendant trees are two separate hierarchies that both start their
+  // own node-id sequence at "p" (the shared root), so an unprefixed id
+  // would collide between them in this one shared <svg> document.
   const thumbnailUrl = (d: HierarchyPointNode<TreeNode>): string | null =>
     token && d.data.person ? personThumbnailUrl(token, d.data.person, IMG_FETCH_SIZE) : null;
   const withImage = withPerson.filter((d) => !!thumbnailUrl(d));
-
-  withImage
-    .append("circle")
-    .attr("r", IMG_RADIUS)
-    .attr("cy", -BOX_HEIGHT / 2 + IMG_RADIUS + IMG_PADDING)
-    .attr("cx", -BOX_WIDTH / 2 + IMG_RADIUS + IMG_PADDING)
-    .attr("fill", (d) => `url(#imgpattern-${orientation}-${d.data.id})`);
+  const imgX = -BOX_WIDTH / 2 + IMG_PADDING;
+  const imgY = -BOX_HEIGHT / 2 + IMG_PADDING;
 
   const defs = svgParent.append("defs");
   defs
-    .selectAll(".imgpattern")
+    .selectAll(".imgclip")
     .data(withImage.data())
     .enter()
-    .append("pattern")
-    .attr("id", (d) => `imgpattern-${orientation}-${d.data.id}`)
-    .attr("height", 1)
-    .attr("width", 1)
-    .attr("x", "0")
-    .attr("y", "0")
+    .append("clipPath")
+    .attr("id", (d) => `imgclip-${orientation}-${d.data.id}`)
+    .append("rect")
+    .attr("x", imgX)
+    .attr("y", imgY)
+    .attr("width", IMG_SIZE)
+    .attr("height", IMG_SIZE)
+    .attr("rx", IMG_CORNER)
+    .attr("ry", IMG_CORNER);
+
+  withImage
     .append("image")
-    .attr("x", 0)
-    .attr("y", 0)
-    .attr("height", IMG_RADIUS * 2)
-    .attr("width", IMG_RADIUS * 2)
+    .attr("x", imgX)
+    .attr("y", imgY)
+    .attr("width", IMG_SIZE)
+    .attr("height", IMG_SIZE)
+    .attr("preserveAspectRatio", "xMidYMid slice")
+    .attr("clip-path", (d) => `url(#imgclip-${orientation}-${d.data.id})`)
     .attr("xlink:href", (d) => thumbnailUrl(d)!);
 
   // Text starts further right of a box that has a thumbnail, to clear it --
   // per-node, since only some boxes in a tree have one.
   const textPadding = (d: HierarchyPointNode<TreeNode>) =>
-    thumbnailUrl(d) ? 2 * IMG_RADIUS + 2 * IMG_PADDING : 2 * TEXT_PADDING;
+    thumbnailUrl(d) ? IMG_SIZE + 2 * IMG_PADDING : 2 * TEXT_PADDING;
   const textWidth = (d: HierarchyPointNode<TreeNode>) =>
-    thumbnailUrl(d) ? BOX_WIDTH - 2 * IMG_PADDING - 2 * IMG_RADIUS : BOX_WIDTH - 2 * TEXT_PADDING;
+    thumbnailUrl(d) ? BOX_WIDTH - 2 * IMG_PADDING - IMG_SIZE : BOX_WIDTH - 2 * TEXT_PADDING;
   const textX = (d: HierarchyPointNode<TreeNode>) => -BOX_WIDTH / 2 + textPadding(d);
 
   const withName = node.filter((d) => !!(d.data.nameGiven || d.data.nameSurname));

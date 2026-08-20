@@ -91,12 +91,21 @@ function ancestorNode(
 }
 
 /** `generations` ancestor generations beyond the root (0 = root only).
- * Ported from gramps-web's getTree. */
+ * Ported from gramps-web's getTree -- `includeEmpty` defaults to `false`
+ * here to match gramps-web's *actual* box-tree call site
+ * (GrampsjsTreeChart.js's `getTree(this.data, handle, this.nAnc, false)`),
+ * not util.js's own default of `true`, which only the Fan Chart actually
+ * uses (its wedge geometry needs a uniform slot per generation regardless
+ * of whether that ancestor is known). `true` here means every unknown
+ * ancestor still reserves a full box-height layout slot all the way to
+ * the requested depth -- which is what was stretching real siblings far
+ * apart whenever their own ancestor lines ran out early, the common case
+ * for real data more than a couple of generations back. */
 export function buildAncestorTree(
   data: TreePersonRaw[],
   handle: string,
   generations: number,
-  includeEmpty = true,
+  includeEmpty = false,
 ): TreeNode {
   return ancestorNode(data, handle, generations + 1, includeEmpty, 0, "p");
 }
