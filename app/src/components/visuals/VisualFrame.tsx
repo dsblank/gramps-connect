@@ -19,6 +19,9 @@ interface VisualFrameProps {
   /** Bottom strip: what's plotted, and any cache-completeness caveat. */
   status?: ReactNode;
   loading: boolean;
+  /** Defaults to Map/Timeline's own copy -- override for a visual (Tree)
+   * whose loading state isn't "places and events". */
+  loadingText?: string;
   error: string | null;
   /** Rendered instead of `children` when there's nothing to plot, so each
    * visual can say why in its own terms. */
@@ -39,7 +42,9 @@ interface VisualFrameProps {
  * window is the most of it you can see. Clicking a marker or a dot is the
  * one thing that leaves -- it navigates to that record in Places or Events,
  * where the three-pane layout takes over. */
-export function VisualFrame({ title, scope, toolbar, status, loading, error, empty, children }: VisualFrameProps) {
+export function VisualFrame({
+  title, scope, toolbar, status, loading, loadingText = "Loading places and events…", error, empty, children,
+}: VisualFrameProps) {
   useDocumentTitle(`${title} — Gramps Connect`);
   return (
     <Box
@@ -73,7 +78,7 @@ export function VisualFrame({ title, scope, toolbar, status, loading, error, emp
           <Center>
             <Group gap="xs">
               <Loader size="sm" />
-              <Text size="sm" c="dimmed">Loading places and events…</Text>
+              <Text size="sm" c="dimmed">{loadingText}</Text>
             </Group>
           </Center>
         ) : empty ? (

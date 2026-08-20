@@ -58,17 +58,18 @@ function formatSubject(subject: VisualSubject): string {
   return `${subject.type}:${subject.handle}`;
 }
 
-/** The whole-tree visuals (View > Map, View > Timeline), which occupy the
- * same slot in a route as an object type's key even though they aren't
- * VIEWS entries: they plot every record of *two* types at once and have no
- * table, no selection and no store of their own, so there's nothing for a
- * ViewConfig to configure. Routed rather than held in component state so
- * they behave like every other page here -- Back steps out of one, a reload
- * lands back on it, and anything that wants to send the user to the map
- * (RelatedPanel's Map/Timeline buttons) only has to set the hash. They plot
- * the whole tree by default and one record's slice of it when the route
- * carries a VisualSubject. */
-export const VISUAL_KEYS = ["map", "timeline"] as const;
+/** The visual pages (View > Map, View > Timeline, View > Tree), which
+ * occupy the same slot in a route as an object type's key even though they
+ * aren't VIEWS entries: they have no table, no selection and no store of
+ * their own, so there's nothing for a ViewConfig to configure. Routed
+ * rather than held in component state so they behave like every other page
+ * here -- Back steps out of one, a reload lands back on it, and anything
+ * that wants to send the user to one (RelatedPanel's Map/Timeline/Tree
+ * buttons) only has to set the hash. Map and Timeline plot every record of
+ * two types at once by default and one record's slice of it when the route
+ * carries a VisualSubject; Tree has no such default -- a VisualSubject (or
+ * a pick made on arrival) is what it's rooted on, always. */
+export const VISUAL_KEYS = ["map", "timeline", "tree"] as const;
 export type VisualKey = (typeof VISUAL_KEYS)[number];
 
 export function isVisualKey(key: string): key is VisualKey {

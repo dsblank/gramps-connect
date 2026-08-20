@@ -283,17 +283,18 @@ export function MenuBar({ draftStack }: MenuBarProps) {
             onClick: () => draftStack.openDraft(type),
           }))}
         />
-        {/* Both are whole-tree overviews of data the app already has cached
-            locally, so neither needs a permission: anyone who can see the
-            Places and Events tables can see these. Each is a route rather
-            than a dialog (see hash.ts), so picking one is an ordinary
-            navigation -- App.tsx renders it over the whole content area,
-            and Back returns to the table you came from. */}
+        {/* None needs a permission: Map/Timeline read data the app already
+            has cached locally, and Tree's per-open fetch needs nothing
+            beyond being logged in, same as opening any other table. Each is
+            a route rather than a dialog (see hash.ts), so picking one is an
+            ordinary navigation -- App.tsx renders it over the whole content
+            area, and Back returns to the table you came from. */}
         <AppMenu
           label="View"
           items={[
             { label: "Map", onClick: () => goTo("map") },
             { label: "Timeline", onClick: () => goTo("timeline") },
+            { label: "Tree", onClick: () => goTo("tree") },
           ]}
         />
         <AppMenu

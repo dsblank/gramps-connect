@@ -18,6 +18,7 @@ import { AsideSplit } from "./components/AsideSplit";
 import { StatusBar } from "./components/StatusBar";
 import { MapView } from "./components/visuals/MapView";
 import { TimelineView } from "./components/visuals/TimelineView";
+import { TreeView } from "./components/visuals/TreeView";
 import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
@@ -65,10 +66,13 @@ const FOOTER_HEIGHT = 36;
 
 /** Which store the footer's load progress follows while a visual page is
  * open. A visual has no store of its own (see hash.ts's VISUAL_KEYS), but
- * it is drawn from these caches, so the footer keeps saying how much of the
- * relevant one has arrived -- which is exactly the caveat the visual's own
- * status strip is disclosing at the same time. */
-const VISUAL_STATUS_VIEW: Record<VisualKey, ViewConfig> = {
+ * Map/Timeline are drawn from these caches, so the footer keeps saying how
+ * much of the relevant one has arrived -- which is exactly the caveat each
+ * visual's own status strip is disclosing at the same time. Tree has no
+ * entry: its data is one network fetch per open, not a background-filling
+ * local cache, so there's no load progress for the footer to add to what
+ * VisualFrame's own loading state already says. */
+const VISUAL_STATUS_VIEW: Partial<Record<VisualKey, ViewConfig>> = {
   map: PLACE_VIEW,
   timeline: EVENT_VIEW,
 };
@@ -94,7 +98,7 @@ function AuthenticatedApp() {
   // progress for (see VISUAL_STATUS_VIEW), but Home has no single view's
   // progress to show, just the live-sync badge.
   const statusView = visualKey
-    ? VISUAL_STATUS_VIEW[visualKey]
+    ? VISUAL_STATUS_VIEW[visualKey] ?? null
     : isHome
     ? null
     : VIEWS.find((v) => v.key === activeKey)!;
@@ -222,6 +226,9 @@ function AuthenticatedApp() {
           {visualKey === "map" && <Box style={{ height: visualHeight }}><MapView subject={visualSubject} /></Box>}
           {visualKey === "timeline" && (
             <Box style={{ height: visualHeight }}><TimelineView subject={visualSubject} /></Box>
+          )}
+          {visualKey === "tree" && (
+            <Box style={{ height: visualHeight }}><TreeView subject={visualSubject} /></Box>
           )}
           {/* Unlike the two above, not height-bounded to visualHeight: a
               dashboard's content isn't a canvas that measures itself against
