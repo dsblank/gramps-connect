@@ -267,23 +267,6 @@ export function useDraftStack(): UseDraftStack {
     return handle;
   }
 
-  // A story note's text.string (storyApi.ts's createStoryNote) is written
-  // compact -- reformatted once here, on load into an edit draft, into
-  // something actually editable by hand in ObjectEditDialog.tsx's "json"
-  // field. Mutates `data` in place: it's a fresh object this call just
-  // built, nothing else holds a reference to it yet. Left alone (not an
-  // error) if it isn't valid JSON -- the "json" field surfaces that itself
-  // rather than this silently reformatting garbage.
-  function prettyPrintStoryText(data: Record<string, unknown>): void {
-    const text = data.text as { string?: string } | undefined;
-    if (!text?.string) return;
-    try {
-      text.string = JSON.stringify(JSON.parse(text.string), null, 2);
-    } catch {
-      // not valid JSON -- leave as-is
-    }
-  }
-
   function openEditDraft(type: DraftType, handle: string, openedFrom?: DraftEntry["openedFrom"]) {
     // Re-editing a handle that's already in `stack` (e.g. Cancel, then Edit
     // the same object again) must *reset* that entry in place rather than
@@ -316,7 +299,6 @@ export function useDraftStack(): UseDraftStack {
       try {
         const token = await getToken();
         const data = await fetchPlainObject(token, VIEW_BY_TYPE[type], handle);
-        if (type === "story") prettyPrintStoryText(data);
         setStack((prev) => prev.map((d) => (d.handle === handle ? { ...d, data, status: "ready" } : d)));
       } catch (err: any) {
         setStack((prev) =>

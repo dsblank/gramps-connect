@@ -275,6 +275,30 @@ export function RelatedPanel({
   // stale in both this panel's title/button and the Tags section below it.
   const [refetchNonce, setRefetchNonce] = useState(0);
 
+  // EditButton opens a draft into `draftStack` but has no way to tell this
+  // panel when the resulting save actually lands -- saveAll() isn't called
+  // from here, it's wired at App.tsx's dialog-shell level, covering every
+  // open draft at once, not just this handle's. So: catch the
+  // saving-true -> saving-false transition instead, and refetch (same as
+  // MessageActions' own refetchNonce bump above) whenever it resolves
+  // without error. Fires for every panel currently mounted regardless of
+  // which handle was actually saved -- an extra fetchObjectExtended for an
+  // unrelated record is cheap, and it's the same "just refetch, don't try
+  // to be precise" tradeoff getViewStore(type).requeryDebounced() already
+  // makes for the list caches.
+  const wasSavingRef = useRef(false);
+  useEffect(() => {
+    if (!draftStack) return;
+    if (draftStack.saving) {
+      wasSavingRef.current = true;
+      return;
+    }
+    if (wasSavingRef.current) {
+      wasSavingRef.current = false;
+      if (!draftStack.error) setRefetchNonce((n) => n + 1);
+    }
+  }, [draftStack, draftStack?.saving, draftStack?.error]);
+
   useDocumentTitle(
     updateDocumentTitle && state.status === "ready"
       ? `${summaryLine(view.key, state.detail) || view.label} — Gramps Connect`

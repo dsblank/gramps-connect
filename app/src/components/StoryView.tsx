@@ -34,6 +34,29 @@ function isLocated(p: HydratedSlide): p is HydratedSlide & { lat: number; long: 
   return p.lat != null && p.long != null;
 }
 
+// Matches StoryTextField.tsx's own markers -- `**bold**` before `*italic*`
+// so a bold span's own `**` pair isn't misread as two empty italic spans.
+const STYLE_MARKERS = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+
+/** Turns StoryTextField.tsx's `**bold**`/`*italic*` markers into `<b>`/`<i>`
+ * spans -- deliberately just these two, matching that field's own toolbar;
+ * anything else (literal asterisks, unmatched markers) passes through as
+ * plain text. */
+function renderStoryText(text: string): React.ReactNode {
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = STYLE_MARKERS.exec(text))) {
+    if (match.index > last) nodes.push(text.slice(last, match.index));
+    if (match[1] !== undefined) nodes.push(<b key={key++}>{match[1]}</b>);
+    else nodes.push(<i key={key++}>{match[2]}</i>);
+    last = STYLE_MARKERS.lastIndex;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 /** Resolves `spec`'s refs into display data every time it changes -- see
  * storyHydration.ts. Runs real async work (a visualData load plus one mime
  * fetch per distinct photo), so callers see `null` until it resolves. */
@@ -90,7 +113,7 @@ function StorySlideContent({ slide }: { slide: HydratedSlide | undefined }) {
           </Text>
         )}
         <Text size="xl" fw={700}>{slide?.title}</Text>
-        <Text>{slide?.text}</Text>
+        <Text>{slide?.text ? renderStoryText(slide.text) : null}</Text>
       </Stack>
     </>
   );
@@ -138,7 +161,17 @@ function NavArrows({ index, total, onPrev, onNext, variant }: {
   );
 }
 
-export function StoryView({ spec, opened, onClose }: { spec: StorySpec | null; opened: boolean; onClose: () => void }) {
+export function StoryView({ spec, opened, onClose, stackId }: {
+  spec: StorySpec | null; opened: boolean; onClose: () => void;
+  /** Only set when opened from inside another Mantine Modal.Stack (see
+   * StoryEditor.tsx's Preview button) -- without it, this plain unstacked
+   * Modal defaults to the same base z-index as the dialog it's nested
+   * inside, and renders *underneath* it rather than on top (Modal.mjs only
+   * asks the stack for a z-index/focus-trap/overlay when both a `stackId`
+   * and a surrounding Modal.Stack context are present). StoryActions.tsx's
+   * standalone Present button (no surrounding stack) leaves this unset. */
+  stackId?: string;
+}) {
   const dark = useComputedColorScheme("light") === "dark";
   const [index, setIndex] = useState(0);
   const hydrated = useHydratedStory(spec);
@@ -178,7 +211,7 @@ export function StoryView({ spec, opened, onClose }: { spec: StorySpec | null; o
 
   return (
     <Modal
-      opened={opened} onClose={onClose} fullScreen withCloseButton={false}
+      opened={opened} onClose={onClose} fullScreen withCloseButton={false} stackId={stackId}
       styles={{ body: { padding: 0 } }}
     >
       {/* Mantine's own Modal title bar is `position: sticky` in normal

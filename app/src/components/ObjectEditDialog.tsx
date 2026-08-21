@@ -17,6 +17,8 @@ import { withGrampsId } from "./related/summary";
 import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
+import { StoryEditor } from "./story/StoryEditor";
+import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
 
 type FieldSpec =
@@ -27,7 +29,7 @@ type FieldSpec =
   | { kind: "date"; key: string; label: string }
   | { kind: "placeName"; label: string }
   | { kind: "styledText"; key: string; label: string }
-  | { kind: "json"; key: string; label: string }
+  | { kind: "storyEditor"; key: string; label: string }
   | {
       kind: "reference"; key: string; label: string; refView: ViewConfig; refField: string; required?: boolean;
       /** Opts this field into "+ New <Type>" / "✎ Edit" on top of plain
@@ -205,13 +207,13 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     ],
   },
   // A story note's text.string is a JSON-stringified StorySpec
-  // (storyBuilder.ts), not free text -- "json" (below) is the same
-  // {_class: "StyledText", string} read/write shape "styledText" uses for
-  // an ordinary Note's text, just pretty-printed/validated as JSON. No
-  // citation_list/media_list/note_list fields: a story note doesn't
-  // reference those the way a person or event would.
+  // (storyBuilder.ts), not free text -- "storyEditor" (below) reads/writes
+  // the same {_class: "StyledText", string} shape "styledText" uses for an
+  // ordinary Note's text, just presented as a structured slide list instead
+  // of hand-edited JSON. No citation_list/media_list/note_list fields: a
+  // story note doesn't reference those the way a person or event would.
   story: {
-    quick: [GRAMPS_ID_FIELD, { kind: "json", key: "text", label: "Story JSON" }],
+    quick: [GRAMPS_ID_FIELD, { kind: "storyEditor", key: "text", label: "Story" }],
     details: [
       { kind: "switch", key: "private", label: "Private" },
       TAGS_FIELD,
@@ -494,34 +496,28 @@ export function ObjectEditDialog({
           />
         );
       }
-      case "json": {
-        // Same {_class: "StyledText", string} shape as "styledText" --
-        // draftStack.ts's openEditDraft pretty-prints this field's value
-        // once, on load (storyApi.ts writes it compact), so this is just
-        // an ordinary controlled Textarea like styledText's own, with a
-        // monospace font and a live JSON-validity check surfaced as both
-        // an inline error and (below, missingRequired's sibling
-        // `invalidJson`) a disabled Save button -- writing broken JSON
-        // back would leave StoryActions.tsx unable to parse it at all.
+      case "storyEditor": {
+        // Same {_class: "StyledText", string} shape as "styledText" -- just
+        // a StorySpec JSON-stringified into it rather than free text. Parsed
+        // back into a spec for StoryEditor to render as a slide list; falls
+        // back to an empty spec if the stored JSON is somehow missing or
+        // invalid (only reachable at all in edit mode on an already-created
+        // story note, so this is a defensive fallback, not a real path).
         const text = (draft.data[f.key] ?? {}) as Record<string, unknown>;
-        const value = (text.string as string | undefined) ?? "";
-        let jsonError: string | null = null;
+        const raw = (text.string as string | undefined) ?? "";
+        let spec: StorySpec;
         try {
-          JSON.parse(value);
-        } catch (err: any) {
-          jsonError = err.message ?? "Invalid JSON";
+          const parsed = JSON.parse(raw);
+          spec = { title: typeof parsed.title === "string" ? parsed.title : "", points: Array.isArray(parsed.points) ? parsed.points : [] };
+        } catch {
+          spec = { title: "", points: [] };
         }
         return (
-          <Textarea
+          <StoryEditor
             key={f.key}
-            label={f.label}
-            styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
-            autosize
-            minRows={16}
-            maxRows={40}
-            value={value}
-            error={jsonError}
-            onChange={(e) => onChange({ [f.key]: { _class: "StyledText", ...text, string: e.currentTarget.value } })}
+            spec={spec}
+            onChange={(next) => onChange({ [f.key]: { _class: "StyledText", ...text, string: JSON.stringify(next) } })}
+            previewStackId={`${draft.handle}-story-preview`}
           />
         );
       }
@@ -636,16 +632,22 @@ export function ObjectEditDialog({
   const missingRequired = allFields(draft.type).some(
     (f) => f.kind === "reference" && f.required && !draft.data[f.key]
   );
-  const invalidJson = allFields(draft.type).some((f) => {
-    if (f.kind !== "json") return false;
+  // A story needs a title and at least one slide -- StoryEditor can't
+  // produce invalid JSON (it writes a JSON.stringify'd object, not
+  // hand-typed text), so this replaces the old "json" field kind's
+  // parse-validity check with the structural minimum StoryActions.tsx's
+  // Present button and storyHydration.ts both expect.
+  const invalidStory = draft.type === "story" && (() => {
+    const f = allFields(draft.type).find((field): field is Extract<FieldSpec, { kind: "storyEditor" }> => field.kind === "storyEditor");
+    if (!f) return false;
     const text = (draft.data[f.key] as { string?: string } | undefined)?.string ?? "";
     try {
-      JSON.parse(text);
-      return false;
+      const spec = JSON.parse(text);
+      return !(typeof spec.title === "string" && spec.title.trim() && Array.isArray(spec.points) && spec.points.length > 0);
     } catch {
       return true;
     }
-  });
+  })();
 
   return (
     <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
@@ -673,7 +675,7 @@ export function ObjectEditDialog({
           <Button variant="default" onClick={onCancel} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={onPrimary} loading={saving} disabled={missingRequired || invalidJson}>
+          <Button onClick={onPrimary} loading={saving} disabled={missingRequired || invalidStory}>
             {primaryLabel}
           </Button>
         </Group>
