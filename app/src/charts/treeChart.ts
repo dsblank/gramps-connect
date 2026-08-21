@@ -23,7 +23,14 @@ import { max, min } from "d3-array";
 import { hierarchy, tree as d3tree, type HierarchyPointNode } from "d3-hierarchy";
 import { create, type Selection } from "d3-selection";
 import { curveBumpX, link } from "d3-shape";
-import { zoom, type ZoomTransform } from "d3-zoom";
+// Side-effect only: patches Selection.prototype with `.transition()` (and
+// its own type augmentation), which the animated select-driven re-center
+// below needs -- `svg.transition().call(zoomBehavior.transform, ...)`, the
+// standard d3-zoom pattern for animating to a computed transform while
+// keeping its own internal gesture state in sync throughout, not just at
+// the end.
+import "d3-transition";
+import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { personThumbnailUrl, type TreeNode } from "../store/treeData";
 
 const BOX_WIDTH = 190;
@@ -118,18 +125,22 @@ interface CoreOptions {
 }
 
 /** Lays out and draws one generation-tree (ancestors or descendants) into
- * `svgParent`, returning [xOffset, yOffset, width, height, rootX] --
- * gramps-web's TreeChartCore's four plus its constant 5th "overlap" return
- * value (`boxWidth + 2*padding`, inlined at the call site below instead) --
- * with the root's own vertical position appended, for renderTreeChart to
- * frame the initial view on rather than the tree's whole bounding box (see
- * its own doc comment on why). */
+ * `svgParent`, returning [xOffset, yOffset, width, height, rootX,
+ * selectedPos] -- gramps-web's TreeChartCore's four plus its constant 5th
+ * "overlap" return value (`boxWidth + 2*padding`, inlined at the call site
+ * below instead) -- with the root's own vertical position appended, for
+ * renderTreeChart to frame the initial view on rather than the tree's whole
+ * bounding box (see its own doc comment on why), and (if `selectedHandle`
+ * lands in this half) that node's own position -- relative to `svgParent`'s
+ * own origin, i.e. still missing renderTreeChart's own per-half outer
+ * offset, the same as `rootX` is documented to be complete without it --
+ * for renderTreeChart to center the view on when re-centering on select. */
 function treeChartCore(
   svgParent: Selection<SVGGElement, undefined, null, undefined>,
   data: TreeNode,
   orientation: "LTR" | "RTL",
   { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand }: CoreOptions,
-): [number, number, number, number, number] {
+): [number, number, number, number, number, { x: number; y: number } | null] {
   const root: HierarchyPointNode<TreeNode> = d3tree<TreeNode>()
     .nodeSize([BOX_HEIGHT + GAP_Y, BOX_WIDTH + GAP_X])
     .separation(() => 1)(hierarchy(data, (d) => d.children));
@@ -154,6 +165,13 @@ function treeChartCore(
   const height = maxX - minX + BOX_HEIGHT;
   const yOffset = minX - BOX_HEIGHT / 2;
   const xOffset = orientation === "RTL" ? BOX_WIDTH / 2 + PADDING - width : -BOX_WIDTH / 2 - PADDING;
+
+  // Position of the selected node (if it's in this half), relative to
+  // `svgParent`'s own origin -- i.e. already accounting for `chart`'s own
+  // `-xOffset` translate below, same as every node's final drawn position
+  // does, but still missing renderTreeChart's own per-half outer offset.
+  const selectedNode = selectedHandle ? descendants.find((d) => d.data.person?.handle === selectedHandle) : undefined;
+  const selectedPos = selectedNode ? { x: -xOffset + selectedNode.y, y: selectedNode.x } : null;
 
   const chart = svgParent.append("g").attr("transform", `translate(${-xOffset},0)`);
 
@@ -403,7 +421,7 @@ function treeChartCore(
     .style("pointer-events", "none")
     .text((d) => (expandingKeys?.has(`${direction}:${d.data.person!.handle}`) ? "…" : "+"));
 
-  return [xOffset, yOffset, width, height, rootX];
+  return [xOffset, yOffset, width, height, rootX, selectedPos];
 }
 
 export interface TreeChartOptions {
@@ -432,6 +450,12 @@ export interface TreeChartOptions {
   expandingKeys?: Set<string>;
   /** See CoreOptions' own doc comment -- threaded straight through. */
   onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant") => void;
+  /** When true and `selectedHandle` is found in either half, the view pans
+   * to center that node instead of applying `initialZoom` as-is (current
+   * zoom scale is kept either way) -- components/visuals/TreeChart.tsx sets
+   * this only on the render where `selectedHandle` just changed to a new
+   * person, not on every rebuild while the same person stays selected. */
+  centerOnSelect?: boolean;
 }
 
 /** Draws both halves (descendants on the left, RTL, ancestors on the right,
@@ -441,20 +465,24 @@ export interface TreeChartOptions {
 export function renderTreeChart(
   ancestorTree: TreeNode | null,
   descendantTree: TreeNode | null,
-  { bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand }: TreeChartOptions,
+  {
+    bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand,
+    centerOnSelect,
+  }: TreeChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 13);
   const chartContent = svg.append("g").attr("id", "tree-chart-content");
 
-  svg.call(
-    zoom<SVGSVGElement, undefined>().on("zoom", (e) => {
-      chartContent.attr("transform", e.transform.toString());
-    })
-  );
-  if (initialZoom) {
-    (svg.node() as unknown as { __zoom: ZoomTransform }).__zoom = initialZoom;
-    chartContent.attr("transform", initialZoom.toString());
-  }
+  // Kept as its own binding (not just `svg.call(zoom<...>()...)` inline) so
+  // a select-driven re-center below can animate through it via
+  // `.call(zoomBehavior.transform, ...)` -- the same zoom behavior d3-zoom
+  // itself expects to drive a transition, so its internal gesture state
+  // (`__zoom`) stays correctly in sync throughout the animation, not just
+  // at the end of it.
+  const zoomBehavior = zoom<SVGSVGElement, undefined>().on("zoom", (e) => {
+    chartContent.attr("transform", e.transform.toString());
+  });
+  svg.call(zoomBehavior);
 
   // The two halves are butted together at their shared root: the overlap is
   // exactly one root box (boxWidth + 2*padding), gramps-web's TreeChartCore
@@ -474,21 +502,29 @@ export function renderTreeChart(
   // both are present.
   let rootXSum = 0;
   let rootXCount = 0;
+  // Composite position of the selected node, relative to chartContent's own
+  // origin (i.e. with each half's own outer offset already folded in,
+  // unlike treeChartCore's own return value) -- null if there's no
+  // selection, or it isn't in either currently-loaded half.
+  let selectedAbsPos: { x: number; y: number } | null = null;
   const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand };
 
   if (descendantTree) {
     const chartD = chartContent.append("g");
-    const [, , widthD, , rootXD] = treeChartCore(chartD, descendantTree, "RTL", coreOptions);
-    chartD.attr("transform", `translate(${-widthD + overlap},0)`);
+    const [, , widthD, , rootXD, selD] = treeChartCore(chartD, descendantTree, "RTL", coreOptions);
+    const offsetD = -widthD + overlap;
+    chartD.attr("transform", `translate(${offsetD},0)`);
     rootXSum += rootXD;
     rootXCount += 1;
+    if (selD) selectedAbsPos = { x: offsetD + selD.x, y: selD.y };
   }
   if (ancestorTree) {
     const chartA = chartContent.append("g");
-    const [, , , , rootXA] = treeChartCore(chartA, ancestorTree, "LTR", coreOptions);
+    const [, , , , rootXA, selA] = treeChartCore(chartA, ancestorTree, "LTR", coreOptions);
     chartA.attr("transform", "translate(0,0)");
     rootXSum += rootXA;
     rootXCount += 1;
+    if (selA) selectedAbsPos = { x: selA.x, y: selA.y };
   }
   const rootVertical = rootXCount > 0 ? rootXSum / rootXCount : 0;
   const rootHorizontal = BOX_WIDTH / 2 + PADDING;
@@ -498,5 +534,31 @@ export function renderTreeChart(
 
   svg.attr("viewBox", `${xOffset} ${yOffset} ${bboxWidth} ${bboxHeight}`);
   svg.attr("width", bboxWidth).attr("height", bboxHeight);
+
+  // The viewBox above is framed so that content-space point
+  // (rootHorizontal, rootVertical) always sits at the exact center of the
+  // visible area, regardless of zoom -- so centering on a different point P
+  // just needs a transform placing P there instead: k stays whatever it
+  // already was (a select shouldn't also change zoom level), only the
+  // translate changes. Falls back to `initialZoom` as-is (or identity) when
+  // not re-centering, preserving pan/zoom across an unrelated rebuild the
+  // same way this always has.
+  const k = initialZoom?.k ?? 1;
+  if (centerOnSelect && selectedAbsPos) {
+    const centered = zoomIdentity.translate(rootHorizontal, rootVertical).scale(k).translate(-selectedAbsPos.x, -selectedAbsPos.y);
+    // Start from wherever the view already was (an instant jump, same as
+    // the non-animated branch below) and animate *from* there -- without
+    // this, the transition would interpolate from identity (k=1, x=y=0)
+    // instead, a visible snap-then-slide on the very first select.
+    if (initialZoom) {
+      (svg.node() as unknown as { __zoom: ZoomTransform }).__zoom = initialZoom;
+      chartContent.attr("transform", initialZoom.toString());
+    }
+    svg.transition().duration(300).call(zoomBehavior.transform, centered);
+  } else if (initialZoom) {
+    (svg.node() as unknown as { __zoom: ZoomTransform }).__zoom = initialZoom;
+    chartContent.attr("transform", initialZoom.toString());
+  }
+
   return svg.node()!;
 }

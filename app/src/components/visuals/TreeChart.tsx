@@ -60,6 +60,11 @@ export function TreeChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const zoomRef = useRef<ZoomTransform | null>(null);
+  // The previous render's selection, so a *new* selection (someone just
+  // clicked a different person) can be told apart from `selectedHandle`
+  // simply being unchanged across an unrelated rebuild (an expand, a
+  // resize, a theme flip) -- only the former should re-center the view.
+  const prevSelectedHandleRef = useRef<string | null>(null);
   const dark = useComputedColorScheme("light") === "dark";
 
   useEffect(() => {
@@ -81,6 +86,9 @@ export function TreeChart({
     const existing = container.querySelector("svg");
     if (existing) zoomRef.current = zoomTransform(existing);
 
+    const justSelected = selectedHandle !== null && selectedHandle !== prevSelectedHandleRef.current;
+    prevSelectedHandleRef.current = selectedHandle;
+
     const svg = renderTreeChart(ancestorTree, descendantTree, {
       bboxWidth: size.width,
       bboxHeight: size.height,
@@ -91,6 +99,7 @@ export function TreeChart({
       token,
       expandingKeys,
       onExpand,
+      centerOnSelect: justSelected,
     });
     container.replaceChildren(svg);
 
