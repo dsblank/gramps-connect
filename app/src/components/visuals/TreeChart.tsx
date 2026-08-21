@@ -31,8 +31,10 @@ interface TreeChartProps {
    * pan/zoom/scroll (this component's own IntersectionObserver below).
    * `label` is the node's own branch id (TreeNode.id, e.g. "pfm"). Already
    * idempotent on TreeView's side, so this component doesn't need to guard
-   * against re-firing for the same element. */
-  onExpand: (label: string, handle: string, direction: "ancestor" | "descendant") => void;
+   * against re-firing for the same element. `source` tells a direct click
+   * apart from an automatic reveal -- see this file's own `justExpanded`
+   * below for why only the former re-centers the view. */
+  onExpand: (label: string, handle: string, direction: "ancestor" | "descendant", source: "click" | "auto") => void;
   /** `${direction}:${handle}` keys currently in flight, mirrored from
    * TreeView's own guard -- shows a small loading state on that marker
    * instead of one a reveal/click would just re-trigger. */
@@ -44,6 +46,13 @@ interface TreeChartProps {
    * (a backgrounded/occluded tab throttles IntersectionObserver entirely,
    * see this file's own doc comment) or is simply unwanted. */
   autoExpandEnabled: boolean;
+  /** TreeView's own record of the handle whose boundary marker was most
+   * recently clicked (not auto-revealed) to expand it -- once that fetch
+   * resolves and the tree rebuilds with the new generation, this component
+   * re-centers the view on it the same way a fresh selection does, so the
+   * node the user just expanded stays where they were looking instead of
+   * drifting as new boxes appear around it. `null` once nothing's pending. */
+  expandCenterHandle: string | null;
 }
 
 /** Owns a plain `div` and hands its DOM to the d3 renderer -- same
@@ -56,6 +65,7 @@ interface TreeChartProps {
  * `dark` (see its own `seriesColor(dark)`). */
 export function TreeChart({
   ancestorTree, descendantTree, selectedHandle, onSelectPerson, token, onExpand, expandingKeys, autoExpandEnabled,
+  expandCenterHandle,
 }: TreeChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -65,6 +75,9 @@ export function TreeChart({
   // simply being unchanged across an unrelated rebuild (an expand, a
   // resize, a theme flip) -- only the former should re-center the view.
   const prevSelectedHandleRef = useRef<string | null>(null);
+  // Same idea for `expandCenterHandle`: told apart from "still the same
+  // pending/last-expanded handle across an unrelated rebuild" the same way.
+  const prevExpandCenterHandleRef = useRef<string | null>(null);
   const dark = useComputedColorScheme("light") === "dark";
 
   useEffect(() => {
@@ -89,6 +102,17 @@ export function TreeChart({
     const justSelected = selectedHandle !== null && selectedHandle !== prevSelectedHandleRef.current;
     prevSelectedHandleRef.current = selectedHandle;
 
+    const justExpanded =
+      expandCenterHandle !== null && expandCenterHandle !== prevExpandCenterHandleRef.current;
+    prevExpandCenterHandleRef.current = expandCenterHandle;
+
+    // A fresh selection wins if somehow both fire on the same render --
+    // either way, at most one of these is ever true in practice, since
+    // selecting a person and clicking a boundary marker are mutually
+    // exclusive gestures (the marker's own click handler stops propagation
+    // so it never also selects the box it's drawn on).
+    const centerHandle = justSelected ? selectedHandle : justExpanded ? expandCenterHandle : null;
+
     const svg = renderTreeChart(ancestorTree, descendantTree, {
       bboxWidth: size.width,
       bboxHeight: size.height,
@@ -99,7 +123,8 @@ export function TreeChart({
       token,
       expandingKeys,
       onExpand,
-      centerOnSelect: justSelected,
+      centerHandle,
+      centerOnSelect: centerHandle !== null,
     });
     container.replaceChildren(svg);
 
@@ -139,7 +164,7 @@ export function TreeChart({
           const el = entry.target as SVGRectElement;
           const { handle, direction, label } = el.dataset;
           if (!handle || !direction || !label) continue;
-          onExpand(label, handle, direction as "ancestor" | "descendant");
+          onExpand(label, handle, direction as "ancestor" | "descendant", "auto");
         }
       },
       { root: container, threshold: 0.4 },
@@ -149,7 +174,7 @@ export function TreeChart({
     return () => io.disconnect();
   }, [
     ancestorTree, descendantTree, size.width, size.height, selectedHandle, onSelectPerson, dark, token, onExpand,
-    expandingKeys, autoExpandEnabled,
+    expandingKeys, autoExpandEnabled, expandCenterHandle,
   ]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;

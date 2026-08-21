@@ -75,6 +75,15 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const fetchedExpansionsRef = useRef<Set<string>>(new Set());
   const expandingRef = useRef<Set<string>>(new Set());
 
+  // The handle whose boundary marker was most recently *clicked* (never an
+  // auto-expand-on-reveal) -- TreeChart.tsx re-centers the view on it once
+  // the resulting rebuild lands, the same "pan to the thing that just
+  // became relevant" treatment a fresh selection gets, so the node the user
+  // clicked to expand doesn't drift out of view as new boxes appear around
+  // it. Left set after that (rather than cleared) is fine: TreeChart.tsx
+  // only reacts to it *changing*, same as `selectedHandle`.
+  const [expandCenterHandle, setExpandCenterHandle] = useState<string | null>(null);
+
   useEffect(() => {
     setRoot(null);
     // A new root (a different record's Tree button, or a fresh pick) makes
@@ -85,6 +94,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     setExpandedAncestor(new Set());
     setExpandedDescendant(new Set());
     setExpandingKeys(new Set());
+    setExpandCenterHandle(null);
     fetchedExpansionsRef.current = new Set();
     expandingRef.current = new Set();
     if (!subject) return;
@@ -150,7 +160,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // this person's next generation into `data`, marks the label expanded for
   // free with no network round-trip at all.
   const expandNode = useCallback(
-    async (label: string, handle: string, direction: "ancestor" | "descendant") => {
+    async (label: string, handle: string, direction: "ancestor" | "descendant", source: "click" | "auto") => {
       const key = `${direction}:${handle}`;
       if (!fetchedExpansionsRef.current.has(key)) {
         if (expandingRef.current.has(key)) return;
@@ -177,6 +187,10 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       }
       const setExpanded = direction === "ancestor" ? setExpandedAncestor : setExpandedDescendant;
       setExpanded((prev) => (prev.has(label) ? prev : new Set(prev).add(label)));
+      // Only a direct click re-centers -- an auto-expand-on-reveal already
+      // happened because the user panned that node into view themselves, so
+      // yanking the view back to it would fight the very pan that caused it.
+      if (source === "click") setExpandCenterHandle(handle);
     },
     [data, token],
   );
@@ -273,6 +287,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           onExpand={expandNode}
           expandingKeys={expandingKeys}
           autoExpandEnabled={!manualExpandOnly}
+          expandCenterHandle={expandCenterHandle}
         />
       )}
       {selectedPerson && (

@@ -119,9 +119,18 @@ interface CoreOptions {
   /** Clicking a boundary marker always expands it, regardless of the
    * manual-expand-only preference (treeExpandPreference.ts) -- that
    * preference only gates whether TreeChart.tsx's own reveal observer also
-   * fires this automatically. Same signature as the observer's own trigger,
-   * see TreeChart.tsx's doc comment on why. */
-  onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant") => void;
+   * fires this automatically. `source` tells the two triggers apart (this
+   * module's own click handler below vs. TreeChart.tsx's reveal observer) --
+   * TreeView.tsx only re-centers the view on the former, since re-centering
+   * on an automatic reveal would fight the pan that just caused it. */
+  onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant", source: "click" | "auto") => void;
+  /** The node to pan/animate the view onto, independent of `selectedHandle`
+   * (which only controls the ring) -- renderTreeChart sets this to whichever
+   * node just became relevant: a fresh selection, or (TreeView.tsx) the
+   * node whose boundary marker was just clicked to expand it. Kept apart
+   * from `selectedHandle` so expanding a node re-centers on it without also
+   * ringing it or opening its detail card. */
+  centerHandle?: string | null;
 }
 
 /** Lays out and draws one generation-tree (ancestors or descendants) into
@@ -139,7 +148,7 @@ function treeChartCore(
   svgParent: Selection<SVGGElement, undefined, null, undefined>,
   data: TreeNode,
   orientation: "LTR" | "RTL",
-  { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand }: CoreOptions,
+  { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, centerHandle }: CoreOptions,
 ): [number, number, number, number, number, { x: number; y: number } | null] {
   const root: HierarchyPointNode<TreeNode> = d3tree<TreeNode>()
     .nodeSize([BOX_HEIGHT + GAP_Y, BOX_WIDTH + GAP_X])
@@ -166,12 +175,15 @@ function treeChartCore(
   const yOffset = minX - BOX_HEIGHT / 2;
   const xOffset = orientation === "RTL" ? BOX_WIDTH / 2 + PADDING - width : -BOX_WIDTH / 2 - PADDING;
 
-  // Position of the selected node (if it's in this half), relative to
+  // Position of the pan/center target (if it's in this half), relative to
   // `svgParent`'s own origin -- i.e. already accounting for `chart`'s own
   // `-xOffset` translate below, same as every node's final drawn position
   // does, but still missing renderTreeChart's own per-half outer offset.
-  const selectedNode = selectedHandle ? descendants.find((d) => d.data.person?.handle === selectedHandle) : undefined;
-  const selectedPos = selectedNode ? { x: -xOffset + selectedNode.y, y: selectedNode.x } : null;
+  // Deliberately keyed off `centerHandle`, not `selectedHandle`: the two
+  // usually agree (a fresh selection), but an expand-triggered re-center
+  // targets the expanded node without selecting it.
+  const centerNode = centerHandle ? descendants.find((d) => d.data.person?.handle === centerHandle) : undefined;
+  const centerPos = centerNode ? { x: -xOffset + centerNode.y, y: centerNode.x } : null;
 
   const chart = svgParent.append("g").attr("transform", `translate(${-xOffset},0)`);
 
@@ -389,7 +401,7 @@ function treeChartCore(
     .style("cursor", "pointer")
     .on("click", (event, d) => {
       event.stopPropagation();
-      if (d.data.person) onExpand?.(d.data.id!, d.data.person.handle, direction);
+      if (d.data.person) onExpand?.(d.data.id!, d.data.person.handle, direction, "click");
     });
 
   // Purely decorative -- a small dot most of the time, a dimmed "…" while
@@ -421,7 +433,7 @@ function treeChartCore(
     .style("pointer-events", "none")
     .text((d) => (expandingKeys?.has(`${direction}:${d.data.person!.handle}`) ? "…" : "+"));
 
-  return [xOffset, yOffset, width, height, rootX, selectedPos];
+  return [xOffset, yOffset, width, height, rootX, centerPos];
 }
 
 export interface TreeChartOptions {
@@ -449,12 +461,18 @@ export interface TreeChartOptions {
   /** See CoreOptions' own doc comment -- threaded straight through. */
   expandingKeys?: Set<string>;
   /** See CoreOptions' own doc comment -- threaded straight through. */
-  onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant") => void;
-  /** When true and `selectedHandle` is found in either half, the view pans
-   * to center that node instead of applying `initialZoom` as-is (current
-   * zoom scale is kept either way) -- components/visuals/TreeChart.tsx sets
-   * this only on the render where `selectedHandle` just changed to a new
-   * person, not on every rebuild while the same person stays selected. */
+  onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant", source: "click" | "auto") => void;
+  /** See CoreOptions' own doc comment -- threaded straight through. Usually
+   * equal to `selectedHandle` (components/visuals/TreeChart.tsx sets it to
+   * that on a fresh selection), but set to the just-expanded node's handle
+   * instead on an expand-triggered re-center, so that case pans the view
+   * without also ringing/selecting the node. */
+  centerHandle?: string | null;
+  /** When true and `centerHandle` is found in either half, the view pans to
+   * center that node instead of applying `initialZoom` as-is (current zoom
+   * scale is kept either way) -- components/visuals/TreeChart.tsx sets this
+   * only on the render where the center target just changed, not on every
+   * rebuild while it stays the same. */
   centerOnSelect?: boolean;
 }
 
@@ -467,7 +485,7 @@ export function renderTreeChart(
   descendantTree: TreeNode | null,
   {
     bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand,
-    centerOnSelect,
+    centerHandle, centerOnSelect,
   }: TreeChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 13);
@@ -502,29 +520,29 @@ export function renderTreeChart(
   // both are present.
   let rootXSum = 0;
   let rootXCount = 0;
-  // Composite position of the selected node, relative to chartContent's own
+  // Composite position of the center target, relative to chartContent's own
   // origin (i.e. with each half's own outer offset already folded in,
   // unlike treeChartCore's own return value) -- null if there's no
-  // selection, or it isn't in either currently-loaded half.
-  let selectedAbsPos: { x: number; y: number } | null = null;
-  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand };
+  // `centerHandle`, or it isn't in either currently-loaded half.
+  let centerAbsPos: { x: number; y: number } | null = null;
+  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, centerHandle };
 
   if (descendantTree) {
     const chartD = chartContent.append("g");
-    const [, , widthD, , rootXD, selD] = treeChartCore(chartD, descendantTree, "RTL", coreOptions);
+    const [, , widthD, , rootXD, cenD] = treeChartCore(chartD, descendantTree, "RTL", coreOptions);
     const offsetD = -widthD + overlap;
     chartD.attr("transform", `translate(${offsetD},0)`);
     rootXSum += rootXD;
     rootXCount += 1;
-    if (selD) selectedAbsPos = { x: offsetD + selD.x, y: selD.y };
+    if (cenD) centerAbsPos = { x: offsetD + cenD.x, y: cenD.y };
   }
   if (ancestorTree) {
     const chartA = chartContent.append("g");
-    const [, , , , rootXA, selA] = treeChartCore(chartA, ancestorTree, "LTR", coreOptions);
+    const [, , , , rootXA, cenA] = treeChartCore(chartA, ancestorTree, "LTR", coreOptions);
     chartA.attr("transform", "translate(0,0)");
     rootXSum += rootXA;
     rootXCount += 1;
-    if (selA) selectedAbsPos = { x: selA.x, y: selA.y };
+    if (cenA) centerAbsPos = { x: cenA.x, y: cenA.y };
   }
   const rootVertical = rootXCount > 0 ? rootXSum / rootXCount : 0;
   const rootHorizontal = BOX_WIDTH / 2 + PADDING;
@@ -544,8 +562,8 @@ export function renderTreeChart(
   // not re-centering, preserving pan/zoom across an unrelated rebuild the
   // same way this always has.
   const k = initialZoom?.k ?? 1;
-  if (centerOnSelect && selectedAbsPos) {
-    const centered = zoomIdentity.translate(rootHorizontal, rootVertical).scale(k).translate(-selectedAbsPos.x, -selectedAbsPos.y);
+  if (centerOnSelect && centerAbsPos) {
+    const centered = zoomIdentity.translate(rootHorizontal, rootVertical).scale(k).translate(-centerAbsPos.x, -centerAbsPos.y);
     // Start from wherever the view already was (an instant jump, same as
     // the non-animated branch below) and animate *from* there -- without
     // this, the transition would interpolate from identity (k=1, x=y=0)
