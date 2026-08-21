@@ -25,17 +25,25 @@ interface TreeChartProps {
   /** For thumbnail URLs (personThumbnailUrl's `jwt` query param) -- null
    * until TreeView's own fetch has resolved one. */
   token: string | null;
-  /** Fired when a boundary marker (a box with `TreeNode.hasMore`, drawn by
-   * charts/treeChart.ts) is panned/zoomed/scrolled into view -- the only
-   * trigger for per-node lazy-expand, there's no click affordance. `label`
-   * is the node's own branch id (TreeNode.id, e.g. "pfm"). Already
+  /** Fired for a boundary marker (a box with `TreeNode.hasMore`, drawn by
+   * charts/treeChart.ts) -- either clicked directly (charts/treeChart.ts's
+   * own handler, always live) or, when `autoExpandEnabled`, revealed by a
+   * pan/zoom/scroll (this component's own IntersectionObserver below).
+   * `label` is the node's own branch id (TreeNode.id, e.g. "pfm"). Already
    * idempotent on TreeView's side, so this component doesn't need to guard
    * against re-firing for the same element. */
   onExpand: (label: string, handle: string, direction: "ancestor" | "descendant") => void;
   /** `${direction}:${handle}` keys currently in flight, mirrored from
    * TreeView's own guard -- shows a small loading state on that marker
-   * instead of one a reveal would just re-trigger. */
+   * instead of one a reveal/click would just re-trigger. */
   expandingKeys: Set<string>;
+  /** The manual-expand-only preference (store/treeExpandPreference.ts),
+   * inverted: false skips creating the reveal observer below entirely,
+   * leaving each marker's own click (always wired, see charts/treeChart.ts)
+   * as the only way to expand -- e.g. for whenever auto-expand doesn't fire
+   * (a backgrounded/occluded tab throttles IntersectionObserver entirely,
+   * see this file's own doc comment) or is simply unwanted. */
+  autoExpandEnabled: boolean;
 }
 
 /** Owns a plain `div` and hands its DOM to the d3 renderer -- same
@@ -47,7 +55,7 @@ interface TreeChartProps {
  * Mantine token -- same reason MapCanvas itself re-renders its markers on
  * `dark` (see its own `seriesColor(dark)`). */
 export function TreeChart({
-  ancestorTree, descendantTree, selectedHandle, onSelectPerson, token, onExpand, expandingKeys,
+  ancestorTree, descendantTree, selectedHandle, onSelectPerson, token, onExpand, expandingKeys, autoExpandEnabled,
 }: TreeChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -82,17 +90,27 @@ export function TreeChart({
       dark,
       token,
       expandingKeys,
+      onExpand,
     });
     container.replaceChildren(svg);
 
     // Auto-expand-on-reveal: watches every boundary marker
     // (charts/treeChart.ts's own `[data-tree-expand]` elements) in the fresh
     // SVG and fires `onExpand` once it's actually been panned/zoomed/
-    // scrolled into view. Re-created every render since replaceChildren
-    // above just discarded the previous SVG -- and anything observing its
-    // elements -- wholesale. Rooted at this component's own container div
-    // (not the default viewport root) so "visible" means "within this chart
-    // panel", not "anywhere on the page".
+    // scrolled into view. Skipped entirely when the user has opted into
+    // manual-only expansion (store/treeExpandPreference.ts) -- each
+    // marker's own click (wired unconditionally in charts/treeChart.ts) is
+    // always the fallback either way, notably for whenever this observer
+    // doesn't fire at all: a backgrounded/occluded browser tab throttles
+    // IntersectionObserver (and requestAnimationFrame) completely, which is
+    // exactly the "sometimes a block doesn't expand" case this preference
+    // and the click affordance both exist for. Re-created every render
+    // since replaceChildren above just discarded the previous SVG -- and
+    // anything observing its elements -- wholesale. Rooted at this
+    // component's own container div (not the default viewport root) so
+    // "visible" means "within this chart panel", not "anywhere on the
+    // page".
+    if (!autoExpandEnabled) return;
     let skippedInitialBatch = false;
     const io = new IntersectionObserver(
       (entries) => {
@@ -120,7 +138,10 @@ export function TreeChart({
     svg.querySelectorAll<SVGRectElement>("[data-tree-expand]").forEach((el) => io.observe(el));
 
     return () => io.disconnect();
-  }, [ancestorTree, descendantTree, size.width, size.height, selectedHandle, onSelectPerson, dark, token, onExpand, expandingKeys]);
+  }, [
+    ancestorTree, descendantTree, size.width, size.height, selectedHandle, onSelectPerson, dark, token, onExpand,
+    expandingKeys, autoExpandEnabled,
+  ]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }

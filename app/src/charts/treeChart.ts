@@ -5,11 +5,12 @@
 // already uses for maplibre-gl. Deliberately smaller than the source: no
 // hover-preview popover. It does draw its own boundary marker (see
 // `hasMore` below) on any box at the edge of the loaded tree with further
-// known ancestors/descendants -- but that marker is purely a passive
-// IntersectionObserver target/visual hint, not a click affordance; the
-// actual per-node lazy-expand trigger lives in
-// components/visuals/TreeChart.tsx's own reveal observer. Most colors are
-// literal `var(--mantine-...)`
+// known ancestors/descendants -- both an IntersectionObserver target for
+// components/visuals/TreeChart.tsx's own reveal observer (auto-expand) and
+// a click target (`onExpand`, manual expand -- the always-available
+// fallback for whenever auto-expand doesn't fire, or the user has turned it
+// off via store/treeExpandPreference.ts). Most colors are literal
+// `var(--mantine-...)`
 // strings passed straight into `.attr()` -- SVG presentation attributes
 // resolve CSS custom properties the same way gramps-web's own
 // `var(--grampsjs-body-font-color-70)` usage does, so light/dark just works
@@ -108,6 +109,12 @@ interface CoreOptions {
    * per-node lazy-expand -- swaps a boundary marker's "+" for a dimmed "…"
    * rather than this module owning any fetch/loading state itself. */
   expandingKeys?: Set<string>;
+  /** Clicking a boundary marker always expands it, regardless of the
+   * manual-expand-only preference (treeExpandPreference.ts) -- that
+   * preference only gates whether TreeChart.tsx's own reveal observer also
+   * fires this automatically. Same signature as the observer's own trigger,
+   * see TreeChart.tsx's doc comment on why. */
+  onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant") => void;
 }
 
 /** Lays out and draws one generation-tree (ancestors or descendants) into
@@ -121,7 +128,7 @@ function treeChartCore(
   svgParent: Selection<SVGGElement, undefined, null, undefined>,
   data: TreeNode,
   orientation: "LTR" | "RTL",
-  { onSelectPerson, selectedHandle, dark, token, expandingKeys }: CoreOptions,
+  { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand }: CoreOptions,
 ): [number, number, number, number, number] {
   const root: HierarchyPointNode<TreeNode> = d3tree<TreeNode>()
     .nodeSize([BOX_HEIGHT + GAP_Y, BOX_WIDTH + GAP_X])
@@ -311,12 +318,16 @@ function treeChartCore(
     .attr("fill", "var(--mantine-color-dimmed)")
     .text((d) => clipString(`†${d.data.person?.profile?.death?.date}`, textWidth(d)));
 
-  // Boundary marker: a passive IntersectionObserver target + visual hint on
+  // Boundary marker: an IntersectionObserver target *and* a click target on
   // any box at the edge of the loaded tree with further known ancestors/
   // descendants (TreeNode.hasMore, set by treeData.ts's own recursion
-  // cutoff) -- not a click affordance, see this module's own doc comment.
-  // Direction follows orientation the same way every other half-specific
-  // choice here does (LTR draws ancestors, RTL descendants).
+  // cutoff). The click always works, regardless of the manual-expand-only
+  // preference -- that preference only gates whether TreeChart.tsx's own
+  // reveal observer *also* fires this automatically, since auto-expand
+  // doesn't always fire (see that file's own doc comment) and this is the
+  // fallback either way. Direction follows orientation the same way every
+  // other half-specific choice here does (LTR draws ancestors, RTL
+  // descendants).
   const direction: "ancestor" | "descendant" = orientation === "LTR" ? "ancestor" : "descendant";
   // The edge facing away from the root, in the same local box coordinate
   // space (-BOX_WIDTH/2..BOX_WIDTH/2) every other box part above draws in --
@@ -330,11 +341,12 @@ function treeChartCore(
     .append("g")
     .attr("transform", `translate(${outwardX},0)`);
 
-  // The actual IntersectionObserver target: invisible, and sized to scale
+  // The IntersectionObserver target *and* the click target: sized to scale
   // with overall zoom the same way the box itself does (TreeChart.tsx's own
-  // MIN_AUTOEXPAND_MARKER_PX throttle relies on that). `pointer-events: none`
-  // -- there's nothing to click, and this keeps it from ever shadowing the
-  // box's own click-to-select handler it sits next to.
+  // MIN_AUTOEXPAND_MARKER_PX throttle relies on that) and much bigger than
+  // the visible dot so it's an easy click target too, not just a precise
+  // one. `stopPropagation` keeps a click here from also firing the parent
+  // node `<g>`'s own click-to-select handler it sits inside of.
   marker
     .append("rect")
     .attr("data-tree-expand", "true")
@@ -346,12 +358,17 @@ function treeChartCore(
     .attr("width", HIT_WIDTH)
     .attr("height", BOX_HEIGHT)
     .attr("fill", "transparent")
-    .style("pointer-events", "none");
+    .style("cursor", "pointer")
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      if (d.data.person) onExpand?.(d.data.id!, d.data.person.handle, direction);
+    });
 
   // Purely decorative -- a small dot most of the time, a dimmed "…" while
   // TreeView's own per-node lazy-expand has this handle's next generation
   // in flight, so the user has some sense of *why* a box they're panning
-  // toward just grew children.
+  // toward just grew children (or what a click here is about to do).
+  // `pointer-events: none` so only the hit-rect above handles the click.
   marker
     .append("circle")
     .attr("r", 9)
@@ -401,6 +418,8 @@ export interface TreeChartOptions {
   token: string | null;
   /** See CoreOptions' own doc comment -- threaded straight through. */
   expandingKeys?: Set<string>;
+  /** See CoreOptions' own doc comment -- threaded straight through. */
+  onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant") => void;
 }
 
 /** Draws both halves (descendants on the left, RTL, ancestors on the right,
@@ -410,7 +429,7 @@ export interface TreeChartOptions {
 export function renderTreeChart(
   ancestorTree: TreeNode | null,
   descendantTree: TreeNode | null,
-  { bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys }: TreeChartOptions,
+  { bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand }: TreeChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 13);
   const chartContent = svg.append("g").attr("id", "tree-chart-content");
@@ -443,7 +462,7 @@ export function renderTreeChart(
   // both are present.
   let rootXSum = 0;
   let rootXCount = 0;
-  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys };
+  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand };
 
   if (descendantTree) {
     const chartD = chartContent.append("g");

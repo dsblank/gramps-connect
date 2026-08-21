@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, CloseButton, Group, Paper, Stack, Text } from "@mantine/core";
+import { Badge, Button, CloseButton, Group, Paper, Stack, Switch, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getToken } from "../../auth/auth";
 import { formatHash, type VisualSubject } from "../../hash";
@@ -10,6 +10,7 @@ import {
   buildAncestorTree, buildDescendantTree, fetchPersonExpansion, fetchTreeData, mergeTreeData, resolveTreeRoot,
   type TreePersonRaw, type TreeRoot,
 } from "../../store/treeData";
+import { isManualExpandEnabled, setManualExpandEnabled } from "../../store/treeExpandPreference";
 import { PERSON_VIEW } from "../../store/views";
 import { TreeChart } from "./TreeChart";
 import { VisualFrame } from "./VisualFrame";
@@ -49,6 +50,12 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const [token, setToken] = useState<string | null>(null);
 
   const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
+
+  // See store/treeExpandPreference.ts -- persisted across sessions, not
+  // reset on a new root/subject the way selection/expansion state below is,
+  // since it's a standing preference about how this view behaves, not
+  // something scoped to what's currently open.
+  const [manualExpandOnly, setManualExpandOnly] = useState(isManualExpandEnabled);
 
   // Per-node lazy-expand state: which branch labels (buildAncestorTree's own
   // "pf"/"pfm"-style ids) have been expanded past BASE_ANC/BASE_DESC, and
@@ -227,10 +234,25 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           </Text>
         ) : undefined
       }
+      toolbar={
+        subject && root ? (
+          <Switch
+            size="xs"
+            label="Manual expand only"
+            checked={manualExpandOnly}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked;
+              setManualExpandOnly(checked);
+              setManualExpandEnabled(checked);
+            }}
+          />
+        ) : undefined
+      }
       status={
         trees ? (
           <Text size="xs" c="dimmed">
-            drag to pan · scroll to zoom · click a person for details · pan toward the edges to reveal more
+            drag to pan · scroll to zoom · click a person for details ·{" "}
+            {manualExpandOnly ? "click + to reveal more" : "pan toward the edges to reveal more, or click +"}
           </Text>
         ) : undefined
       }
@@ -244,6 +266,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           token={token}
           onExpand={expandNode}
           expandingKeys={expandingKeys}
+          autoExpandEnabled={!manualExpandOnly}
         />
       )}
       {selectedPerson && (
