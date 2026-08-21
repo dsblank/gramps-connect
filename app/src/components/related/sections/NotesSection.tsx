@@ -130,9 +130,13 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   // the same note_list, not the only one, so no type is excluded here.
   const canAttach = hasPermissions("EditObject");
 
-  async function handleRemove(handle: string, target: RawNote) {
-    const summary = summaryLine("note", target) || "this note";
-    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the note itself.`)) return;
+  // Shared by both Notes and Stories rows below -- a story is still just a
+  // note_list entry (a tagged Note), so unlinking it is the exact same
+  // detachRefListEntry call, just with `kind` swapped in so the confirm
+  // copy reads as "story"/its own title rather than "note"/raw note text.
+  async function handleRemove(handle: string, target: RawNote, kind: "note" | "story") {
+    const summary = summaryLine(kind, target) || `this ${kind}`;
+    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the ${kind} itself.`)) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "note_list", handle);
     onRefetch?.();
@@ -149,7 +153,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
               handle={handle}
               obj={target}
               onNavigate={onNavigate}
-              onRemove={canAttach ? () => handleRemove(handle, target) : undefined}
+              onRemove={canAttach ? () => handleRemove(handle, target, "note") : undefined}
             />
           ))}
           {canAttach && (
@@ -183,6 +187,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
               obj={target}
               label={summaryLine("story", target)}
               onNavigate={onNavigate}
+              onRemove={canAttach ? () => handleRemove(handle, target, "story") : undefined}
             />
           ))}
           {canAddStory && (
