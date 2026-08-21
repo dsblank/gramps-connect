@@ -14,6 +14,7 @@ import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MessageButton } from "./related/MessageButton";
+import { StoryButton } from "./related/StoryButton";
 import { EditButton } from "./related/EditButton";
 import { DeleteButton } from "./related/DeleteButton";
 import { VisualButtons } from "./related/VisualButtons";
@@ -319,6 +320,7 @@ export function RelatedPanel({
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           <DeleteButton view={view} detail={detail} />
           <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
+          <StoryButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
       </Group>
       {/* Directly under the title, not up in the header slot above: these
