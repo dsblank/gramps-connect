@@ -180,22 +180,24 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     // A story note's text.string is a JSON-stringified StorySpec
     // (storyBuilder.ts), not free text -- the note/messages branch below
     // would otherwise dump raw JSON here. NoteText's embedded gramps://...
-    // link handling doesn't apply (a spec's title/intro are plain text),
+    // link handling doesn't apply (a spec's title and point text are plain
+    // text),
     // so ClickableTitle covers the isSelf/navigate distinction on its own
     // without that branch's button-can't-nest-in-button workaround.
-    let spec: { title?: string; intro?: string } | null = null;
+    let spec: { title?: string; points?: { text?: string }[] } | null = null;
     try {
       spec = JSON.parse((detail.text as { string?: string } | undefined)?.string ?? "");
     } catch {
       spec = null;
     }
+    const intro = spec?.points?.[0]?.text;
     return (
       <div>
         <Text size="sm" c="dimmed" fw={600}>
           {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{view.label} <PrivateIndicator detail={detail} />
         </Text>
         <ClickableTitle onClick={navigateToSelf}>{spec?.title || "(story)"}</ClickableTitle>
-        {spec?.intro && <Text c="dimmed">{spec.intro}</Text>}
+        {intro && <Text c="dimmed">{intro}</Text>}
       </div>
     );
   }

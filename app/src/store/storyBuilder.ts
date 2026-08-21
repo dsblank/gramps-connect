@@ -11,23 +11,26 @@ import { API_BASE } from "../config";
 import { zipRefs, type ObjectDetail } from "./objectDetail";
 import type { VisualData } from "./visualData";
 
-// A point is a reference, not a description: everything a presenter needs
-// to *show* a point (place title, coordinates, date, photo mime, ...) is
-// derived at render time by storyHydration.ts from the same local
-// eventsByHandle/places caches this module reads below, rather than copied
-// in here where it would go stale the moment the underlying Event or Place
-// changes.
+// A point is mostly a reference, not a description: place title,
+// coordinates, date, and photo mime are derived at render time by
+// storyHydration.ts from the same local eventsByHandle/places caches this
+// module reads below, rather than copied in here where they'd go stale the
+// moment the underlying Event or Place changes. `text` is the exception --
+// it's seeded from the event's own description when the point is built,
+// but lives in the spec from then on (so a hand-edit to it sticks) rather
+// than being re-derived on every presentation.
+//
+// The story's opening card is just its first point: one with no
+// `eventRef` (nothing but its own text and photo), rather than separate
+// intro/introMediaRef fields of its own.
 export interface StoryPoint {
   eventRef?: string;
   mediaRef?: string;
+  text?: string;
 }
 
 export interface StorySpec {
-  version: 1;
   title: string;
-  intro: string;
-  introMediaRef?: string;
-  subjectRef: string;
   points: StoryPoint[];
 }
 
@@ -95,12 +98,13 @@ async function resolvePointMedia(
 }
 
 /** One point per event on `detail`, in the order recorded on
- * `event_ref_list` -- a point is just a reference plus (when one was
- * found) a photo; place, date, and title/text are resolved from the event
- * at presentation time by storyHydration.ts, not looked up here (unlike a
- * strictly map- or timeline-driven story, nothing here requires
- * coordinates or a parseable date up front). Returns null only when the
- * person has no events at all to draw from. */
+ * `event_ref_list`, plus a leading point for the opening card -- a point
+ * is a reference plus (when one was found) a photo plus a starting `text`;
+ * place, date, and title are resolved from the event at presentation time
+ * by storyHydration.ts, not looked up here (unlike a strictly map- or
+ * timeline-driven story, nothing here requires coordinates or a parseable
+ * date up front). Returns null only when the person has no events at all
+ * to draw from. */
 export async function buildPersonStory(
   token: string,
   detail: ObjectDetail,
@@ -121,7 +125,7 @@ export async function buildPersonStory(
     const record = visualData.eventsByHandle.get(ref.ref);
     if (!record) continue; // event not in the local cache (yet) -- nothing to describe it with
     const placeHandle = visualData.placeOfEvent.get(ref.ref);
-    const point: StoryPoint = { eventRef: ref.ref };
+    const point: StoryPoint = { eventRef: ref.ref, text: record.description || undefined };
     const draft: Draft = { point, year: record.year, placeHandle, eventMediaList: target?.media_list ?? [] };
     (record.year === null ? undated : dated).push(draft);
   }
@@ -138,19 +142,20 @@ export async function buildPersonStory(
   }));
   const points = drafts.map((d) => d.point);
 
-  // The person's own portrait, for the opening card and as every point's
-  // last-resort fallback (see storyHydration.ts's slidesFor) -- already
-  // resolved, since media_list is a top-level forward ref on the fetched
-  // Person that extend=all covers for free.
+  // The person's own portrait, for the opening card and as every other
+  // point's last-resort fallback (see storyHydration.ts's hydratePoint) --
+  // already resolved, since media_list is a top-level forward ref on the
+  // fetched Person that extend=all covers for free.
   const portrait = zipRefs<{ mime?: string }>(detail.media_list, detail.extended?.media)
     .find((row) => row.target?.mime?.startsWith("image/"));
 
+  const introPoint: StoryPoint = {
+    mediaRef: portrait?.ref.ref,
+    text: `${points.length} moment${points.length === 1 ? "" : "s"} from ${personName}'s recorded life.`,
+  };
+
   return {
-    version: 1,
     title: `The Story of ${personName}`,
-    intro: `${points.length} moment${points.length === 1 ? "" : "s"} from ${personName}'s recorded life.`,
-    introMediaRef: portrait?.ref.ref,
-    subjectRef: detail.handle,
-    points,
+    points: [introPoint, ...points],
   };
 }
