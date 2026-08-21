@@ -1,20 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, CloseButton, Group, NumberInput, Paper, Stack, Text } from "@mantine/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Badge, Button, CloseButton, Group, Paper, Stack, Text } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { getToken } from "../../auth/auth";
 import { formatHash, type VisualSubject } from "../../hash";
 import { pickerResultLabel } from "../RefPickerField";
 import { RecordPicker } from "../RecordPicker";
 import type { QueryItem } from "../../store/api";
 import {
-  buildAncestorTree, buildDescendantTree, fetchTreeData, resolveTreeRoot,
+  buildAncestorTree, buildDescendantTree, fetchPersonExpansion, fetchTreeData, mergeTreeData, resolveTreeRoot,
   type TreePersonRaw, type TreeRoot,
 } from "../../store/treeData";
 import { PERSON_VIEW } from "../../store/views";
 import { TreeChart } from "./TreeChart";
 import { VisualFrame } from "./VisualFrame";
 
-const DEFAULT_ANC = 4;
-const DEFAULT_DESC = 2;
+// Small on purpose: auto-expand-on-reveal (TreeChart.tsx's own
+// IntersectionObserver) grows the tree to fill whatever's visible anyway, so
+// the *initial* fetch should stay cheap rather than front-loading
+// generations nobody's looked at yet.
+const BASE_ANC = 3;
+const BASE_DESC = 2;
 
 /** View > Tree, and the "Tree" button on a Person or Family's own page
  * (RelatedPanel's VisualButtons.tsx). Unlike Map/Timeline this always needs
@@ -32,9 +37,6 @@ const DEFAULT_DESC = 2;
  * this" for a glance and "take me there" for a commit would make the more
  * common one (skimming the tree) accidentally leave it constantly. */
 export function TreeView({ subject }: { subject: VisualSubject | null }) {
-  const [nAnc, setNAnc] = useState(DEFAULT_ANC);
-  const [nDesc, setNDesc] = useState(DEFAULT_DESC);
-
   const [root, setRoot] = useState<TreeRoot | null>(null);
   const [rootLoading, setRootLoading] = useState(false);
 
@@ -48,12 +50,30 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
 
   const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
 
+  // Per-node lazy-expand state: which branch labels (buildAncestorTree's own
+  // "pf"/"pfm"-style ids) have been expanded past BASE_ANC/BASE_DESC, and
+  // which `${direction}:${handle}` fetches are in flight (mirrored into
+  // state so TreeChart can show a loading marker) versus already resolved
+  // (a ref -- guards re-entry/re-fetch only, never needs to trigger a
+  // render itself).
+  const [expandedAncestor, setExpandedAncestor] = useState<Set<string>>(new Set());
+  const [expandedDescendant, setExpandedDescendant] = useState<Set<string>>(new Set());
+  const [expandingKeys, setExpandingKeys] = useState<Set<string>>(new Set());
+  const fetchedExpansionsRef = useRef<Set<string>>(new Set());
+  const expandingRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     setRoot(null);
     // A new root (a different record's Tree button, or a fresh pick) makes
-    // whatever was selected under the old one meaningless -- same guard
-    // TimelineView/MapView apply when their own underlying set changes.
+    // whatever was selected/expanded under the old one meaningless -- same
+    // guard TimelineView/MapView apply when their own underlying set
+    // changes.
     setSelectedHandle(null);
+    setExpandedAncestor(new Set());
+    setExpandedDescendant(new Set());
+    setExpandingKeys(new Set());
+    fetchedExpansionsRef.current = new Set();
+    expandingRef.current = new Set();
     if (!subject) return;
     let cancelled = false;
     setRootLoading(true);
@@ -83,7 +103,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     setError(null);
     (async () => {
       const t = await getToken();
-      const rows = await fetchTreeData(t, root.grampsId, nAnc, nDesc);
+      const rows = await fetchTreeData(t, root.grampsId, BASE_ANC, BASE_DESC);
       if (!cancelled) {
         setData(rows);
         setToken(t);
@@ -98,20 +118,59 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     return () => {
       cancelled = true;
     };
-  }, [root, nAnc, nDesc]);
+  }, [root]);
 
   const trees = useMemo(() => {
     if (!data || !root) return null;
     return {
-      ancestorTree: buildAncestorTree(data, root.handle, nAnc),
-      descendantTree: buildDescendantTree(data, root.handle, nDesc),
+      ancestorTree: buildAncestorTree(data, root.handle, BASE_ANC, expandedAncestor),
+      descendantTree: buildDescendantTree(data, root.handle, BASE_DESC, expandedDescendant),
     };
-  }, [data, root, nAnc, nDesc]);
+  }, [data, root, expandedAncestor, expandedDescendant]);
 
-  // Resolved from `data` (not carried as its own object in state) so a
-  // generation-count change that drops the selected person out of the
-  // fetched window clears the card for free -- there's no separate person
-  // to go stale.
+  // The single funnel auto-expand-on-reveal (TreeChart.tsx's own
+  // IntersectionObserver) calls through -- there's no click affordance, so
+  // this is the only trigger. Guards at most one in-flight/one-ever fetch
+  // per `${direction}:${handle}`, regardless of how many branch labels or
+  // reveal events reference that same person (pedigree collapse, or a
+  // repeat intersection crossing) -- and if another branch already pulled
+  // this person's next generation into `data`, marks the label expanded for
+  // free with no network round-trip at all.
+  const expandNode = useCallback(
+    async (label: string, handle: string, direction: "ancestor" | "descendant") => {
+      const key = `${direction}:${handle}`;
+      if (!fetchedExpansionsRef.current.has(key)) {
+        if (expandingRef.current.has(key)) return;
+        expandingRef.current.add(key);
+        setExpandingKeys(new Set(expandingRef.current));
+        try {
+          const person = data?.find((p) => p.handle === handle);
+          if (!person) return;
+          const t = token ?? (await getToken());
+          const rows = await fetchPersonExpansion(t, person.gramps_id, direction);
+          setData((prev) => mergeTreeData(prev ?? [], rows));
+          fetchedExpansionsRef.current.add(key);
+        } catch (err) {
+          notifications.show({
+            color: "red",
+            title: "Couldn't load more of the tree",
+            message: err instanceof Error ? err.message : String(err),
+          });
+          return; // leave it un-fetched/un-expanded -- a later reveal retries it
+        } finally {
+          expandingRef.current.delete(key);
+          setExpandingKeys(new Set(expandingRef.current));
+        }
+      }
+      const setExpanded = direction === "ancestor" ? setExpandedAncestor : setExpandedDescendant;
+      setExpanded((prev) => (prev.has(label) ? prev : new Set(prev).add(label)));
+    },
+    [data, token],
+  );
+
+  // Resolved from `data` (not carried as its own object in state) so a new
+  // root clearing `data` out from under the selected person clears the card
+  // for free -- there's no separate person object to go stale.
   const selectedPerson = useMemo(
     () => (selectedHandle ? data?.find((p) => p.handle === selectedHandle) ?? null : null),
     [selectedHandle, data],
@@ -168,33 +227,11 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           </Text>
         ) : undefined
       }
-      toolbar={
-        subject && root ? (
-          <Group gap="md" wrap="wrap">
-            <NumberInput
-              label="Ancestor generations"
-              size="xs"
-              w={170}
-              min={0}
-              max={15}
-              value={nAnc}
-              onChange={(v) => setNAnc(typeof v === "number" ? v : Number(v) || 0)}
-            />
-            <NumberInput
-              label="Descendant generations"
-              size="xs"
-              w={170}
-              min={0}
-              max={15}
-              value={nDesc}
-              onChange={(v) => setNDesc(typeof v === "number" ? v : Number(v) || 0)}
-            />
-          </Group>
-        ) : undefined
-      }
       status={
         trees ? (
-          <Text size="xs" c="dimmed">drag to pan · scroll to zoom · click a person for details</Text>
+          <Text size="xs" c="dimmed">
+            drag to pan · scroll to zoom · click a person for details · pan toward the edges to reveal more
+          </Text>
         ) : undefined
       }
     >
@@ -205,6 +242,8 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           selectedHandle={selectedHandle}
           onSelectPerson={setSelectedHandle}
           token={token}
+          onExpand={expandNode}
+          expandingKeys={expandingKeys}
         />
       )}
       {selectedPerson && (

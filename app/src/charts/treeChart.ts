@@ -3,9 +3,13 @@
 // connecting links, d3-zoom for pan/zoom, raw d3-selection to build the SVG,
 // the same "imperative lib in a ref" shape components/visuals/MapCanvas.tsx
 // already uses for maplibre-gl. Deliberately smaller than the source: no
-// hover-preview popover or "expand one more generation" triangle menu
-// (gramps-connect has neither system; raising the generation controls does
-// the second one's job). Most colors are literal `var(--mantine-...)`
+// hover-preview popover. It does draw its own boundary marker (see
+// `hasMore` below) on any box at the edge of the loaded tree with further
+// known ancestors/descendants -- but that marker is purely a passive
+// IntersectionObserver target/visual hint, not a click affordance; the
+// actual per-node lazy-expand trigger lives in
+// components/visuals/TreeChart.tsx's own reveal observer. Most colors are
+// literal `var(--mantine-...)`
 // strings passed straight into `.attr()` -- SVG presentation attributes
 // resolve CSS custom properties the same way gramps-web's own
 // `var(--grampsjs-body-font-color-70)` usage does, so light/dark just works
@@ -100,6 +104,10 @@ interface CoreOptions {
    * null before the token's first resolved, in which case no box gets a
    * thumbnail rather than a broken image. */
   token: string | null;
+  /** `${direction}:${handle}` keys currently being fetched by TreeView's own
+   * per-node lazy-expand -- swaps a boundary marker's "+" for a dimmed "…"
+   * rather than this module owning any fetch/loading state itself. */
+  expandingKeys?: Set<string>;
 }
 
 /** Lays out and draws one generation-tree (ancestors or descendants) into
@@ -113,7 +121,7 @@ function treeChartCore(
   svgParent: Selection<SVGGElement, undefined, null, undefined>,
   data: TreeNode,
   orientation: "LTR" | "RTL",
-  { onSelectPerson, selectedHandle, dark, token }: CoreOptions,
+  { onSelectPerson, selectedHandle, dark, token, expandingKeys }: CoreOptions,
 ): [number, number, number, number, number] {
   const root: HierarchyPointNode<TreeNode> = d3tree<TreeNode>()
     .nodeSize([BOX_HEIGHT + GAP_Y, BOX_WIDTH + GAP_X])
@@ -303,6 +311,69 @@ function treeChartCore(
     .attr("fill", "var(--mantine-color-dimmed)")
     .text((d) => clipString(`†${d.data.person?.profile?.death?.date}`, textWidth(d)));
 
+  // Boundary marker: a passive IntersectionObserver target + visual hint on
+  // any box at the edge of the loaded tree with further known ancestors/
+  // descendants (TreeNode.hasMore, set by treeData.ts's own recursion
+  // cutoff) -- not a click affordance, see this module's own doc comment.
+  // Direction follows orientation the same way every other half-specific
+  // choice here does (LTR draws ancestors, RTL descendants).
+  const direction: "ancestor" | "descendant" = orientation === "LTR" ? "ancestor" : "descendant";
+  // The edge facing away from the root, in the same local box coordinate
+  // space (-BOX_WIDTH/2..BOX_WIDTH/2) every other box part above draws in --
+  // only the container-level transform differs between the two halves.
+  const outwardX = orientation === "LTR" ? BOX_WIDTH / 2 : -BOX_WIDTH / 2;
+  const HIT_WIDTH = 60;
+
+  const withMarker = withPerson.filter((d) => !!d.data.hasMore);
+
+  const marker = withMarker
+    .append("g")
+    .attr("transform", `translate(${outwardX},0)`);
+
+  // The actual IntersectionObserver target: invisible, and sized to scale
+  // with overall zoom the same way the box itself does (TreeChart.tsx's own
+  // MIN_AUTOEXPAND_MARKER_PX throttle relies on that). `pointer-events: none`
+  // -- there's nothing to click, and this keeps it from ever shadowing the
+  // box's own click-to-select handler it sits next to.
+  marker
+    .append("rect")
+    .attr("data-tree-expand", "true")
+    .attr("data-handle", (d) => d.data.person!.handle)
+    .attr("data-direction", direction)
+    .attr("data-label", (d) => d.data.id!)
+    .attr("x", orientation === "LTR" ? 0 : -HIT_WIDTH)
+    .attr("y", -BOX_HEIGHT / 2)
+    .attr("width", HIT_WIDTH)
+    .attr("height", BOX_HEIGHT)
+    .attr("fill", "transparent")
+    .style("pointer-events", "none");
+
+  // Purely decorative -- a small dot most of the time, a dimmed "…" while
+  // TreeView's own per-node lazy-expand has this handle's next generation
+  // in flight, so the user has some sense of *why* a box they're panning
+  // toward just grew children.
+  marker
+    .append("circle")
+    .attr("r", 9)
+    .attr("fill", (d) =>
+      expandingKeys?.has(`${direction}:${d.data.person!.handle}`)
+        ? "var(--mantine-color-dimmed)"
+        : "var(--mantine-primary-color-filled)",
+    )
+    .attr("stroke", "var(--mantine-color-body)")
+    .attr("stroke-width", 2)
+    .style("pointer-events", "none");
+
+  marker
+    .append("text")
+    .attr("text-anchor", "middle")
+    .attr("dominant-baseline", "central")
+    .attr("fill", "white")
+    .attr("font-size", 13)
+    .attr("font-weight", 700)
+    .style("pointer-events", "none")
+    .text((d) => (expandingKeys?.has(`${direction}:${d.data.person!.handle}`) ? "…" : "+"));
+
   return [xOffset, yOffset, width, height, rootX];
 }
 
@@ -328,6 +399,8 @@ export interface TreeChartOptions {
   selectedHandle?: string | null;
   dark: boolean;
   token: string | null;
+  /** See CoreOptions' own doc comment -- threaded straight through. */
+  expandingKeys?: Set<string>;
 }
 
 /** Draws both halves (descendants on the left, RTL, ancestors on the right,
@@ -337,7 +410,7 @@ export interface TreeChartOptions {
 export function renderTreeChart(
   ancestorTree: TreeNode | null,
   descendantTree: TreeNode | null,
-  { bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token }: TreeChartOptions,
+  { bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys }: TreeChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 13);
   const chartContent = svg.append("g").attr("id", "tree-chart-content");
@@ -370,7 +443,7 @@ export function renderTreeChart(
   // both are present.
   let rootXSum = 0;
   let rootXCount = 0;
-  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token };
+  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys };
 
   if (descendantTree) {
     const chartD = chartContent.append("g");

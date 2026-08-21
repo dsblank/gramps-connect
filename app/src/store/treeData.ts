@@ -53,6 +53,12 @@ export interface TreeNode {
   nameSurname?: string | null;
   person?: TreePersonRaw | null;
   children?: TreeNode[];
+  /** Set only on a childless node whose person's own already-fetched
+   * `extended` data points at a parent/child handle beyond this branch's
+   * current depth -- i.e. "this box is a real edge of the loaded tree, not
+   * a true leaf" -- drives the auto-expand-on-reveal marker in
+   * charts/treeChart.ts. Never set on a node that has `children`. */
+  hasMore?: boolean;
 }
 
 function findPerson(data: TreePersonRaw[], handle: string | undefined): TreePersonRaw | undefined {
@@ -63,12 +69,13 @@ function findPerson(data: TreePersonRaw[], handle: string | undefined): TreePers
 function ancestorNode(
   data: TreePersonRaw[],
   handle: string | undefined,
-  depth: number,
-  includeEmpty: boolean,
   i: number,
+  baseDepth: number,
+  expanded: ReadonlySet<string>,
+  includeEmpty: boolean,
   label: string,
 ): TreeNode {
-  if (depth === 0) return {};
+  if (!handle) return {};
   const person = findPerson(data, handle);
   const node: TreeNode = {
     id: label,
@@ -77,41 +84,63 @@ function ancestorNode(
     nameSurname: person?.profile?.name_surname ?? null,
     person: person ?? null,
   };
-  if (depth === 1) return node;
   const fatherHandle = person?.extended?.primary_parent_family?.father_handle;
   const motherHandle = person?.extended?.primary_parent_family?.mother_handle;
+  // Past the base depth, a branch only keeps recursing once its own label
+  // has been explicitly expanded (treeData's per-node lazy-expand) -- until
+  // then this box is a real edge of the loaded tree, not a true leaf, iff
+  // the person's own already-fetched `extended` data names a parent we
+  // haven't loaded/shown yet.
+  if (i >= baseDepth && !expanded.has(label)) {
+    node.hasMore = !!(fatherHandle || motherHandle);
+    return node;
+  }
   node.children = [];
   if (fatherHandle || includeEmpty) {
-    node.children.push(ancestorNode(data, fatherHandle, depth - 1, includeEmpty, i + 1, `${label}f`));
+    node.children.push(ancestorNode(data, fatherHandle, i + 1, baseDepth, expanded, includeEmpty, `${label}f`));
   }
   if (motherHandle || includeEmpty) {
-    node.children.push(ancestorNode(data, motherHandle, depth - 1, includeEmpty, i + 1, `${label}m`));
+    node.children.push(ancestorNode(data, motherHandle, i + 1, baseDepth, expanded, includeEmpty, `${label}m`));
   }
   return node;
 }
 
-/** `generations` ancestor generations beyond the root (0 = root only).
- * Ported from gramps-web's getTree -- `includeEmpty` defaults to `false`
- * here to match gramps-web's *actual* box-tree call site
- * (GrampsjsTreeChart.js's `getTree(this.data, handle, this.nAnc, false)`),
- * not util.js's own default of `true`, which only the Fan Chart actually
- * uses (its wedge geometry needs a uniform slot per generation regardless
- * of whether that ancestor is known). `true` here means every unknown
- * ancestor still reserves a full box-height layout slot all the way to
- * the requested depth -- which is what was stretching real siblings far
- * apart whenever their own ancestor lines ran out early, the common case
- * for real data more than a couple of generations back. */
+/** `baseDepth` ancestor generations beyond the root are always expanded (0 =
+ * root only); any branch in `expanded` (node labels like "pf"/"pfm", see
+ * ancestorNode) recurses one further generation past that, regardless of
+ * depth -- the per-node lazy-expand's own state, fed back in here so a
+ * click/auto-reveal on one branch doesn't affect any other. With `expanded`
+ * empty this is byte-for-byte the fixed-depth recursion this function used
+ * to do (the old `generations` param is `baseDepth` unchanged).
+ * `includeEmpty` defaults to `false` here to match gramps-web's *actual*
+ * box-tree call site (GrampsjsTreeChart.js's
+ * `getTree(this.data, handle, this.nAnc, false)`), not util.js's own
+ * default of `true`, which only the Fan Chart actually uses (its wedge
+ * geometry needs a uniform slot per generation regardless of whether that
+ * ancestor is known). `true` here means every unknown ancestor still
+ * reserves a full box-height layout slot all the way to the requested
+ * depth -- which is what was stretching real siblings far apart whenever
+ * their own ancestor lines ran out early, the common case for real data
+ * more than a couple of generations back. */
 export function buildAncestorTree(
   data: TreePersonRaw[],
   handle: string,
-  generations: number,
+  baseDepth: number,
+  expanded: ReadonlySet<string> = new Set(),
   includeEmpty = false,
 ): TreeNode {
-  return ancestorNode(data, handle, generations + 1, includeEmpty, 0, "p");
+  return ancestorNode(data, handle, 0, baseDepth, expanded, includeEmpty, "p");
 }
 
-function descendantNode(data: TreePersonRaw[], handle: string | undefined, depth: number, i: number, label: string): TreeNode {
-  if (depth === 0) return {};
+function descendantNode(
+  data: TreePersonRaw[],
+  handle: string | undefined,
+  i: number,
+  baseDepth: number,
+  expanded: ReadonlySet<string>,
+  label: string,
+): TreeNode {
+  if (!handle) return {};
   const person = findPerson(data, handle);
   const node: TreeNode = {
     id: label,
@@ -120,7 +149,6 @@ function descendantNode(data: TreePersonRaw[], handle: string | undefined, depth
     nameSurname: person?.profile?.name_surname ?? null,
     person: person ?? null,
   };
-  if (depth === 1) return node;
   const childHandles = (person?.extended?.families ?? []).flatMap((fam) => {
     const isFather = fam.father_handle === person?.handle;
     const isMother = fam.mother_handle === person?.handle;
@@ -133,16 +161,27 @@ function descendantNode(data: TreePersonRaw[], handle: string | undefined, depth
       .filter((ref) => ref[relationKey] === "Birth")
       .map((ref) => ref.ref);
   });
+  if (i >= baseDepth && !expanded.has(label)) {
+    node.hasMore = childHandles.length > 0;
+    return node;
+  }
   node.children = childHandles.map((childHandle, idx) =>
-    descendantNode(data, childHandle, depth - 1, i + 1, `${label}c${idx}`)
+    descendantNode(data, childHandle, i + 1, baseDepth, expanded, `${label}c${idx}`)
   );
   return node;
 }
 
-/** `generations` descendant generations beyond the root (0 = root only).
- * Ported from gramps-web's getDescendantTree. */
-export function buildDescendantTree(data: TreePersonRaw[], handle: string, generations: number): TreeNode {
-  return descendantNode(data, handle, generations + 1, 0, "p");
+/** `baseDepth` descendant generations beyond the root are always expanded (0
+ * = root only); see buildAncestorTree's own doc comment -- same
+ * base-depth-plus-per-branch-`expanded` shape, mirrored here. Ported from
+ * gramps-web's getDescendantTree. */
+export function buildDescendantTree(
+  data: TreePersonRaw[],
+  handle: string,
+  baseDepth: number,
+  expanded: ReadonlySet<string> = new Set(),
+): TreeNode {
+  return descendantNode(data, handle, 0, baseDepth, expanded, "p");
 }
 
 /** GET /api/people/?rules=...&profile=self&extend=primary_parent_family,
@@ -169,6 +208,32 @@ export async function fetchTreeData(token: string, grampsId: string, nAnc: numbe
   // the matched people directly.
   if (Array.isArray(body)) return body as TreePersonRaw[];
   throw new Error(body?.error?.message ?? "Failed to load tree data");
+}
+
+/** One person's immediate next generation in one direction -- the per-node
+ * lazy-expand fetch, rooted at *that* person instead of the tree's root.
+ * `nAnc=1,nDesc=0` (or the reverse) returns exactly the revealed person plus
+ * their immediate parents/children, each already carrying their own
+ * `extended`, so the newly-drawn boundary is itself immediately correct
+ * about whether it needs its own hasMore marker -- no second round-trip. */
+export async function fetchPersonExpansion(
+  token: string,
+  grampsId: string,
+  direction: "ancestor" | "descendant",
+): Promise<TreePersonRaw[]> {
+  return direction === "ancestor"
+    ? fetchTreeData(token, grampsId, 1, 0)
+    : fetchTreeData(token, grampsId, 0, 1);
+}
+
+/** Merges a newly-fetched batch into the flat person list TreeView holds, by
+ * handle -- the same person can legitimately arrive via two branches (e.g. a
+ * cousin marriage), so this keeps `data` deduplicated rather than growing an
+ * array with repeats each expand. */
+export function mergeTreeData(base: TreePersonRaw[], incoming: TreePersonRaw[]): TreePersonRaw[] {
+  const byHandle = new Map(base.map((p) => [p.handle, p]));
+  for (const p of incoming) byHandle.set(p.handle, p);
+  return Array.from(byHandle.values());
 }
 
 function clampPct(n: number): number {
