@@ -334,6 +334,16 @@ function treeChartCore(
   // only the container-level transform differs between the two halves.
   const outwardX = orientation === "LTR" ? BOX_WIDTH / 2 : -BOX_WIDTH / 2;
   const HIT_WIDTH = 60;
+  const MARKER_R = 9;
+  // Local coordinates here start exactly at the box's own edge (`marker`'s
+  // own translate below), so a dot centered at 0 would draw half *on top of*
+  // the box -- clicking that half used to hit the box's own click-to-select
+  // instead of this marker, because the invisible hit-rect (which starts at
+  // the edge, not before it) never covered that overlapping half in the
+  // first place. Centering the visible dot a few px clear of the edge
+  // instead keeps the whole glyph inside the hit-rect and off the box.
+  const outward = (n: number) => (orientation === "LTR" ? n : -n);
+  const markerCenter = outward(4 + MARKER_R);
 
   const withMarker = withPerson.filter((d) => !!d.data.hasMore);
 
@@ -371,7 +381,8 @@ function treeChartCore(
   // `pointer-events: none` so only the hit-rect above handles the click.
   marker
     .append("circle")
-    .attr("r", 9)
+    .attr("cx", markerCenter)
+    .attr("r", MARKER_R)
     .attr("fill", (d) =>
       expandingKeys?.has(`${direction}:${d.data.person!.handle}`)
         ? "var(--mantine-color-dimmed)"
@@ -383,6 +394,7 @@ function treeChartCore(
 
   marker
     .append("text")
+    .attr("x", markerCenter)
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "central")
     .attr("fill", "white")
