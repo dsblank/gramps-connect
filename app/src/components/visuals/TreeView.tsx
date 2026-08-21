@@ -169,9 +169,16 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         try {
           const person = data?.find((p) => p.handle === handle);
           if (!person) return;
-          const t = token ?? (await getToken());
+          // Always go through getToken() rather than reusing the `token`
+          // state below -- that state is set once from the initial fetch and
+          // read here has no idea whether it's since gone stale. getToken()
+          // itself already knows (EXPIRY_TOLERANCE_MS) and transparently
+          // refreshes, which is exactly what a click well into a long
+          // browsing session needs.
+          const t = await getToken();
           const rows = await fetchPersonExpansion(t, person.gramps_id, direction);
           setData((prev) => mergeTreeData(prev ?? [], rows));
+          setToken(t);
           fetchedExpansionsRef.current.add(key);
         } catch (err) {
           notifications.show({
@@ -192,7 +199,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       // yanking the view back to it would fight the very pan that caused it.
       if (source === "click") setExpandCenterHandle(handle);
     },
-    [data, token],
+    [data],
   );
 
   // Resolved from `data` (not carried as its own object in state) so a new
