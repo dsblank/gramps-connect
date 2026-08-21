@@ -11,20 +11,15 @@ import { API_BASE } from "../config";
 import { zipRefs, type ObjectDetail } from "./objectDetail";
 import type { VisualData } from "./visualData";
 
+// A point is a reference, not a description: everything a presenter needs
+// to *show* a point (place title, coordinates, date, photo mime, ...) is
+// derived at render time by storyHydration.ts from the same local
+// eventsByHandle/places caches this module reads below, rather than copied
+// in here where it would go stale the moment the underlying Event or Place
+// changes.
 export interface StoryPoint {
-  personRefs?: string[];
-  personNames?: string[];
   eventRef?: string;
-  placeRef?: string;
-  placeTitle?: string;
-  lat?: number;
-  long?: number;
-  date?: string;
-  year?: number;
   mediaRef?: string;
-  mediaMime?: string;
-  title: string;
-  text: string;
 }
 
 export interface StorySpec {
@@ -32,7 +27,6 @@ export interface StorySpec {
   title: string;
   intro: string;
   introMediaRef?: string;
-  introMediaMime?: string;
   subjectRef: string;
   points: StoryPoint[];
 }
@@ -41,7 +35,9 @@ interface MediaRefLike {
   ref: string;
 }
 
-async function fetchMediaMime(token: string, handle: string): Promise<string | undefined> {
+/** Exported for storyHydration.ts, which resolves a mediaRef's mime type
+ * at presentation time rather than storing it in the spec. */
+export async function fetchMediaMime(token: string, handle: string): Promise<string | undefined> {
   try {
     const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -99,22 +95,23 @@ async function resolvePointMedia(
 }
 
 /** One point per event on `detail`, in the order recorded on
- * `event_ref_list` -- place and date are filled in whenever the local
- * caches have them, left off otherwise, rather than dropping the event for
- * lacking either (unlike a strictly map- or timeline-driven story, nothing
- * here requires coordinates or a parseable date). Returns null only when
- * the person has no events at all to draw from. */
+ * `event_ref_list` -- a point is just a reference plus (when one was
+ * found) a photo; place, date, and title/text are resolved from the event
+ * at presentation time by storyHydration.ts, not looked up here (unlike a
+ * strictly map- or timeline-driven story, nothing here requires
+ * coordinates or a parseable date up front). Returns null only when the
+ * person has no events at all to draw from. */
 export async function buildPersonStory(
   token: string,
   detail: ObjectDetail,
   personName: string,
   visualData: VisualData,
 ): Promise<StorySpec | null> {
-  const placesByHandle = new Map(visualData.places.map((place) => [place.handle, place]));
   const rows = zipRefs<{ media_list?: MediaRefLike[] }>(detail.event_ref_list, detail.extended?.events);
 
   interface Draft {
     point: StoryPoint;
+    year: number | null;
     placeHandle: string | undefined;
     eventMediaList: MediaRefLike[];
   }
@@ -124,25 +121,12 @@ export async function buildPersonStory(
     const record = visualData.eventsByHandle.get(ref.ref);
     if (!record) continue; // event not in the local cache (yet) -- nothing to describe it with
     const placeHandle = visualData.placeOfEvent.get(ref.ref);
-    const place = placeHandle ? placesByHandle.get(placeHandle) : undefined;
-    const point: StoryPoint = {
-      personRefs: [detail.handle],
-      personNames: [personName],
-      eventRef: ref.ref,
-      placeRef: place?.handle,
-      placeTitle: place?.title,
-      lat: place?.lat,
-      long: place?.long,
-      date: record.dateText || undefined,
-      year: record.year ?? undefined,
-      title: record.type,
-      text: record.description || (place?.title ? `${record.type} at ${place.title}` : record.type),
-    };
-    const draft: Draft = { point, placeHandle, eventMediaList: target?.media_list ?? [] };
+    const point: StoryPoint = { eventRef: ref.ref };
+    const draft: Draft = { point, year: record.year, placeHandle, eventMediaList: target?.media_list ?? [] };
     (record.year === null ? undated : dated).push(draft);
   }
   if (dated.length === 0 && undated.length === 0) return null;
-  dated.sort((a, b) => a.point.year! - b.point.year!);
+  dated.sort((a, b) => a.year! - b.year!);
   const drafts = [...dated, ...undated];
 
   // Every point's photo lookup runs together rather than one after another
@@ -151,12 +135,11 @@ export async function buildPersonStory(
   await Promise.all(drafts.map(async (draft) => {
     const media = await resolvePointMedia(token, draft.eventMediaList, draft.placeHandle);
     draft.point.mediaRef = media?.ref;
-    draft.point.mediaMime = media?.mime;
   }));
   const points = drafts.map((d) => d.point);
 
   // The person's own portrait, for the opening card and as every point's
-  // last-resort fallback (see StoryView.tsx's slidesFor) -- already
+  // last-resort fallback (see storyHydration.ts's slidesFor) -- already
   // resolved, since media_list is a top-level forward ref on the fetched
   // Person that extend=all covers for free.
   const portrait = zipRefs<{ mime?: string }>(detail.media_list, detail.extended?.media)
@@ -167,7 +150,6 @@ export async function buildPersonStory(
     title: `The Story of ${personName}`,
     intro: `${points.length} moment${points.length === 1 ? "" : "s"} from ${personName}'s recorded life.`,
     introMediaRef: portrait?.ref.ref,
-    introMediaMime: portrait?.target?.mime,
     subjectRef: detail.handle,
     points,
   };

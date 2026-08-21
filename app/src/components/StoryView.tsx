@@ -15,17 +15,13 @@
 // both get the timeline strip appended when the story has enough dated
 // points to make one meaningful.
 import { useEffect, useState } from "react";
-import { ActionIcon, Box, Group, Image, Modal, Paper, Stack, Text, useComputedColorScheme } from "@mantine/core";
+import { ActionIcon, Box, Group, Image, Loader, Modal, Paper, Stack, Text, useComputedColorScheme } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { API_BASE } from "../config";
 import { StoryMapBackground } from "./story/StoryMapBackground";
 import { StoryTimelineStrip, type StoryTimelinePoint } from "./story/StoryTimelineStrip";
-import type { StorySpec, StoryPoint } from "../store/storyBuilder";
-
-interface Slide extends Partial<StoryPoint> {
-  title: string;
-  text: string;
-}
+import type { StorySpec } from "../store/storyBuilder";
+import { hydrateStory, type HydratedSlide } from "../store/storyHydration";
 
 // Width of the content panel (and, matching it, how much of the map's
 // right side StoryMapBackground pads out) -- kept as one constant so the
@@ -34,24 +30,30 @@ interface Slide extends Partial<StoryPoint> {
 // point" off-centre in the now-narrower clear area.
 const PANEL_FRACTION = 0.62;
 
-/** A point rarely has its own photo (storyBuilder.ts only fills one in for
- * the person's own portrait on the intro slide -- a per-event photo would
- * need a separate fetch per event, deferred). Falling back to the person's
- * portrait here means every slide gets a face rather than only the first
- * one, without pretending a point "has" a photo it doesn't. */
-function slidesFor(spec: StorySpec): Slide[] {
-  return [
-    { title: spec.title, text: spec.intro, mediaRef: spec.introMediaRef, mediaMime: spec.introMediaMime },
-    ...spec.points.map((p) => ({
-      ...p,
-      mediaRef: p.mediaRef ?? spec.introMediaRef,
-      mediaMime: p.mediaMime ?? spec.introMediaMime,
-    })),
-  ];
+function isLocated(p: HydratedSlide): p is HydratedSlide & { lat: number; long: number } {
+  return p.lat != null && p.long != null;
 }
 
-function isLocated(p: StoryPoint): p is StoryPoint & { lat: number; long: number } {
-  return p.lat != null && p.long != null;
+/** Resolves `spec`'s refs into display data every time it changes -- see
+ * storyHydration.ts. Runs real async work (a visualData load plus one mime
+ * fetch per distinct photo), so callers see `null` until it resolves. */
+function useHydratedStory(spec: StorySpec | null) {
+  const [hydrated, setHydrated] = useState<Awaited<ReturnType<typeof hydrateStory>> | null>(null);
+  useEffect(() => {
+    if (!spec) {
+      setHydrated(null);
+      return;
+    }
+    let cancelled = false;
+    setHydrated(null);
+    hydrateStory(spec).then((h) => {
+      if (!cancelled) setHydrated(h);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [spec]);
+  return hydrated;
 }
 
 /** Full-bleed authed photo -- same jwt-query-param trick as
@@ -77,7 +79,7 @@ function SlidePhoto({ handle, mime }: { handle: string; mime?: string }) {
 /** The one piece of UI that actually knows what a slide is (photo, eyebrow
  * line, title, body) -- reused verbatim by both layouts below, which differ
  * only in where they place it. */
-function StorySlideContent({ slide }: { slide: Slide | undefined }) {
+function StorySlideContent({ slide }: { slide: HydratedSlide | undefined }) {
   return (
     <>
       {slide?.mediaRef && <SlidePhoto handle={slide.mediaRef} mime={slide.mediaMime} />}
@@ -139,8 +141,9 @@ function NavArrows({ index, total, onPrev, onNext, variant }: {
 export function StoryView({ spec, opened, onClose }: { spec: StorySpec | null; opened: boolean; onClose: () => void }) {
   const dark = useComputedColorScheme("light") === "dark";
   const [index, setIndex] = useState(0);
+  const hydrated = useHydratedStory(spec);
 
-  const slides = spec ? slidesFor(spec) : [];
+  const slides = hydrated?.slides ?? [];
   const slide = slides[index];
 
   const datedSlides: StoryTimelinePoint[] = [];
@@ -170,7 +173,7 @@ export function StoryView({ spec, opened, onClose }: { spec: StorySpec | null; o
 
   const goPrev = () => setIndex((i) => Math.max(i - 1, 0));
   const goNext = () => setIndex((i) => Math.min(i + 1, slides.length - 1));
-  const firstLocated = spec.points.find(isLocated);
+  const firstLocated = slides.find(isLocated);
   const currentPoint = slide && isLocated(slide) ? { lat: slide.lat, long: slide.long } : undefined;
 
   return (
@@ -212,7 +215,11 @@ export function StoryView({ spec, opened, onClose }: { spec: StorySpec | null; o
         >
           <Text size="lg" c="white">&times;</Text>
         </ActionIcon>
-      {firstLocated ? (
+      {!hydrated ? (
+        <Stack align="center" justify="center" style={{ height: "100%" }}>
+          <Loader />
+        </Stack>
+      ) : firstLocated ? (
         <Box style={{ position: "relative", height: "100%", overflow: "hidden" }}>
           <StoryMapBackground
             initialCenter={[firstLocated.long, firstLocated.lat]}
