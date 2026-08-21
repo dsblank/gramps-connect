@@ -22,6 +22,12 @@ import { VisualFrame } from "./VisualFrame";
 const BASE_ANC = 3;
 const BASE_DESC = 2;
 
+// Manual is the default and currently the only mode a user can reach --
+// this just hides the "Manual expand only" toggle itself (store/
+// treeExpandPreference.ts already defaults to manual either way) since
+// manual is the preferred mode for now. Flip to re-show it.
+const SHOW_MANUAL_EXPAND_TOGGLE = false;
+
 /** View > Tree, and the "Tree" button on a Person or Family's own page
  * (RelatedPanel's VisualButtons.tsx). Unlike Map/Timeline this always needs
  * a root to mean anything -- there's no "whole tree" default -- so with no
@@ -235,7 +241,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         ) : undefined
       }
       toolbar={
-        subject && root ? (
+        subject && root && SHOW_MANUAL_EXPAND_TOGGLE ? (
           <Switch
             size="xs"
             label="Manual expand only"
