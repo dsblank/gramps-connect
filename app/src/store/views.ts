@@ -21,6 +21,7 @@ import iconNotes from "../assets/icons/gramps-notes.svg";
 import iconTag from "../assets/icons/gramps-tag.svg";
 import iconReports from "../assets/icons/gramps-reports.svg";
 import iconChat from "../assets/icons/chat-message.svg";
+import iconStory from "../assets/icons/story-book.svg";
 
 export interface ColumnConfig {
   /** Both the local SQLite column name and the API response key (the
@@ -530,6 +531,28 @@ function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+// The .../query/ endpoint's json_path resolver (confirmed against a live
+// server) auto-decodes a string value into a nested object when that
+// string's own content happens to itself parse as JSON, instead of
+// returning it as the literal string every single-object GET route
+// always does. A story note's text.string always triggers this (a
+// StorySpec is deliberately stored as JSON there -- see storyBuilder.ts),
+// but any Note/message whose free-typed content happens to parse as JSON
+// would too. Every column below that selects a StyledText's `.string` --
+// MESSAGES_VIEW's "author"/"text", STORY_VIEW's "title", NOTE_VIEW's own
+// "text" -- needs this: without it, an already-decoded object reaches
+// toRowValues() (sql.ts) with no toSql to flatten it back to a string, and
+// a local TEXT column can't bind an object (this is what broke Home's
+// Recently Changed list once a story note became one of the most recently
+// changed Notes). Reflattens to an equivalent JSON string either way, so
+// each column's own toDisplay parses it the same regardless of which
+// shape the response actually arrived in.
+function styledTextToSql(raw: unknown): string | null {
+  if (typeof raw === "string") return raw;
+  if (raw && typeof raw === "object") return JSON.stringify(raw);
+  return null;
+}
+
 // Gramps Connect messages: standalone Notes (never attached to another
 // object's note_list) tagged "message" at creation -- same trick
 // GENERATED_VIEW uses for report/export, applied to Note instead of Media.
@@ -573,11 +596,64 @@ export const MESSAGES_VIEW: ViewConfig = {
     // half of the "author: message" split (see authoredText.ts).
     {
       key: "author", label: "By", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
-      toDisplay: (v) => splitAuthorMessage((v as string | null) ?? "").author ?? "",
+      toSql: styledTextToSql, toDisplay: (v) => splitAuthorMessage((v as string | null) ?? "").author ?? "",
     },
     {
       key: "text", label: "Message", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
-      toDisplay: (v) => truncate(splitAuthorMessage((v as string | null) ?? "").message, 80),
+      toSql: styledTextToSql, toDisplay: (v) => truncate(splitAuthorMessage((v as string | null) ?? "").message, 80),
+    },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+  ],
+};
+
+// A story note's text.string is a JSON-stringified StorySpec
+// (storyBuilder.ts), not free text -- unlike MESSAGES_VIEW's "By"/"Message"
+// columns, which run splitAuthorMessage() over the same field, this reads
+// out just the spec's own title. Falls back to the raw (truncated) text on
+// parse failure -- summary.ts's "story" case does the same, for the same
+// reason: an older/foreign note that happens to carry the "story" tag but
+// isn't valid JSON shouldn't break the row, just look like a plain note.
+// Its own toSql is styledTextToSql (see above truncate()) -- the same
+// query-endpoint quirk that function exists for.
+function storyTitle(json: unknown): string {
+  const raw = (json as string | null) ?? "";
+  try {
+    const spec = JSON.parse(raw) as { title?: string };
+    if (spec.title) return spec.title;
+  } catch {
+    // fall through to the raw-text fallback below
+  }
+  return truncate(raw, 80);
+}
+
+// Gramps Connect stories: standalone Notes (attached to the person they
+// were generated from via the normal note_list mechanism, same as
+// MESSAGES_VIEW's "message" Notes) tagged "story" at creation (see
+// storyApi.ts's STORY_TAG/createStoryNote). Same fixed-tag-filter trick as
+// MESSAGES_VIEW, applied to the "story" tag instead of "message" -- but
+// with its own columns (see storyTitle above) and its own opfsFilename:
+// sharing MESSAGES_VIEW's local cache table would corrupt both.
+export const STORY_VIEW: ViewConfig = {
+  key: "story",
+  label: "Stories",
+  icon: iconStory,
+  table: "note",
+  endpoint: "/api/notes/query/",
+  baseFilter: "exists(tags, name == 'story')",
+  // Continues the same "not an ordinary object type" sidebar group
+  // GENERATED_VIEW/MESSAGES_VIEW opened -- no separator of its own.
+  orderBy: [{ column: "change", direction: "desc" }],
+  opfsFilename: "app-cache-story.sqlite",
+  wherePlaceholder: 'e.g. "wedding" in text.string',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or a story title…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "text.string"]),
+  },
+  columns: [
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    {
+      key: "title", label: "Title", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
+      toSql: styledTextToSql, toDisplay: storyTitle,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
   ],
@@ -588,6 +664,15 @@ export const NOTE_VIEW: ViewConfig = {
   label: "Notes",
   icon: iconNotes,
   endpoint: "/api/notes/query/",
+  // Messages and stories are each their own tagged-Note-under-a-fixed-filter
+  // view (MESSAGES_VIEW/STORY_VIEW above), with their own icon, listing,
+  // and RelatedPanel treatment -- excluded here so they don't *also* show
+  // up a second time in the plain Notes list (or its "Add a note" picker,
+  // RefListField.tsx, which shares this same ViewConfig), unlabeled and
+  // unstyled as generic notes. homeStats.ts's fetchRecentlyChanged/
+  // fetchLatestMessages both read this same baseFilter through
+  // combinedFilter(), so this one exclusion covers Home's own lists too.
+  baseFilter: "not exists(tags, name == 'message') and not exists(tags, name == 'story')",
   // Notes have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-note.sqlite",
@@ -602,9 +687,20 @@ export const NOTE_VIEW: ViewConfig = {
       // Note.text is a StyledText struct (formatting spans + the plain
       // string); .string is the plain text. Notes can run long, so this
       // is truncated for the table -- the full text still round-trips
-      // through local SQLite, only the *display* is cut.
+      // through local SQLite, only the *display* is cut. toSql is
+      // styledTextToSql (see above truncate()) -- this view's own
+      // baseFilter keeps story notes (their text.string is JSON, see
+      // STORY_VIEW above) out of the ordinary run, but that same
+      // query-endpoint quirk could in principle still hit a plain note
+      // whose free-typed content happens to itself parse as JSON, so this
+      // stays defensive rather than assuming every row here is prose.
+      // toDisplay reuses storyTitle (defined below, before STORY_VIEW) for
+      // the same reason -- a stray JSON-shaped note (or one written before
+      // the "story" tag existed) shows its own title instead of raw JSON;
+      // an ordinary note's plain text falls through unchanged, since it
+      // never parses as JSON with a `title` field.
       key: "text", label: "Text", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
-      toDisplay: (v) => truncate((v as string | null) ?? "", 80),
+      toSql: styledTextToSql, toDisplay: (v) => storyTitle(v),
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
   ],
@@ -635,5 +731,5 @@ export const TAG_VIEW: ViewConfig = {
 export const VIEWS: ViewConfig[] = [
   PERSON_VIEW, FAMILY_VIEW, EVENT_VIEW, PLACE_VIEW, REPOSITORY_VIEW,
   SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW, GENERATED_VIEW,
-  MESSAGES_VIEW,
+  MESSAGES_VIEW, STORY_VIEW,
 ];

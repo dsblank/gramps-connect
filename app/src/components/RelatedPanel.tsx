@@ -14,11 +14,11 @@ import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MessageButton } from "./related/MessageButton";
-import { StoryButton } from "./related/StoryButton";
 import { EditButton } from "./related/EditButton";
 import { DeleteButton } from "./related/DeleteButton";
 import { VisualButtons } from "./related/VisualButtons";
 import { MessageActions } from "./related/MessageActions";
+import { StoryActions } from "./related/StoryActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
 import type { UseDraftStack } from "../store/draftStack";
@@ -176,6 +176,30 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     );
   }
 
+  if (view.key === "story") {
+    // A story note's text.string is a JSON-stringified StorySpec
+    // (storyBuilder.ts), not free text -- the note/messages branch below
+    // would otherwise dump raw JSON here. NoteText's embedded gramps://...
+    // link handling doesn't apply (a spec's title/intro are plain text),
+    // so ClickableTitle covers the isSelf/navigate distinction on its own
+    // without that branch's button-can't-nest-in-button workaround.
+    let spec: { title?: string; intro?: string } | null = null;
+    try {
+      spec = JSON.parse((detail.text as { string?: string } | undefined)?.string ?? "");
+    } catch {
+      spec = null;
+    }
+    return (
+      <div>
+        <Text size="sm" c="dimmed" fw={600}>
+          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{view.label} <PrivateIndicator detail={detail} />
+        </Text>
+        <ClickableTitle onClick={navigateToSelf}>{spec?.title || "(story)"}</ClickableTitle>
+        {spec?.intro && <Text c="dimmed">{spec.intro}</Text>}
+      </div>
+    );
+  }
+
   if (view.key === "note" || view.key === "messages") {
     const text = (detail.text as { string: string; tags?: { name: string; ranges: [number, number][]; value: string }[] } | undefined) ?? { string: "" };
     return (
@@ -320,7 +344,6 @@ export function RelatedPanel({
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           <DeleteButton view={view} detail={detail} />
           <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
-          <StoryButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
       </Group>
       {/* Directly under the title, not up in the header slot above: these
@@ -333,6 +356,7 @@ export function RelatedPanel({
       {view.key === "messages" && (
         <MessageActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
       )}
+      {view.key === "story" && <StoryActions detail={detail} />}
       <DetailFields type={view.key} detail={detail} />
       {sections.map((section) => {
         const Section = SECTION_COMPONENTS[section];

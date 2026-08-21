@@ -50,17 +50,18 @@ const RECENT_LABEL: Record<string, (view: ViewConfig, item: QueryItem) => string
   tag: (v, i) => cellText(v, i, "name") || "(tag)",
 };
 
-/** The where_expr actually sent for `view`: any fixed `view.baseFilter`
- * AND-ed with an extra, caller-supplied clause. Needed here because these
- * fetches call api.ts's fetchPage() directly rather than going through a
- * ViewStore -- fetchPage sends exactly the where_expr it's given, with no
- * idea that a view like MESSAGES_VIEW carries a baseFilter of its own (that
- * combining is normally viewStore.ts's combinedFilter()); skipping it here
- * silently turned "Latest messages" into "latest notes of any kind". */
-function combinedFilter(view: ViewConfig, extra: string | null): string | null {
-  const base = view.baseFilter ?? null;
-  if (base && extra) return `(${base}) and (${extra})`;
-  return base ?? extra;
+/** The where_expr actually sent for `view`: just its own fixed
+ * `view.baseFilter`, if it has one. Needed here because these fetches call
+ * api.ts's fetchPage() directly rather than going through a ViewStore --
+ * fetchPage sends exactly the where_expr it's given, with no idea that a
+ * view like MESSAGES_VIEW/STORY_VIEW/NOTE_VIEW carries a baseFilter of its
+ * own (that combining is normally viewStore.ts's combinedFilter());
+ * skipping it here silently turned "Latest messages" into "latest notes of
+ * any kind", and (before NOTE_VIEW's own baseFilter excluded them) let
+ * messages/stories double up in Recently Changed under NOTE_VIEW's plain,
+ * convention-blind `text` column. */
+function combinedFilter(view: ViewConfig): string | null {
+  return view.baseFilter ?? null;
 }
 
 export interface RecentItem {
@@ -82,17 +83,6 @@ function toRecentItem(view: ViewConfig, item: QueryItem): RecentItem {
   };
 }
 
-/** Recently Changed's own where_expr, per type -- only Notes needs one. A
- * Gramps Connect message *is* a Note (one tagged "message", see
- * MESSAGES_VIEW's baseFilter), already shown -- with its author split out
- * and its own icon -- by the Messages panel above this one. Without this
- * exclusion, every message would also turn up a second time here, labeled
- * from NOTE_VIEW's plain `text` column, which doesn't know about the
- * "author: message" convention and so reads as one run-on line. */
-const RECENT_WHERE: Partial<Record<string, string>> = {
-  note: "not exists(tags, name == 'message')",
-};
-
 /** The `limit` most recently changed records across every type in
  * STAT_VIEWS, newest first. Each type is asked for its own top `limit`
  * (an ordinary /query/ POST, order_by change desc -- no different from
@@ -105,7 +95,7 @@ export async function fetchRecentlyChanged(token: string, limit: number): Promis
     STAT_VIEWS.map(async (view) => {
       try {
         const { page } = await fetchPage(
-          view, token, null, false, combinedFilter(view, RECENT_WHERE[view.key] ?? null),
+          view, token, null, false, combinedFilter(view),
           [{ column: "change", direction: "desc" }], limit
         );
         return page.items.map((item) => toRecentItem(view, item));
@@ -134,7 +124,7 @@ export interface MessageItem {
  * combinedFilter above), just capped and unfiltered by search. */
 export async function fetchLatestMessages(token: string, limit: number): Promise<MessageItem[]> {
   const { page } = await fetchPage(
-    MESSAGES_VIEW, token, null, false, combinedFilter(MESSAGES_VIEW, null),
+    MESSAGES_VIEW, token, null, false, combinedFilter(MESSAGES_VIEW),
     [{ column: "change", direction: "desc" }], limit
   );
   return page.items.map((item) => ({

@@ -22,7 +22,7 @@ import {
 } from "./views";
 
 export type DraftType =
-  | "person" | "family" | "event" | "place" | "repository" | "source" | "citation" | "note" | "tag";
+  | "person" | "family" | "event" | "place" | "repository" | "source" | "citation" | "note" | "tag" | "story";
 
 /** Every type with a create/edit dialog -- MenuBar's "Add" menu and
  * EditButton's eligibility check both derive from this instead of each
@@ -31,18 +31,28 @@ export type DraftType =
  * the binary upload, not fields a blank form fills in; see jobsApi.ts's
  * uploadMedia / ImportMediaDialog for that flow) and the two synthetic
  * views, "generated"/"messages" (Media/Note under a fixed tag filter, not
- * distinct object types). */
+ * distinct object types). "story" is a third such synthetic type (also a
+ * tagged Note) that's an exception to that exclusion: unlike
+ * generated/messages it does need a generic Edit dialog (the JSON spec),
+ * so it stays in this list purely for EditButton's sake -- MenuBar.tsx
+ * filters it back out of its own "Add" dropdown, since a blank story has
+ * no person to attach to (only the person-scoped generate flow creates
+ * one, see storyApi.ts's generatePersonStory). */
 export const EDITABLE_TYPES: DraftType[] = [
-  "person", "family", "event", "place", "repository", "source", "citation", "note", "tag",
+  "person", "family", "event", "place", "repository", "source", "citation", "note", "tag", "story",
 ];
 
 /** Singular display name per type, for dialog titles ("New Event"/"Edit
  * Event") and MenuBar's "Add" entries ("New Event…"). */
 export const DRAFT_TYPE_LABELS: Record<DraftType, string> = {
   person: "Person", family: "Family", event: "Event", place: "Place", repository: "Repository", source: "Source",
-  citation: "Citation", note: "Note", tag: "Tag",
+  citation: "Citation", note: "Note", tag: "Tag", story: "Story",
 };
 
+// "story" has no ViewConfig of its own to fetch/PUT against -- a story is a
+// Note (STORY_VIEW is a fixed-tag-filter listing, same as MESSAGES_VIEW),
+// so its edit draft reads/writes through NOTE_VIEW's plain /api/notes/
+// endpoint exactly like an ordinary Note draft would.
 const VIEW_BY_TYPE: Record<DraftType, ViewConfig> = {
   person: PERSON_VIEW,
   family: FAMILY_VIEW,
@@ -53,6 +63,7 @@ const VIEW_BY_TYPE: Record<DraftType, ViewConfig> = {
   citation: CITATION_VIEW,
   note: NOTE_VIEW,
   tag: TAG_VIEW,
+  story: NOTE_VIEW,
 };
 
 export interface DraftEntry {
@@ -118,7 +129,7 @@ export interface DraftEntry {
 // every type that has no field a blank record can't sensibly start without.
 const CLASS_NAME: Record<DraftType, string> = {
   person: "Person", family: "Family", event: "Event", place: "Place", repository: "Repository", source: "Source",
-  citation: "Citation", note: "Note", tag: "Tag",
+  citation: "Citation", note: "Note", tag: "Tag", story: "Note",
 };
 
 function defaultDataFor(type: DraftType, handle: string): Record<string, unknown> {
@@ -256,6 +267,23 @@ export function useDraftStack(): UseDraftStack {
     return handle;
   }
 
+  // A story note's text.string (storyApi.ts's createStoryNote) is written
+  // compact -- reformatted once here, on load into an edit draft, into
+  // something actually editable by hand in ObjectEditDialog.tsx's "json"
+  // field. Mutates `data` in place: it's a fresh object this call just
+  // built, nothing else holds a reference to it yet. Left alone (not an
+  // error) if it isn't valid JSON -- the "json" field surfaces that itself
+  // rather than this silently reformatting garbage.
+  function prettyPrintStoryText(data: Record<string, unknown>): void {
+    const text = data.text as { string?: string } | undefined;
+    if (!text?.string) return;
+    try {
+      text.string = JSON.stringify(JSON.parse(text.string), null, 2);
+    } catch {
+      // not valid JSON -- leave as-is
+    }
+  }
+
   function openEditDraft(type: DraftType, handle: string, openedFrom?: DraftEntry["openedFrom"]) {
     // Re-editing a handle that's already in `stack` (e.g. Cancel, then Edit
     // the same object again) must *reset* that entry in place rather than
@@ -288,6 +316,7 @@ export function useDraftStack(): UseDraftStack {
       try {
         const token = await getToken();
         const data = await fetchPlainObject(token, VIEW_BY_TYPE[type], handle);
+        if (type === "story") prettyPrintStoryText(data);
         setStack((prev) => prev.map((d) => (d.handle === handle ? { ...d, data, status: "ready" } : d)));
       } catch (err: any) {
         setStack((prev) =>

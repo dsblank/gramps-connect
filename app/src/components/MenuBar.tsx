@@ -270,7 +270,14 @@ export function MenuBar({ draftStack }: MenuBarProps) {
         />
         <AppMenu
           label="Add"
-          items={EDITABLE_TYPES.map((type) => ({
+          // "story" is in EDITABLE_TYPES only so EditButton.tsx's shared
+          // eligibility check offers Edit on an existing story note (see
+          // draftStack.ts's own doc comment) -- filtered back out here
+          // since a blank story has no person to attach to; the only way
+          // to create one is the person-scoped "+ Add a story" generate
+          // flow (NotesSection.tsx's AddStoryControl, via
+          // storyApi.ts's generatePersonStory).
+          items={EDITABLE_TYPES.filter((type) => type !== "story").map((type) => ({
             label: `New ${DRAFT_TYPE_LABELS[type]}…`,
             // Family alone needs EditObject too -- families.py's
             // FamiliesResource.post() checks both, because adding a

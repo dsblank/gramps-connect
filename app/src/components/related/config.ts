@@ -62,5 +62,6 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   generated: ["attributes", "citations", "notes", "tags", "backlinks"],
   note: ["tags", "backlinks"],
   messages: ["tags", "backlinks"],
+  story: ["tags", "backlinks"],
   tag: ["backlinks"],
 };

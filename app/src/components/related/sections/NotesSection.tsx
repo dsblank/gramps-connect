@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
+import { Alert, Text, UnstyledButton } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { getTagHandleCached, MESSAGE_TAG, TODO_DONE_TAG } from "../../../store/notesApi";
 import { detachRefListEntry } from "../../../store/refListApi";
+import { generatePersonStory, STORY_TAG } from "../../../store/storyApi";
+import type { StorySpec } from "../../../store/storyBuilder";
 import { NOTE_VIEW } from "../../../store/views";
+import { StoryView } from "../../StoryView";
 import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
@@ -12,33 +16,36 @@ interface RawNote {
   tag_list?: string[];
 }
 
-/** The "message" and "todo-done" tags' own handles (resolved once,
+/** The "message"/"todo-done"/"story" tags' own handles (resolved once,
  * cached -- see getTagHandleCached's doc comment), needed to tell which of
- * a note's raw tag_list entries mean anything. Both start `null` before the
- * lookups resolve, so a message briefly renders as a plain, non-done note
- * on first paint rather than blocking the whole section on two network
- * round trips. */
-function useKnownTagHandles(): { message: string | null; done: string | null } {
+ * a note's raw tag_list entries mean anything. All start `null` before the
+ * lookups resolve, so a message or story briefly renders as a plain,
+ * non-done note on first paint rather than blocking the whole section on
+ * three network round trips. */
+function useKnownTagHandles(): { message: string | null; done: string | null; story: string | null } {
   const [message, setMessage] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [story, setStory] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const token = await getToken();
-        const [messageHandle, doneHandle] = await Promise.all([
+        const [messageHandle, doneHandle, storyHandle] = await Promise.all([
           getTagHandleCached(token, MESSAGE_TAG),
           getTagHandleCached(token, TODO_DONE_TAG),
+          getTagHandleCached(token, STORY_TAG),
         ]);
         if (!cancelled) {
           setMessage(messageHandle);
           setDone(doneHandle);
+          setStory(storyHandle);
         }
       } catch {
         // Not fatal -- rows just render/navigate as plain notes until this
-        // resolves (both tags always exist once any message has ever been
-        // created, so this only matters on a transient failure).
+        // resolves (all three tags always exist once any message/story has
+        // ever been created, so this only matters on a transient failure).
       }
     })();
     return () => {
@@ -46,7 +53,50 @@ function useKnownTagHandles(): { message: string | null; done: string | null } {
     };
   }, []);
 
-  return { message, done };
+  return { message, done, story };
+}
+
+/** "+ Add a story" -- the Stories section's own generate-and-attach
+ * trigger, replacing the old header-icon StoryButton.tsx (now deleted).
+ * Person-only (storyBuilder.ts's buildPersonStory only knows how to read a
+ * Person's own events), same permission gate the header icon used to have.
+ * Preserves that button's own behavior of opening the presentation
+ * immediately once the note's written, rather than requiring a second
+ * click into the new row. */
+function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["view"]; detail: SectionProps["detail"]; onAttached: () => void }) {
+  const [spec, setSpec] = useState<StorySpec | null>(null);
+  const [opened, setOpened] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (view.key !== "person" || !hasPermissions("AddObject", "EditObject")) return null;
+
+  async function handleClick() {
+    setBusy(true);
+    setError(null);
+    try {
+      const personName = summaryLine("person", detail) || "this person";
+      const token = await getToken();
+      const built = await generatePersonStory(token, view, detail, personName);
+      onAttached();
+      setSpec(built);
+      setOpened(true);
+    } catch (err: any) {
+      setError(err.message ?? String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <UnstyledButton onClick={handleClick} disabled={busy}>
+        <Text size="sm" c="blue">+ Add a story</Text>
+      </UnstyledButton>
+      {error && <Alert color="red">{error}</Alert>}
+      <StoryView spec={spec} opened={opened} onClose={() => setOpened(false)} />
+    </>
+  );
 }
 
 /** NoteBase.note_list -- a plain handle list, present on nearly every type.
@@ -62,12 +112,18 @@ function useKnownTagHandles(): { message: string | null; done: string | null } {
  * and loses MessageActions (Mark done/Reopen/Delete) -- and get a "done"
  * indicator ordinary notes have no equivalent of. */
 export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
-  const { message: messageTag, done: doneTag } = useKnownTagHandles();
+  const { message: messageTag, done: doneTag, story: storyTag } = useKnownTagHandles();
 
   const rows = zipHandles<RawNote>(detail.note_list, detail.extended?.notes);
   const isMessage = (target: RawNote) => Boolean(messageTag && target?.tag_list?.includes(messageTag));
-  const noteRows = rows.filter(({ target }) => !isMessage(target));
+  const isStory = (target: RawNote) => Boolean(storyTag && target?.tag_list?.includes(storyTag));
+  const noteRows = rows.filter(({ target }) => !isMessage(target) && !isStory(target));
   const messageRows = rows.filter(({ target }) => isMessage(target));
+  const storyRows = rows.filter(({ target }) => isStory(target));
+  // "+ Add a story" only offered on a person's own panel -- same reasoning
+  // AddStoryControl's own internal gate has, kept here too so the Stories
+  // SectionShell itself doesn't render empty for every other type.
+  const canAddStory = view.key === "person" && hasPermissions("AddObject", "EditObject");
   // Every editable type's own edit dialog also has a Notes field
   // (PersonEditDialog.tsx/FamilyEditDialog.tsx/ObjectEditDialog.tsx's
   // "refList" field kind) -- this live attach/detach is a quicker path to
@@ -115,6 +171,23 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
             const label = `${isDone ? "✓ " : ""}${summaryLine("messages", target)}`;
             return <RefRow key={handle} type="messages" handle={handle} obj={target} label={label} onNavigate={onNavigate} />;
           })}
+        </SectionShell>
+      )}
+      {(storyRows.length > 0 || canAddStory) && (
+        <SectionShell label="Stories">
+          {storyRows.map(({ handle, target }) => (
+            <RefRow
+              key={handle}
+              type="story"
+              handle={handle}
+              obj={target}
+              label={summaryLine("story", target)}
+              onNavigate={onNavigate}
+            />
+          ))}
+          {canAddStory && (
+            <AddStoryControl view={view} detail={detail} onAttached={() => onRefetch?.()} />
+          )}
         </SectionShell>
       )}
     </>

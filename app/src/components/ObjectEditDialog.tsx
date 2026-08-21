@@ -27,6 +27,7 @@ type FieldSpec =
   | { kind: "date"; key: string; label: string }
   | { kind: "placeName"; label: string }
   | { kind: "styledText"; key: string; label: string }
+  | { kind: "json"; key: string; label: string }
   | {
       kind: "reference"; key: string; label: string; refView: ViewConfig; refField: string; required?: boolean;
       /** Opts this field into "+ New <Type>" / "✎ Edit" on top of plain
@@ -203,6 +204,19 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "number", key: "priority", label: "Priority", min: 0 },
     ],
   },
+  // A story note's text.string is a JSON-stringified StorySpec
+  // (storyBuilder.ts), not free text -- "json" (below) is the same
+  // {_class: "StyledText", string} read/write shape "styledText" uses for
+  // an ordinary Note's text, just pretty-printed/validated as JSON. No
+  // citation_list/media_list/note_list fields: a story note doesn't
+  // reference those the way a person or event would.
+  story: {
+    quick: [GRAMPS_ID_FIELD, { kind: "json", key: "text", label: "Story JSON" }],
+    details: [
+      { kind: "switch", key: "private", label: "Private" },
+      TAGS_FIELD,
+    ],
+  },
 };
 
 function allFields(type: DraftType): FieldSpec[] {
@@ -268,11 +282,14 @@ export function ObjectEditDialog({
   const typeLabel = DRAFT_TYPE_LABELS[draft.type];
   const title = draft.mode === "edit" ? `Edit ${typeLabel}` : `New ${typeLabel}`;
   const spec = FIELD_SPECS[draft.type];
-  // Note is the only type with a styledText field -- the rest are all
-  // short scalar/reference fields that are fine in the default-width
+  // Note is the only other type with a styledText field -- the rest are
+  // all short scalar/reference fields that are fine in the default-width
   // modal. Widened here (rather than just the Textarea) since a wide
-  // textarea inside a narrow modal would just wrap awkwardly.
-  const modalSize = draft.type === "note" ? "xl" : "md";
+  // textarea inside a narrow modal would just wrap awkwardly. Story's own
+  // "json" field needs even more room than plain prose does -- a StorySpec
+  // with several points reads far more comfortably at near-full-width than
+  // "xl" allows.
+  const modalSize = draft.type === "story" ? "90%" : draft.type === "note" ? "xl" : "md";
 
   // Same fix as FamilyEditDialog.tsx's father/mother seeding effect,
   // generalized across every field kind that points at another object --
@@ -477,6 +494,37 @@ export function ObjectEditDialog({
           />
         );
       }
+      case "json": {
+        // Same {_class: "StyledText", string} shape as "styledText" --
+        // draftStack.ts's openEditDraft pretty-prints this field's value
+        // once, on load (storyApi.ts writes it compact), so this is just
+        // an ordinary controlled Textarea like styledText's own, with a
+        // monospace font and a live JSON-validity check surfaced as both
+        // an inline error and (below, missingRequired's sibling
+        // `invalidJson`) a disabled Save button -- writing broken JSON
+        // back would leave StoryActions.tsx unable to parse it at all.
+        const text = (draft.data[f.key] ?? {}) as Record<string, unknown>;
+        const value = (text.string as string | undefined) ?? "";
+        let jsonError: string | null = null;
+        try {
+          JSON.parse(value);
+        } catch (err: any) {
+          jsonError = err.message ?? "Invalid JSON";
+        }
+        return (
+          <Textarea
+            key={f.key}
+            label={f.label}
+            styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+            autosize
+            minRows={16}
+            maxRows={40}
+            value={value}
+            error={jsonError}
+            onChange={(e) => onChange({ [f.key]: { _class: "StyledText", ...text, string: e.currentTarget.value } })}
+          />
+        );
+      }
       case "reference": {
         const handle = (draft.data[f.key] as string | undefined) ?? null;
         const nestedDraft = f.nestedType ? findNestedDraft(f.key) : undefined;
@@ -588,9 +636,19 @@ export function ObjectEditDialog({
   const missingRequired = allFields(draft.type).some(
     (f) => f.kind === "reference" && f.required && !draft.data[f.key]
   );
+  const invalidJson = allFields(draft.type).some((f) => {
+    if (f.kind !== "json") return false;
+    const text = (draft.data[f.key] as { string?: string } | undefined)?.string ?? "";
+    try {
+      JSON.parse(text);
+      return false;
+    } catch {
+      return true;
+    }
+  });
 
   return (
-    <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle}>
+    <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
       <Stack gap="md">
         {spec.quick.map(renderField)}
 
@@ -615,7 +673,7 @@ export function ObjectEditDialog({
           <Button variant="default" onClick={onCancel} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={onPrimary} loading={saving} disabled={missingRequired}>
+          <Button onClick={onPrimary} loading={saving} disabled={missingRequired || invalidJson}>
             {primaryLabel}
           </Button>
         </Group>

@@ -18,6 +18,10 @@ Gramps icon theme has no dashboard/home glyph either. Named `gramps-*.svg`
 like the object-type icons above (Home sits in the same icon rail) even
 though, like `chat-message.svg`, it isn't sourced from Gramps or Tango.
 
+`story-book.svg` is also original artwork (Story view) -- Gramps' own icon
+theme has no story/presentation glyph to source from either, so it follows
+`chat-message.svg`'s naming and style rather than the `gramps-*.svg` set.
+
 `gramps-connect-logo.svg` is also original artwork: this app's own mark,
 and the reason the row above no longer includes a `gramps-logo.svg`. That
 file was Gramps' application icon (`org.gramps_project.Gramps.svg`), and

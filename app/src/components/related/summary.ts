@@ -83,6 +83,19 @@ function summaryText(type: string, obj: any): string {
     case "note":
     case "messages":
       return truncate(obj.text?.string ?? "", 80) || "(note)";
+    case "story": {
+      // A story note's text.string is a JSON-stringified StorySpec, not
+      // free text -- show its own title rather than raw JSON. Falls back
+      // to "(story)" on parse failure, same reasoning as views.ts's
+      // storyTitle() for the sidebar table's own Title column.
+      try {
+        const spec = JSON.parse(obj.text?.string ?? "");
+        if (spec?.title) return spec.title;
+      } catch {
+        // fall through
+      }
+      return "(story)";
+    }
     case "tag":
       return obj.name || "(tag)";
     default:
