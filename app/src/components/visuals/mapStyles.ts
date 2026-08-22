@@ -11,12 +11,19 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 // method the plugin's own README shows for a script-tag install.
 import { filterByDate } from "@openhistoricalmap/maplibre-gl-dates";
 
-/** The same OpenFreeMap vector styles gramps-web uses, so the two clients'
- * maps look like the same product. Both are free, key-less, and hosted --
- * which does mean a map (unlike every other view in this app) needs the
- * network even though its *data* is local. */
+/** The same OpenFreeMap "liberty" style gramps-web uses for its light
+ * basemap, so the two clients' maps look like the same product in light
+ * mode. Free, key-less, and hosted -- which does mean a map (unlike every
+ * other view in this app) needs the network even though its *data* is
+ * local. */
 export const STYLE_LIGHT = "https://tiles.openfreemap.org/styles/liberty";
-export const STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
+/** OpenFreeMap's own "dark" style renders every layer, including water, in
+ * the same near-zero-saturation gray (confirmed against their own demo at
+ * openfreemap.org) -- there's no hue anywhere to tell land from water at a
+ * glance. CARTO's Dark Matter style is the free, key-less alternative with
+ * an actual (if muted) blue-gray palette -- water and major roads read as
+ * distinct from background and from each other. */
+export const STYLE_DARK = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
 /** OHM's own vector style -- one cartography regardless of light/dark,
  * matching gramps-web's choice (see HANDOFF-ohm-map-modes.md). */
