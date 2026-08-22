@@ -76,7 +76,7 @@ const MEDIA_FIELDS: HelpEntry[] = [
   CHANGE,
 ];
 
-// Likewise for Note, shared by the Notes view and the Messages view.
+// Likewise for Note, shared by the Notes, Messages, and Stories views.
 const NOTE_FIELDS: HelpEntry[] = [
   GRAMPS_ID,
   { name: "text.string", description: "The note's text -- the Text column" },
@@ -286,6 +286,10 @@ const MEDIA_HELP: SearchHelp = {
 
 const NOTE_HELP: SearchHelp = {
   typeName: "Note",
+  scopeNote:
+    "This list already leaves out the messages people have left and the stories generated " +
+    "for people on this tree -- both are stored as notes too, but have their own views (and " +
+    "their own search) rather than showing up a second time here.",
   examples: [
     { expr: "'TODO' in text.string", description: "Notes mentioning TODO anywhere" },
     { expr: "like(text.string, 'Check %')", description: "Notes starting with 'Check '" },
@@ -311,10 +315,11 @@ const TAG_HELP: SearchHelp = {
   ],
 };
 
-// Media and Note under a fixed tag filter (see GENERATED_VIEW and
-// MESSAGES_VIEW's baseFilter) -- same fields as the tables they come from,
-// so those lists are reused verbatim; only the scope note and the examples
-// are their own.
+// Media and Note under a fixed filter (see GENERATED_VIEW's baseFilter,
+// still a tag; MESSAGES_VIEW/STORY_VIEW's, now Note.type -- see
+// notesApi.ts's MESSAGE_TYPE doc comment for why) -- same fields as the
+// tables they come from, so those lists are reused verbatim; only the
+// scope note and the examples are their own.
 const GENERATED_HELP: SearchHelp = {
   typeName: "Media",
   scopeNote:
@@ -351,6 +356,22 @@ const MESSAGES_HELP: SearchHelp = {
   collections: [TAGS],
 };
 
+const STORY_HELP: SearchHelp = {
+  typeName: "Note",
+  scopeNote:
+    "This list already shows only the stories generated for people on this tree -- they are " +
+    "stored as notes (the text a JSON blob describing the story, not free text), so a search " +
+    "here searches those notes, and is narrowed down further within the list rather than " +
+    "reaching the rest of your notes.",
+  examples: [
+    { expr: "'wedding' in text.string", description: "Stories whose generated text mentions a wedding" },
+    { expr: "like(text.string, '%\"title\":\"The Story of%')", description: "Stories still using the generated default title" },
+    { expr: "exists(tags)", description: "Stories you've tagged yourself" },
+  ],
+  fields: NOTE_FIELDS,
+  collections: [TAGS],
+};
+
 /** Keyed by ViewConfig.key -- by view rather than by object type, since two
  * views over the same table (Media/Output, Notes/Messages) hold different
  * rows and want different examples. A view with no entry simply gets no
@@ -368,6 +389,7 @@ const SEARCH_HELP: Record<string, SearchHelp> = {
   tag: TAG_HELP,
   generated: GENERATED_HELP,
   messages: MESSAGES_HELP,
+  story: STORY_HELP,
 };
 
 export function getSearchHelp(view: ViewConfig): SearchHelp | undefined {
