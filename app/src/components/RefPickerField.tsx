@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Button, Group, Select, Stack, Text } from "@mantine/core";
 import { FileButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
-import { createHandle, fetchPlainObject, updateObject } from "../store/objectsApi";
-import { uploadMedia } from "../store/jobsApi";
+import { createHandle } from "../store/objectsApi";
+import { uploadMediaFile } from "../store/jobsApi";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { RecordPicker } from "./RecordPicker";
 import { withGrampsId } from "./related/summary";
@@ -494,18 +494,7 @@ export function MediaListField({ label, refs, labels, onAddExisting, onAdded, on
     setError(null);
     try {
       const token = await getToken();
-      const handle = await uploadMedia(token, file, file.type || "application/octet-stream");
-      // Best-effort: give the upload a real description (its own filename)
-      // rather than leaving `desc` blank forever -- there's nowhere else in
-      // this app to set one afterward. Not fatal if it fails; the Media
-      // object itself was already created fine either way.
-      try {
-        const obj = await fetchPlainObject(token, MEDIA_VIEW, handle);
-        obj.desc = file.name;
-        await updateObject(token, MEDIA_VIEW, handle, obj);
-      } catch {
-        // best-effort, see above
-      }
+      const handle = await uploadMediaFile(token, file);
       onAdded(handle, file.name);
     } catch (err: any) {
       setError(err.message ?? String(err));

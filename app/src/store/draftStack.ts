@@ -42,6 +42,18 @@ export const EDITABLE_TYPES: DraftType[] = [
   "person", "family", "event", "place", "repository", "source", "citation", "note", "tag", "story",
 ];
 
+/** Types whose Gramps schema actually has a media_list field -- Person and
+ * Family wire MediaListField up themselves (PersonEditDialog.tsx,
+ * FamilyEditDialog.tsx); the rest go through ObjectEditDialog.tsx's
+ * FIELD_SPECS, which is the source of truth this mirrors (Repository, Note,
+ * Tag and the synthetic "story" type carry no media_list at all -- see that
+ * file's own comments). Used by useMediaDrop.ts to decide whether a dropped
+ * file can attach to whichever draft is currently open, or has to fall back
+ * to just adding a bare Media object instead. */
+export const MEDIA_CAPABLE_TYPES = new Set<DraftType>([
+  "person", "family", "event", "place", "source", "citation",
+]);
+
 /** Singular display name per type, for dialog titles ("New Event"/"Edit
  * Event") and MenuBar's "Add" entries ("New Event…"). */
 export const DRAFT_TYPE_LABELS: Record<DraftType, string> = {

@@ -5,7 +5,8 @@
 // gramps-web-api" section.
 import { API_BASE } from "../config";
 import { parseErrorMessage, fetchPage } from "./api";
-import { TAG_VIEW } from "./views";
+import { fetchPlainObject, updateObject } from "./objectsApi";
+import { MEDIA_VIEW, TAG_VIEW } from "./views";
 
 export type TaskState = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE" | string;
 
@@ -98,6 +99,24 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
   const added = trans.find((t) => t.type === "add");
   if (!added) throw new Error("expected an 'add' transaction entry, got none");
   return added.handle;
+}
+
+/** uploadMedia() plus a best-effort `desc` of the file's own name -- shared
+ * by every "drop/pick a file to create a Media object" entry point
+ * (RefPickerField.tsx's MediaListField, useMediaDrop.ts's global drop
+ * handler) so the description-setting isn't duplicated per call site.
+ * Not fatal if the desc PUT fails; the Media object itself is already
+ * created either way. */
+export async function uploadMediaFile(token: string, file: File): Promise<string> {
+  const handle = await uploadMedia(token, file, file.type || "application/octet-stream");
+  try {
+    const obj = await fetchPlainObject(token, MEDIA_VIEW, handle);
+    obj.desc = file.name;
+    await updateObject(token, MEDIA_VIEW, handle, obj);
+  } catch {
+    // best-effort, see above
+  }
+  return handle;
 }
 
 /** Finds an existing Tag by exact name (reusing TAG_VIEW's own query

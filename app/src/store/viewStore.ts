@@ -165,6 +165,20 @@ export class ViewStore {
     this.emit();
   }
 
+  /** Bumps selectedRevision (the same signal applyLiveChange() sends a
+   * live-synced edit of the selected row) without touching any cached row
+   * data -- for a write that goes straight to the server via some other
+   * path (useMediaDrop.ts attaching a dropped file directly to the viewed
+   * record, bypassing the edit-dialog/draftStack flow entirely), so
+   * RelatedPanel's own revision-keyed effect refetches this record's detail
+   * immediately instead of waiting up to one live-sync poll interval.
+   * No-op if `handle` isn't the current selection. */
+  touchSelected(handle: string): void {
+    if (handle !== this.selectedHandle) return;
+    this.selectedRevision += 1;
+    this.emit();
+  }
+
   /** Selects the first row whenever nothing is selected against a loaded
    * cache, so the detail panes always have a record to show. An empty
    * right-hand pane is a dead half of the window, and the first row is

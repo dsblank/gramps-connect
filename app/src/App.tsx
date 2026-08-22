@@ -27,6 +27,8 @@ import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
 import { EditDialogs } from "./components/EditDialogs";
+import { useMediaDrop } from "./hooks/useMediaDrop";
+import { MediaDropOverlay } from "./components/MediaDropOverlay";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 
 export function App() {
@@ -86,6 +88,7 @@ function AuthenticatedApp() {
   // State owned by MenuBar itself would vanish (mid-edit!) on a resize that
   // crosses STACKED_QUERY's breakpoint; state owned here survives it.
   const draftStack = useDraftStack();
+  const mediaDrop = useMediaDrop(draftStack, activeKey);
   // #/map and #/timeline are pages in their own right rather than VIEWS
   // entries -- each takes over the whole content area (table *and* detail
   // panes) for one whole-tree plot; see hash.ts. #/home is the same idea
@@ -309,6 +312,7 @@ function AuthenticatedApp() {
       {/* Lives outside AppShell, not inside either MenuBar instance --
           see draftStack's doc comment above for why. */}
       <EditDialogs draftStack={draftStack} />
+      <MediaDropOverlay {...mediaDrop} />
     </>
   );
 }
