@@ -1,13 +1,14 @@
-// Write path for "story" notes -- a standalone Note tagged "story" whose
-// text is a JSON-stringified StorySpec (storyBuilder.ts), attached to the
-// person it was generated from via the normal note_list mechanism (same
-// two-step create-then-attach as MessageButton.tsx). Same generic-object
-// shape as notesApi.ts's createMessage; kept in its own module since a
-// story note isn't a message and shouldn't show up in NotesSection's
-// ordinary-Notes split.
+// Write path for "story" notes -- a standalone Note whose Note.type
+// identifies it as "story" (a custom NoteType, set the same way
+// notesApi.ts's MESSAGE_TYPE is -- see its doc comment) and whose text is a
+// JSON-stringified StorySpec (storyBuilder.ts), attached to the person it
+// was generated from via the normal note_list mechanism (same two-step
+// create-then-attach as MessageButton.tsx). Same generic-object shape as
+// notesApi.ts's createMessage; kept in its own module since a story note
+// isn't a message and shouldn't show up in NotesSection's ordinary-Notes
+// split.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
-import { getOrCreateTagHandle } from "./jobsApi";
 import { attachNoteToObject } from "./notesApi";
 import type { ObjectDetail } from "./objectDetail";
 import { getViewStore } from "./registry";
@@ -15,7 +16,7 @@ import { buildPersonStory, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
 import type { ViewConfig } from "./views";
 
-export const STORY_TAG = "story";
+export const STORY_TYPE = "story";
 
 function addedHandle(trans: { type: string; handle: string }[]): string {
   const added = trans.find((t) => t.type === "add");
@@ -24,11 +25,10 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
 }
 
 export async function createStoryNote(token: string, spec: StorySpec): Promise<string> {
-  const storyTag = await getOrCreateTagHandle(token, STORY_TAG);
   const res = await fetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ text: { string: JSON.stringify(spec) }, tag_list: [storyTag] }),
+    body: JSON.stringify({ text: { string: JSON.stringify(spec) }, type: STORY_TYPE }),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return addedHandle(await res.json());

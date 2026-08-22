@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Alert, Text, UnstyledButton } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
-import { getTagHandleCached, MESSAGE_TAG, TODO_DONE_TAG } from "../../../store/notesApi";
+import { getTagHandleCached, MESSAGE_TYPE, TODO_DONE_TAG } from "../../../store/notesApi";
 import { detachRefListEntry } from "../../../store/refListApi";
-import { generatePersonStory, STORY_TAG } from "../../../store/storyApi";
+import { generatePersonStory, STORY_TYPE } from "../../../store/storyApi";
 import type { StorySpec } from "../../../store/storyBuilder";
 import { NOTE_VIEW } from "../../../store/views";
 import { StoryView } from "../../StoryView";
@@ -14,38 +14,39 @@ import type { SectionProps } from "../types";
 
 interface RawNote {
   tag_list?: string[];
+  // gramps-web-api flattens Note.type to a plain string in its REST JSON
+  // responses ("story", or a standard type's name like "General") rather
+  // than the {_class, value, string} shape the query endpoint's json_data
+  // uses internally (see views.ts's MESSAGES_VIEW/STORY_VIEW baseFilter,
+  // which target .string against that internal shape instead) -- confirmed
+  // by fetching a person with extend=all and inspecting extended.notes.
+  type?: string;
 }
 
-/** The "message"/"todo-done"/"story" tags' own handles (resolved once,
- * cached -- see getTagHandleCached's doc comment), needed to tell which of
- * a note's raw tag_list entries mean anything. All start `null` before the
- * lookups resolve, so a message or story briefly renders as a plain,
- * non-done note on first paint rather than blocking the whole section on
- * three network round trips. */
-function useKnownTagHandles(): { message: string | null; done: string | null; story: string | null } {
-  const [message, setMessage] = useState<string | null>(null);
+/** The "todo-done" tag's own handle (resolved once, cached -- see
+ * getTagHandleCached's doc comment), needed to tell a done message from an
+ * open one: a note's raw tag_list entries are unresolved handles (extend=all
+ * doesn't resolve tag names on a note nested inside another object's
+ * note_list), so there's nothing to compare against until this resolves.
+ * Message/story identity has no such lookup -- Note.type is an embedded
+ * field, read straight off `target.type.string` below. Starts `null` before
+ * the lookup resolves, so a message briefly renders without its done
+ * indicator on first paint rather than blocking the whole section on a
+ * network round trip. */
+function useDoneTagHandle(): string | null {
   const [done, setDone] = useState<string | null>(null);
-  const [story, setStory] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const token = await getToken();
-        const [messageHandle, doneHandle, storyHandle] = await Promise.all([
-          getTagHandleCached(token, MESSAGE_TAG),
-          getTagHandleCached(token, TODO_DONE_TAG),
-          getTagHandleCached(token, STORY_TAG),
-        ]);
-        if (!cancelled) {
-          setMessage(messageHandle);
-          setDone(doneHandle);
-          setStory(storyHandle);
-        }
+        const doneHandle = await getTagHandleCached(token, TODO_DONE_TAG);
+        if (!cancelled) setDone(doneHandle);
       } catch {
-        // Not fatal -- rows just render/navigate as plain notes until this
-        // resolves (all three tags always exist once any message/story has
-        // ever been created, so this only matters on a transient failure).
+        // Not fatal -- rows just render without a done indicator until this
+        // resolves (the tag always exists once any message has ever been
+        // marked done, so this only matters on a transient failure).
       }
     })();
     return () => {
@@ -53,7 +54,7 @@ function useKnownTagHandles(): { message: string | null; done: string | null; st
     };
   }, []);
 
-  return { message, done, story };
+  return done;
 }
 
 /** "+ Add a story" -- the Stories section's own generate-and-attach
@@ -102,21 +103,25 @@ function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["vie
 /** NoteBase.note_list -- a plain handle list, present on nearly every type.
  * A listed note might itself be a Gramps Connect message (MessageButton.tsx
  * attaches new messages here rather than putting any reference in the
- * message text) rather than an ordinary Note -- extend=all only resolves
- * names for the *top-level* fetched object's own forward refs, not a
- * second level deep, so a nested note's `tag_list` here is still raw
- * handles. Split into two SectionShells (mirrors Notes/Messages already
- * being separate top-level sidebar views) rather than one mixed list;
- * message rows route through onNavigate as "messages" rather than "note"
- * -- otherwise a click lands on the general Notes view instead of Messages
- * and loses MessageActions (Mark done/Reopen/Delete) -- and get a "done"
- * indicator ordinary notes have no equivalent of. */
+ * message text) or a story rather than an ordinary Note -- told apart by
+ * `target.type`, an embedded field on each resolved Note that needs no
+ * further lookup (see RawNote's own doc comment for the string-vs-object
+ * shape gotcha). Its `tag_list` is a different story: extend=all only
+ * resolves names for the *top-level* fetched object's own forward refs, not
+ * a second level deep, so a nested note's tag_list here is still raw
+ * handles -- which is why the "done" indicator needs useDoneTagHandle's
+ * resolved handle to compare against. Split into two SectionShells (mirrors
+ * Notes/Messages already being separate top-level sidebar views) rather
+ * than one mixed list; message rows route through onNavigate as "messages"
+ * rather than "note" -- otherwise a click lands on the general Notes view
+ * instead of Messages and loses MessageActions (Mark done/Reopen/Delete) --
+ * and get a "done" indicator ordinary notes have no equivalent of. */
 export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
-  const { message: messageTag, done: doneTag, story: storyTag } = useKnownTagHandles();
+  const doneTag = useDoneTagHandle();
 
   const rows = zipHandles<RawNote>(detail.note_list, detail.extended?.notes);
-  const isMessage = (target: RawNote) => Boolean(messageTag && target?.tag_list?.includes(messageTag));
-  const isStory = (target: RawNote) => Boolean(storyTag && target?.tag_list?.includes(storyTag));
+  const isMessage = (target: RawNote) => target?.type === MESSAGE_TYPE;
+  const isStory = (target: RawNote) => target?.type === STORY_TYPE;
   const noteRows = rows.filter(({ target }) => !isMessage(target) && !isStory(target));
   const messageRows = rows.filter(({ target }) => isMessage(target));
   const storyRows = rows.filter(({ target }) => isStory(target));

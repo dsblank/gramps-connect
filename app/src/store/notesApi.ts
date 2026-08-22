@@ -1,9 +1,14 @@
 // Write path for Gramps Connect messages -- standalone Notes (never
-// attached to another object's note_list) tagged "message", with a
+// attached to another object's note_list) whose Note.type identifies them
+// as "message" (a custom NoteType, set by passing a plain string for
+// `type` -- gramps-web-api's fix_object_dict coerces that into the
+// {_class: "NoteType", value: CUSTOM, string: "message"} shape), with a
 // "todo-open"/"todo-done" tag pair standing in for a done flag (see
 // store/views.ts's MESSAGES_VIEW doc comment for why a tag pair, not a
-// column). Same generic-object-CRUD, no-backend-changes shape as
-// jobsApi.ts's Media helpers -- gramps-web-api gets nothing new here
+// column -- unlike message/story identity, "done" has no natural home on
+// Note.type since a message is either a message or it isn't, but can be
+// either done or open). Same generic-object-CRUD, no-backend-changes shape
+// as jobsApi.ts's Media helpers -- gramps-web-api gets nothing new here
 // either.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
@@ -12,7 +17,7 @@ import { formatAuthoredText } from "./authoredText";
 import { attachRefListEntry } from "./refListApi";
 import type { ViewConfig } from "./views";
 
-export const MESSAGE_TAG = "message";
+export const MESSAGE_TYPE = "message";
 const TODO_OPEN_TAG = "todo-open";
 export const TODO_DONE_TAG = "todo-done";
 
@@ -21,12 +26,13 @@ const tagHandleCache = new Map<string, Promise<string>>();
 /** Memoized wrapper around getOrCreateTagHandle -- each tag name looked up
  * (or created) once and cached for the rest of the session rather than once
  * per caller. NotesSection needs this on every object with attached notes:
- * telling a message apart from an ordinary note, and a done message from an
- * open one, both come down to comparing a nested note's raw tag_list
- * against one of these known tags' handles (extend=all doesn't resolve tag
- * names on a note nested inside another object's note_list -- only the
- * top-level fetched object's own forward refs get that). Reset on failure
- * so a transient error doesn't wedge every future call for that name. */
+ * telling a done message from an open one comes down to comparing a nested
+ * note's raw tag_list against TODO_DONE_TAG's handle (extend=all doesn't
+ * resolve tag names on a note nested inside another object's note_list --
+ * only the top-level fetched object's own forward refs get that; message/
+ * story identity has no such problem since Note.type is an embedded field,
+ * not a reference, and needs no resolution at all). Reset on failure so a
+ * transient error doesn't wedge every future call for that name. */
 export function getTagHandleCached(token: string, name: string): Promise<string> {
   let promise = tagHandleCache.get(name);
   if (!promise) {
@@ -45,19 +51,20 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
   return added.handle;
 }
 
-/** Creates a standalone Note tagged "message" + "todo-open". Unlike
+/** Creates a standalone Note typed "message" and tagged "todo-open". Unlike
  * uploadMedia, Note creation has no blob-upload step -- the POST body is
- * JSON throughout, so tag_list can be set in the same request instead of a
- * follow-up GET+PUT. */
+ * JSON throughout, so type and tag_list can both be set in the same
+ * request instead of a follow-up GET+PUT. */
 export async function createMessage(token: string, author: string, message: string): Promise<string> {
-  const [messageTag, openTag] = await Promise.all([
-    getOrCreateTagHandle(token, MESSAGE_TAG),
-    getOrCreateTagHandle(token, TODO_OPEN_TAG),
-  ]);
+  const openTag = await getOrCreateTagHandle(token, TODO_OPEN_TAG);
   const res = await fetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ text: { string: formatAuthoredText(author, message) }, tag_list: [messageTag, openTag] }),
+    body: JSON.stringify({
+      text: { string: formatAuthoredText(author, message) },
+      type: MESSAGE_TYPE,
+      tag_list: [openTag],
+    }),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return addedHandle(await res.json());

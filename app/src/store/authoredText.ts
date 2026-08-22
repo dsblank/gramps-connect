@@ -1,6 +1,6 @@
 // "author: message" encoding for a Gramps Connect message's Note.text --
-// see notesApi.ts's MESSAGE_TAG doc comment for why this exists (Note
-// has no author field, and a tag can't back a real table column either).
+// see notesApi.ts's MESSAGE_TYPE doc comment for why this exists (Note
+// has no author field).
 // Split into its own module so views.ts (reads it for the "By"/"Message"
 // columns' toDisplay) and notesApi.ts (writes it at creation) can both
 // import it without notesApi.ts -> jobsApi.ts -> views.ts creating a cycle

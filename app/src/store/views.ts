@@ -587,17 +587,18 @@ function styledTextToSql(raw: unknown): string | null {
 }
 
 // Gramps Connect messages: standalone Notes (never attached to another
-// object's note_list) tagged "message" at creation -- same trick
-// GENERATED_VIEW uses for report/export, applied to Note instead of Media.
-// Completion state is a second tag pair ("todo-open"/"todo-done", see
-// notesApi.ts) rather than its own column, for the same reason
-// GENERATED_VIEW doesn't have a report-vs-export column: cheaper than
-// resolving tag names into the local SQLite cache just for one derived
-// field -- confirmed empirically (see authoredText.ts) that a *collection*
-// relationship like "tags" can't back a select column at all, only a
-// singular one (a Person's "father"/"birth") can. `table: "note"` (key
-// differs) puts this store in the same live-sync bucket as NOTE_VIEW, so
-// both get notified off one getViewStoresForTable("note") lookup.
+// object's note_list) whose Note.type is set to "message" at creation (see
+// notesApi.ts's MESSAGE_TYPE) -- a singular embedded field, unlike
+// GENERATED_VIEW's report/export split, which still has to use a tag
+// (Media has no equivalent typed field to repurpose). Completion state is
+// still a tag pair ("todo-open"/"todo-done", see notesApi.ts) rather than
+// its own column: cheaper than resolving tag names into the local SQLite
+// cache just for one derived field -- confirmed empirically (see
+// authoredText.ts) that a *collection* relationship like "tags" can't back
+// a select column at all, only a singular one (a Person's "father"/"birth",
+// or now a Note's own "type") can. `table: "note"` (key differs) puts this
+// store in the same live-sync bucket as NOTE_VIEW, so both get notified off
+// one getViewStoresForTable("note") lookup.
 export const MESSAGES_VIEW: ViewConfig = {
   // The key is both the URL segment (#/messages/<handle>, see hash.ts) and,
   // spliced unquoted into raw SQL by viewStore.ts (`SELECT ... FROM
@@ -609,7 +610,7 @@ export const MESSAGES_VIEW: ViewConfig = {
   icon: iconChat,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "exists(tags, name == 'message')",
+  baseFilter: "type.string == 'message'",
   // No separator of its own -- GENERATED_VIEW's divider already opens this
   // "not an ordinary object type" group in the sidebar; Messages just
   // continues it rather than starting a second one.
@@ -661,18 +662,19 @@ function storyTitle(json: unknown): string {
 
 // Gramps Connect stories: standalone Notes (attached to the person they
 // were generated from via the normal note_list mechanism, same as
-// MESSAGES_VIEW's "message" Notes) tagged "story" at creation (see
-// storyApi.ts's STORY_TAG/createStoryNote). Same fixed-tag-filter trick as
-// MESSAGES_VIEW, applied to the "story" tag instead of "message" -- but
-// with its own columns (see storyTitle above) and its own opfsFilename:
-// sharing MESSAGES_VIEW's local cache table would corrupt both.
+// MESSAGES_VIEW's "message" Notes) whose Note.type is set to "story" at
+// creation (see storyApi.ts's STORY_TYPE/createStoryNote). Same
+// fixed-type-filter trick as MESSAGES_VIEW, applied to "story" instead of
+// "message" -- but with its own columns (see storyTitle above) and its own
+// opfsFilename: sharing MESSAGES_VIEW's local cache table would corrupt
+// both.
 export const STORY_VIEW: ViewConfig = {
   key: "story",
   label: "Stories",
   icon: iconStory,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "exists(tags, name == 'story')",
+  baseFilter: "type.string == 'story'",
   // Continues the same "not an ordinary object type" sidebar group
   // GENERATED_VIEW/MESSAGES_VIEW opened -- no separator of its own.
   orderBy: [{ column: "change", direction: "desc" }],
@@ -697,7 +699,7 @@ export const NOTE_VIEW: ViewConfig = {
   label: "Notes",
   icon: iconNotes,
   endpoint: "/api/notes/query/",
-  // Messages and stories are each their own tagged-Note-under-a-fixed-filter
+  // Messages and stories are each their own typed-Note-under-a-fixed-filter
   // view (MESSAGES_VIEW/STORY_VIEW above), with their own icon, listing,
   // and RelatedPanel treatment -- excluded here so they don't *also* show
   // up a second time in the plain Notes list (or its "Add a note" picker,
@@ -705,7 +707,7 @@ export const NOTE_VIEW: ViewConfig = {
   // unstyled as generic notes. homeStats.ts's fetchRecentlyChanged/
   // fetchLatestMessages both read this same baseFilter through
   // combinedFilter(), so this one exclusion covers Home's own lists too.
-  baseFilter: "not exists(tags, name == 'message') and not exists(tags, name == 'story')",
+  baseFilter: "type.string != 'message' and type.string != 'story'",
   // Notes have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-note.sqlite",

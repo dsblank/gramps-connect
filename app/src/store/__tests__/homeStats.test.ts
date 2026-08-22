@@ -79,13 +79,13 @@ describe("fetchRecentlyChanged", () => {
     expect(result).toEqual([{ viewKey: "tag", handle: "T1", grampsId: "", label: "Ancestors", changeUnix: 100 }]);
   });
 
-  it("excludes message- and story-tagged notes -- the Messages/Story panels already cover those", async () => {
+  it("excludes message- and story-typed notes -- the Messages/Story panels already cover those", async () => {
     vi.mocked(fetchPage).mockImplementation(async () => page([]));
 
     await fetchRecentlyChanged("tok", 5);
 
     const noteCall = vi.mocked(fetchPage).mock.calls.find(([view]) => view.key === "note")!;
-    expect(noteCall[4]).toBe("not exists(tags, name == 'message') and not exists(tags, name == 'story')");
+    expect(noteCall[4]).toBe("type.string != 'message' and type.string != 'story'");
   });
 });
 
@@ -115,7 +115,7 @@ describe("fetchLatestMessages", () => {
     await fetchLatestMessages("tok", 5);
 
     const call = vi.mocked(fetchPage).mock.calls[0];
-    expect(call[4]).toBe("exists(tags, name == 'message')");
+    expect(call[4]).toBe("type.string == 'message'");
   });
 });
 
