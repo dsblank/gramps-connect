@@ -22,6 +22,7 @@ export type RelatedSection =
   | "citations"
   | "notes"
   | "media"
+  | "comparisons"
   | "attributes"
   | "addresses"
   | "urls"
@@ -55,11 +56,11 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   // source" only ever shows up as a backlink, not a forward ref here.
   source: ["repositories", "attributes", "media", "notes", "tags", "backlinks"],
   citation: ["source", "attributes", "media", "notes", "tags", "backlinks"],
-  media: ["attributes", "citations", "notes", "tags", "backlinks"],
+  media: ["comparisons", "attributes", "citations", "notes", "tags", "backlinks"],
   // The Output view (store/views.ts's GENERATED_VIEW) is Media
   // rows under a fixed tag filter, not a distinct object type -- same
   // sections as the ordinary Media view.
-  generated: ["attributes", "citations", "notes", "tags", "backlinks"],
+  generated: ["comparisons", "attributes", "citations", "notes", "tags", "backlinks"],
   note: ["tags", "backlinks"],
   messages: ["tags", "backlinks"],
   story: ["tags", "backlinks"],

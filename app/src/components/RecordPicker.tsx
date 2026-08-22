@@ -67,7 +67,14 @@ export function RecordPicker({
 
   useEffect(() => {
     const term = query.trim().replace(/['\\]/g, "");
-    const whereExpr = term.length === 0 ? null : buildExpr ? buildExpr(term) : `like(${searchField}, '${term}%')`;
+    // A caller-supplied buildExpr is asked even for an empty term (unlike
+    // the plain-prefix-match fallback below, which only ever runs once
+    // something's typed) -- ComparisonsSection's image-only picker needs its
+    // mime filter applied to the default browse-all list too, not just once
+    // the user starts typing. Every existing buildExpr (buildSimpleSearchExpr)
+    // already returns null for a too-short term on its own, so this is a
+    // no-op for every other caller.
+    const whereExpr = buildExpr ? buildExpr(term) : term.length === 0 ? null : `like(${searchField}, '${term}%')`;
     let cancelled = false;
     setLoading(true);
     // A fresh search invalidates whatever was highlighted from the

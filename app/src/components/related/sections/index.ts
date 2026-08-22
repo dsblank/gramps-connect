@@ -18,6 +18,7 @@ import { RepositoriesSection } from "./RepositoriesSection";
 import { CitationsSection } from "./CitationsSection";
 import { NotesSection } from "./NotesSection";
 import { MediaSection } from "./MediaSection";
+import { ComparisonsSection } from "./ComparisonsSection";
 import { AttributesSection } from "./AttributesSection";
 import { AddressesSection } from "./AddressesSection";
 import { UrlsSection } from "./UrlsSection";
@@ -39,6 +40,7 @@ export const SECTION_COMPONENTS: Record<RelatedSection, ComponentType<SectionPro
   citations: CitationsSection,
   notes: NotesSection,
   media: MediaSection,
+  comparisons: ComparisonsSection,
   attributes: AttributesSection,
   addresses: AddressesSection,
   urls: UrlsSection,

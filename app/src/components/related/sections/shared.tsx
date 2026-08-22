@@ -63,7 +63,7 @@ function TypeIcon({ type }: { type: string }) {
  * always through the `onNavigate` callback RelatedPanel was given, so the
  * same row works whether it's mounted in the top pane (sets sub-selection)
  * or the bottom pane (promotes to a real view switch). */
-export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onEdit, onRemove }: {
+export function RefRow({ type, handle, obj, refMeta, onNavigate, label, extra, onEdit, onRemove }: {
   type: string;
   handle: string;
   obj: unknown;
@@ -74,6 +74,12 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onEdit, 
    * FamiliesSection showing just the *other* spouse's name rather than
    * both family members). */
   label?: string;
+  /** An extra action rendered inline right after the label, before
+   * onEdit/onRemove -- e.g. ComparisonsSection's own "Compare" button, which
+   * needs to sit next to the row's name rather than as a separate row below
+   * it. Left unset by every other section (none of them need a per-row
+   * action beyond edit/remove). */
+  extra?: ReactNode;
   /** Opens RefEditDialog.tsx to edit this *reference's own* relationship
    * metadata (a ChildRef's frel/mrel, an EventRef's role, ...) -- distinct
    * from RelatedPanel's header EditButton, which edits the target object
@@ -112,6 +118,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, onEdit, 
             {text}
           </Anchor>
         )}
+        {extra}
         {onEdit && <CircleGlyphButton glyph="🔗" label="Edit relationship" onClick={onEdit} size={16} />}
         {onRemove && <CircleGlyphButton glyph="−" label="Remove" onClick={onRemove} size={16} />}
       </Group>
