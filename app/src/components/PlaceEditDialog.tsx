@@ -1,5 +1,6 @@
 import { Button, Group, Modal, Stack, Switch, TextInput } from "@mantine/core";
 import { UrlListField, type Url } from "./EmbeddedListFields";
+import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 
@@ -32,7 +33,7 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
     <Modal opened={opened} onClose={onDone} title={title} size="md" stackId={stackId}>
       <Stack gap="md">
         <TextInput
-          label="Name"
+          label={t("Name")}
           value={titleValue}
           onChange={(e) => {
             const v = e.currentTarget.value;
@@ -41,23 +42,23 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           autoFocus
         />
         <TextInput
-          label="Type"
+          label={t("Type")}
           placeholder={TYPE_HINT}
           value={(data.place_type as string | undefined) ?? ""}
           onChange={(e) => onChange({ place_type: e.currentTarget.value })}
         />
         <TextInput
-          label="Latitude"
+          label={t("Latitude")}
           value={(data.lat as string | undefined) ?? ""}
           onChange={(e) => onChange({ lat: e.currentTarget.value })}
         />
         <TextInput
-          label="Longitude"
+          label={t("Longitude")}
           value={(data.long as string | undefined) ?? ""}
           onChange={(e) => onChange({ long: e.currentTarget.value })}
         />
         <Switch
-          label="Private"
+          label={t("Private")}
           checked={Boolean(data.private)}
           onChange={(e) => onChange({ private: e.currentTarget.checked })}
         />
@@ -66,7 +67,7 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           onChange={(items) => onChange({ urls: items })}
         />
         <Group justify="flex-end">
-          <Button onClick={onDone}>Done</Button>
+          <Button onClick={onDone}>{t("Done")}</Button>
         </Group>
       </Stack>
     </Modal>

@@ -11,6 +11,7 @@ import { RefEditDialog } from "../RefEditDialog";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 interface EditingParticipant {
   view: ViewConfig;
@@ -95,7 +96,7 @@ export function ParticipantsSection({ detail, onNavigate, onRefetch }: SectionPr
   }
 
   return (
-    <SectionShell label="Participants">
+    <SectionShell label={t("Participants")}>
       {people.map(({ person, role }) => (
         <RefRow
           key={person.handle}

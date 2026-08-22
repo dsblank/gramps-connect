@@ -2,6 +2,7 @@ import { Group, Text } from "@mantine/core";
 import { SectionShell } from "./shared";
 import { displayDate } from "../summary";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 // Per gramps/gen/lib/ldsord.py's LdsOrd._TYPE_MAP / _STATUS_MAP -- neither
 // is resolved to a label by the API (unlike Event.type/Family.type
@@ -31,7 +32,7 @@ export function LdsOrdinancesSection({ detail }: SectionProps) {
   const ords = (detail.lds_ord_list as LdsOrd[] | undefined) ?? [];
   if (ords.length === 0) return null;
   return (
-    <SectionShell label="LDS Ordinances">
+    <SectionShell label={t("LDS Ordinances")}>
       {ords.map((ord, i) => {
         const parts = [displayDate(ord.date), ord.temple, STATUS_LABELS[ord.status]].filter(Boolean);
         return (

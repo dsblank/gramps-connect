@@ -1,6 +1,7 @@
 import { Stack, Text } from "@mantine/core";
 import { SectionShell } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 interface Address {
   street?: string;
@@ -24,7 +25,7 @@ export function AddressesSection({ detail }: SectionProps) {
   const addresses = (detail.address_list as Address[] | undefined) ?? [];
   if (addresses.length === 0) return null;
   return (
-    <SectionShell label="Addresses">
+    <SectionShell label={t("Addresses")}>
       {addresses.map((addr, i) => (
         <Stack key={i} gap={0}>
           <Text size="md">{formatAddress(addr)}{addr.private ? " 🔒" : ""}</Text>

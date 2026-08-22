@@ -13,6 +13,7 @@ import {
   type EventRefLite,
 } from "./RefPickerField";
 import type { DraftEntry, DraftType } from "../store/draftStack";
+import { t } from "../i18n/i18n";
 
 // FamilyRelType's built-in values (gramps/gen/lib/familyreltype.py) as plain
 // English strings -- gramps-web-api's fix_object_dict() turns a `type`
@@ -99,8 +100,8 @@ function ChildrenField({
 
   return (
     <Stack gap={4}>
-      <Text size="sm" fw={500}>Children</Text>
-      {refs.length === 0 && <Text size="xs" c="dimmed">No children</Text>}
+      <Text size="sm" fw={500}>{t("Children")}</Text>
+      {refs.length === 0 && <Text size="xs" c="dimmed">{t("No children")}</Text>}
       {refs.map((ref) => {
         const nestedDraft = childDraftsByHandle.get(ref.ref) ?? findChildEditDraft(ref.ref);
         if (nestedDraft) {
@@ -129,7 +130,7 @@ function ChildrenField({
       <Stack gap={4}>
         <Group gap="xs">
           <Select
-            label="Relationship to father"
+            label={t("Relationship to father")}
             data={CHILD_REL_OPTIONS}
             value={frel}
             onChange={(next) => setFrel(next ?? "Birth")}
@@ -139,7 +140,7 @@ function ChildrenField({
             comboboxProps={{ withinPortal: true }}
           />
           <Select
-            label="Relationship to mother"
+            label={t("Relationship to mother")}
             data={CHILD_REL_OPTIONS}
             value={mrel}
             onChange={(next) => setMrel(next ?? "Birth")}
@@ -465,9 +466,9 @@ export function FamilyEditDialog({
     return (
       <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
         <Stack gap="md">
-          <Alert color="red" title="Could not load">{draft.loadError}</Alert>
+          <Alert color="red" title={t("Could not load")}>{draft.loadError}</Alert>
           <Group justify="flex-end">
-            <Button variant="default" onClick={onCancel}>Close</Button>
+            <Button variant="default" onClick={onCancel}>{t("Close")}</Button>
           </Group>
         </Stack>
       </Modal>
@@ -504,8 +505,8 @@ export function FamilyEditDialog({
     <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
       <Stack gap="lg">
         <TextInput
-          label="Gramps ID"
-          placeholder="auto-assigned"
+          label={t("Gramps ID")}
+          placeholder={t("auto-assigned")}
           value={(draft.data.gramps_id as string | undefined) ?? ""}
           onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
         />
@@ -533,7 +534,7 @@ export function FamilyEditDialog({
         />
 
         <Select
-          label="Relationship type"
+          label={t("Relationship type")}
           data={REL_TYPE_OPTIONS}
           value={(draft.data.type as string) ?? "Married"}
           onChange={(next) => onChange({ type: next ?? "Married" })}
@@ -547,7 +548,7 @@ export function FamilyEditDialog({
         <Collapse in={showDetails}>
           <Stack gap="md">
             <Switch
-              label="Private"
+              label={t("Private")}
               checked={Boolean(draft.data.private)}
               onChange={(e) => onChange({ private: e.currentTarget.checked })}
             />
@@ -557,7 +558,7 @@ export function FamilyEditDialog({
             />
 
             <RefListField
-              label="Citations"
+              label={t("Citations")}
               refs={citationRefs}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "citation", CITATION_FIELD_PREFIX)}
@@ -579,7 +580,7 @@ export function FamilyEditDialog({
             />
 
             <RefListField
-              label="Notes"
+              label={t("Notes")}
               refs={noteRefs}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "note", NOTE_FIELD_PREFIX)}
@@ -599,7 +600,7 @@ export function FamilyEditDialog({
             />
 
             <MediaListField
-              label="Media"
+              label={t("Media")}
               refs={mediaRefs}
               labels={pickedLabels}
               onAddExisting={handleMediaAddExisting}
@@ -608,7 +609,7 @@ export function FamilyEditDialog({
             />
 
             <RefListField
-              label="Tags"
+              label={t("Tags")}
               refs={tagRefs}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "tag", TAG_FIELD_PREFIX)}
@@ -643,14 +644,14 @@ export function FamilyEditDialog({
         </Collapse>
 
         {error && (
-          <Alert color="red" title="Could not save">
+          <Alert color="red" title={t("Could not save")}>
             {error}
           </Alert>
         )}
 
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={saving}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button onClick={onPrimary} loading={saving}>
             {primaryLabel}

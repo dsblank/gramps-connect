@@ -1,6 +1,7 @@
 import { Badge, Group, Loader, SegmentedControl, Text, Tooltip } from "@mantine/core";
 import { formatHash, type VisualKey } from "../../hash";
 import type { ResolvedScope } from "../../store/visualScope";
+import { t } from "../../i18n/i18n";
 
 /** Filter down to the subject's own records, or draw the whole tree with
  * them picked out. Which one a visual opens in depends on the subject type
@@ -42,7 +43,7 @@ export function ScopeChip({
     return (
       <Group gap={6} wrap="nowrap">
         <Loader size="xs" />
-        <Text size="xs" c="dimmed">Loading this record…</Text>
+        <Text size="xs" c="dimmed">{t("Loading this record…")}</Text>
       </Group>
     );
   }
@@ -50,13 +51,13 @@ export function ScopeChip({
   if (unresolved) {
     return (
       <Tooltip
-        label="This record isn't in this device's cache — it may have been deleted, or the cache is still filling."
+        label={t("This record isn't in this device's cache — it may have been deleted, or the cache is still filling.")}
         withArrow
         multiline
         w={260}
       >
         <Badge size="sm" variant="light" color="yellow" style={{ textTransform: "none" }}>
-          Record not found — showing the whole tree
+          {t("Record not found — showing the whole tree")}
         </Badge>
       </Tooltip>
     );
@@ -73,7 +74,7 @@ export function ScopeChip({
         color={empty ? "yellow" : "blue"}
         style={{ textTransform: "none", maxWidth: 320 }}
         rightSection={
-          <Tooltip label="Show the whole tree" withArrow>
+          <Tooltip label={t("Show the whole tree")} withArrow>
             {/* An anchor, not a button: this is a navigation, and making it
                 a real link means middle-click and copy-link behave. */}
             <a

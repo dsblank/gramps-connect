@@ -4,6 +4,7 @@ import {
 } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
+import { t } from "../i18n/i18n";
 import { createHandle, fetchPlainObject } from "../store/objectsApi";
 import { fetchPage, type QueryItem } from "../store/api";
 import { CITATION_VIEW, EVENT_VIEW, MEDIA_VIEW, NOTE_VIEW, PERSON_VIEW, TAG_VIEW } from "../store/views";
@@ -85,8 +86,8 @@ function AssociationsField({
 
   return (
     <Stack gap={4}>
-      <Text size="sm" fw={500}>Associations</Text>
-      {refs.length === 0 && <Text size="xs" c="dimmed">No associations</Text>}
+      <Text size="sm" fw={500}>{t("Associations")}</Text>
+      {refs.length === 0 && <Text size="xs" c="dimmed">{t("No associations")}</Text>}
       {refs.map((ref) => {
         const nestedDraft = newDrafts.get(ref.ref) ?? findEdit(ref.ref);
         if (nestedDraft) {
@@ -115,8 +116,8 @@ function AssociationsField({
       })}
       <Stack gap={4}>
         <TextInput
-          label="Relationship"
-          placeholder="e.g. Godfather"
+          label={t("Relationship")}
+          placeholder={t("e.g. Godfather")}
           size="xs"
           value={rel}
           onChange={(e) => setRel(e.currentTarget.value)}
@@ -656,9 +657,9 @@ export function PersonEditDialog({
   } else if (draft.status === "error") {
     modalBody = (
       <Stack gap="md">
-        <Alert color="red" title="Could not load">{draft.loadError}</Alert>
+        <Alert color="red" title={t("Could not load")}>{draft.loadError}</Alert>
         <Group justify="flex-end">
-          <Button variant="default" onClick={onCancel}>Close</Button>
+          <Button variant="default" onClick={onCancel}>{t("Close")}</Button>
         </Group>
       </Stack>
     );
@@ -666,28 +667,28 @@ export function PersonEditDialog({
     modalBody = (
       <Stack gap="md">
         <TextInput
-          label="Gramps ID"
-          placeholder="auto-assigned"
+          label={t("Gramps ID")}
+          placeholder={t("auto-assigned")}
           value={(draft.data.gramps_id as string | undefined) ?? ""}
           onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
         />
         <TextInput
-          label="Given name"
+          label={t("Given name")}
           value={givenName}
           onChange={(e) => patchName("first_name", e.currentTarget.value)}
           autoFocus
         />
         <Group gap="xs" align="flex-end" wrap="nowrap">
           <TextInput
-            label="Surname"
+            label={t("Surname")}
             value={surname}
             onChange={(e) => patchName("surname", e.currentTarget.value)}
             style={{ flex: 1 }}
           />
-          <CircleGlyphButton glyph="»" label="Edit full name details" onClick={() => setPrimaryNameOpen(true)} size={34} />
+          <CircleGlyphButton glyph="»" label={t("Edit full name details")} onClick={() => setPrimaryNameOpen(true)} size={34} />
         </Group>
         <Select
-          label="Gender"
+          label={t("Gender")}
           data={GENDER_OPTIONS}
           value={gender}
           onChange={(next) => onChange({ gender: Number(next ?? 2) })}
@@ -700,29 +701,29 @@ export function PersonEditDialog({
         </Anchor>
         <Collapse in={showDetails}>
           <Stack gap="md">
-            <DateInput id={`${draft.handle}-birth-date`} label="Birth date" value={birthDate} onChange={setBirthDate} />
+            <DateInput id={`${draft.handle}-birth-date`} label={t("Birth date")} value={birthDate} onChange={setBirthDate} />
             <EventPlaceField
-              label="Birth place"
+              label={t("Birth place")}
               id={`${draft.handle}-birth-place`}
               value={birthPlace}
               onChange={setBirthPlace}
             />
-            <DateInput id={`${draft.handle}-death-date`} label="Death date" value={deathDate} onChange={setDeathDate} />
+            <DateInput id={`${draft.handle}-death-date`} label={t("Death date")} value={deathDate} onChange={setDeathDate} />
             <EventPlaceField
-              label="Death place"
+              label={t("Death place")}
               id={`${draft.handle}-death-place`}
               value={deathPlace}
               onChange={setDeathPlace}
             />
             <Switch
-              label="Private"
+              label={t("Private")}
               checked={Boolean(draft.data.private)}
               onChange={(e) => onChange({ private: e.currentTarget.checked })}
             />
 
             <Stack gap={4}>
-              <Text size="sm" fw={500}>Alternate names</Text>
-              {altIds.length === 0 && <Text size="xs" c="dimmed">No alternate names</Text>}
+              <Text size="sm" fw={500}>{t("Alternate names")}</Text>
+              {altIds.length === 0 && <Text size="xs" c="dimmed">{t("No alternate names")}</Text>}
               {altIds.map((id, i) => (
                 <Group key={id} gap="xs">
                   <Anchor
@@ -735,7 +736,7 @@ export function PersonEditDialog({
                   </Anchor>
                   <CircleGlyphButton
                     glyph="−"
-                    label="Remove alternate name"
+                    label={t("Remove alternate name")}
                     onClick={() => removeAlternateName(id)}
                     size={16}
                   />
@@ -743,7 +744,7 @@ export function PersonEditDialog({
               ))}
               <CircleGlyphButton
                 glyph="+"
-                label="Add alternate name"
+                label={t("Add alternate name")}
                 textLabel="Add alternate name"
                 onClick={addAlternateName}
               />
@@ -776,7 +777,7 @@ export function PersonEditDialog({
             />
 
             <RefListField
-              label="Citations"
+              label={t("Citations")}
               refs={citationRefs}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "citation", CITATION_FIELD_PREFIX)}
@@ -796,7 +797,7 @@ export function PersonEditDialog({
             />
 
             <RefListField
-              label="Notes"
+              label={t("Notes")}
               refs={noteRefs}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "note", NOTE_FIELD_PREFIX)}
@@ -816,7 +817,7 @@ export function PersonEditDialog({
             />
 
             <MediaListField
-              label="Media"
+              label={t("Media")}
               refs={mediaRefs}
               labels={pickedLabels}
               onAddExisting={handleMediaAddExisting}
@@ -825,7 +826,7 @@ export function PersonEditDialog({
             />
 
             <RefListField
-              label="Tags"
+              label={t("Tags")}
               refs={tagRefs}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "tag", TAG_FIELD_PREFIX)}
@@ -860,17 +861,17 @@ export function PersonEditDialog({
         </Collapse>
 
         {error && (
-          <Alert color="red" title="Could not save">
+          <Alert color="red" title={t("Could not save")}>
             {error}
           </Alert>
         )}
 
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={saving}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button onClick={onPrimary} loading={saving}>
-            {primaryLabel}
+            {t(primaryLabel)}
           </Button>
         </Group>
       </Stack>
@@ -886,7 +887,7 @@ export function PersonEditDialog({
       <NameEditDialog
         stackId={`${draft.handle}-primary-name`}
         opened={primaryNameOpen}
-        title="Primary Name"
+        title={t("Primary Name")}
         data={name}
         onChange={patchPrimaryName}
         onDone={() => setPrimaryNameOpen(false)}

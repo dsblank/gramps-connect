@@ -22,6 +22,7 @@ import { StoryActions } from "./related/StoryActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
 import type { UseDraftStack } from "../store/draftStack";
+import { t } from "../i18n/i18n";
 
 interface RelatedPanelProps {
   view: ViewConfig;
@@ -72,7 +73,7 @@ const SEX_SYMBOL: Record<string, string> = { M: "♂", F: "♀", X: "⚧", U: ""
 function PrivateIndicator({ detail }: { detail: ObjectDetail }) {
   if (!detail.private) return null;
   return (
-    <Tooltip label="Marked private" withArrow>
+    <Tooltip label={t("Marked private")} withArrow>
       <Text component="span" size="sm">🔒</Text>
     </Tooltip>
   );
@@ -169,7 +170,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
       <div>
         <MediaThumbnail handle={detail.handle} mime={detail.mime as string | undefined} size={240} />
         <div style={{ marginTop: "var(--mantine-spacing-xs)" }}>
-          <ClickableTitle onClick={navigateToSelf}>{summaryLine(view.key, detail) || view.label}</ClickableTitle>
+          <ClickableTitle onClick={navigateToSelf}>{summaryLine(view.key, detail) || t(view.label)}</ClickableTitle>
         </div>
         <PrivateIndicator detail={detail} />
       </div>
@@ -194,7 +195,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     return (
       <div>
         <Text size="sm" c="dimmed" fw={600}>
-          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{view.label} <PrivateIndicator detail={detail} />
+          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t(view.label)} <PrivateIndicator detail={detail} />
         </Text>
         <ClickableTitle onClick={navigateToSelf}>{spec?.title || "(story)"}</ClickableTitle>
         {intro && <Text c="dimmed">{intro}</Text>}
@@ -207,7 +208,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     return (
       <div>
         <Text size="sm" c="dimmed" fw={600}>
-          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{view.label} <PrivateIndicator detail={detail} />
+          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t(view.label)} <PrivateIndicator detail={detail} />
         </Text>
         {isSelf ? (
           <Text fw={700}>{text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}</Text>
@@ -246,7 +247,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
         <Group gap={6} align="center">
           {view.key === "tag" && <TagSwatch color={detail.color as string | undefined} />}
           <ClickableTitle onClick={navigateToSelf}>
-            {summaryLine(view.key, detail) || view.label}
+            {summaryLine(view.key, detail) || t(view.label)}
             {sex && SEX_SYMBOL[sex] ? ` ${SEX_SYMBOL[sex]}` : ""}
           </ClickableTitle>
         </Group>
@@ -301,7 +302,7 @@ export function RelatedPanel({
 
   useDocumentTitle(
     updateDocumentTitle && state.status === "ready"
-      ? `${summaryLine(view.key, state.detail) || view.label} — Gramps Connect`
+      ? `${summaryLine(view.key, state.detail) || t(view.label)} — Gramps Connect`
       : undefined
   );
 
@@ -347,7 +348,7 @@ export function RelatedPanel({
   }
   if (state.status === "error") {
     return (
-      <Alert color="red" m="md" title={`Failed to load ${view.label.toLowerCase()}`}>
+      <Alert color="red" m="md" title={`${t("Failed to load")} ${t(view.label)}`}>
         {state.message}
       </Alert>
     );

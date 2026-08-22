@@ -11,6 +11,7 @@ import { RefMetaRow } from "../RefBadges";
 import { isCurrentPage, useCurrentPage } from "../CurrentPageContext";
 import type { RefMeta } from "../../../store/objectDetail";
 import type { OnNavigate } from "../types";
+import { t } from "../../../i18n/i18n";
 
 // Anchor's own "rendered as a button" styles default to a flex-centered,
 // full-width control -- overridden back to plain inline text so these read
@@ -119,8 +120,8 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, extra, o
           </Anchor>
         )}
         {extra}
-        {onEdit && <CircleGlyphButton glyph="🔗" label="Edit relationship" onClick={onEdit} size={16} />}
-        {onRemove && <CircleGlyphButton glyph="−" label="Remove" onClick={onRemove} size={16} />}
+        {onEdit && <CircleGlyphButton glyph="🔗" label={t("Edit relationship")} onClick={onEdit} size={16} />}
+        {onRemove && <CircleGlyphButton glyph="−" label={t("Remove")} onClick={onRemove} size={16} />}
       </Group>
       <RefMetaRow refMeta={refMeta} />
     </Stack>

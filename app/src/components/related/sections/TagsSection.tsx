@@ -7,6 +7,7 @@ import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { SectionShell, zipHandles } from "./shared";
 import { gtkColorToCss } from "../color";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** PrimaryObject.tag_list -- a plain handle list. Tags are simple enough
  * (name/color/priority, no sub-detail worth drilling into) that they're
@@ -29,7 +30,7 @@ export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProp
   }
 
   return (
-    <SectionShell label="Tags">
+    <SectionShell label={t("Tags")}>
       <Group gap={6} align="center">
         {rows.map(({ handle, target }) => (
           <Badge
@@ -43,7 +44,7 @@ export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProp
               canAttach ? (
                 <CircleGlyphButton
                   glyph="−"
-                  label="Remove tag"
+                  label={t("Remove tag")}
                   size={14}
                   onClick={(e) => {
                     e.stopPropagation();

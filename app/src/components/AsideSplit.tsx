@@ -9,6 +9,7 @@ import { ReferenceDetail } from "./ReferenceDetail";
 import type { SubSelection } from "./ReferenceDetail";
 import { CurrentPageContext } from "./related/CurrentPageContext";
 import type { UseDraftStack } from "../store/draftStack";
+import { t } from "../i18n/i18n";
 
 interface AsideSplitProps {
   view: ViewConfig;
@@ -29,10 +30,10 @@ interface AsideSplitProps {
  * plumbing the sub-selected record's own fetched title up two components
  * for. */
 function stripLabel(subSelection: SubSelection | null): string {
-  if (!subSelection) return "Reference detail";
-  if (subSelection.kind === "gallery") return `Reference detail — ${subSelection.label}`;
+  if (!subSelection) return t("Reference detail");
+  if (subSelection.kind === "gallery") return `${t("Reference detail")} — ${subSelection.label}`;
   const label = VIEWS.find((v) => v.key === subSelection.type)?.label;
-  return label ? `Reference detail — ${label}` : "Reference detail";
+  return label ? `${t("Reference detail")} — ${t(label)}` : t("Reference detail");
 }
 
 /** Replaces the old single-pane DetailPanel mount in App.tsx's
@@ -115,7 +116,7 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
   // narrowing of selectedHandle to non-null past that return still holds.
   useDocumentTitle(
     snapshot.selectedIndex === null || snapshot.selectedHandle === null
-      ? `${view.label} — Gramps Connect`
+      ? `${t(view.label)} — Gramps Connect`
       : undefined
   );
 

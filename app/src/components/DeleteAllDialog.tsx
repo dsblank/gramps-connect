@@ -10,6 +10,7 @@ import {
 import { clearAllOpfs } from "../store/opfs";
 import { describeTaskFailure, waitForTask } from "../store/taskApi";
 import { ReloginDialog } from "./ReloginDialog";
+import { t } from "../i18n/i18n";
 
 const NAMESPACE_LABELS: Record<DeleteNamespace, string> = {
   people: "People",
@@ -96,18 +97,17 @@ export function DeleteAllDialog({ opened, onClose }: DeleteAllDialogProps) {
       <Modal
         opened={opened}
         onClose={handleClose}
-        title="Delete"
+        title={t("Delete")}
         closeOnClickOutside={stage !== "deleting"}
         closeOnEscape={stage !== "deleting"}
       >
         <Stack gap="md">
           {stage === "select" && (
             <>
-              <Alert color="red" title="This cannot be undone">
-                This permanently deletes every selected object from the current family tree,
-                for every user. There is no undo.
+              <Alert color="red" title={t("This cannot be undone")}>
+                {t("This permanently deletes every selected object from the current family tree, for every user. There is no undo.")}
               </Alert>
-              <Text size="sm">Object types to delete:</Text>
+              <Text size="sm">{t("Object types to delete:")}</Text>
               <Chip.Group multiple value={selected} onChange={setSelected}>
                 <Group gap="xs">
                   {DELETE_NAMESPACES.map((ns) => (
@@ -119,10 +119,10 @@ export function DeleteAllDialog({ opened, onClose }: DeleteAllDialogProps) {
               </Chip.Group>
               <Group justify="flex-end">
                 <Button variant="default" onClick={handleClose}>
-                  Cancel
+                  {t("Cancel")}
                 </Button>
                 <Button color="red" disabled={selected.length === 0} onClick={handleDeleteClick}>
-                  Delete
+                  {t("Delete")}
                 </Button>
               </Group>
             </>
@@ -131,21 +131,21 @@ export function DeleteAllDialog({ opened, onClose }: DeleteAllDialogProps) {
           {stage === "deleting" && (
             <Group justify="center" py="md">
               <Loader size="sm" color="red" />
-              <Text size="sm">Deleting… this may take a while.</Text>
+              <Text size="sm">{t("Deleting… this may take a while.")}</Text>
             </Group>
           )}
 
           {stage === "error" && (
             <>
-              <Alert color="red" title="Delete failed">
+              <Alert color="red" title={t("Delete failed")}>
                 {error}
               </Alert>
               <Group justify="flex-end">
                 <Button variant="default" onClick={reset}>
-                  Try again
+                  {t("Try again")}
                 </Button>
                 <Button variant="subtle" onClick={handleClose}>
-                  Close
+                  {t("Close")}
                 </Button>
               </Group>
             </>

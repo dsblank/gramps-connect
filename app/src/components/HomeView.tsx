@@ -8,6 +8,7 @@ import {
   type MessageItem, type RecentItem,
 } from "../store/homeStats";
 import iconChat from "../assets/icons/chat-message.svg";
+import { t } from "../i18n/i18n";
 
 const RECENT_LIMIT = 8;
 const MESSAGE_LIMIT = 5;
@@ -54,25 +55,25 @@ export function HomeView() {
 
   return (
     <Box p="md">
-      <Title order={2} mb="md">Home</Title>
+      <Title order={2} mb="md">{t("Home")}</Title>
 
       {stage === "loading" && (
         <Group py="xl" justify="center">
           <Loader size="sm" />
-          <Text size="sm" c="dimmed">Loading the tree's overview…</Text>
+          <Text size="sm" c="dimmed">{t("Loading the tree's overview…")}</Text>
         </Group>
       )}
 
       {stage === "error" && (
-        <Alert color="red" title="Couldn't load the overview">{error}</Alert>
+        <Alert color="red" title={t("Couldn't load the overview")}>{error}</Alert>
       )}
 
       {stage === "ready" && (
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
           <Stack gap="lg">
-            <Panel title="Messages">
+            <Panel title={t("Messages")}>
               {messages.length === 0 ? (
-                <Text size="sm" c="dimmed">No messages yet.</Text>
+                <Text size="sm" c="dimmed">{t("No messages yet.")}</Text>
               ) : (
                 <Stack gap="sm">
                   {messages.map((m) => (
@@ -102,13 +103,13 @@ export function HomeView() {
                 mt="sm"
                 display="inline-block"
               >
-                See all messages
+                {t("See all messages")}
               </Anchor>
             </Panel>
 
-            <Panel title="Recently changed objects">
+            <Panel title={t("Recently changed objects")}>
               {recent.length === 0 ? (
-                <Text size="sm" c="dimmed">Nothing changed yet.</Text>
+                <Text size="sm" c="dimmed">{t("Nothing changed yet.")}</Text>
               ) : (
                 <Stack gap="xs">
                   {recent.map((item) => {
@@ -136,14 +137,14 @@ export function HomeView() {
             </Panel>
           </Stack>
 
-          <Panel title="Statistics">
+          <Panel title={t("Statistics")}>
             <Stack gap={6}>
               {STAT_VIEWS.map((v) => (
                 <Group key={v.key} justify="space-between" wrap="nowrap">
                   <Anchor component="a" href={formatHash({ viewKey: v.key })} size="sm" c="inherit" underline="never">
                     <Group gap="xs" wrap="nowrap">
                       <Image src={v.icon} alt="" w={20} h={20} />
-                      <Text size="sm">{v.label}</Text>
+                      <Text size="sm">{t(v.label)}</Text>
                     </Group>
                   </Anchor>
                   <Text size="sm" fw={600}>{(counts[v.key] ?? 0).toLocaleString()}</Text>

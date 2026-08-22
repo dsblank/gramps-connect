@@ -3,6 +3,7 @@ import { HOME_KEY } from "../hash";
 import { VIEWS } from "../store/views";
 import iconHome from "../assets/icons/gramps-home.svg";
 import classes from "./Sidebar.module.css";
+import { t } from "../i18n/i18n";
 
 interface SidebarProps {
   activeKey: string;
@@ -26,12 +27,12 @@ export function Sidebar({ activeKey, onSelect }: SidebarProps) {
         {/* Above the object-type list and set off by its own divider: a
             dashboard overview isn't another data type alongside People/
             Events/..., it's the page this whole rail returns to. */}
-        <Tooltip label="Home" position="right" withArrow openDelay={300}>
+        <Tooltip label={t("Home")} position="right" withArrow openDelay={300}>
           <UnstyledButton
             className={classes.item}
             data-active={activeKey === HOME_KEY || undefined}
             onClick={() => onSelect(HOME_KEY)}
-            aria-label="Home"
+            aria-label={t("Home")}
             aria-current={activeKey === HOME_KEY}
           >
             <Image src={iconHome} alt="" w={32} h={32} />
@@ -41,12 +42,12 @@ export function Sidebar({ activeKey, onSelect }: SidebarProps) {
         {VIEWS.map((view) => (
           <div key={view.key}>
             {view.sidebarSeparatorBefore && <Divider my="xs" />}
-            <Tooltip label={view.label} position="right" withArrow openDelay={300}>
+            <Tooltip label={t(view.label)} position="right" withArrow openDelay={300}>
               <UnstyledButton
                 className={classes.item}
                 data-active={view.key === activeKey || undefined}
                 onClick={() => onSelect(view.key)}
-                aria-label={view.label}
+                aria-label={t(view.label)}
                 aria-current={view.key === activeKey}
               >
                 <Image src={view.icon} alt="" w={32} h={32} />

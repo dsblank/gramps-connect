@@ -13,6 +13,7 @@ import { NoMatches } from "./NoMatches";
 import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { TimelineChart } from "./TimelineChart";
 import { VisualFrame } from "./VisualFrame";
+import { t } from "../../i18n/i18n";
 
 /** View > Timeline: every dated event in the tree on one zoomable time axis.
  *
@@ -189,7 +190,7 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
 
   return (
     <VisualFrame
-      title="Timeline"
+      title={t("Timeline")}
       scope={subject && (
         <ScopeChip
           visual="timeline"
@@ -206,7 +207,7 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
       error={error}
       empty={data.events.length === 0 ? (
         <Text size="sm" c="dimmed" ta="center">
-          No event in this tree has a date that can be placed on a timeline.
+          {t("No event in this tree has a date that can be placed on a timeline.")}
         </Text>
       ) : undefined}
       toolbar={
@@ -214,7 +215,7 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
           <TextInput
             size="xs"
             w={280}
-            placeholder="Filter by type, place or description"
+            placeholder={t("Filter by type, place or description")}
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
             rightSection={search ? <CloseButton size="sm" onClick={() => setSearch("")} /> : null}
@@ -299,7 +300,7 @@ function EventCard({ event, onOpen, onClose }: EventCardProps) {
       {event.description && (
         <Text size="xs" c="dimmed" mb="xs" lineClamp={3}>{event.description}</Text>
       )}
-      <Button size="xs" fullWidth onClick={onOpen}>Open in Events</Button>
+      <Button size="xs" fullWidth onClick={onOpen}>{t("Open in Events")}</Button>
     </Paper>
   );
 }

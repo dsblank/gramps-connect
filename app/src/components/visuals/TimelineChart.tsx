@@ -11,6 +11,7 @@ import {
   domainLimit, fullDomain, hitTest, layoutTimeline, panDomain, tickLabel, zoomDomain,
   type Dot, type TimelineLayout,
 } from "./timelineLayout";
+import { t } from "../../i18n/i18n";
 
 /** Marker radius. The mark spec's floor is an 8px marker (r >= 4); this is
  * exactly that, because the dot-stack's whole point is packing as many
@@ -381,13 +382,13 @@ export function TimelineChart({
       {/* Zoom controls, bottom-right over the plot -- same placement and
           same three actions as gramps-web's timeline. */}
       <Stack gap={4} style={{ position: "absolute", right: 8, bottom: AXIS_HEIGHT + 8, zIndex: 2 }}>
-        <Tooltip label="Zoom in" position="left" withArrow>
+        <Tooltip label={t("Zoom in")} position="left" withArrow>
           <ActionIcon variant="default" onClick={() => zoomBy(1 / BUTTON_FACTOR)} aria-label="Zoom in">+</ActionIcon>
         </Tooltip>
         <Tooltip label={`Fit all (${Math.round(spanYears)} years shown)`} position="left" withArrow>
           <ActionIcon variant="default" onClick={() => setDomain(fullDomain(allEvents))} aria-label="Fit all">⤢</ActionIcon>
         </Tooltip>
-        <Tooltip label="Zoom out" position="left" withArrow>
+        <Tooltip label={t("Zoom out")} position="left" withArrow>
           <ActionIcon variant="default" onClick={() => zoomBy(BUTTON_FACTOR)} aria-label="Zoom out">−</ActionIcon>
         </Tooltip>
       </Stack>

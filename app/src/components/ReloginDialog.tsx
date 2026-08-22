@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Button, Group, Modal, PasswordInput, Stack, Text } from "@mantine/core";
 import { getCurrentUsername, login } from "../auth/auth";
+import { t } from "../i18n/i18n";
 
 interface ReloginDialogProps {
   opened: boolean;
@@ -42,12 +43,12 @@ export function ReloginDialog({ opened, onClose, onSuccess }: ReloginDialogProps
   }
 
   return (
-    <Modal opened={opened} onClose={handleClose} title="Confirm your password" size="sm">
+    <Modal opened={opened} onClose={handleClose} title={t("Confirm your password")} size="sm">
       <form onSubmit={handleSubmit}>
         <Stack gap="md">
-          <Text size="sm">This action requires you to sign in again to continue.</Text>
+          <Text size="sm">{t("This action requires you to sign in again to continue.")}</Text>
           <PasswordInput
-            label="Password"
+            label={t("Password")}
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
             autoFocus
@@ -59,10 +60,10 @@ export function ReloginDialog({ opened, onClose, onSuccess }: ReloginDialogProps
           )}
           <Group justify="flex-end">
             <Button type="button" variant="default" onClick={handleClose}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit" loading={submitting} disabled={!password}>
-              Continue
+              {t("Continue")}
             </Button>
           </Group>
         </Stack>

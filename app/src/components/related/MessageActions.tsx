@@ -6,6 +6,7 @@ import { toggleMessageDone, deleteMessage } from "../../store/notesApi";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { summaryLine } from "./summary";
 import { zipHandles } from "./sections/shared";
+import { t } from "../../i18n/i18n";
 
 /** Mark done/Reopen + delete for a message, in RelatedPanel's
  * `view.key === "messages"` branch -- same Button+Group+error-Alert shape
@@ -23,7 +24,7 @@ export function MessageActions({ detail, onToggled }: { detail: ObjectDetail; on
   const isDone = tags.some((t) => t.target?.name === "todo-done");
 
   if (deleted) {
-    return <Alert color="gray">Message deleted.</Alert>;
+    return <Alert color="gray">{t("Message deleted.")}</Alert>;
   }
 
   async function handleToggle() {
@@ -55,7 +56,7 @@ export function MessageActions({ detail, onToggled }: { detail: ObjectDetail; on
   return (
     <Group gap="xs">
       <Button size="xs" onClick={handleToggle}>{isDone ? "Reopen" : "Mark done"}</Button>
-      <Button size="xs" color="red" variant="subtle" onClick={handleDelete}>Delete</Button>
+      <Button size="xs" color="red" variant="subtle" onClick={handleDelete}>{t("Delete")}</Button>
       {error && <Alert color="red">{error}</Alert>}
     </Group>
   );

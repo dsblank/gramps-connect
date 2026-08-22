@@ -6,6 +6,7 @@ import { getSearchHelp } from "../store/searchHelp";
 import { getSearchState, setSearchState } from "../store/searchState";
 import { SearchHelpDialog } from "./SearchHelpDialog";
 import type { ViewConfig } from "../store/views";
+import { t } from "../i18n/i18n";
 
 interface FilterBarProps {
   view: ViewConfig;
@@ -104,7 +105,7 @@ export function FilterBar({ view }: FilterBarProps) {
   return (
     <Stack gap={4} mb="sm">
       <Group gap="xs" wrap="nowrap">
-        <Text size="sm" ff="monospace" c="dimmed">Search:</Text>
+        <Text size="sm" ff="monospace" c="dimmed">{t("Search:")}</Text>
         <TextInput
           id="where-expr"
           size="sm"
@@ -131,7 +132,7 @@ export function FilterBar({ view }: FilterBarProps) {
           }
         />
         {view.simpleSearch && (
-          <Tooltip label="Use Gramps Object Query Language" withArrow>
+          <Tooltip label={t("Use Gramps Object Query Language")} withArrow>
             <Checkbox
               size="sm"
               aria-label="Use Gramps Object Query Language"
@@ -151,15 +152,15 @@ export function FilterBar({ view }: FilterBarProps) {
           </Tooltip>
         )}
         {help && (
-          <Tooltip label={`How to search ${view.label}`} withArrow>
+          <Tooltip label={`${t("How to search")} ${t(view.label)}`} withArrow>
             <ActionIcon
               variant="default"
               radius="xl"
               size="sm"
-              aria-label={`How to search ${view.label}`}
+              aria-label={`${t("How to search")} ${t(view.label)}`}
               onClick={() => setHelpOpen(true)}
             >
-              <Text component="span" size="xs" fw={700} ff="serif" fs="italic">i</Text>
+              <Text component="span" size="xs" fw={700} ff="serif" fs="italic">{t("i")}</Text>
             </ActionIcon>
           </Tooltip>
         )}

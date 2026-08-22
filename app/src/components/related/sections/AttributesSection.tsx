@@ -1,6 +1,7 @@
 import { Group, Text } from "@mantine/core";
 import { SectionShell } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 interface Attribute {
   type: string;
@@ -15,7 +16,7 @@ export function AttributesSection({ detail }: SectionProps) {
   const attrs = (detail.attribute_list as Attribute[] | undefined) ?? [];
   if (attrs.length === 0) return null;
   return (
-    <SectionShell label="Attributes">
+    <SectionShell label={t("Attributes")}>
       {attrs.map((attr, i) => (
         <Group key={i} gap={6}>
           <Text size="md" fw={500}>{attr.type}:</Text>

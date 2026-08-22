@@ -6,6 +6,7 @@ import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** EventBase.event_ref_list -- shared verbatim by Person and Family (both
  * mix in EventBase), each ref carrying its own role (Primary/Witness/...).
@@ -31,7 +32,7 @@ export function EventsSection({ view, detail, onNavigate, onRefetch }: SectionPr
   }
 
   return (
-    <SectionShell label="Events">
+    <SectionShell label={t("Events")}>
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}

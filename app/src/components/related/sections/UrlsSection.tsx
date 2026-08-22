@@ -1,6 +1,7 @@
 import { Anchor, Group, Text } from "@mantine/core";
 import { SectionShell } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 interface Url {
   path: string;
@@ -16,7 +17,7 @@ export function UrlsSection({ detail }: SectionProps) {
   const urls = (detail.urls as Url[] | undefined) ?? [];
   if (urls.length === 0) return null;
   return (
-    <SectionShell label="Web links">
+    <SectionShell label={t("Web links")}>
       {urls.map((url, i) => (
         <Group key={i} gap={6}>
           <Anchor href={url.path} target="_blank" rel="noopener noreferrer" size="md">

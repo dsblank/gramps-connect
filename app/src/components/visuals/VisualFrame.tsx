@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { Alert, Box, Group, Loader, Stack, Text } from "@mantine/core";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { t } from "../../i18n/i18n";
 
 interface VisualFrameProps {
   /** "Map"/"Timeline", at the head of the toolbar row. The page it names
@@ -73,7 +74,7 @@ export function VisualFrame({
       </Box>
       <Box style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
         {error ? (
-          <Alert color="red" m="md" title="Couldn't load the tree's data">{error}</Alert>
+          <Alert color="red" m="md" title={t("Couldn't load the tree's data")}>{error}</Alert>
         ) : loading ? (
           <Center>
             <Group gap="xs">

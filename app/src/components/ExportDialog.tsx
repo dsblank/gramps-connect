@@ -28,6 +28,7 @@ import {
 import { exportLabel, promoteJob, stripMnemonic } from "../store/jobsPromote";
 import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
+import { t } from "../i18n/i18n";
 
 type Stage = "loading" | "ready" | "error";
 
@@ -151,12 +152,12 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
   }
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Export Family Tree">
+    <Modal opened={opened} onClose={onClose} title={t("Export Family Tree")}>
       <Stack gap="md">
         {stage === "loading" && (
           <Group justify="center" py="md">
             <Loader size="sm" />
-            <Text size="sm">Loading formats…</Text>
+            <Text size="sm">{t("Loading formats…")}</Text>
           </Group>
         )}
 
@@ -165,12 +166,12 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
             reported by toast (see handleExport). */}
         {stage === "error" && (
           <>
-            <Alert color="red" title="Could not load export formats">
+            <Alert color="red" title={t("Could not load export formats")}>
               {error}
             </Alert>
             <Group justify="flex-end">
               <Button variant="subtle" onClick={onClose}>
-                Close
+                {t("Close")}
               </Button>
             </Group>
           </>
@@ -179,7 +180,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
         {stage === "ready" && (
           <>
             <Select
-              label="Format"
+              label={t("Format")}
               data={exporters.map((candidate) => ({
                 value: candidate.extension,
                 label: `${stripMnemonic(candidate.name)} (.${candidate.extension})`,
@@ -202,8 +203,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
                 smaller than the tree. */}
             {!hasPermissions(PERM_VIEW_PRIVATE) && (
               <Text size="sm" c="orange">
-                You do not have permission to view private records, so the export will be
-                incomplete.
+                {t("You do not have permission to view private records, so the export will be incomplete.")}
               </Text>
             )}
 
@@ -213,7 +213,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
             <Collapse in={showOptions}>
               <Stack gap="md">
                 <Select
-                  label="Living people"
+                  label={t("Living people")}
                   data={LIVING_MODES.map((mode) => ({ value: mode.value, label: mode.label }))}
                   value={living}
                   onChange={(next) => setLiving(next ?? living)}
@@ -225,7 +225,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
                     would be an inert field under "Include all". */}
                 {living !== DEFAULT_LIVING && (
                   <NumberInput
-                    label="Years after death"
+                    label={t("Years after death")}
                     description="Treat someone as living for this long after they died."
                     min={0}
                     allowDecimal={false}
@@ -246,15 +246,15 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
             </Collapse>
 
             <Text size="sm" c="dimmed">
-              The finished file appears in Output, where you can download it.
+              {t("The finished file appears in Output, where you can download it.")}
             </Text>
 
             <Group justify="flex-end">
               <Button variant="default" onClick={onClose}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button onClick={handleExport} disabled={!exporter}>
-                Export
+                {t("Export")}
               </Button>
             </Group>
           </>

@@ -6,6 +6,7 @@ import { deleteObject } from "../../store/objectsApi";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
 import { summaryLine } from "./summary";
+import { t } from "../../i18n/i18n";
 
 /** Top-right icon on a RelatedPanel (in the same header action slot as
  * EditButton/MessageButton) that deletes this record, after confirmation.
@@ -84,27 +85,27 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
         <Stack gap="md">
           <Text size="sm">
             This permanently deletes <b>{summary}</b>. Every other reference to it is cleaned up
-            automatically -- but a record that <i>requires</i> this one (e.g. a Citation's Source) is
+            automatically -- but a record that <i>{t("requires")}</i> this one (e.g. a Citation's Source) is
             deleted right along with it, not just un-linked. There is no undo.
           </Text>
           <Checkbox
             checked={false}
             disabled
-            label="Remove all orphaned items"
+            label={t("Remove all orphaned items")}
             description="Not implemented yet -- see this dialog's doc comment for why."
             readOnly
           />
           {error && (
-            <Alert color="red" title="Could not delete">
+            <Alert color="red" title={t("Could not delete")}>
               {error}
             </Alert>
           )}
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirmOpen(false)} disabled={deleting}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button color="red" onClick={handleDelete} loading={deleting}>
-              Delete
+              {t("Delete")}
             </Button>
           </Group>
         </Stack>

@@ -4,6 +4,7 @@ import { useViewStore } from "../hooks/useViewStore";
 import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
 import { getViewStore } from "../store/registry";
 import { visibleColumns, type ViewConfig } from "../store/views";
+import { t } from "../i18n/i18n";
 import classes from "./DataTable.module.css";
 
 // Virtualized scroll: the scroll container's inner spacer is sized to
@@ -224,7 +225,7 @@ export function DataTable({ view }: DataTableProps) {
               className={`${classes.cell} ${classes.headerCell} ${sortColumn ? classes.sortable : ""}`}
               onClick={sortColumn ? () => store.setSort(sortColumn).catch(() => {}) : undefined}
             >
-              <span>{col.label}</span>
+              <span>{t(col.label)}</span>
               {isSorted && <span className={classes.sortArrow}>{activeSort.direction === "asc" ? "▲" : "▼"}</span>}
               <div
                 className={classes.resizeHandle}

@@ -9,6 +9,7 @@ import type { EventRecord, MapPlace } from "../../store/visualData";
 import { NoMatches } from "./NoMatches";
 import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { VisualFrame } from "./VisualFrame";
+import { t } from "../../i18n/i18n";
 
 // maplibre-gl is ~900KB of the bundle on its own -- an order of magnitude more
 // than anything else here -- so it's split out and only fetched when someone
@@ -234,7 +235,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
 
   return (
     <VisualFrame
-      title="Map"
+      title={t("Map")}
       scope={subject && (
         <ScopeChip
           visual="map"
@@ -251,9 +252,9 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
       error={error}
       empty={data.places.length === 0 ? (
         <Stack align="center" gap="xs">
-          <Text size="sm" c="dimmed" ta="center">No place in this tree has coordinates.</Text>
+          <Text size="sm" c="dimmed" ta="center">{t("No place in this tree has coordinates.")}</Text>
           <Text size="xs" c="dimmed" ta="center">
-            Add latitude and longitude to a place and it will appear here.
+            {t("Add latitude and longitude to a place and it will appear here.")}
           </Text>
         </Stack>
       ) : undefined}
@@ -262,7 +263,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           <TextInput
             size="xs"
             w={260}
-            placeholder="Find a place"
+            placeholder={t("Find a place")}
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
             rightSection={search ? <CloseButton size="sm" onClick={() => setSearch("")} /> : null}
@@ -273,7 +274,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
               size="xs"
               checked={timeOn}
               onChange={(e) => setTimeOn(e.currentTarget.checked)}
-              label="Years"
+              label={t("Years")}
               styles={{ label: { whiteSpace: "nowrap" } }}
             />
             <RangeSlider
@@ -294,7 +295,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
             />
           </Group>
           <Button size="xs" variant="default" onClick={() => setFitRequest((n) => n + 1)}>
-            Fit to results
+            {t("Fit to results")}
           </Button>
         </Group>
       }
@@ -321,7 +322,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
         fallback={
           <Stack align="center" justify="center" gap="xs" style={{ flex: 1 }}>
             <Loader size="sm" />
-            <Text size="sm" c="dimmed">Loading map…</Text>
+            <Text size="sm" c="dimmed">{t("Loading map…")}</Text>
           </Stack>
         }
       >
@@ -426,7 +427,7 @@ function PlaceCard({ place, events, contributor, onOpen, onClose }: PlaceCardPro
           ))}
         </Stack>
       )}
-      <Button size="xs" fullWidth onClick={onOpen}>Open in Places</Button>
+      <Button size="xs" fullWidth onClick={onOpen}>{t("Open in Places")}</Button>
     </Paper>
   );
 }

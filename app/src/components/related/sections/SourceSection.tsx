@@ -3,6 +3,7 @@ import { SOURCE_VIEW } from "../../../store/views";
 import { SetFieldControl } from "../AttachControl";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** Citation.source_handle -- a singular ref, resolved by extend=all into
  * extended.source. Guards on `.handle` rather than object truthiness --
@@ -19,7 +20,7 @@ export function SourceSection({ view, detail, onNavigate, onRefetch }: SectionPr
   if (!source?.handle && !canEdit) return null;
 
   return (
-    <SectionShell label="Source">
+    <SectionShell label={t("Source")}>
       {source?.handle ? (
         <RefRow type="source" handle={source.handle} obj={source} onNavigate={onNavigate} />
       ) : (

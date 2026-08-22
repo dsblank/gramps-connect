@@ -14,6 +14,7 @@ import { isManualExpandEnabled, setManualExpandEnabled } from "../../store/treeE
 import { PERSON_VIEW } from "../../store/views";
 import { TreeChart } from "./TreeChart";
 import { VisualFrame } from "./VisualFrame";
+import { t } from "../../i18n/i18n";
 
 // Small on purpose: auto-expand-on-reveal (TreeChart.tsx's own
 // IntersectionObserver) grows the tree to fill whatever's visible anyway, so
@@ -226,7 +227,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
 
   return (
     <VisualFrame
-      title="Tree"
+      title={t("Tree")}
       scope={
         subject && root ? (
           <Text size="xs" c="dimmed">
@@ -240,9 +241,9 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       empty={
         !subject ? (
           <Stack align="center" gap="xs" maw={360}>
-            <Text size="sm" fw={600}>Open a tree</Text>
+            <Text size="sm" fw={600}>{t("Open a tree")}</Text>
             <Text size="xs" c="dimmed" ta="center">
-              Pick a person to see their ancestors and descendants.
+              {t("Pick a person to see their ancestors and descendants.")}
             </Text>
             <RecordPicker
               view={PERSON_VIEW}
@@ -265,7 +266,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         subject && root && SHOW_MANUAL_EXPAND_TOGGLE ? (
           <Switch
             size="xs"
-            label="Manual expand only"
+            label={t("Manual expand only")}
             checked={manualExpandOnly}
             onChange={(e) => {
               const checked = e.currentTarget.checked;
@@ -337,7 +338,7 @@ function PersonCard({ person, onOpen, onClose }: PersonCardProps) {
         {person.profile?.birth?.date && <Badge size="xs" variant="light">*{person.profile.birth.date}</Badge>}
         {person.profile?.death?.date && <Badge size="xs" variant="light">†{person.profile.death.date}</Badge>}
       </Group>
-      <Button size="xs" fullWidth onClick={onOpen}>Open in People</Button>
+      <Button size="xs" fullWidth onClick={onOpen}>{t("Open in People")}</Button>
     </Paper>
   );
 }

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Center, Paper, Stack, Group, Image, Title, TextInput, PasswordInput, Button, Text } from "@mantine/core";
 import { login } from "./auth";
 import logo from "../assets/icons/gramps-connect-logo.svg";
+import { t } from "../i18n/i18n";
 
 export function LoginForm() {
   const [username, setUsername] = useState("");
@@ -28,22 +29,22 @@ export function LoginForm() {
         <Stack gap="md">
           <Group gap="xs" justify="center">
             <Image src={logo} alt="" w={32} h={32} />
-            <Title order={3}>Gramps Connect</Title>
+            <Title order={3}>{t("Gramps Connect")}</Title>
           </Group>
           <TextInput
-            label="Username"
+            label={t("Username")}
             value={username}
             onChange={(e) => setUsername(e.currentTarget.value)}
             autoFocus
           />
           <PasswordInput
-            label="Password"
+            label={t("Password")}
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
           />
           {error && <Text size="sm" c="red">{error}</Text>}
           <Button type="submit" loading={submitting} fullWidth>
-            Sign in
+            {t("Sign in")}
           </Button>
         </Stack>
       </Paper>

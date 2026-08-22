@@ -12,6 +12,7 @@ import { EVENT_VIEW, MEDIA_VIEW, formatEventType, displayName } from "../store/v
 import type { QueryItem } from "../store/api";
 import type { DraftEntry, DraftType } from "../store/draftStack";
 import type { ViewConfig } from "../store/views";
+import { t } from "../i18n/i18n";
 
 /** A result's display label for a Person picker -- shared by every "pick an
  * existing Person" surface (Family's parent/child slots today; Associations
@@ -164,11 +165,11 @@ export function OccupiedRefRow({ label, isNew, onEdit, onRemove, removeLabel }: 
           py={1}
           style={{ borderRadius: 100, letterSpacing: "0.04em", flexShrink: 0 }}
         >
-          new
+          {t("new")}
         </Text>
       )}
       <Text size="sm" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</Text>
-      {onEdit && <CircleGlyphButton glyph="✎" label="Edit" onClick={onEdit} size={16} />}
+      {onEdit && <CircleGlyphButton glyph="✎" label={t("Edit")} onClick={onEdit} size={16} />}
       <CircleGlyphButton glyph="−" label={removeLabel} onClick={onRemove} size={16} />
     </Group>
   );
@@ -227,7 +228,7 @@ export function SearchOrCreate({
   return (
     <Group gap="xs">
       <Button variant="default" size="xs" onClick={() => setSearching(true)}>
-        Select existing…
+        {t("Select existing…")}
       </Button>
       {onOpenNew && (
         <Button variant="default" size="xs" onClick={onOpenNew}>
@@ -506,7 +507,7 @@ export function MediaListField({ label, refs, labels, onAddExisting, onAdded, on
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
-      {refs.length === 0 && <Text size="xs" c="dimmed">No media</Text>}
+      {refs.length === 0 && <Text size="xs" c="dimmed">{t("No media")}</Text>}
       {refs.map((refHandle) => (
         <OccupiedRefRow
           key={refHandle}
@@ -531,12 +532,12 @@ export function MediaListField({ label, refs, labels, onAddExisting, onAdded, on
       ) : (
         <Group gap="xs">
           <Button variant="default" size="xs" onClick={() => setSearching(true)}>
-            Select existing…
+            {t("Select existing…")}
           </Button>
           <FileButton onChange={handleFile}>
             {(props) => (
               <Button variant="default" size="xs" loading={uploading} {...props}>
-                + New Media
+                {t("+ New Media")}
               </Button>
             )}
           </FileButton>
@@ -592,8 +593,8 @@ export function EventsField({
 
   return (
     <Stack gap={4}>
-      <Text size="sm" fw={500}>Events</Text>
-      {refs.length === 0 && <Text size="xs" c="dimmed">No events</Text>}
+      <Text size="sm" fw={500}>{t("Events")}</Text>
+      {refs.length === 0 && <Text size="xs" c="dimmed">{t("No events")}</Text>}
       {refs.map((ref) => {
         const nestedDraft = newDrafts.get(ref.ref) ?? findEdit(ref.ref);
         if (nestedDraft) {
@@ -622,7 +623,7 @@ export function EventsField({
       })}
       <Stack gap={4}>
         <Select
-          label="Role"
+          label={t("Role")}
           data={EVENT_ROLE_OPTIONS}
           value={role}
           onChange={(next) => setRole(next ?? "Primary")}

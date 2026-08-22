@@ -1,6 +1,7 @@
 import { getBacklinks } from "../../../store/objectDetail";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 const TYPE_LABELS: Record<string, string> = {
   person: "People", family: "Families", event: "Events", place: "Places",
@@ -21,7 +22,7 @@ export function BacklinksSection({ detail, onNavigate }: SectionProps) {
   if (types.length === 0) return null;
   const total = types.reduce((sum, t) => sum + backlinks[t].length, 0);
   return (
-    <SectionShell label="Referenced by">
+    <SectionShell label={t("Referenced by")}>
       {types.map((type) => (
         <div key={type}>
           <div style={{ fontWeight: 500, fontSize: "var(--mantine-font-size-sm)", opacity: 0.7 }}>

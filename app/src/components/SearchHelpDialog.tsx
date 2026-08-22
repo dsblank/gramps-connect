@@ -2,6 +2,7 @@ import {
   Code, Modal, ScrollArea, Stack, Table, Text, Title, UnstyledButton,
 } from "@mantine/core";
 import type { HelpEntry, SearchHelp } from "../store/searchHelp";
+import { t } from "../i18n/i18n";
 
 interface SearchHelpDialogProps {
   opened: boolean;
@@ -30,7 +31,7 @@ export function SearchHelpDialog({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`Searching ${viewLabel}`}
+      title={`${t("Searching")} ${t(viewLabel)}`}
       size="lg"
       scrollAreaComponent={ScrollArea.Autosize}
     >
@@ -47,9 +48,9 @@ export function SearchHelpDialog({
           )}
         </Stack>
 
-        <Section title="Examples">
+        <Section title={t("Examples")}>
           <Text size="sm" c="dimmed">
-            Click one to put it in the search box, then change it to suit.
+            {t("Click one to put it in the search box, then change it to suit.")}
           </Text>
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>
@@ -74,7 +75,7 @@ export function SearchHelpDialog({
           </Table>
         </Section>
 
-        <Section title="What you can match on">
+        <Section title={t("What you can match on")}>
           <Text size="sm">
             The fields of a {help.typeName.toLowerCase()} record worth searching by. Text
             goes in quotes (<Code>'Smith'</Code>), numbers don't (<Code>1968</Code>), and a
@@ -84,18 +85,16 @@ export function SearchHelpDialog({
         </Section>
 
         {help.relationships && (
-          <Section title="Reaching related records">
+          <Section title={t("Reaching related records")}>
             <Text size="sm">
-              A dot carries the search over into another record and keeps going, so
-              anything on the record it reaches can be matched too — as far along as you
-              like.
+              {t("A dot carries the search over into another record and keeps going, so anything on the record it reaches can be matched too — as far along as you like.")}
             </Text>
             <EntryTable entries={help.relationships} />
           </Section>
         )}
 
         {help.collections && (
-          <Section title="Testing lists of related records">
+          <Section title={t("Testing lists of related records")}>
             <Text size="sm">
               These reach any number of records rather than exactly one, so instead of a
               dot they take <Code>exists(list, condition)</Code> — true when at least one
@@ -107,8 +106,8 @@ export function SearchHelpDialog({
           </Section>
         )}
 
-        <Section title="Building blocks">
-          <Text size="sm">These work the same on every list:</Text>
+        <Section title={t("Building blocks")}>
+          <Text size="sm">{t("These work the same on every list:")}</Text>
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>
               <SymbolRow symbol="==  !=" meaning="Is / is not equal to" />
@@ -127,7 +126,7 @@ export function SearchHelpDialog({
           </Table>
         </Section>
 
-        <Section title="Things worth knowing">
+        <Section title={t("Things worth knowing")}>
           <Text size="sm">
             <b>Dates are compared through <Code>sortval</Code>.</b> That is the date's
             position on the calendar and nothing else — a date recorded as "before 1968"
@@ -136,13 +135,13 @@ export function SearchHelpDialog({
             <Code>date.modifier</Code> as well.
           </Text>
           <Text size="sm">
-            <b>Missing values never match.</b> A condition about something that was never
+            <b>{t("Missing values never match.")}</b> A condition about something that was never
             recorded is neither true nor false, and such a record stays out of the results
             either way — even under <Code>not</Code>. To find records where something is
             missing, ask for it directly with <Code>is None</Code>.
           </Text>
           <Text size="sm">
-            <b>Nothing else is accepted.</b> This is a small, fixed set of building blocks
+            <b>{t("Nothing else is accepted.")}</b> This is a small, fixed set of building blocks
             rather than a programming language: anything outside it is refused with an
             error rather than guessed at, so a search that runs is a search that means
             what it says.

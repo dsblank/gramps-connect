@@ -8,6 +8,7 @@ import type { MapPlace } from "../../store/visualData";
 import { readVisualColors } from "./cssVar";
 import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { t } from "../../i18n/i18n";
 // maplibre-gl loads its tile-parsing/clustering work off the main thread via
 // `new Worker(new URL(\`./${name}\`, import.meta.url))`, with the filename
 // built from a template literal at runtime -- Vite's static asset scanner
@@ -426,12 +427,11 @@ export function MapCanvas({
       {tileError && (
         <Alert
           color="yellow"
-          title="Map tiles unavailable"
+          title={t("Map tiles unavailable")}
           m="md"
           style={{ position: "absolute", top: 0, left: 0, right: 60, zIndex: 2 }}
         >
-          The basemap comes from tiles.openfreemap.org and couldn't be reached. Your places are
-          still plotted — they're read from this device's own cache — but there's no map under them.
+          {t("The basemap comes from tiles.openfreemap.org and couldn't be reached. Your places are still plotted — they're read from this device's own cache — but there's no map under them.")}
         </Alert>
       )}
     </Box>

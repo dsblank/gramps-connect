@@ -12,6 +12,7 @@ import {
 } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchMetadata, systemInfoLines } from "../store/metadataApi";
+import { t } from "../i18n/i18n";
 
 interface SystemInfoDialogProps {
   opened: boolean;
@@ -58,22 +59,21 @@ export function SystemInfoDialog({ opened, onClose }: SystemInfoDialogProps) {
   const text = lines.join("\n");
 
   return (
-    <Modal opened={opened} onClose={onClose} title="System Information">
+    <Modal opened={opened} onClose={onClose} title={t("System Information")}>
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          Include this when reporting a problem — it says which versions of everything you
-          are running, and what this server has switched on.
+          {t("Include this when reporting a problem — it says which versions of everything you are running, and what this server has switched on.")}
         </Text>
 
         {stage === "loading" && (
           <Group justify="center" py="md">
             <Loader size="sm" />
-            <Text size="sm">Asking the server…</Text>
+            <Text size="sm">{t("Asking the server…")}</Text>
           </Group>
         )}
 
         {stage === "error" && (
-          <Alert color="red" title="Could not read the server's details">
+          <Alert color="red" title={t("Could not read the server's details")}>
             {error}
           </Alert>
         )}
@@ -97,7 +97,7 @@ export function SystemInfoDialog({ opened, onClose }: SystemInfoDialogProps) {
             </CopyButton>
           )}
           <Button variant="default" onClick={onClose}>
-            Close
+            {t("Close")}
           </Button>
         </Group>
       </Stack>

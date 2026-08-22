@@ -4,6 +4,7 @@ import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
 import type { ViewConfig } from "../store/views";
 import { withGrampsId } from "./related/summary";
+import { t } from "../i18n/i18n";
 
 // Capped rather than raised when a search is too broad: a picker that can
 // return hundreds of matches needs a narrower query, not a longer dropdown.
@@ -144,7 +145,7 @@ export function RecordPicker({
         </Card>
       )}
       {results.length === 0 && !loading && (
-        <Text size="xs" c="dimmed">No matches</Text>
+        <Text size="xs" c="dimmed">{t("No matches")}</Text>
       )}
       {totalCount !== null && totalCount > results.length && (
         <Text size="xs" c="dimmed">
@@ -153,7 +154,7 @@ export function RecordPicker({
       )}
       {onCreateNew && query.trim().length > 0 && (
         <Group gap={4}>
-          <Text size="xs" c="dimmed">Not finding it?</Text>
+          <Text size="xs" c="dimmed">{t("Not finding it?")}</Text>
           <Anchor component="button" type="button" size="xs" onClick={onCreateNew}>
             + Create new {createLabel}…
           </Anchor>
@@ -162,7 +163,7 @@ export function RecordPicker({
       {confirmWithButton && (
         <Group justify="flex-end">
           <Button disabled={!selectedItem} onClick={() => selectedItem && onPick(selectedItem)}>
-            Select
+            {t("Select")}
           </Button>
         </Group>
       )}

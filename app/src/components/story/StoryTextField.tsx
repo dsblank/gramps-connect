@@ -5,6 +5,7 @@
 // reader that turns those markers back into <b>/<i> when presenting.
 import { useRef } from "react";
 import { Button, Group, Stack, Text, Textarea } from "@mantine/core";
+import { t } from "../../i18n/i18n";
 
 /** Wraps the textarea's current selection in `marker` (or unwraps it, if
  * the selection is already exactly `marker…marker`) -- with nothing
@@ -35,10 +36,10 @@ export function StoryTextField({ label, value, onChange }: { label: string; valu
       <Group gap="xs">
         <Text size="sm" fw={500}>{label}</Text>
         <Button variant="default" size="compact-xs" fw={700} onClick={() => ref.current && applyMarker(ref.current, "**", value, onChange)}>
-          B
+          {t("B")}
         </Button>
         <Button variant="default" size="compact-xs" fs="italic" onClick={() => ref.current && applyMarker(ref.current, "*", value, onChange)}>
-          i
+          {t("i")}
         </Button>
       </Group>
       <Textarea ref={ref} autosize minRows={2} maxRows={8} value={value} onChange={(e) => onChange(e.currentTarget.value)} />

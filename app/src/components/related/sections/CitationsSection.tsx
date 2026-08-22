@@ -5,6 +5,7 @@ import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** CitationBase.citation_list -- a plain handle list (no per-item ref
  * metadata; a citation reference is just "this object cites that citation",
@@ -25,7 +26,7 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
   }
 
   return (
-    <SectionShell label="Citations">
+    <SectionShell label={t("Citations")}>
       {rows.map(({ handle, target }) => (
         <RefRow
           key={handle}

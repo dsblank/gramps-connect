@@ -8,6 +8,7 @@ import { RefEditDialog } from "../RefEditDialog";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** Source.reporef_list -- repositories this source is held at, each
  * carrying its own call_number/media_type (RepoRef, not a bare handle).
@@ -29,7 +30,7 @@ export function RepositoriesSection({ view, detail, onNavigate, onRefetch }: Sec
   }
 
   return (
-    <SectionShell label="Repositories">
+    <SectionShell label={t("Repositories")}>
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}

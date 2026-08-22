@@ -336,6 +336,45 @@ npm run typecheck -w app    # tsc --noEmit
 npm run test -w packages/gramps-date
 ```
 
+### Translations
+
+`app/`'s UI strings go through `t()` (`app/src/i18n/i18n.ts`), which mirrors
+[gramps-web](https://github.com/gramps-project/gramps-web)'s own approach —
+a plain `{english: translated}` lookup, no i18n library — merged from two
+sources per language, chosen at `setLanguage()` time and cached in-memory
+until the next language switch:
+
+- **The Gramps desktop vocabulary** — translated *live*, per request, by
+  POSTing the strings actually in use to `gramps-web-api`'s existing
+  `GET/POST /api/translations/<lang>` endpoint, which runs them through the
+  installed `gramps` package's own gettext catalog. No static copy to keep
+  in sync; always as fresh as whatever `gramps` version the server has
+  installed. The fixed list of which desktop-vocabulary strings to request
+  lives in `i18n.ts`'s `desktopStrings` array — grown by hand, one entry per
+  string, whenever a newly-wrapped `t()` call turns out to be real Gramps
+  vocabulary rather than something gramps-connect-specific.
+- **gramps-web's own UI strings, and Gramps addons' strings** — bootstrapped
+  as static `app/public/lang/{locale}.json` files (tracked in git, so the
+  app works without anyone needing a Weblate connection) by
+  `scripts/bootstrap-translations.py`, which reads `../gramps-web/lang/`
+  and `../addons-source/*/po/*-local.po` — sibling checkouts of this repo,
+  not a network call. Run it (`python3 scripts/bootstrap-translations.py`,
+  needs `pip install polib`) whenever those sibling checkouts get updated
+  and you want the static corpus refreshed; it's not wired into any build
+  step, so nothing runs it automatically. Safe to re-run: without `--force`
+  it skips any locale `.json` that already exists, and even with `--force`
+  it only ever overwrites files under `app/public/lang/` — no network
+  calls, no git operations, and any bad result is a `git checkout` away
+  from undone.
+
+Wrapping more of the app's own strings in `t()` is ongoing, incremental
+work — `app/scripts/wrap-translations.mjs` is a one-time codemod (kept
+around as a reusable tool) that mechanically wraps plain JSX text and a
+safe attribute allowlist (`label`/`title`/`placeholder`); anything sourced
+from a variable or object-literal property (view/column configs in
+`app/src/store/views.ts`, dynamic API data, `notifications.show()` calls)
+needs a manual `t(...)` at whatever component renders it instead.
+
 ### Contributing
 
 Discussion happens on the [Gramps Discourse forum](https://gramps.discourse.group/);

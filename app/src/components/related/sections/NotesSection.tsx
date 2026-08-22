@@ -11,6 +11,7 @@ import { AttachControl } from "../AttachControl";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 interface RawNote {
   tag_list?: string[];
@@ -92,7 +93,7 @@ function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["vie
   return (
     <>
       <UnstyledButton onClick={handleClick} disabled={busy}>
-        <Text size="sm" c="blue">+ Add a story</Text>
+        <Text size="sm" c="blue">{t("+ Add a story")}</Text>
       </UnstyledButton>
       {error && <Alert color="red">{error}</Alert>}
       <StoryView spec={spec} opened={opened} onClose={() => setOpened(false)} />
@@ -150,7 +151,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   return (
     <>
       {(noteRows.length > 0 || canAttach) && (
-        <SectionShell label="Notes">
+        <SectionShell label={t("Notes")}>
           {noteRows.map(({ handle, target }) => (
             <RefRow
               key={handle}
@@ -174,7 +175,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
         </SectionShell>
       )}
       {messageRows.length > 0 && (
-        <SectionShell label="Messages">
+        <SectionShell label={t("Messages")}>
           {messageRows.map(({ handle, target }) => {
             const isDone = Boolean(doneTag && target.tag_list?.includes(doneTag));
             const label = `${isDone ? "✓ " : ""}${summaryLine("messages", target)}`;
@@ -183,7 +184,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
         </SectionShell>
       )}
       {(storyRows.length > 0 || canAddStory) && (
-        <SectionShell label="Stories">
+        <SectionShell label={t("Stories")}>
           {storyRows.map(({ handle, target }) => (
             <RefRow
               key={handle}

@@ -1,5 +1,6 @@
 import { Card, Group, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { CircleGlyphButton } from "./CircleGlyphButton";
+import { t } from "../i18n/i18n";
 
 // Attribute/Address/Url (AttributeBase/AddressBase/UrlBase in gramps' own
 // class hierarchy) are inline structs, not references to another Gramps
@@ -72,7 +73,7 @@ interface AttributeListFieldProps {
 export function AttributeListField({ items, onChange }: AttributeListFieldProps) {
   return (
     <ListShell
-      label="Attributes"
+      label={t("Attributes")}
       addLabel="Add attribute"
       items={items}
       onChange={onChange}
@@ -87,14 +88,14 @@ export function AttributeListField({ items, onChange }: AttributeListFieldProps)
             style={{ flex: 1 }}
           />
           <TextInput
-            placeholder="Value"
+            placeholder={t("Value")}
             aria-label="Attribute value"
             value={attr.value ?? ""}
             onChange={(e) => onPatch({ value: e.currentTarget.value })}
             style={{ flex: 1 }}
           />
           <Switch
-            label="Private"
+            label={t("Private")}
             checked={Boolean(attr.private)}
             onChange={(e) => onPatch({ private: e.currentTarget.checked })}
           />
@@ -127,7 +128,7 @@ interface AddressListFieldProps {
 export function AddressListField({ items, onChange }: AddressListFieldProps) {
   return (
     <ListShell
-      label="Addresses"
+      label={t("Addresses")}
       addLabel="Add address"
       items={items}
       onChange={onChange}
@@ -136,47 +137,47 @@ export function AddressListField({ items, onChange }: AddressListFieldProps) {
         <Card withBorder padding="xs">
           <Stack gap="xs">
             <TextInput
-              label="Street"
+              label={t("Street")}
               value={addr.street ?? ""}
               onChange={(e) => onPatch({ street: e.currentTarget.value })}
             />
             <TextInput
-              label="Locality"
+              label={t("Locality")}
               value={addr.locality ?? ""}
               onChange={(e) => onPatch({ locality: e.currentTarget.value })}
             />
             <TextInput
-              label="City"
+              label={t("City")}
               value={addr.city ?? ""}
               onChange={(e) => onPatch({ city: e.currentTarget.value })}
             />
             <TextInput
-              label="County"
+              label={t("County")}
               value={addr.county ?? ""}
               onChange={(e) => onPatch({ county: e.currentTarget.value })}
             />
             <TextInput
-              label="State"
+              label={t("State")}
               value={addr.state ?? ""}
               onChange={(e) => onPatch({ state: e.currentTarget.value })}
             />
             <TextInput
-              label="Postal code"
+              label={t("Postal code")}
               value={addr.postal ?? ""}
               onChange={(e) => onPatch({ postal: e.currentTarget.value })}
             />
             <TextInput
-              label="Country"
+              label={t("Country")}
               value={addr.country ?? ""}
               onChange={(e) => onPatch({ country: e.currentTarget.value })}
             />
             <TextInput
-              label="Phone"
+              label={t("Phone")}
               value={addr.phone ?? ""}
               onChange={(e) => onPatch({ phone: e.currentTarget.value })}
             />
             <Switch
-              label="Private"
+              label={t("Private")}
               checked={Boolean(addr.private)}
               onChange={(e) => onPatch({ private: e.currentTarget.checked })}
             />
@@ -205,7 +206,7 @@ interface UrlListFieldProps {
 export function UrlListField({ items, onChange }: UrlListFieldProps) {
   return (
     <ListShell
-      label="Web links"
+      label={t("Web links")}
       addLabel="Add web link"
       items={items}
       onChange={onChange}
@@ -213,14 +214,14 @@ export function UrlListField({ items, onChange }: UrlListFieldProps) {
       renderRow={(url, onPatch) => (
         <Stack gap="xs">
           <TextInput
-            placeholder="URL"
+            placeholder={t("URL")}
             aria-label="Url path"
             value={url.path ?? ""}
             onChange={(e) => onPatch({ path: e.currentTarget.value })}
           />
           <Group gap="xs" wrap="nowrap">
             <TextInput
-              placeholder="Description"
+              placeholder={t("Description")}
               aria-label="Url description"
               value={url.desc ?? ""}
               onChange={(e) => onPatch({ desc: e.currentTarget.value })}
@@ -234,7 +235,7 @@ export function UrlListField({ items, onChange }: UrlListFieldProps) {
               style={{ flex: 1 }}
             />
             <Switch
-              label="Private"
+              label={t("Private")}
               checked={Boolean(url.private)}
               onChange={(e) => onPatch({ private: e.currentTarget.checked })}
             />

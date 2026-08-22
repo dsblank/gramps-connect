@@ -1,5 +1,6 @@
 import { Box, Center, Stack, Text } from "@mantine/core";
 import type { MediaDropState } from "../hooks/useMediaDrop";
+import { t } from "../i18n/i18n";
 
 /** Full-window visual feedback while a file is being dragged over the app
  * (useMediaDrop.ts) -- pointer-events: none throughout, since the drag/drop
@@ -30,7 +31,7 @@ export function MediaDropOverlay({ active, targetLabel }: MediaDropState) {
             border: "2px dashed var(--mantine-color-blue-5)",
           }}
         >
-          <Text fw={600}>Drop to add media</Text>
+          <Text fw={600}>{t("Drop to add media")}</Text>
           <Text size="sm" c="dimmed">{targetLabel}</Text>
         </Stack>
       </Center>

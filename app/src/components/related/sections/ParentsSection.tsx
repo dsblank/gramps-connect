@@ -7,6 +7,7 @@ import { SetFieldControl } from "../AttachControl";
 import { SectionShell, RefRow, PairGroup } from "./shared";
 import { summaryLine, withGrampsId } from "../summary";
 import type { OnNavigate, SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 interface FamilyProfile {
   handle: string;
@@ -92,7 +93,7 @@ export function ParentsSection({ type, view, detail, onNavigate, onRefetch }: Se
     }
 
     return (
-      <SectionShell label="Parents">
+      <SectionShell label={t("Parents")}>
         <PairGroup>
           {father?.handle ? (
             <RefRow
@@ -148,14 +149,14 @@ export function ParentsSection({ type, view, detail, onNavigate, onRefetch }: Se
   const rawParentFamilies = (detail.extended?.parent_families as ({ handle: string; child_ref_list?: RawRef[] })[] | undefined) ?? [];
 
   return (
-    <SectionShell label="Parents">
+    <SectionShell label={t("Parents")}>
       <Stack gap="md">
         {hasPrimary && primary && (
           <ParentFamilyPair profileFamily={primary} rawFamily={rawPrimary} childHandle={detail.handle} onNavigate={onNavigate} />
         )}
         {others.map((fam) => (
           <div key={fam.handle}>
-            <Text size="sm" c="dimmed">Also a child in:</Text>
+            <Text size="sm" c="dimmed">{t("Also a child in:")}</Text>
             <ParentFamilyPair
               profileFamily={fam}
               rawFamily={rawParentFamilies.find((r) => r.handle === fam.handle)}

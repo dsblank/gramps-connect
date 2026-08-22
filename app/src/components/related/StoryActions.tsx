@@ -3,6 +3,7 @@ import { Alert, Button, Group } from "@mantine/core";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { StorySpec } from "../../store/storyBuilder";
 import { StoryView } from "../StoryView";
+import { t } from "../../i18n/i18n";
 
 /** Parses a story note's text.string back into the StorySpec StoryView
  * expects -- the inverse of storyApi.ts's createStoryNote, which just
@@ -35,11 +36,11 @@ export function StoryActions({ detail }: { detail: ObjectDetail }) {
   return (
     <Group gap="xs">
       <Button size="xs" onClick={() => setOpened(true)} disabled={!spec}>
-        Present
+        {t("Present")}
       </Button>
       {!spec && (
         <Alert color="red" py={4}>
-          This story's JSON couldn't be parsed -- edit it to fix before presenting.
+          {t("This story's JSON couldn't be parsed -- edit it to fix before presenting.")}
         </Alert>
       )}
       <StoryView spec={spec} opened={opened} onClose={() => setOpened(false)} />

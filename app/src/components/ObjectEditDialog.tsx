@@ -20,6 +20,7 @@ import {
 import { StoryEditor } from "./story/StoryEditor";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
+import { t } from "../i18n/i18n";
 
 type FieldSpec =
   | { kind: "text"; key: string; label: string; placeholder?: string }
@@ -390,9 +391,9 @@ export function ObjectEditDialog({
     return (
       <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
         <Stack gap="md">
-          <Alert color="red" title="Could not load">{draft.loadError}</Alert>
+          <Alert color="red" title={t("Could not load")}>{draft.loadError}</Alert>
           <Group justify="flex-end">
-            <Button variant="default" onClick={onCancel}>Close</Button>
+            <Button variant="default" onClick={onCancel}>{t("Close")}</Button>
           </Group>
         </Stack>
       </Modal>
@@ -409,7 +410,7 @@ export function ObjectEditDialog({
     // drifts out of sync.
     return (
       <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
-        <Alert color="red" title="No fields defined">Unknown object type "{draft.type}".</Alert>
+        <Alert color="red" title={t("No fields defined")}>Unknown object type "{draft.type}".</Alert>
       </Modal>
     );
   }
@@ -666,14 +667,14 @@ export function ObjectEditDialog({
         )}
 
         {error && (
-          <Alert color="red" title="Could not save">
+          <Alert color="red" title={t("Could not save")}>
             {error}
           </Alert>
         )}
 
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={saving}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button onClick={onPrimary} loading={saving} disabled={missingRequired || invalidStory}>
             {primaryLabel}

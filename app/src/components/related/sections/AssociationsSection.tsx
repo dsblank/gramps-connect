@@ -8,6 +8,7 @@ import { RefEditDialog } from "../RefEditDialog";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** Person.person_ref_list -- associations to other people (godparent,
  * witness, ...), each carrying its own free-text `rel` description.
@@ -32,7 +33,7 @@ export function AssociationsSection({ view, detail, onNavigate, onRefetch }: Sec
   }
 
   return (
-    <SectionShell label="Associations">
+    <SectionShell label={t("Associations")}>
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}

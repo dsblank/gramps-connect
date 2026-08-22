@@ -5,6 +5,7 @@ import { SetFieldControl } from "../AttachControl";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** Event.place -- a singular ref (not a list), still fully resolved by
  * extend=all into extended.place despite not being one of the documented
@@ -33,7 +34,7 @@ export function PlaceSection({ view, detail, onNavigate, onRefetch }: SectionPro
   }
 
   return (
-    <SectionShell label="Place">
+    <SectionShell label={t("Place")}>
       {place?.handle ? (
         <RefRow
           type="place"

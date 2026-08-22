@@ -8,6 +8,7 @@ import { summaryLine } from "../summary";
 import { MediaThumbnail } from "../MediaThumbnail";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** MediaBase.media_list -- under a "Media" SectionShell like every other
  * section. The optional visual teaser/gallery link (one thumbnail plus a
@@ -39,7 +40,7 @@ export function MediaSection({ type, view, detail, onNavigate, onViewGallery, on
   }
 
   return (
-    <SectionShell label="Media">
+    <SectionShell label={t("Media")}>
       {onViewGallery && rows.length > 0 && (
         <UnstyledButton
           onClick={() => onViewGallery(rows.map((r) => ({ handle: r.ref.ref, mime: r.target?.mime })), label)}

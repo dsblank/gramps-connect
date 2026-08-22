@@ -20,6 +20,7 @@ import {
 } from "../store/mediaImportApi";
 import { clearAllOpfs } from "../store/opfs";
 import { describeTaskFailure, waitForTask } from "../store/taskApi";
+import { t } from "../i18n/i18n";
 
 type Stage = "select" | "uploading" | "done" | "error";
 
@@ -99,7 +100,7 @@ export function ImportMediaDialog({ opened, onClose }: ImportMediaDialogProps) {
     <Modal
       opened={opened}
       onClose={handleClose}
-      title="Import Media"
+      title={t("Import Media")}
       closeOnClickOutside={stage !== "uploading"}
       closeOnEscape={stage !== "uploading"}
     >
@@ -107,24 +108,22 @@ export function ImportMediaDialog({ opened, onClose }: ImportMediaDialogProps) {
         {stage === "select" && (
           <>
             <Text size="sm" c="dimmed">
-              Upload a ZIP archive of image files. Files matching the checksum (or path) of a
-              Media object already in the tree that's missing its file are attached to it. This
-              does not create new Media objects for images the tree has no record of.
+              {t("Upload a ZIP archive of image files. Files matching the checksum (or path) of a Media object already in the tree that's missing its file are attached to it. This does not create new Media objects for images the tree has no record of.")}
             </Text>
             <FileButton onChange={setFile} accept=".zip">
               {(props) => (
                 <Button {...props} variant="light">
-                  Choose ZIP file
+                  {t("Choose ZIP file")}
                 </Button>
               )}
             </FileButton>
             {file && <Text size="sm">{file.name}</Text>}
             <Group justify="flex-end">
               <Button variant="default" onClick={handleClose}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button disabled={!file} onClick={handleConfirm}>
-                Import
+                {t("Import")}
               </Button>
             </Group>
           </>
@@ -133,7 +132,7 @@ export function ImportMediaDialog({ opened, onClose }: ImportMediaDialogProps) {
         {stage === "uploading" && (
           <Group justify="center" py="md">
             <Loader size="sm" />
-            <Text size="sm">Uploading… this may take a while.</Text>
+            <Text size="sm">{t("Uploading… this may take a while.")}</Text>
           </Group>
         )}
 
@@ -167,22 +166,22 @@ export function ImportMediaDialog({ opened, onClose }: ImportMediaDialogProps) {
               </>
             )}
             <Group justify="flex-end">
-              <Button onClick={() => window.location.reload()}>Close</Button>
+              <Button onClick={() => window.location.reload()}>{t("Close")}</Button>
             </Group>
           </>
         )}
 
         {stage === "error" && (
           <>
-            <Alert color="red" title="Import failed">
+            <Alert color="red" title={t("Import failed")}>
               {error}
             </Alert>
             <Group justify="flex-end">
               <Button variant="default" onClick={reset}>
-                Try again
+                {t("Try again")}
               </Button>
               <Button variant="subtle" onClick={handleClose}>
-                Close
+                {t("Close")}
               </Button>
             </Group>
           </>

@@ -4,6 +4,7 @@ import { getToken } from "../../auth/auth";
 import { patchRefListEntry } from "../../store/refListApi";
 import type { RefMeta } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
+import { t } from "../../i18n/i18n";
 
 // ChildRefType/EventRoleType/SourceMediaType built-ins (gramps/gen/lib/
 // childreftype.py, eventroletype.py, srcmediatype.py) as plain English
@@ -102,13 +103,13 @@ export function RefEditDialog({
         {refType === "child" && (
           <>
             <Select
-              label="Relationship to father"
+              label={t("Relationship to father")}
               data={CHILD_REL_OPTIONS}
               value={frel || null}
               onChange={(next) => setFrel(next ?? "")}
             />
             <Select
-              label="Relationship to mother"
+              label={t("Relationship to mother")}
               data={CHILD_REL_OPTIONS}
               value={mrel || null}
               onChange={(next) => setMrel(next ?? "")}
@@ -117,7 +118,7 @@ export function RefEditDialog({
         )}
         {refType === "event" && (
           <Select
-            label="Role"
+            label={t("Role")}
             data={EVENT_ROLE_OPTIONS}
             value={role || null}
             onChange={(next) => setRole(next ?? "")}
@@ -125,8 +126,8 @@ export function RefEditDialog({
         )}
         {refType === "person" && (
           <TextInput
-            label="Relationship"
-            placeholder="e.g. Godfather"
+            label={t("Relationship")}
+            placeholder={t("e.g. Godfather")}
             value={rel}
             onChange={(e) => setRel(e.currentTarget.value)}
           />
@@ -134,12 +135,12 @@ export function RefEditDialog({
         {refType === "repo" && (
           <>
             <TextInput
-              label="Call number"
+              label={t("Call number")}
               value={callNumber}
               onChange={(e) => setCallNumber(e.currentTarget.value)}
             />
             <Select
-              label="Media type"
+              label={t("Media type")}
               data={REPO_MEDIA_TYPE_OPTIONS}
               value={mediaType || null}
               onChange={(next) => setMediaType(next ?? "")}
@@ -147,8 +148,8 @@ export function RefEditDialog({
           </>
         )}
         <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} loading={saving}>Save</Button>
+          <Button variant="default" onClick={onClose}>{t("Cancel")}</Button>
+          <Button onClick={handleSave} loading={saving}>{t("Save")}</Button>
         </Group>
       </Stack>
     </Modal>

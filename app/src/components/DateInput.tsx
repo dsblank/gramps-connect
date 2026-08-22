@@ -20,6 +20,7 @@ import {
   type GrampsDate,
   type NewYearValue,
 } from "@gramps-connect/gramps-date";
+import { t } from "../i18n/i18n";
 
 interface DateInputProps {
   label: string;
@@ -171,8 +172,8 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
     <Group gap="xs" wrap="nowrap" align="flex-end" style={{ flex: 1 }}>
       <Group grow gap="xs" style={{ flex: 1 }}>
         <NumberInput
-          label="Year"
-          placeholder="Year"
+          label={t("Year")}
+          placeholder={t("Year")}
           value={year || ""}
           onChange={(v) => setField({ year: Number(v) || 0 })}
           hideControls
@@ -180,8 +181,8 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
           error={invalid}
         />
         <NumberInput
-          label="Month"
-          placeholder="Month"
+          label={t("Month")}
+          placeholder={t("Month")}
           value={month || ""}
           onChange={(v) => setField({ month: Number(v) || 0 })}
           hideControls
@@ -192,8 +193,8 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
           max={12}
         />
         <NumberInput
-          label="Day"
-          placeholder="Day"
+          label={t("Day")}
+          placeholder={t("Day")}
           value={day || ""}
           onChange={(v) => setField({ day: Number(v) || 0 })}
           hideControls
@@ -346,7 +347,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
         <Stack gap={4}>
           <Group grow gap="xs" wrap="nowrap">
             <Select
-              label="Type"
+              label={t("Type")}
               data={MODIFIER_OPTIONS}
               value={String(modifier)}
               onChange={(v) => commit({ modifier: (Number(v) as Modifier) ?? Modifier.NONE })}
@@ -354,7 +355,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
               comboboxProps={{ withinPortal: true }}
             />
             <Select
-              label="Quality"
+              label={t("Quality")}
               data={QUALITY_OPTIONS}
               value={String(quality)}
               onChange={(v) => commit({ quality: (Number(v) as Quality) ?? Quality.NONE })}
@@ -363,7 +364,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
             />
             {!textOnly && (
               <Select
-                label="Calendar"
+                label={t("Calendar")}
                 data={CALENDAR_OPTIONS}
                 value={String(calendar)}
                 onChange={(v) => setCalendar((Number(v) as Calendar) ?? Calendar.GREGORIAN)}
@@ -384,7 +385,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
               />
               {compound && (
                 <Group gap="xs" wrap="nowrap" align="flex-end">
-                  <Text size="sm" c="dimmed" pb={8}>to</Text>
+                  <Text size="sm" c="dimmed" pb={8}>{t("to")}</Text>
                   <DatePartRow
                     part={stop}
                     onChange={(p) => commit({ stop: p })}
@@ -395,7 +396,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
               )}
               <Group gap="md" wrap="nowrap" align="flex-end" justify="space-between">
                 <Switch
-                  label="Dual dated (e.g. 1745/6)"
+                  label={t("Dual dated (e.g. 1745/6)")}
                   checked={dualDated}
                   onChange={(e) => setDualDated(e.currentTarget.checked)}
                 />
@@ -424,7 +425,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
           />
 
           <Group justify="flex-end">
-            <Button onClick={() => setDetailsOpen(false)}>Done</Button>
+            <Button onClick={() => setDetailsOpen(false)}>{t("Done")}</Button>
           </Group>
         </Stack>
       </Modal>
@@ -480,7 +481,7 @@ function QuickEntryField({
       <TextInput
         style={{ flex: 1 }}
         aria-label={label}
-        placeholder='about Jan 1983, before 1960, 1745/6…'
+        placeholder={t("about Jan 1983, before 1960, 1745/6…")}
         value={buffer}
         onChange={(e) => setBuffer(e.currentTarget.value)}
         onFocus={() => { focusedRef.current = true; }}
@@ -518,9 +519,9 @@ function NewYearField({
 
   return (
     <TextInput
-      label="New year begins"
+      label={t("New year begins")}
       aria-label={`${label} new year`}
-      placeholder="Jan1"
+      placeholder={t("Jan1")}
       disabled={disabled}
       value={disabled ? "" : buffer}
       onChange={(e) => setBuffer(e.currentTarget.value)}

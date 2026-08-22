@@ -13,6 +13,7 @@ import { CircleGlyphButton } from "../CircleGlyphButton";
 import { RefSlot, pickerResultLabel } from "../RefPickerField";
 import { StoryTextField } from "./StoryTextField";
 import { StoryView } from "../StoryView";
+import { t } from "../../i18n/i18n";
 
 /** Resolves display labels for every eventRef/mediaRef already on `spec`
  * that this component hasn't seen yet -- same `fetchPage(view, token, null,
@@ -68,13 +69,13 @@ function StorySlideCard({ point, index, total, labels, onLabel, onUpdate, onRemo
         <Group justify="space-between" wrap="nowrap">
           <Text size="sm" fw={600}>Slide {index + 1}</Text>
           <Group gap={4} wrap="nowrap">
-            {index > 0 && <CircleGlyphButton glyph="↑" label="Move up" onClick={onMoveUp} size={20} />}
-            {index < total - 1 && <CircleGlyphButton glyph="↓" label="Move down" onClick={onMoveDown} size={20} />}
-            <CircleGlyphButton glyph="−" label="Remove slide" onClick={onRemove} size={20} />
+            {index > 0 && <CircleGlyphButton glyph="↑" label={t("Move up")} onClick={onMoveUp} size={20} />}
+            {index < total - 1 && <CircleGlyphButton glyph="↓" label={t("Move down")} onClick={onMoveDown} size={20} />}
+            <CircleGlyphButton glyph="−" label={t("Remove slide")} onClick={onRemove} size={20} />
           </Group>
         </Group>
         <RefSlot
-          label="Event"
+          label={t("Event")}
           handle={point.eventRef ?? null}
           pickedLabel={point.eventRef ? (labels[point.eventRef] ?? null) : null}
           onPick={(item) => {
@@ -89,7 +90,7 @@ function StorySlideCard({ point, index, total, labels, onLabel, onUpdate, onRemo
           renderLabel={(item) => pickerResultLabel("event", item)}
         />
         <RefSlot
-          label="Media"
+          label={t("Media")}
           handle={point.mediaRef ?? null}
           pickedLabel={point.mediaRef ? (labels[point.mediaRef] ?? null) : null}
           onPick={(item) => {
@@ -104,7 +105,7 @@ function StorySlideCard({ point, index, total, labels, onLabel, onUpdate, onRemo
           renderLabel={(item) => pickerResultLabel("media", item)}
         />
         <StoryTextField
-          label="Text"
+          label={t("Text")}
           value={point.text ?? ""}
           onChange={(text) => onUpdate({ text: text || undefined })}
         />
@@ -143,7 +144,7 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
   return (
     <Stack gap="sm">
       <TextInput
-        label="Title"
+        label={t("Title")}
         value={spec.title}
         onChange={(e) => onChange({ ...spec, title: e.currentTarget.value })}
       />
@@ -162,9 +163,9 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         />
       ))}
       <Group justify="space-between">
-        <CircleGlyphButton glyph="+" label="Add slide" textLabel="Add slide" onClick={addPoint} />
+        <CircleGlyphButton glyph="+" label={t("Add slide")} textLabel="Add slide" onClick={addPoint} />
         <Button variant="default" size="xs" onClick={() => setPreviewOpened(true)} disabled={spec.points.length === 0}>
-          Preview
+          {t("Preview")}
         </Button>
       </Group>
       <StoryView

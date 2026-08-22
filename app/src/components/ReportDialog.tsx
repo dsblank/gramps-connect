@@ -28,6 +28,7 @@ import {
 import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { promoteJob } from "../store/jobsPromote";
+import { t } from "../i18n/i18n";
 
 type Stage = "loading" | "ready" | "error";
 
@@ -188,7 +189,7 @@ export function ReportDialog({ reportId, onClose }: ReportDialogProps) {
         {stage === "loading" && (
           <Group justify="center" py="md">
             <Loader size="sm" />
-            <Text size="sm">Loading options…</Text>
+            <Text size="sm">{t("Loading options…")}</Text>
           </Group>
         )}
 
@@ -197,12 +198,12 @@ export function ReportDialog({ reportId, onClose }: ReportDialogProps) {
             went is reported by toast (see handleGenerate). */}
         {stage === "error" && (
           <>
-            <Alert color="red" title="Could not load this report">
+            <Alert color="red" title={t("Could not load this report")}>
               {error}
             </Alert>
             <Group justify="flex-end">
               <Button variant="subtle" onClick={onClose}>
-                Close
+                {t("Close")}
               </Button>
             </Group>
           </>
@@ -262,10 +263,10 @@ export function ReportDialog({ reportId, onClose }: ReportDialogProps) {
 
             <Group justify="flex-end">
               <Button variant="default" onClick={onClose}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button onClick={handleGenerate} disabled={missingRequired}>
-                Generate
+                {t("Generate")}
               </Button>
             </Group>
           </>
@@ -361,7 +362,7 @@ function OptionInput({ field, value, onChange }: OptionInputProps) {
         <TextInput
           label={field.label}
           description="Gramps IDs, separated by spaces"
-          placeholder="I0044 I0128"
+          placeholder={t("I0044 I0128")}
           value={value}
           onChange={(event) => onChange(event.currentTarget.value)}
         />

@@ -12,6 +12,7 @@ import { pickerResultLabel } from "../../RefPickerField";
 import { CompareModal } from "../CompareModal";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 interface MediaSummary {
   handle: string;
@@ -98,7 +99,7 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
   }
 
   return (
-    <SectionShell label="Comparisons">
+    <SectionShell label={t("Comparisons")}>
       {targets.map((handle) => {
         const target = targetObjs[handle];
         return (
@@ -111,7 +112,7 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
             extra={
               target && (
                 <Button size="xs" onClick={() => setCompareTarget(target)}>
-                  ⇔ Compare
+                  {t("⇔ Compare")}
                 </Button>
               )
             }
@@ -123,11 +124,11 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
         <>
           <CircleGlyphButton
             glyph="+"
-            label="Attach a comparison"
+            label={t("Attach a comparison")}
             textLabel="Add a comparison"
             onClick={() => setPickerOpened(true)}
           />
-          <Modal opened={pickerOpened} onClose={() => setPickerOpened(false)} title="Adding a comparison" size="sm">
+          <Modal opened={pickerOpened} onClose={() => setPickerOpened(false)} title={t("Adding a comparison")} size="sm">
             <RecordPicker
               view={MEDIA_VIEW}
               searchField="desc"

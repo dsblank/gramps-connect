@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 import { Button, Divider, Group, Menu } from "@mantine/core";
 import { getToken, hasPermissions } from "../auth/auth";
+import { addDesktopTranslations, getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { ImportDialog } from "./ImportDialog";
 import { ImportMediaDialog } from "./ImportMediaDialog";
 import { ExportDialog } from "./ExportDialog";
@@ -106,7 +107,7 @@ function AppMenu({ label, items, onOpen }: AppMenuProps) {
       </Menu.Target>
       <Menu.Dropdown>
         {visibleItems.length === 0 ? (
-          <Menu.Item disabled>Nothing here yet</Menu.Item>
+          <Menu.Item disabled>{t("Nothing here yet")}</Menu.Item>
         ) : (
           visibleItems.map((item) => (
             <Fragment key={item.label}>
@@ -146,9 +147,9 @@ function reportMenuItems(reports: ReportSummary[], onPick: (id: string) => void)
     if (inCategory.length === 0) return [];
     return [
       {
-        label,
+        label: t(label),
         children: inCategory.map((report) => ({
-          label: report.name,
+          label: t(report.name),
           onClick: () => onPick(report.id),
         })),
       },
@@ -232,6 +233,17 @@ export function MenuBar({ draftStack }: MenuBarProps) {
     };
   }, [reportsRequested]);
 
+  // Report names come from whatever plugins the server has installed --
+  // unlike i18n.ts's static desktopStrings list, there's no way to know
+  // them ahead of time, so they're translated as a separate batch once
+  // loaded (see addDesktopTranslations' doc comment). Depends on `lang` too:
+  // the report list itself is cached for the session (loadReports()), but a
+  // language change needs this batch re-translated for the new language.
+  const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
+  useEffect(() => {
+    if (reports.length > 0) addDesktopTranslations(reports.map((r) => r.name));
+  }, [reports, lang]);
+
   return (
     <>
       {/* Never wraps: the header it sits in has a fixed height, so a
@@ -241,7 +253,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           row of its own that scrolls sideways. */}
       <Group gap={2} wrap="nowrap">
         <AppMenu
-          label="Family Trees"
+          label={t("Family Trees")}
           items={[
             {
               label: "Import…",
@@ -269,7 +281,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           ]}
         />
         <AppMenu
-          label="Add"
+          label={t("Add")}
           // "story" is in EDITABLE_TYPES only so EditButton.tsx's shared
           // eligibility check offers Edit on an existing story note (see
           // draftStack.ts's own doc comment) -- filtered back out here
@@ -297,7 +309,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
             ordinary navigation -- App.tsx renders it over the whole content
             area, and Back returns to the table you came from. */}
         <AppMenu
-          label="View"
+          label={t("View")}
           items={[
             { label: "Map", onClick: () => goTo("map") },
             { label: "Timeline", onClick: () => goTo("timeline") },
@@ -305,7 +317,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           ]}
         />
         <AppMenu
-          label="Reports"
+          label={t("Reports")}
           items={reportMenuItems(reports, setReportId)}
           onOpen={() => setReportsRequested(true)}
         />
@@ -317,7 +329,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
             one) -- and reporting a bug is exactly what a reader with no
             privileges still needs to be able to do. */}
         <AppMenu
-          label="Help"
+          label={t("Help")}
           items={[
             { label: "Overview", onClick: () => setOverviewOpened(true) },
             { label: "System Information", onClick: () => setSystemInfoOpened(true) },

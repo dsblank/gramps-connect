@@ -6,6 +6,7 @@ import { EVENT_VIEW, PLACE_VIEW, VIEWS, type ViewConfig } from "./store/views";
 import { getViewStore } from "./store/registry";
 import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
 import { getAuthSnapshot, subscribe as subscribeAuth } from "./auth/auth";
+import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "./i18n/i18n";
 import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
 import { HomeView } from "./components/HomeView";
@@ -80,6 +81,19 @@ const VISUAL_STATUS_VIEW: Partial<Record<VisualKey, ViewConfig>> = {
 };
 
 function AuthenticatedApp() {
+  // Re-renders the whole tree on a language change -- t() elsewhere is a
+  // plain synchronous lookup, so one subscription here (same coarse-grained
+  // approach as the loggedIn gate in App()) is enough; no per-component
+  // subscription needed.
+  const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
+  useEffect(() => {
+    // Module state seeds `lang` from storage at import time but not
+    // `strings` -- populate it once on mount for a persisted non-English
+    // choice. A no-op for "en", and safe to call again on a real language
+    // change (setLanguage is what drives `lang` after that).
+    if (lang !== "en") setLanguage(lang);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { activeKey, setActiveKey, visualSubject } = useHistorySync();
   const liveSyncStatus = useLiveSync(onRemoteNoteChange);
   // Lifted above MenuBar (rather than MenuBar calling this itself) because
@@ -133,7 +147,7 @@ function AuthenticatedApp() {
   const wordmark = (
     <Group gap="xs" wrap="nowrap">
       <Image src={logo} alt="" w={32} h={32} />
-      <Title order={4} fw={600}>Gramps Connect</Title>
+      <Title order={4} fw={600}>{t("Gramps Connect")}</Title>
     </Group>
   );
 

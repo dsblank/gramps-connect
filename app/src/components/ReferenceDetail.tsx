@@ -6,6 +6,7 @@ import { RefMetaRow } from "./related/RefBadges";
 import { MediaGallery } from "./related/MediaGallery";
 import type { GalleryItem, OnNavigate } from "./related/types";
 import type { UseDraftStack } from "../store/draftStack";
+import { t } from "../i18n/i18n";
 
 export type SubSelection =
   | { kind: "object"; type: string; handle: string; refMeta?: RefMeta }
@@ -33,7 +34,7 @@ export function ReferenceDetail({ subSelection, onPromote, flow, draftStack }: R
   if (!subSelection) {
     return (
       <Stack p="md">
-        <Text c="dimmed" size="md">Select a related item above to see its details.</Text>
+        <Text c="dimmed" size="md">{t("Select a related item above to see its details.")}</Text>
       </Stack>
     );
   }

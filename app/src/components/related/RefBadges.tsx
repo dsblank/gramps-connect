@@ -5,11 +5,12 @@
 // which section put it there.
 import { Badge, Group, Text, Tooltip } from "@mantine/core";
 import type { RefMeta } from "../../store/objectDetail";
+import { t } from "../../i18n/i18n";
 
 function PrivateBadge({ refMeta }: { refMeta?: RefMeta }) {
   if (!refMeta?.private) return null;
   return (
-    <Tooltip label="Private" withArrow>
+    <Tooltip label={t("Private")} withArrow>
       <Text component="span" size="sm" aria-label="Private">🔒</Text>
     </Tooltip>
   );

@@ -2,6 +2,7 @@ import { Anchor, Group, Image, Modal, Stack, Text, Title } from "@mantine/core";
 import { API_BASE } from "../config";
 import { getCurrentUsername } from "../auth/auth";
 import logo from "../assets/icons/gramps-connect-logo.svg";
+import { t } from "../i18n/i18n";
 
 interface AboutDialogProps {
   opened: boolean;
@@ -26,12 +27,12 @@ export function AboutDialog({ opened, onClose, onShowOverview }: AboutDialogProp
   const username = getCurrentUsername();
 
   return (
-    <Modal opened={opened} onClose={onClose} title="About">
+    <Modal opened={opened} onClose={onClose} title={t("About")}>
       <Stack gap="md">
         <Group gap="sm" wrap="nowrap">
           <Image src={logo} alt="" w={48} h={48} />
           <Stack gap={0}>
-            <Title order={4}>Gramps Connect</Title>
+            <Title order={4}>{t("Gramps Connect")}</Title>
             <Text size="sm" c="dimmed">
               Version {__APP_VERSION__}
             </Text>
@@ -41,34 +42,33 @@ export function AboutDialog({ opened, onClose, onShowOverview }: AboutDialogProp
         <Text size="sm">
           A way to browse a{" "}
           <Anchor href="https://gramps-project.org/" target="_blank" rel="noreferrer">
-            Gramps
+            {t("Gramps")}
           </Anchor>{" "}
           family tree in your browser, together with other people, built to stay quick on
           very large trees.{" "}
           <Anchor component="button" type="button" onClick={onShowOverview}>
-            Read the overview
+            {t("Read the overview")}
           </Anchor>{" "}
           for what it is trying to do differently.
         </Text>
 
         <Text size="sm">
-          This is an experiment rather than finished software, and it is not an official
-          release of the Gramps Project. Keep your tree backed up.
+          {t("This is an experiment rather than finished software, and it is not an official release of the Gramps Project. Keep your tree backed up.")}
         </Text>
 
         <Stack gap={2}>
           <Text size="sm">
-            <b>Signed in as:</b> {username ?? "unknown"}
+            <b>{t("Signed in as:")}</b> {username ?? "unknown"}
           </Text>
           <Text size="sm" style={{ overflowWrap: "anywhere" }}>
-            <b>Server:</b> {server}
+            <b>{t("Server:")}</b> {server}
           </Text>
         </Stack>
 
         <Text size="sm" c="dimmed">
           Free software under the AGPL-3.0-or-later licence. Source, issues and discussion:{" "}
           <Anchor href="https://github.com/dsblank/gramps-connect" target="_blank" rel="noreferrer">
-            github.com/dsblank/gramps-connect
+            {t("github.com/dsblank/gramps-connect")}
           </Anchor>
           .
         </Text>

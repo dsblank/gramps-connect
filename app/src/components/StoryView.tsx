@@ -22,6 +22,7 @@ import { StoryMapBackground } from "./story/StoryMapBackground";
 import { StoryTimelineStrip, type StoryTimelinePoint } from "./story/StoryTimelineStrip";
 import type { StorySpec } from "../store/storyBuilder";
 import { hydrateStory, type HydratedSlide } from "../store/storyHydration";
+import { t } from "../i18n/i18n";
 
 // Width of the content panel (and, matching it, how much of the map's
 // right side StoryMapBackground pads out) -- kept as one constant so the
@@ -140,23 +141,23 @@ function NavArrows({ index, total, onPrev, onNext, variant }: {
           aria-label="Previous"
           style={{ position: "absolute", left: 24, top: "50%", transform: "translateY(-50%)", opacity: 0.8, zIndex: 2 }}
         >
-          <Text size="xl" c="white">&larr;</Text>
+          <Text size="xl" c="white">{t("&larr;")}</Text>
         </ActionIcon>
         <ActionIcon
           variant="filled" color="dark" size={56} radius="xl" disabled={index === total - 1} onClick={onNext}
           aria-label="Next"
           style={{ position: "absolute", right: 24, top: "50%", transform: "translateY(-50%)", opacity: 0.8, zIndex: 2 }}
         >
-          <Text size="xl" c="white">&rarr;</Text>
+          <Text size="xl" c="white">{t("&rarr;")}</Text>
         </ActionIcon>
       </>
     );
   }
   return (
     <Group justify="center" gap="md" mt="md">
-      <ActionIcon variant="light" size="lg" disabled={index === 0} onClick={onPrev} aria-label="Previous">&larr;</ActionIcon>
+      <ActionIcon variant="light" size="lg" disabled={index === 0} onClick={onPrev} aria-label="Previous">{t("&larr;")}</ActionIcon>
       <Text size="sm" c="dimmed">{index + 1} / {total}</Text>
-      <ActionIcon variant="light" size="lg" disabled={index === total - 1} onClick={onNext} aria-label="Next">&rarr;</ActionIcon>
+      <ActionIcon variant="light" size="lg" disabled={index === total - 1} onClick={onNext} aria-label="Next">{t("&rarr;")}</ActionIcon>
     </Group>
   );
 }
@@ -246,7 +247,7 @@ export function StoryView({ spec, opened, onClose, stackId }: {
           variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label="Close"
           style={{ position: "absolute", top: 10, right: 12, zIndex: 3, opacity: 0.8 }}
         >
-          <Text size="lg" c="white">&times;</Text>
+          <Text size="lg" c="white">{t("&times;")}</Text>
         </ActionIcon>
       {!hydrated ? (
         <Stack align="center" justify="center" style={{ height: "100%" }}>

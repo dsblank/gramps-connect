@@ -3,6 +3,7 @@ import { Alert, Button, Group, Modal, Text, Textarea } from "@mantine/core";
 import { getToken, getCurrentUsername } from "../auth/auth";
 import { getViewStore } from "../store/registry";
 import { createMessage } from "../store/notesApi";
+import { t } from "../i18n/i18n";
 
 interface MessageComposerProps {
   /** Defaults to the plain "+ New message" button App.tsx has always shown
@@ -72,10 +73,10 @@ export function MessageComposer({ renderTrigger, onSaved, about }: MessageCompos
         renderTrigger(() => setOpen(true))
       ) : (
         <Group mb="sm">
-          <Button size="xs" onClick={() => setOpen(true)}>+ New message</Button>
+          <Button size="xs" onClick={() => setOpen(true)}>{t("+ New message")}</Button>
         </Group>
       )}
-      <Modal opened={open} onClose={close} title="New Gramps Connect message">
+      <Modal opened={open} onClose={close} title={t("New Gramps Connect message")}>
         {about && (
           <Text size="sm" c="dimmed" mb="xs">
             {about}
@@ -86,13 +87,13 @@ export function MessageComposer({ renderTrigger, onSaved, about }: MessageCompos
           minRows={4}
           value={text}
           onChange={(e) => setText(e.currentTarget.value)}
-          placeholder="Message for collaborators..."
+          placeholder={t("Message for collaborators...")}
           disabled={saving}
         />
         {error && <Alert color="red" mt="sm">{error}</Alert>}
         <Group justify="flex-end" mt="md">
-          <Button variant="subtle" onClick={close} disabled={saving}>Cancel</Button>
-          <Button onClick={save} loading={saving} disabled={!text.trim()}>Save</Button>
+          <Button variant="subtle" onClick={close} disabled={saving}>{t("Cancel")}</Button>
+          <Button onClick={save} loading={saving} disabled={!text.trim()}>{t("Save")}</Button>
         </Group>
       </Modal>
     </>

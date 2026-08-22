@@ -11,6 +11,7 @@ import type { QueryItem } from "../../../store/api";
 import { SectionShell, RefRow } from "./shared";
 import { withGrampsId } from "../summary";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** Person.family_list -- families this person is a spouse/parent in (as
  * opposed to ParentsSection's parent_family_list, families they're a
@@ -62,14 +63,14 @@ function AddFamilyControl({ personHandle, onAdded }: { personHandle: string; onA
     <>
       <CircleGlyphButton
         glyph="+"
-        label="Attach a family"
+        label={t("Attach a family")}
         textLabel="Add a family"
         onClick={() => {
           setError(null);
           setOpened(true);
         }}
       />
-      <Modal opened={opened} onClose={() => setOpened(false)} title="Adding a family" size="sm">
+      <Modal opened={opened} onClose={() => setOpened(false)} title={t("Adding a family")} size="sm">
         <Stack gap="xs">
           {error && <Text size="xs" c="red">{error}</Text>}
           <RecordPicker
@@ -104,7 +105,7 @@ export function FamiliesSection({ type, detail, onNavigate, onRefetch }: Section
   }
 
   return (
-    <SectionShell label="Families">
+    <SectionShell label={t("Families")}>
       {families.map((fam) => {
         // Show the *other* member of the family (the spouse), not both --
         // father/mother is {} rather than absent when missing (see

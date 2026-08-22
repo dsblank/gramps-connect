@@ -6,6 +6,7 @@ import { PLACE_VIEW } from "../store/views";
 import { RecordPicker } from "./RecordPicker";
 import { PlaceEditDialog } from "./PlaceEditDialog";
 import { CircleGlyphButton } from "./CircleGlyphButton";
+import { t } from "../i18n/i18n";
 
 export interface EventPlaceValue {
   handle: string;
@@ -111,13 +112,13 @@ export function EventPlaceField({ label, id, value, onChange }: EventPlaceFieldP
           <Anchor component="button" type="button" size="sm" onClick={() => setDialogOpen(true)}>
             {pendingTitle ?? existingLabel ?? "…"}
           </Anchor>
-          <CircleGlyphButton glyph="−" label="Remove" onClick={() => onChange(null)} size={16} />
+          <CircleGlyphButton glyph="−" label={t("Remove")} onClick={() => onChange(null)} size={16} />
         </Group>
       ) : searching ? (
         <RecordPicker
           view={PLACE_VIEW}
           searchField="title"
-          placeholder="Search by title…"
+          placeholder={t("Search by title…")}
           onPick={(item) => {
             setSearching(false);
             onChange({ handle: item.handle });
@@ -126,7 +127,7 @@ export function EventPlaceField({ label, id, value, onChange }: EventPlaceFieldP
       ) : (
         <Group gap="xs">
           <Button variant="default" size="xs" onClick={() => setSearching(true)}>
-            Select existing…
+            {t("Select existing…")}
           </Button>
           <Button
             variant="default"
@@ -140,7 +141,7 @@ export function EventPlaceField({ label, id, value, onChange }: EventPlaceFieldP
               setDialogOpen(true);
             }}
           >
-            + New Place
+            {t("+ New Place")}
           </Button>
         </Group>
       )}

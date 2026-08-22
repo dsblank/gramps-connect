@@ -4,6 +4,7 @@ import { getToken } from "../auth/auth";
 import { IMPORT_EXTENSIONS, previewImport, runImport, type ImportCounts } from "../store/importApi";
 import { clearAllOpfs } from "../store/opfs";
 import { describeTaskFailure, waitForTask } from "../store/taskApi";
+import { t } from "../i18n/i18n";
 
 type Stage = "select" | "previewing" | "preview" | "importing" | "error";
 
@@ -111,7 +112,7 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
     <Modal
       opened={opened}
       onClose={handleClose}
-      title="Import Family Tree"
+      title={t("Import Family Tree")}
       closeOnClickOutside={!BUSY_STAGES.has(stage)}
       closeOnEscape={!BUSY_STAGES.has(stage)}
     >
@@ -121,17 +122,17 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
             <FileButton onChange={setFile} accept={IMPORT_EXTENSIONS.map((ext) => `.${ext}`).join(",")}>
               {(props) => (
                 <Button {...props} variant="light">
-                  Choose file
+                  {t("Choose file")}
                 </Button>
               )}
             </FileButton>
             {file && <Text size="sm">{file.name}</Text>}
             <Group justify="flex-end">
               <Button variant="default" onClick={handleClose}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button disabled={!file} onClick={handlePreview}>
-                Preview
+                {t("Preview")}
               </Button>
             </Group>
           </>
@@ -140,13 +141,13 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
         {stage === "previewing" && (
           <Group justify="center" py="md">
             <Loader size="sm" />
-            <Text size="sm">Reading file…</Text>
+            <Text size="sm">{t("Reading file…")}</Text>
           </Group>
         )}
 
         {stage === "preview" && counts && (
           <>
-            <Text size="sm">This file contains:</Text>
+            <Text size="sm">{t("This file contains:")}</Text>
             <List size="sm">
               {Object.entries(counts)
                 .filter(([, n]) => n > 0)
@@ -157,14 +158,13 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
                 ))}
             </List>
             <Text size="sm" c="dimmed">
-              Importing adds this data to the current family tree and locks it for writes by
-              everyone else until it finishes. This cannot be undone from here.
+              {t("Importing adds this data to the current family tree and locks it for writes by everyone else until it finishes. This cannot be undone from here.")}
             </Text>
             <Group justify="flex-end">
               <Button variant="default" onClick={handleClose}>
-                Cancel
+                {t("Cancel")}
               </Button>
-              <Button onClick={handleConfirm}>Import</Button>
+              <Button onClick={handleConfirm}>{t("Import")}</Button>
             </Group>
           </>
         )}
@@ -172,21 +172,21 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
         {stage === "importing" && (
           <Group justify="center" py="md">
             <Loader size="sm" />
-            <Text size="sm">Importing… this may take a while.</Text>
+            <Text size="sm">{t("Importing… this may take a while.")}</Text>
           </Group>
         )}
 
         {stage === "error" && (
           <>
-            <Alert color="red" title="Import failed">
+            <Alert color="red" title={t("Import failed")}>
               {error}
             </Alert>
             <Group justify="flex-end">
               <Button variant="default" onClick={reset}>
-                Try again
+                {t("Try again")}
               </Button>
               <Button variant="subtle" onClick={handleClose}>
-                Close
+                {t("Close")}
               </Button>
             </Group>
           </>

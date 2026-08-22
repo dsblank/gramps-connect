@@ -8,6 +8,7 @@ import { RefEditDialog } from "../RefEditDialog";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
+import { t } from "../../../i18n/i18n";
 
 /** Family.child_ref_list -- each child carries its own frel/mrel (relation
  * to father/mother: Birth/Adopted/Step/Foster/...), the piece the old
@@ -30,7 +31,7 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
   }
 
   return (
-    <SectionShell label="Children">
+    <SectionShell label={t("Children")}>
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}

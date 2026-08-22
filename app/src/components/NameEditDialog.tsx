@@ -3,6 +3,7 @@ import { Anchor, Button, Card, Collapse, Group, Modal, Select, Stack, Switch, Te
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { DateInput } from "./DateInput";
 import { ListShell } from "./EmbeddedListFields";
+import { t } from "../i18n/i18n";
 
 // NameType (gramps/gen/lib/nametype.py) -- plain English strings, same
 // convention as FamilyEditDialog's REL_TYPE_OPTIONS: gramps-web-api's
@@ -71,24 +72,24 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
       <Stack gap="md">
         <Group grow>
           <TextInput
-            label="Title"
+            label={t("Title")}
             value={(data.title as string | undefined) ?? ""}
             onChange={(e) => onChange({ title: e.currentTarget.value })}
           />
           <TextInput
-            label="Given name"
+            label={t("Given name")}
             value={(data.first_name as string | undefined) ?? ""}
             onChange={(e) => onChange({ first_name: e.currentTarget.value })}
           />
           <TextInput
-            label="Suffix"
+            label={t("Suffix")}
             value={(data.suffix as string | undefined) ?? ""}
             onChange={(e) => onChange({ suffix: e.currentTarget.value })}
           />
         </Group>
 
         <ListShell<Surname>
-          label="Surnames"
+          label={t("Surnames")}
           addLabel="Add surname"
           items={surnameList}
           onChange={(items) => onChange({ surname_list: items })}
@@ -98,21 +99,21 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
               <Stack gap="xs">
                 <Group gap="xs" wrap="nowrap">
                   <TextInput
-                    placeholder="Prefix"
+                    placeholder={t("Prefix")}
                     aria-label="Surname prefix"
                     value={surname.prefix ?? ""}
                     onChange={(e) => onPatch({ prefix: e.currentTarget.value })}
                     style={{ flex: 1 }}
                   />
                   <TextInput
-                    placeholder="Surname"
+                    placeholder={t("Surname")}
                     aria-label="Surname"
                     value={surname.surname ?? ""}
                     onChange={(e) => onPatch({ surname: e.currentTarget.value })}
                     style={{ flex: 2 }}
                   />
                   <TextInput
-                    placeholder="Connector"
+                    placeholder={t("Connector")}
                     aria-label="Surname connector"
                     value={surname.connector ?? ""}
                     onChange={(e) => onPatch({ connector: e.currentTarget.value })}
@@ -121,9 +122,9 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
                 </Group>
                 <Group gap="xs" wrap="nowrap" justify="space-between">
                   <Group gap={6} wrap="nowrap" style={{ flex: 1 }}>
-                    <Text size="sm" c="dimmed">Surname type:</Text>
+                    <Text size="sm" c="dimmed">{t("Surname type:")}</Text>
                     <Select
-                      placeholder="Origin"
+                      placeholder={t("Origin")}
                       aria-label="Surname origin"
                       data={ORIGIN_TYPE_OPTIONS.map((o) => ({ value: o, label: o || "(none)" }))}
                       value={surname.origintype ?? ""}
@@ -136,7 +137,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
                    * every other row -- SurnameBase expects exactly one
                    * primary surname, not a per-row independent switch. */}
                   <Switch
-                    label="Primary"
+                    label={t("Primary")}
                     checked={Boolean(surname.primary)}
                     onChange={(e) => {
                       const checked = e.currentTarget.checked;
@@ -155,17 +156,17 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
 
         <Group grow>
           <TextInput
-            label="Call name"
+            label={t("Call name")}
             value={(data.call as string | undefined) ?? ""}
             onChange={(e) => onChange({ call: e.currentTarget.value })}
           />
           <TextInput
-            label="Nickname"
+            label={t("Nickname")}
             value={(data.nick as string | undefined) ?? ""}
             onChange={(e) => onChange({ nick: e.currentTarget.value })}
           />
           <TextInput
-            label="Family nickname"
+            label={t("Family nickname")}
             value={(data.famnick as string | undefined) ?? ""}
             onChange={(e) => onChange({ famnick: e.currentTarget.value })}
           />
@@ -173,7 +174,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
 
         <Group grow align="flex-end">
           <Select
-            label="Name type"
+            label={t("Name type")}
             data={NAME_TYPE_OPTIONS}
             value={(data.type as string | undefined) ?? "Birth Name"}
             onChange={(next) => onChange({ type: next ?? "Birth Name" })}
@@ -181,13 +182,13 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
             comboboxProps={{ withinPortal: true }}
           />
           <Switch
-            label="Private"
+            label={t("Private")}
             checked={Boolean(data.private)}
             onChange={(e) => onChange({ private: e.currentTarget.checked })}
           />
         </Group>
 
-        <DateInput id={`${stackId}-date`} label="Date" value={date} onChange={(next) => onChange({ date: next })} />
+        <DateInput id={`${stackId}-date`} label={t("Date")} value={date} onChange={(next) => onChange({ date: next })} />
 
         <Anchor component="button" type="button" size="sm" onClick={() => setShowSorting((v) => !v)}>
           {showSorting ? "▾" : "▸"} Sorting & display
@@ -195,13 +196,13 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
         <Collapse in={showSorting}>
           <Stack gap="md">
             <TextInput
-              label="Group as"
+              label={t("Group as")}
               description="Leave blank to group by primary surname"
               value={(data.group_as as string | undefined) ?? ""}
               onChange={(e) => onChange({ group_as: e.currentTarget.value })}
             />
             <Select
-              label="Sort as"
+              label={t("Sort as")}
               data={FORMAT_OPTIONS}
               value={String((data.sort_as as number | undefined) ?? 0)}
               onChange={(next) => onChange({ sort_as: Number(next ?? 0) })}
@@ -209,7 +210,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
               comboboxProps={{ withinPortal: true }}
             />
             <Select
-              label="Display as"
+              label={t("Display as")}
               data={FORMAT_OPTIONS}
               value={String((data.display_as as number | undefined) ?? 0)}
               onChange={(next) => onChange({ display_as: Number(next ?? 0) })}
@@ -222,12 +223,12 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
         <Group justify="space-between">
           {onRemove ? (
             <Button variant="subtle" color="red" onClick={onRemove}>
-              Remove this name
+              {t("Remove this name")}
             </Button>
           ) : (
             <div />
           )}
-          <Button onClick={onDone}>Done</Button>
+          <Button onClick={onDone}>{t("Done")}</Button>
         </Group>
       </Stack>
     </Modal>
