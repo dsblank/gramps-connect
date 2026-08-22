@@ -17,6 +17,7 @@
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
     "@mantine/notifications": "^8.3.18",
+    "@openhistoricalmap/maplibre-gl-dates": "^1.4.0",
     "@tanstack/react-virtual": "^3.13.0",
     "d3-array": "^3.2.4",
     "d3-hierarchy": "^3.1.2",

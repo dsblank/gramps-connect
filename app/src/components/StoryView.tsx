@@ -14,15 +14,16 @@
 // components" so much as different arrangements of the same pieces -- and
 // both get the timeline strip appended when the story has enough dated
 // points to make one meaningful.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Box, Group, Image, Loader, Modal, Paper, Stack, Text, useComputedColorScheme } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { API_BASE } from "../config";
+import { MapModeControl } from "./visuals/MapModeControl";
+import type { MapMode } from "./visuals/mapStyles";
 import { StoryMapBackground } from "./story/StoryMapBackground";
 import { StoryTimelineStrip, type StoryTimelinePoint } from "./story/StoryTimelineStrip";
 import type { StorySpec } from "../store/storyBuilder";
 import { hydrateStory, type HydratedSlide } from "../store/storyHydration";
-import { t } from "../i18n/i18n";
 
 // Width of the content panel (and, matching it, how much of the map's
 // right side StoryMapBackground pads out) -- kept as one constant so the
@@ -141,23 +142,23 @@ function NavArrows({ index, total, onPrev, onNext, variant }: {
           aria-label="Previous"
           style={{ position: "absolute", left: 24, top: "50%", transform: "translateY(-50%)", opacity: 0.8, zIndex: 2 }}
         >
-          <Text size="xl" c="white">{t("&larr;")}</Text>
+          <Text size="xl" c="white">←</Text>
         </ActionIcon>
         <ActionIcon
           variant="filled" color="dark" size={56} radius="xl" disabled={index === total - 1} onClick={onNext}
           aria-label="Next"
           style={{ position: "absolute", right: 24, top: "50%", transform: "translateY(-50%)", opacity: 0.8, zIndex: 2 }}
         >
-          <Text size="xl" c="white">{t("&rarr;")}</Text>
+          <Text size="xl" c="white">→</Text>
         </ActionIcon>
       </>
     );
   }
   return (
     <Group justify="center" gap="md" mt="md">
-      <ActionIcon variant="light" size="lg" disabled={index === 0} onClick={onPrev} aria-label="Previous">{t("&larr;")}</ActionIcon>
+      <ActionIcon variant="light" size="lg" disabled={index === 0} onClick={onPrev} aria-label="Previous">←</ActionIcon>
       <Text size="sm" c="dimmed">{index + 1} / {total}</Text>
-      <ActionIcon variant="light" size="lg" disabled={index === total - 1} onClick={onNext} aria-label="Next">{t("&rarr;")}</ActionIcon>
+      <ActionIcon variant="light" size="lg" disabled={index === total - 1} onClick={onNext} aria-label="Next">→</ActionIcon>
     </Group>
   );
 }
@@ -185,6 +186,34 @@ export function StoryView({ spec, opened, onClose, stackId }: {
     if (s.year != null) datedSlides.push({ index: i, year: s.year });
   });
   const showTimeline = datedSlides.length >= 2;
+
+  // The historical-map mode (see MapModeControl / mapStyles.ts), shown only
+  // over the located layout below -- an unlocated story has no map to mode-
+  // switch. "Auto" is the current slide's own year: as the viewer steps
+  // through the story, the basemap's year steps with it.
+  const [mapMode, setMapMode] = useState<MapMode>("standard");
+  const [historicalYear, setHistoricalYear] = useState(() => new Date().getFullYear());
+  // Floored -- a slide's year is fractional within the year (the same
+  // decimal-year representation MapPlace.years uses, see MapView.tsx's own
+  // PlaceCard), and the mode control's slider/NumberInput both want a plain
+  // calendar year, not "1916.4".
+  const autoYear = slide?.year != null ? Math.floor(slide.year) : null;
+  const yearBounds = useMemo<[number, number]>(() => {
+    if (datedSlides.length === 0) {
+      const thisYear = new Date().getFullYear();
+      return [thisYear - 200, thisYear];
+    }
+    const years = datedSlides.map((d) => d.year);
+    return [Math.floor(Math.min(...years)), Math.ceil(Math.max(...years))];
+  }, [datedSlides]);
+  const wasHistoricalRef = useRef(false);
+  useEffect(() => {
+    if (mapMode === "historical" && !wasHistoricalRef.current) {
+      setHistoricalYear(autoYear ?? yearBounds[1]);
+    }
+    wasHistoricalRef.current = mapMode === "historical";
+  }, [mapMode, autoYear, yearBounds]);
+  const ohmYear = mapMode === "standard" ? null : mapMode === "auto" ? autoYear : historicalYear;
 
   useEffect(() => {
     if (opened) setIndex(0);
@@ -239,15 +268,45 @@ export function StoryView({ spec, opened, onClose, stackId }: {
         />
         <Text
           fw={600} truncate
-          style={{ position: "absolute", top: 17, left: 20, right: 60, zIndex: 3 }}
+          style={{ position: "absolute", top: 17, left: 20, maxWidth: "26%", zIndex: 3 }}
         >
           {spec.title}
         </Text>
+        {/* Only over the located layout -- the unlocated one has no map to
+            mode-switch. Centered in the bar rather than pinned next to the
+            title, so it reads as a toolbar for the whole presentation
+            instead of crowding the title on one side.
+            A flex container spanning the full 56px bar, not `top: "50%"` on
+            its own -- that would center against the outer fixed Box's full
+            *screen* height instead, landing this in the middle of the
+            slide, not the header (found live). `pointerEvents: "none"` on
+            this full-width span keeps it from blocking clicks on whatever's
+            under the rest of the bar; the inner wrapper opts back in so the
+            control itself still works. */}
+        {firstLocated && (
+          <Box
+            style={{
+              position: "absolute", top: 0, left: 0, right: 0, height: 56, zIndex: 3,
+              display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none",
+            }}
+          >
+            <Box style={{ pointerEvents: "auto" }}>
+              <MapModeControl
+                mode={mapMode}
+                onModeChange={setMapMode}
+                autoYear={autoYear}
+                year={historicalYear}
+                onYearChange={setHistoricalYear}
+                yearBounds={yearBounds}
+              />
+            </Box>
+          </Box>
+        )}
         <ActionIcon
           variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label="Close"
           style={{ position: "absolute", top: 10, right: 12, zIndex: 3, opacity: 0.8 }}
         >
-          <Text size="lg" c="white">{t("&times;")}</Text>
+          <Text size="lg" c="white">×</Text>
         </ActionIcon>
       {!hydrated ? (
         <Stack align="center" justify="center" style={{ height: "100%" }}>
@@ -261,6 +320,7 @@ export function StoryView({ spec, opened, onClose, stackId }: {
             dark={dark}
             opened={opened}
             panelFraction={PANEL_FRACTION}
+            ohmYear={ohmYear}
           />
           <Paper
             radius={0}

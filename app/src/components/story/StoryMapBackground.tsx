@@ -15,14 +15,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { Box } from "@mantine/core";
 import { readVisualColors } from "../visuals/cssVar";
 import { seriesColor } from "../visuals/eventCategories";
+import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl } from "../visuals/mapStyles";
 import { PIN_PATH_D } from "./storyMarker";
 
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
-const STYLE_LIGHT = "https://tiles.openfreemap.org/styles/liberty";
-const STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
-
-export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, panelFraction }: {
+export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, panelFraction, ohmYear }: {
   initialCenter: [number, number];
   currentPoint: { lat: number; long: number } | undefined;
   dark: boolean;
@@ -31,6 +29,9 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
    * StoryView.tsx's PANEL_FRACTION) -- what a point is centered against is
    * the *remaining* left-hand fraction, not a fixed half. */
   panelFraction: number;
+  /** Non-null switches the basemap to OHM tiles filtered to this year (see
+   * mapStyles.ts); null is the plain OpenFreeMap basemap. */
+  ohmYear: number | null;
 }) {
   // A callback ref (via state), not a plain useRef: Mantine's Modal doesn't
   // guarantee its children are in the DOM on the very first render pass
@@ -44,29 +45,41 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
   const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markerRef = useRef<MapLibreMarker | null>(null);
+  // Mirrors MapCanvas.tsx's own `ready`: flips true on "style.load", which
+  // fires on initial load and again after every setStyle() -- the moment
+  // the OHM filter effect below is safe to (re-)apply.
+  const [ready, setReady] = useState(false);
 
   const darkRef = useRef(dark);
   darkRef.current = dark;
+  const ohmYearRef = useRef(ohmYear);
+  ohmYearRef.current = ohmYear;
   // What the live map was actually built (or last swapped) with -- lets the
-  // style-swap effect below tell "dark really changed" from "this is just
-  // the effect's own mount", the same distinction MapCanvas.tsx's own
-  // appliedDarkRef makes. Needed because useComputedColorScheme returns a
-  // default on the first render and only corrects itself a tick later --
-  // recreating the whole map on that correction (instead of swapping its
-  // style in place) meant a real map could be destroyed and rebuilt
-  // moments after creation, sometimes mid-load.
-  const appliedDarkRef = useRef(dark);
+  // style-swap effect below tell "the style actually needs to change" from
+  // "this is just the effect's own mount", the same distinction
+  // MapCanvas.tsx's own appliedStyleKeyRef makes, and for the same reason:
+  // useComputedColorScheme returns a default on the first render and only
+  // corrects itself a tick later -- recreating the whole map on that
+  // correction (instead of swapping its style in place) meant a real map
+  // could be destroyed and rebuilt moments after creation, sometimes
+  // mid-load.
+  const appliedStyleKeyRef = useRef(mapStyleKey(dark, ohmYear));
 
   useEffect(() => {
     if (!opened || !containerEl) return;
-    appliedDarkRef.current = darkRef.current;
+    setReady(false);
+    appliedStyleKeyRef.current = mapStyleKey(darkRef.current, ohmYearRef.current);
     const map = new maplibregl.Map({
       container: containerEl,
-      style: darkRef.current ? STYLE_DARK : STYLE_LIGHT,
+      style: mapStyleUrl(darkRef.current, ohmYearRef.current),
       zoom: 5,
       attributionControl: { compact: true },
+      // So crossfadeStyleSwap's canvas.toDataURL() snapshot reliably has the
+      // last-rendered frame in it rather than a possibly-cleared buffer.
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     mapRef.current = map;
+    map.on("style.load", () => setReady(true));
     // The right half of the container sits under the (opaque, by the time
     // the fade finishes) content panel, so the visible map is really just
     // the left half -- padding tells maplibre to center any given point
@@ -102,12 +115,22 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, containerEl]);
 
+  // Keyed by mapStyleKey, not `dark`/`ohmYear` directly -- see MapCanvas.tsx's
+  // own version of this effect for why (OHM has no dark variant, and a
+  // same-mode year change is the filter effect's job below, not a reload).
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || appliedDarkRef.current === dark) return;
-    appliedDarkRef.current = dark;
-    map.setStyle(dark ? STYLE_DARK : STYLE_LIGHT);
-  }, [dark]);
+    const key = mapStyleKey(dark, ohmYear);
+    if (!map || appliedStyleKeyRef.current === key) return;
+    appliedStyleKeyRef.current = key;
+    crossfadeStyleSwap(map, mapStyleUrl(dark, ohmYear), () => setReady(false));
+  }, [dark, ohmYear]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || ohmYear == null) return;
+    applyOhmYear(map, ohmYear);
+  }, [ready, ohmYear]);
 
   useEffect(() => {
     const map = mapRef.current;

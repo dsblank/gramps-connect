@@ -9,6 +9,7 @@ import { readVisualColors } from "./cssVar";
 import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { t } from "../../i18n/i18n";
+import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl } from "./mapStyles";
 // maplibre-gl loads its tile-parsing/clustering work off the main thread via
 // `new Worker(new URL(\`./${name}\`, import.meta.url))`, with the filename
 // built from a template literal at runtime -- Vite's static asset scanner
@@ -32,13 +33,6 @@ import { t } from "../../i18n/i18n";
 // they're served at a fixed path the same way the sql.js WASM files are
 // (see registry.ts's locateFile).
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
-
-/** The same OpenFreeMap vector styles gramps-web uses, so the two clients'
- * maps look like the same product. Both are free, key-less, and hosted --
- * which does mean a map (unlike every other view in this app) needs the
- * network even though its *data* is local; see the error state below. */
-const STYLE_LIGHT = "https://tiles.openfreemap.org/styles/liberty";
-const STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
 
 /** Where the user last left the map, so reopening doesn't jump back to a
  * world view. Same idea (and same purpose) as gramps-web's own
@@ -102,6 +96,10 @@ interface MapCanvasProps {
    * the same reason. */
   selectedHandle?: string | null;
   onSelectPlace: (place: MapPlace | null) => void;
+  /** Non-null switches the basemap to OpenHistoricalMap tiles filtered to
+   * this year (see MapModeControl / mapStyles.ts); null is the plain
+   * OpenFreeMap basemap, unfiltered. */
+  ohmYear: number | null;
 }
 
 function toGeoJson(
@@ -138,7 +136,7 @@ const DIM_OPACITY = 0.15;
  * lazily -- maplibre-gl is by far the heaviest thing in this app, and a
  * session that never opens View > Map should never download it. */
 export function MapCanvas({
-  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace,
+  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace, ohmYear,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -158,6 +156,8 @@ export function MapCanvas({
   selectedRef.current = selectedHandle;
   const onSelectRef = useRef(onSelectPlace);
   onSelectRef.current = onSelectPlace;
+  const ohmYearRef = useRef(ohmYear);
+  ohmYearRef.current = ohmYear;
 
   // Create once. The style is swapped in place on a colour-scheme change (see
   // the effect below) rather than recreating the map, which would lose the
@@ -168,10 +168,13 @@ export function MapCanvas({
     const saved = loadViewport();
     const map = new maplibregl.Map({
       container,
-      style: dark ? STYLE_DARK : STYLE_LIGHT,
+      style: mapStyleUrl(dark, ohmYearRef.current),
       center: saved ? [saved.lng, saved.lat] : [0, 20],
       zoom: saved ? saved.zoom : 1.5,
       attributionControl: { compact: true },
+      // So crossfadeStyleSwap's canvas.toDataURL() snapshot reliably has the
+      // last-rendered frame in it rather than a possibly-cleared buffer.
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
@@ -380,19 +383,36 @@ export function MapCanvas({
     popupRef.current?.remove();
   }, []);
 
-  // Colour-scheme flip: swap the basemap. setStyle() discards every
-  // user-added source and layer, but it also re-fires "style.load", which
-  // flips `ready` back on and re-runs the layer effect above with the theme
-  // tokens re-resolved for the new scheme -- so there's nothing to re-add
-  // here. `ready` is dropped first so that effect's deps actually change.
-  const appliedDarkRef = useRef(dark);
+  // Colour-scheme flip, or a mode switch into/out of the OHM historical
+  // style: swap the basemap. setStyle() discards every user-added source
+  // and layer, but it also re-fires "style.load", which flips `ready` back
+  // on and re-runs the layer effect above with the theme tokens re-resolved
+  // for the new scheme -- so there's nothing to re-add here. `ready` is
+  // dropped first so that effect's deps actually change.
+  //
+  // Keyed by mapStyleKey, not `dark`/`ohmYear` directly: OHM's cartography
+  // has no dark variant, so toggling dark while it's showing must not
+  // trigger a reload, and neither should a slider drag that changes
+  // `ohmYear`'s value without leaving historical/auto mode (see the filter
+  // effect below, which is what a same-mode year change actually needs).
+  const appliedStyleKeyRef = useRef(mapStyleKey(dark, ohmYear));
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || appliedDarkRef.current === dark) return;
-    appliedDarkRef.current = dark;
-    setReady(false);
-    map.setStyle(dark ? STYLE_DARK : STYLE_LIGHT);
-  }, [dark]);
+    const key = mapStyleKey(dark, ohmYear);
+    if (!map || appliedStyleKeyRef.current === key) return;
+    appliedStyleKeyRef.current = key;
+    crossfadeStyleSwap(map, mapStyleUrl(dark, ohmYear), () => setReady(false));
+  }, [dark, ohmYear]);
+
+  // The OHM year filter itself -- fires after a style (re)load that leaves
+  // historical/auto mode on (`ready` flipping true again above), and again
+  // on every slider drag that doesn't touch the style at all. Idempotent
+  // per applyOhmYear's own doc, so no guard against calling it redundantly.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || ohmYear == null) return;
+    applyOhmYear(map, ohmYear);
+  }, [ready, ohmYear]);
 
   // Push filtered data through to the existing source rather than rebuilding
   // it, so filtering never disturbs the viewport.

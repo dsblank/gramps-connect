@@ -6,6 +6,8 @@ import { useVisualData } from "../../hooks/useVisualData";
 import { useVisualScope } from "../../hooks/useVisualScope";
 import { formatHash, type VisualSubject } from "../../hash";
 import type { EventRecord, MapPlace } from "../../store/visualData";
+import { MapModeControl } from "./MapModeControl";
+import type { MapMode } from "./mapStyles";
 import { NoMatches } from "./NoMatches";
 import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { VisualFrame } from "./VisualFrame";
@@ -38,6 +40,25 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   const [timeOn, setTimeOn] = useState(false);
   const [fitRequest, setFitRequest] = useState(0);
   const [selected, setSelected] = useState<MapPlace | null>(null);
+
+  // The historical-map mode (see MapModeControl / mapStyles.ts) -- distinct
+  // from `timeOn`/`range` above, which filter which places are drawn rather
+  // than which basemap tiles are shown.
+  const [mapMode, setMapMode] = useState<MapMode>("standard");
+  const [historicalYear, setHistoricalYear] = useState(() => new Date().getFullYear());
+
+  // "Auto" resolves to the latest year among the current subject's linked
+  // events -- null when there's no scoped subject to derive one from (the
+  // whole-tree map), where Auto has nothing to differ from Standard by.
+  const autoYear = useMemo(() => {
+    if (!scope) return null;
+    let max = -Infinity;
+    for (const handle of scope.eventHandles) {
+      const year = data.eventsByHandle.get(handle)?.year;
+      if (year != null && year > max) max = year;
+    }
+    return Number.isFinite(max) ? Math.floor(max) : null;
+  }, [scope, data]);
 
   // The scope's places that this map can actually draw, with their event
   // counts and years *recomputed against the scope*.
@@ -118,6 +139,23 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   useEffect(() => {
     if (!timeOn) setRange(yearBounds);
   }, [yearBounds, timeOn]);
+
+  // Seed the historical slider on *entering* historical mode -- to the
+  // subject's own auto year when there is one (switching from Auto to
+  // Historical should hand off the same year, not jump to some default),
+  // or the map's latest year otherwise. Left alone the rest of the time, so
+  // it doesn't yank a year the user is actively dragging.
+  const wasHistoricalRef = useRef(false);
+  useEffect(() => {
+    if (mapMode === "historical" && !wasHistoricalRef.current) {
+      setHistoricalYear(autoYear ?? yearBounds[1]);
+    }
+    wasHistoricalRef.current = mapMode === "historical";
+  }, [mapMode, autoYear, yearBounds]);
+
+  // "standard" never touches OHM; "auto" and "historical" both do, differing
+  // only in where the year comes from (see MapModeControl's doc comment).
+  const ohmYear = mapMode === "standard" ? null : mapMode === "auto" ? autoYear : historicalYear;
 
   const places = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -297,6 +335,14 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           <Button size="xs" variant="default" onClick={() => setFitRequest((n) => n + 1)}>
             {t("Fit to results")}
           </Button>
+          <MapModeControl
+            mode={mapMode}
+            onModeChange={setMapMode}
+            autoYear={autoYear}
+            year={historicalYear}
+            onYearChange={setHistoricalYear}
+            yearBounds={yearBounds}
+          />
         </Group>
       }
       status={
@@ -339,6 +385,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           fitTo={scopeActive && mode === "context" ? scopedPlaces! : undefined}
           selectedHandle={selected?.handle ?? null}
           onSelectPlace={setSelected}
+          ohmYear={ohmYear}
         />
       </Suspense>
       {noMatches && <NoMatches {...noMatches} />}
