@@ -263,7 +263,11 @@ export function DataTable({ view }: DataTableProps) {
             >
               {rawRow ? (
                 columns.map(({ column: col, index }) => (
-                  <div key={col.key} className={classes.cell}>
+                  <div
+                    key={col.key}
+                    className={classes.cell}
+                    title={col.toTitle ? col.toTitle(rawRow[index]) : undefined}
+                  >
                     {col.toDisplay ? col.toDisplay(rawRow[index]) : rawRow[index] == null ? "" : String(rawRow[index])}
                   </div>
                 ))

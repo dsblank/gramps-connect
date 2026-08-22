@@ -5,7 +5,7 @@
 // is a cheap glance at the whole tree, not loading all ten of it locally.
 import { fetchPage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
-import { VIEWS, MESSAGES_VIEW, type ViewConfig } from "./views";
+import { VIEWS, MESSAGES_VIEW, formatChange, type ViewConfig } from "./views";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -145,28 +145,8 @@ export async function fetchHomeCounts(): Promise<Record<string, number>> {
   return state.counts;
 }
 
-const RELATIVE_TIME = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-const TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["year", 60 * 60 * 24 * 365],
-  ["month", 60 * 60 * 24 * 30],
-  ["week", 60 * 60 * 24 * 7],
-  ["day", 60 * 60 * 24],
-  ["hour", 60 * 60],
-  ["minute", 60],
-];
-
 /** "15 minutes ago" / "a month ago", from a `change` column's raw Unix
- * seconds -- Home's dashboard reads better at a glance than views.ts's
- * plain-date formatChange(), which the object tables themselves keep
- * (a sortable column benefits from a fixed-width absolute date; a
- * dashboard skim doesn't). */
-export function timeAgo(unixSeconds: number | null | undefined): string {
-  if (!unixSeconds) return "";
-  const diffSeconds = unixSeconds - Date.now() / 1000;
-  for (const [unit, secondsInUnit] of TIME_UNITS) {
-    if (Math.abs(diffSeconds) >= secondsInUnit) {
-      return RELATIVE_TIME.format(Math.round(diffSeconds / secondsInUnit), unit);
-    }
-  }
-  return RELATIVE_TIME.format(Math.round(diffSeconds / 60), "minute");
-}
+ * seconds. Same relative-time logic views.ts's DataTable columns use for
+ * their own "Last changed" column -- re-exported here under its established
+ * Home-dashboard name rather than duplicated. */
+export const timeAgo = formatChange;

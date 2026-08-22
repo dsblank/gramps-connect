@@ -39,6 +39,10 @@ export interface ColumnConfig {
   /** Stored SQLite value -> displayed cell text. Default: String(value),
    * or "" for null/undefined. */
   toDisplay?: (sqlValue: unknown) => string;
+  /** Stored SQLite value -> the cell's hover title attribute. Default: no
+   * title -- for a column whose toDisplay is lossy (e.g. "change"'s
+   * relative-time text) and wants the precise value available on hover. */
+  toTitle?: (sqlValue: unknown) => string;
   /** Cached and kept up to date like any other column, but never shown as
    * a DataTable column (see visibleColumns) -- for a field some *other*
    * feature reads out of the local cache rather than one the user is meant
@@ -166,13 +170,42 @@ export function parseHandleList(sqlValue: unknown): string[] {
   return sqlValue.split(",");
 }
 
+const RELATIVE_TIME = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const TIME_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["year", 60 * 60 * 24 * 365],
+  ["month", 60 * 60 * 24 * 30],
+  ["week", 60 * 60 * 24 * 7],
+  ["day", 60 * 60 * 24],
+  ["hour", 60 * 60],
+  ["minute", 60],
+];
+
 // `change` is a plain Unix mtime (when the record was last edited), not a
 // GrampsDate struct -- unrelated to gramps-date, which is about
-// genealogical event dates specifically.
-function formatChange(unixSeconds: unknown): string {
+// genealogical event dates specifically. Relative ("10 minutes ago") so the
+// "Last changed" column reads at a glance like Home's own timeAgo (same
+// Intl.RelativeTimeFormat logic, kept in sync via homeStats.ts re-exporting
+// this function); the exact timestamp is still available via
+// formatChangeTitle, shown as the cell's hover title.
+export function formatChange(unixSeconds: unknown): string {
   const n = unixSeconds as number | null;
   if (!n) return "";
-  return new Date(n * 1000).toISOString().slice(0, 10);
+  const diffSeconds = n - Date.now() / 1000;
+  for (const [unit, secondsInUnit] of TIME_UNITS) {
+    if (Math.abs(diffSeconds) >= secondsInUnit) {
+      return RELATIVE_TIME.format(Math.round(diffSeconds / secondsInUnit), unit);
+    }
+  }
+  return RELATIVE_TIME.format(Math.round(diffSeconds / 60), "minute");
+}
+
+// Full date/time, for the "Last changed" column's hover tooltip -- the cell
+// itself shows formatChange's relative form, which loses precision the user
+// may still want on demand.
+function formatChangeTitle(unixSeconds: unknown): string {
+  const n = unixSeconds as number | null;
+  if (!n) return "";
+  return new Date(n * 1000).toLocaleString();
 }
 
 // A father/mother's primary_name select entry returns the full Name
@@ -216,7 +249,7 @@ export const PERSON_VIEW: ViewConfig = {
       key: "death_date", label: "Death", select: { json_path: ["death", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
     // Hidden, for the Map/Timeline's subject scoping (store/visualScope.ts).
     // Person.event_ref_list isn't a flat secondary column and isn't a
     // registered relationship either, so it resolves as a plain json_path --
@@ -267,7 +300,7 @@ export const FAMILY_VIEW: ViewConfig = {
       key: "mother_name", label: "Mother", select: { json_path: ["mother", "primary_name"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: displayName,
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
     // Hidden, for subject scoping -- same reasoning as Person's above.
     {
       key: "event_refs", label: "Event handles", select: { json_path: ["event_ref_list"] },
@@ -360,7 +393,7 @@ export const EVENT_VIEW: ViewConfig = {
     // here so MapView's time filter can match events to places by key
     // rather than by comparing display titles.
     { key: "place", label: "Place handle", select: "place", sqlType: "TEXT", hidden: true },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -381,7 +414,7 @@ export const PLACE_VIEW: ViewConfig = {
     { key: "title", label: "Title", select: "title", sqlType: "TEXT" },
     { key: "lat", label: "Lat", select: "lat", sqlType: "TEXT" },
     { key: "long", label: "Long", select: "long", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
     // Hidden: the handles of the places this one sits inside (PlaceRef.ref).
     // Gramps places are a containment hierarchy -- an event is usually
     // recorded against a specific town, not the county or country above it
@@ -411,7 +444,7 @@ export const REPOSITORY_VIEW: ViewConfig = {
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "name", label: "Name", select: "name", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -431,7 +464,7 @@ export const SOURCE_VIEW: ViewConfig = {
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "title", label: "Title", select: "title", sqlType: "TEXT" },
     { key: "author", label: "Author", select: "author", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -464,7 +497,7 @@ export const CITATION_VIEW: ViewConfig = {
     },
     { key: "page", label: "Page", select: "page", sqlType: "TEXT" },
     { key: "confidence", label: "Confidence", select: "confidence", sqlType: "INTEGER", toDisplay: displayConfidence },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -489,7 +522,7 @@ export const MEDIA_VIEW: ViewConfig = {
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
     { key: "path", label: "Path", select: "path", sqlType: "TEXT" },
     { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -523,7 +556,7 @@ export const GENERATED_VIEW: ViewConfig = {
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
     { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -602,7 +635,7 @@ export const MESSAGES_VIEW: ViewConfig = {
       key: "text", label: "Message", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
       toSql: styledTextToSql, toDisplay: (v) => truncate(splitAuthorMessage((v as string | null) ?? "").message, 80),
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -655,7 +688,7 @@ export const STORY_VIEW: ViewConfig = {
       key: "title", label: "Title", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
       toSql: styledTextToSql, toDisplay: storyTitle,
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -702,7 +735,7 @@ export const NOTE_VIEW: ViewConfig = {
       key: "text", label: "Text", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
       toSql: styledTextToSql, toDisplay: (v) => storyTitle(v),
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
@@ -724,7 +757,7 @@ export const TAG_VIEW: ViewConfig = {
     { key: "name", label: "Name", select: "name", sqlType: "TEXT" },
     { key: "color", label: "Color", select: "color", sqlType: "TEXT" },
     { key: "priority", label: "Priority", select: "priority", sqlType: "INTEGER" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
