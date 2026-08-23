@@ -208,6 +208,15 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
     if (!scopeActive || scopedPlaces!.length === 0 || fittedFor.current === key) return;
     fittedFor.current = key;
     setFitRequest((n) => n + 1);
+    // A place subject names one specific marker, not just an area to frame
+    // -- selecting it opens its detail card and, via MapCanvas's own
+    // MapPlace.kmlMedia handling, draws any KML file attached to it, so a
+    // "Map" link from that file's own media page (MediaMapButton.tsx) lands
+    // on it drawn rather than one more click away.
+    if (subject?.type === "place") {
+      const own = scopedPlaces!.find((p) => p.handle === subject.handle);
+      if (own) setSelected(own);
+    }
   }, [scopeActive, scopedPlaces, subject?.type, subject?.handle]);
 
   // The scoped events at the clicked place -- the answer to "why is this

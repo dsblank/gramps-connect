@@ -13,6 +13,7 @@ import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
+import { MediaMapButton } from "./related/MediaMapButton";
 import { MessageButton } from "./related/MessageButton";
 import { EditButton } from "./related/EditButton";
 import { DeleteButton } from "./related/DeleteButton";
@@ -379,6 +380,7 @@ export function RelatedPanel({
           full size they read as an offer, which a compact icon tucked into
           a corner shared with the record's own controls did not. */}
       <VisualButtons view={view} detail={detail} />
+      {view.key === "media" && <MediaMapButton detail={detail} />}
       {view.key === "generated" && <GeneratedItemActions detail={detail} />}
       {view.key === "messages" && (
         <MessageActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />

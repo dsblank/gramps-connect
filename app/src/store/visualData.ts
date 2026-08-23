@@ -19,6 +19,12 @@ import {
 import { getViewStore } from "./registry";
 import { formatEventType, parseHandleList } from "./views";
 
+/** The one MIME type this app overlays on the map -- a place's attached
+ * KML file (a field boundary, a route, ...), drawn as its own vector shape
+ * rather than just a pin. What Python's mimetypes module (and so Gramps'
+ * own media-add) resolves a ".kml" file to. */
+export const KML_MIME = "application/vnd.google-earth.kml+xml";
+
 /** A cached Place that has usable coordinates. */
 export interface MapPlace {
   handle: string;
@@ -31,6 +37,29 @@ export interface MapPlace {
   /** Gregorian years of those events, ascending, for the time filter.
    * Events with no usable date contribute nothing. */
   years: number[];
+  /** Handles of this place's attached media whose mime is KML_MIME -- what
+   * lets MapCanvas fetch and overlay them when this place is selected.
+   * Empty for the common case of a place with no such attachment. */
+  kmlMedia: string[];
+}
+
+/** A place with no lat/long of its own, but a KML attachment that might
+ * supply one -- see useVisualData.ts, which fetches each of these and, once
+ * a position can be read out of the file, promotes it into a real MapPlace
+ * (via KML_MIME's own coordinates, which the KML spec always has). Kept
+ * separate from MapPlace rather than giving that a nullable lat/long: every
+ * other reader of `data.places` (search, the time filter, scope resolution,
+ * ...) wants "plottable, definitely has coordinates" to keep meaning that
+ * unconditionally. */
+export interface PendingKmlPlace {
+  handle: string;
+  grampsId: string;
+  title: string;
+  eventCount: number;
+  years: number[];
+  /** Never empty -- see readVisualData, which only puts a coordinate-less
+   * place here when it has at least one KML attachment to try. */
+  kmlMedia: string[];
 }
 
 /** A cached Event, whether or not its date can be placed on an axis. */
@@ -61,6 +90,11 @@ export interface TimelineEvent extends EventRecord {
 
 export interface VisualData {
   places: MapPlace[];
+  /** Coordinate-less places with a KML attachment worth trying -- see
+   * PendingKmlPlace. Not part of `places`, and so not plotted, filtered, or
+   * scoped-to on its own until useVisualData.ts resolves a position for one
+   * and folds it in. */
+  pendingKmlPlaces: PendingKmlPlace[];
   events: TimelineEvent[];
   /** Event handle -> the place it happened at, for turning a set of scoped
    * events into the places to plot them at (store/visualScope.ts). Covers
@@ -91,7 +125,7 @@ export interface VisualData {
 }
 
 export const EMPTY_VISUAL_DATA: VisualData = {
-  places: [], events: [],
+  places: [], pendingKmlPlaces: [], events: [],
   placeOfEvent: new Map(), eventsByPlace: new Map(), eventsByHandle: new Map(), childPlaces: new Map(),
   placesCached: 0, placesTotal: 0, eventsCached: 0, eventsTotal: 0,
 };
@@ -138,7 +172,8 @@ function formatStoredDate(dateJson: string | null): string {
 export async function loadVisualData(): Promise<VisualData> {
   const placeStore = getViewStore("place");
   const eventStore = getViewStore("event");
-  await Promise.all([placeStore.ensureLoaded(), eventStore.ensureLoaded()]);
+  const mediaStore = getViewStore("media");
+  await Promise.all([placeStore.ensureLoaded(), eventStore.ensureLoaded(), mediaStore.ensureLoaded()]);
   return readVisualData();
 }
 
@@ -148,8 +183,19 @@ export async function loadVisualData(): Promise<VisualData> {
 export function readVisualData(): VisualData {
   const placeStore = getViewStore("place");
   const eventStore = getViewStore("event");
+  const mediaStore = getViewStore("media");
   const placeSnapshot = placeStore.getSnapshot();
   const eventSnapshot = eventStore.getSnapshot();
+
+  // Handle -> mime, for turning a place's media_refs (handles only) into
+  // the ones actually worth overlaying. Reads whatever the Media cache
+  // has loaded so far, same "first prefix, then whatever a background fill
+  // adds" honesty as the places/events read below.
+  const mimeByMediaHandle = new Map<string, string>();
+  for (const row of mediaStore.readColumns(["handle", "mime"])) {
+    const [handle, mime] = row as [string, string | null];
+    if (mime) mimeByMediaHandle.set(handle, mime);
+  }
 
   const events: TimelineEvent[] = [];
   // Place handle -> years of events there, built in the same pass as the
@@ -201,10 +247,13 @@ export function readVisualData(): VisualData {
   for (const years of yearsByPlace.values()) years.sort((a, b) => a - b);
 
   const places: MapPlace[] = [];
+  const pendingKmlPlaces: PendingKmlPlace[] = [];
   const childPlaces = new Map<string, string[]>();
-  for (const row of placeStore.readColumns(["handle", "gramps_id", "title", "lat", "long", "enclosed_by"])) {
-    const [handle, grampsId, title, latText, longText, enclosedBy] = row as [
-      string, string | null, string | null, string | null, string | null, string | null,
+  for (const row of placeStore.readColumns(
+    ["handle", "gramps_id", "title", "lat", "long", "enclosed_by", "media_refs"]
+  )) {
+    const [handle, grampsId, title, latText, longText, enclosedBy, mediaRefs] = row as [
+      string, string | null, string | null, string | null, string | null, string | null, string | null,
     ];
     // Before the coordinate check below, not after: a country or county
     // usually has no coordinates of its own but is exactly the level a
@@ -215,8 +264,23 @@ export function readVisualData(): VisualData {
       if (children) children.push(handle);
       else childPlaces.set(parent, [handle]);
     }
+    const kmlMedia = parseHandleList(mediaRefs)
+      .filter((mediaHandle) => mimeByMediaHandle.get(mediaHandle) === KML_MIME);
     const coords = parseCoords(latText, longText);
-    if (!coords) continue;
+    if (!coords) {
+      // No lat/long of its own, but a KML file's own coordinates (the KML
+      // spec always carries them) might still place it -- see
+      // useVisualData.ts, which resolves these asynchronously and folds any
+      // that succeed into `places` alongside these.
+      if (kmlMedia.length > 0) {
+        pendingKmlPlaces.push({
+          handle, grampsId: grampsId ?? "", title: title ?? "",
+          eventCount: countByPlace.get(handle) ?? 0, years: yearsByPlace.get(handle) ?? [],
+          kmlMedia,
+        });
+      }
+      continue;
+    }
     places.push({
       handle,
       grampsId: grampsId ?? "",
@@ -225,11 +289,13 @@ export function readVisualData(): VisualData {
       long: coords[1],
       eventCount: countByPlace.get(handle) ?? 0,
       years: yearsByPlace.get(handle) ?? [],
+      kmlMedia,
     });
   }
 
   return {
     places,
+    pendingKmlPlaces,
     events,
     placeOfEvent,
     eventsByPlace,

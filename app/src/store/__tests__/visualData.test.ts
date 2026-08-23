@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import { Calendar, Modifier, Quality, gregorianSdn, type GrampsDate } from "@gramps-connect/gramps-date";
-import { EVENT_VIEW, PLACE_VIEW, formatEventType, visibleColumns, type ViewConfig } from "../views";
+import { EVENT_VIEW, MEDIA_VIEW, PLACE_VIEW, formatEventType, visibleColumns, type ViewConfig } from "../views";
 
 vi.mock("../api", () => ({ fetchPage: vi.fn(), fetchByHandle: vi.fn() }));
 vi.mock("../../auth/auth", () => ({
@@ -174,6 +174,10 @@ beforeAll(async () => {
     // No place at all.
     { handle: "e3", gramps_id: "E3", event_type: { string: "", value: 21 }, description: "", place_title: "", place: null, date: null },
   ]);
+  // readVisualData cross-references media mime types against every place's
+  // media_list -- registered empty since none of these tests seed one, so
+  // it's just "the store this view needs is present" rather than data.
+  await register(MEDIA_VIEW, []);
 });
 
 describe("readVisualData indexes", () => {

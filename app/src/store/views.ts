@@ -426,6 +426,14 @@ export const PLACE_VIEW: ViewConfig = {
       key: "enclosed_by", label: "Enclosing place handles", select: { json_path: ["placeref_list"] },
       sqlType: "TEXT", hidden: true, toSql: toRefHandles,
     },
+    // Hidden: cross-referenced against the Media cache's own `mime` column
+    // in visualData.ts to find a place's attached KML files -- see
+    // MapPlace.kmlMedia. Same handles-only shape as enclosed_by, for the
+    // same reason.
+    {
+      key: "media_refs", label: "Media handles", select: { json_path: ["media_list"] },
+      sqlType: "TEXT", hidden: true, toSql: toRefHandles,
+    },
   ],
 };
 

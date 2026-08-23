@@ -5,6 +5,7 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point as GeoJsonPoint } from "geojson";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
+import { fetchAllKmlFeatures, kmlBounds } from "../../store/kmlMedia";
 import { readVisualColors } from "./cssVar";
 import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -74,6 +75,15 @@ const CLUSTER_COUNT_LAYER = "place-cluster-count";
 const POINT_LAYER = "place-points";
 const LABEL_LAYER = "place-labels";
 
+// Every currently-plotted place's attached KML file(s) (see
+// MapPlace.kmlMedia), overlaid underneath the place markers so a field
+// boundary or a route doesn't hide the pin that opened it.
+const KML_SOURCE = "kml-overlay";
+const KML_FILL_LAYER = "kml-fill";
+const KML_LINE_LAYER = "kml-line";
+const KML_POINT_LAYER = "kml-points";
+const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
+
 interface MapCanvasProps {
   /** Already filtered by MapView's search and time filter. */
   places: MapPlace[];
@@ -131,6 +141,7 @@ function toGeoJson(
 /** Full strength, or receded to context. Applied to fill and label alike so
  * a dimmed marker's name recedes with it. */
 const DIM_OPACITY = 0.15;
+
 
 /** The maplibre map itself, in its own module so MapView can import() it
  * lazily -- maplibre-gl is by far the heaviest thing in this app, and a
@@ -279,6 +290,40 @@ export function MapCanvas({
     // accent and is not stepped to stay legible as a mark on a dark surface.
     const markColor = seriesColor(dark);
 
+    // Added before the places source/layers below, so its shapes render
+    // underneath the markers rather than obscuring them.
+    if (!map.getSource(KML_SOURCE)) {
+      map.addSource(KML_SOURCE, { type: "geojson", data: EMPTY_FEATURE_COLLECTION });
+      map.addLayer({
+        id: KML_FILL_LAYER,
+        type: "fill",
+        source: KML_SOURCE,
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: { "fill-color": markColor, "fill-opacity": 0.25 },
+      });
+      map.addLayer({
+        id: KML_LINE_LAYER,
+        type: "line",
+        source: KML_SOURCE,
+        // Polygon outline and bare LineString (a route) share one style --
+        // there's no second thing a line width/colour would need to say.
+        filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
+        paint: { "line-color": markColor, "line-width": 2 },
+      });
+      map.addLayer({
+        id: KML_POINT_LAYER,
+        type: "circle",
+        source: KML_SOURCE,
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": markColor,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": colors.surface,
+        },
+      });
+    }
+
     if (!map.getSource(SOURCE)) {
       map.addSource(SOURCE, {
         type: "geojson",
@@ -423,15 +468,75 @@ export function MapCanvas({
     source?.setData(toGeoJson(places, highlighted, selectedHandle));
   }, [places, highlighted, selectedHandle, ready]);
 
+  // Every currently-plotted place's KML attachment(s) (see
+  // MapPlace.kmlMedia), overlaid via KML_SOURCE above -- not gated on
+  // selection, so a shape is visible any time its place is on the map, the
+  // same as the marker itself. Keyed on the deduplicated handles themselves
+  // rather than on `places` directly, so a filter/search change that leaves
+  // the same KML-attached places on screen doesn't requery the source (and
+  // fetchAllKmlFeatures's own per-handle cache means even a real change only
+  // pays for whatever handles are actually new).
+  const kmlKey = [...new Set(places.flatMap((place) => place.kmlMedia))].sort().join(",");
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const source = map.getSource(KML_SOURCE) as GeoJSONSource | undefined;
+    if (!source) return;
+    if (kmlKey === "") {
+      source.setData(EMPTY_FEATURE_COLLECTION);
+      return;
+    }
+    let cancelled = false;
+    fetchAllKmlFeatures(kmlKey.split(",")).then((features) => {
+      if (!cancelled) source.setData({ type: "FeatureCollection", features });
+    }).catch(() => {
+      if (!cancelled) source.setData(EMPTY_FEATURE_COLLECTION);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [kmlKey, ready]);
+
   // Fit to the requested places (see fitRequest). Skipped at fitRequest 0 so
   // the remembered viewport survives the first open.
+  //
+  // Guarded against reapplying the same request: `ready` is a dependency
+  // (a fit requested before the style has finished its first load has to
+  // wait for it), but `ready` also flips false-then-true on every mode/
+  // theme swap (crossfadeStyleSwap's setStyle() forces a reload) even
+  // though `fitRequest` itself hasn't changed -- without this, switching
+  // Standard/Historical after zooming in by hand (or after the KML-bounds
+  // refinement below zoomed in further) would silently redo the last fit
+  // and yank the viewport straight back to it. Found live.
   const fitPlaces = fitTo ?? places;
+  const appliedFitRequestRef = useRef(0);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || fitRequest === 0 || fitPlaces.length === 0) return;
+    if (appliedFitRequestRef.current === fitRequest) return;
+    appliedFitRequestRef.current = fitRequest;
     if (fitPlaces.length === 1) {
-      map.easeTo({ center: [fitPlaces[0].long, fitPlaces[0].lat], zoom: Math.max(map.getZoom(), 9) });
-      return;
+      const place = fitPlaces[0];
+      map.easeTo({ center: [place.long, place.lat], zoom: Math.max(map.getZoom(), 9) });
+      if (place.kmlMedia.length === 0) return;
+      // A KML attachment is typically a field boundary or a short route,
+      // far tighter than the flat zoom just picked above -- there's no way
+      // to know how tight without the file's own coordinates, which the
+      // overlay effect above is fetching but may not have resolved yet
+      // (fetchAllKmlFeatures's cache makes this call free once it has).
+      // Refines the camera a second time once they're in, rather than
+      // waiting on them for the first move.
+      let cancelled = false;
+      fetchAllKmlFeatures(place.kmlMedia).then((features) => {
+        if (cancelled) return;
+        const bounds = kmlBounds(features);
+        if (bounds) {
+          map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { maxZoom: 17, duration: 600 });
+        }
+      });
+      return () => {
+        cancelled = true;
+      };
     }
     const bounds = new maplibregl.LngLatBounds(
       [fitPlaces[0].long, fitPlaces[0].lat],

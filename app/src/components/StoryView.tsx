@@ -215,6 +215,20 @@ export function StoryView({ spec, opened, onClose, stackId }: {
   }, [mapMode, autoYear, yearBounds]);
   const ohmYear = mapMode === "standard" ? null : mapMode === "auto" ? autoYear : historicalYear;
 
+  // Memoized on `slide` alone (stable across renders that don't change
+  // slides -- `slides` comes from `hydrated` state, not rebuilt on every
+  // render): StoryMapBackground's flyTo/KML-fit effects key off this
+  // object's *identity*, and a fresh literal on every render -- e.g. every
+  // mode-control click, which re-renders this component for unrelated
+  // `mapMode`/`historicalYear` state -- would retrigger them and fly the
+  // camera back to the flat zoom 9, undoing the tighter KML-bounds zoom.
+  // Found live: exactly this, only on the Story map (MapCanvas.tsx's own
+  // selection state doesn't get rebuilt the same way on a mode switch).
+  const currentPoint = useMemo(
+    () => (slide && isLocated(slide) ? { lat: slide.lat, long: slide.long, kmlMedia: slide.kmlMedia ?? [] } : undefined),
+    [slide],
+  );
+
   useEffect(() => {
     if (opened) setIndex(0);
   }, [opened, spec]);
@@ -237,7 +251,6 @@ export function StoryView({ spec, opened, onClose, stackId }: {
   const goPrev = () => setIndex((i) => Math.max(i - 1, 0));
   const goNext = () => setIndex((i) => Math.min(i + 1, slides.length - 1));
   const firstLocated = slides.find(isLocated);
-  const currentPoint = slide && isLocated(slide) ? { lat: slide.lat, long: slide.long } : undefined;
 
   return (
     <Modal

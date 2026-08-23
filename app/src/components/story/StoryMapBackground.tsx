@@ -10,7 +10,8 @@
 import { useEffect, useRef, useState } from "react";
 // Namespace import: maplibre-gl v5 has no default export.
 import * as maplibregl from "maplibre-gl";
-import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import type { GeoJSONSource, Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import type { FeatureCollection } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Box } from "@mantine/core";
 import { readVisualColors } from "../visuals/cssVar";
@@ -20,9 +21,17 @@ import { PIN_PATH_D } from "./storyMarker";
 
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
+// The current slide's place's KML attachment(s) (see MapPlace.kmlMedia /
+// MapCanvas.tsx's own version of this), overlaid underneath the pin.
+const KML_SOURCE = "story-kml-overlay";
+const KML_FILL_LAYER = "story-kml-fill";
+const KML_LINE_LAYER = "story-kml-line";
+const KML_POINT_LAYER = "story-kml-points";
+const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
+
 export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, panelFraction, ohmYear }: {
   initialCenter: [number, number];
-  currentPoint: { lat: number; long: number } | undefined;
+  currentPoint: { lat: number; long: number; kmlMedia: string[] } | undefined;
   dark: boolean;
   opened: boolean;
   /** How much of the container's right side the content panel covers (see
@@ -131,6 +140,103 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
     if (!map || !ready || ohmYear == null) return;
     applyOhmYear(map, ohmYear);
   }, [ready, ohmYear]);
+
+  // Adds (or re-adds) the KML overlay source/layers -- same shapes as
+  // MapCanvas.tsx's own version, under the marker for the same reason. Runs
+  // whenever `ready` flips true, since setStyle() (the crossfade swap above)
+  // wipes every user-added source/layer along with the basemap it's
+  // replacing, same as MapCanvas.tsx's places source.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || map.getSource(KML_SOURCE)) return;
+    const markColor = seriesColor(darkRef.current);
+    const colors = readVisualColors();
+    map.addSource(KML_SOURCE, { type: "geojson", data: EMPTY_FEATURE_COLLECTION });
+    map.addLayer({
+      id: KML_FILL_LAYER,
+      type: "fill",
+      source: KML_SOURCE,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: { "fill-color": markColor, "fill-opacity": 0.25 },
+    });
+    map.addLayer({
+      id: KML_LINE_LAYER,
+      type: "line",
+      source: KML_SOURCE,
+      filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
+      paint: { "line-color": markColor, "line-width": 2 },
+    });
+    map.addLayer({
+      id: KML_POINT_LAYER,
+      type: "circle",
+      source: KML_SOURCE,
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        "circle-radius": 5,
+        "circle-color": markColor,
+        "circle-stroke-width": 1,
+        "circle-stroke-color": colors.surface,
+      },
+    });
+  }, [ready]);
+
+  // The current slide's place's KML attachment(s), fetched and drawn
+  // whenever the slide changes -- see MapCanvas.tsx's own version of this
+  // for the caching/dedup story (fetchAllKmlFeatures shares its per-handle
+  // cache with every other reader). Dynamically imported: kmlMedia.ts pulls
+  // in @tmcw/togeojson, and this component (unlike MapCanvas.tsx, which is
+  // lazy-loaded from MapView) is part of the main bundle -- a story with no
+  // KML-attached place should never pay for that parser.
+  //
+  // Once the shape is in, the camera refines to frame it -- a KML file is
+  // typically a field boundary or a short route, far tighter than the flat
+  // zoom 9 the flyTo effect below picks for an ordinary located point, and
+  // there's no way to know how tight without the file's own coordinates. A
+  // second camera move right after the first (that effect's flyTo already
+  // got the map to roughly the right place) rather than replacing it: the
+  // fetch is asynchronous and the plain point case still needs its own
+  // immediate zoom.
+  //
+  // The fit itself is guarded to once per distinct `kmlKey` (via the ref
+  // below), separately from the data refresh: `ready` is a dependency (the
+  // source this writes into is wiped by every setStyle(), so its data has
+  // to be re-supplied after each one), but `ready` also flips false-then-
+  // true on every mode/theme swap even when the slide hasn't changed --
+  // without the guard, switching Standard/Historical would redo the fit and
+  // yank the viewport back from wherever the viewer had since zoomed or
+  // panned to. Found live.
+  const kmlKey = (currentPoint?.kmlMedia ?? []).join(",");
+  const appliedKmlFitKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const source = map.getSource(KML_SOURCE) as GeoJSONSource | undefined;
+    if (!source) return;
+    if (kmlKey === "") {
+      source.setData(EMPTY_FEATURE_COLLECTION);
+      return;
+    }
+    let cancelled = false;
+    import("../../store/kmlMedia")
+      .then(async ({ fetchAllKmlFeatures, kmlBounds }) => {
+        const features = await fetchAllKmlFeatures(kmlKey.split(","));
+        return { features, bounds: kmlBounds(features) };
+      })
+      .then(({ features, bounds }) => {
+        if (cancelled) return;
+        source.setData({ type: "FeatureCollection", features });
+        if (bounds && appliedKmlFitKeyRef.current !== kmlKey) {
+          appliedKmlFitKeyRef.current = kmlKey;
+          map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { maxZoom: 17, duration: 900 });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) source.setData(EMPTY_FEATURE_COLLECTION);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kmlKey, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
