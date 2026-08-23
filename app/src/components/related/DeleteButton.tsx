@@ -77,8 +77,8 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
   return (
     <>
       <Tooltip label={label} withArrow>
-        <UnstyledButton onClick={openConfirm} aria-label={label}>
-          <Text size="lg" lh={1}>🗑</Text>
+        <UnstyledButton onClick={openConfirm} aria-label={label} p={6} style={{ borderRadius: "50%" }}>
+          <Text fz={22} lh={1}>🗑</Text>
         </UnstyledButton>
       </Tooltip>
       <Modal opened={confirmOpen} onClose={() => setConfirmOpen(false)} title={`Delete this ${view.key}?`}>

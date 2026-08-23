@@ -40,8 +40,10 @@ export function EditButton({
       <UnstyledButton
         onClick={() => draftStack.openEditDraft(view.key as DraftType, detail.handle)}
         aria-label={label}
+        p={6}
+        style={{ borderRadius: "50%" }}
       >
-        <Text size="lg" lh={1}>✎</Text>
+        <Text fz={22} lh={1}>✎</Text>
       </UnstyledButton>
     </Tooltip>
   );
