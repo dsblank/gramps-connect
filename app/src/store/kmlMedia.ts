@@ -11,8 +11,10 @@ import { API_BASE } from "../config";
 
 /** Media handle -> its parsed features, module-level so MapCanvas's overlay
  * and useVisualData's position guess never both fetch the same file, and
- * neither refetches one the other already has -- a KML file is static once
- * uploaded, so there's nothing to invalidate this on. */
+ * neither refetches one the other already has. A KML file was originally
+ * static once uploaded (nothing to invalidate this on) until
+ * MapItemEditorDialog.tsx's edit flow started replacing one in place --
+ * see invalidateKmlFeatures below. */
 const featureCache = new Map<string, Promise<Feature[]>>();
 
 /** A single KML media object's shapes, as GeoJSON. The same jwt-bearing
@@ -52,6 +54,16 @@ export async function fetchAllKmlFeatures(handles: string[]): Promise<Feature[]>
   if (handles.length === 0) return [];
   const collections = await Promise.all(handles.map(fetchKmlFeatures));
   return collections.flat();
+}
+
+/** Drops a handle's cached parse -- called after MapItemEditorDialog.tsx
+ * PUTs new content over an existing KML media object's file (same handle,
+ * new bytes; see jobsApi.ts's updateMediaFile). Without this, MapCanvas's
+ * overlay and StoryMapBackground would keep serving the pre-edit shapes for
+ * the rest of the session, since featureCache is keyed on the handle alone
+ * and a KML file was previously assumed static once uploaded. */
+export function invalidateKmlFeatures(handle: string): void {
+  featureCache.delete(handle);
 }
 
 function visitCoordinates(coords: unknown, bounds: [number, number, number, number]): void {

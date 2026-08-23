@@ -95,6 +95,44 @@ export async function uploadMedia(token: string, blob: Blob, mimeType: string): 
   return addedHandle(await res.json());
 }
 
+/** PUT /api/media/<handle>/file (file.py:MediaFileResource.put) -- replaces
+ * an *existing* media object's file content in place, under the same
+ * handle: the server recomputes checksum/path/mime itself, same as
+ * uploadMedia's POST does for a new one. Used by MapItemEditorDialog.tsx's
+ * edit flow so a re-saved KML file keeps the handle every Place's
+ * media_list and MediaMapButton's link already point at, rather than
+ * minting a new Media object and having to rewire every reference to it.
+ * No `If-Match` sent -- the endpoint treats a missing one as "don't check",
+ * and this editor has no concurrent-edit story to enforce yet.
+ *
+ * A 409 (the endpoint's own reply to bytes identical to what's already
+ * stored -- "don't allow PUTting if the file didn't change") is treated as
+ * success here, not an error: from this function's point of view, the
+ * server already has the content being asked for, so there's nothing left
+ * to do. Surfacing it as a failure would block MapItemEditorDialog.tsx's
+ * Save whenever someone edits only the description/place and leaves the
+ * shapes themselves untouched -- found live. */
+export async function updateMediaFile(token: string, handle: string, blob: Blob, mimeType: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}/file`, {
+    method: "PUT",
+    headers: { "Content-Type": mimeType, Authorization: `Bearer ${token}` },
+    body: blob,
+  });
+  if (res.status === 409) return;
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+}
+
+/** Sets an existing Media object's `desc` -- fetch-then-PUT-whole-object,
+ * same shape as tagAndDescribeMedia above, but standing alone (no tag/
+ * filename side effects) for MapItemEditorDialog.tsx's plain "Description"
+ * field, on both a freshly-uploaded map item and an edit of an existing
+ * one. */
+export async function setMediaDesc(token: string, handle: string, desc: string): Promise<void> {
+  const obj = await fetchPlainObject(token, MEDIA_VIEW, handle);
+  obj.desc = desc;
+  await updateObject(token, MEDIA_VIEW, handle, obj);
+}
+
 function addedHandle(trans: { type: string; handle: string }[]): string {
   const added = trans.find((t) => t.type === "add");
   if (!added) throw new Error("expected an 'add' transaction entry, got none");

@@ -29,7 +29,10 @@
     "maplibre-gl": "^6.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "sql.js": "^1.14.1"
+    "sql.js": "^1.14.1",
+    "terra-draw": "^1.32.3",
+    "terra-draw-maplibre-gl-adapter": "^1.4.1",
+    "tokml": "^0.4.0"
   },
   "devDependencies": {
     "@types/d3-array": "^3.2.1",

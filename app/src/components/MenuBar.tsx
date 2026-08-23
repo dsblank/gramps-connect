@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
-import { Button, Divider, Group, Menu } from "@mantine/core";
+import { Fragment, lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
+import { Box, Button, Divider, Group, Loader, Menu } from "@mantine/core";
 import { getToken, hasPermissions } from "../auth/auth";
 import { addDesktopTranslations, getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { ImportDialog } from "./ImportDialog";
@@ -17,6 +17,13 @@ import { runMediaExport } from "../store/mediaExportApi";
 import { exportLabel, promoteJob } from "../store/jobsPromote";
 import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
+
+// maplibre-gl and terra-draw are the heaviest thing this app can pull in
+// (see MapItemEditorDialog.tsx's own doc comment) -- lazy so a session that
+// never opens "Add Map Item…" never fetches either, same reasoning as
+// MapView.tsx's own lazy MapCanvas import.
+const MapItemEditorDialog = lazy(() =>
+  import("./MapItemEditorDialog").then((m) => ({ default: m.MapItemEditorDialog })));
 
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
 // at ROLE_OWNER and above.
@@ -214,6 +221,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
   const [overviewOpened, setOverviewOpened] = useState(false);
   const [systemInfoOpened, setSystemInfoOpened] = useState(false);
   const [aboutOpened, setAboutOpened] = useState(false);
+  const [mapItemOpened, setMapItemOpened] = useState(false);
 
   // App.tsx mounts a second MenuBar when the header switches layouts, so
   // the fetch is deduplicated in loadReports() and only its result is
@@ -289,18 +297,29 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           // to create one is the person-scoped "+ Add a story" generate
           // flow (NotesSection.tsx's AddStoryControl, via
           // storyApi.ts's generatePersonStory).
-          items={EDITABLE_TYPES.filter((type) => type !== "story").map((type) => ({
-            label: `New ${DRAFT_TYPE_LABELS[type]}…`,
-            // Family alone needs EditObject too -- families.py's
-            // FamiliesResource.post() checks both, because adding a
-            // Family also rewrites its parents' Person records
-            // (family_list). Every other type's resource has no such
-            // post() override (confirmed against gramps-web-api's
-            // events/places/sources/citations/repositories/notes/tags.py),
-            // so plain AddObject is correct for the rest.
-            perm: type === "family" ? [PERM_ADD_OBJ, PERM_EDIT_OBJ] : PERM_ADD_OBJ,
-            onClick: () => draftStack.openDraft(type),
-          }))}
+          items={[
+            ...EDITABLE_TYPES.filter((type) => type !== "story").map((type) => ({
+              label: `New ${DRAFT_TYPE_LABELS[type]}…`,
+              // Family alone needs EditObject too -- families.py's
+              // FamiliesResource.post() checks both, because adding a
+              // Family also rewrites its parents' Person records
+              // (family_list). Every other type's resource has no such
+              // post() override (confirmed against gramps-web-api's
+              // events/places/sources/citations/repositories/notes/tags.py),
+              // so plain AddObject is correct for the rest.
+              perm: type === "family" ? [PERM_ADD_OBJ, PERM_EDIT_OBJ] : PERM_ADD_OBJ,
+              onClick: () => draftStack.openDraft(type),
+            })),
+            {
+              // Not a draft type (see draftStack.ts's own exclusion of
+              // Media) -- opens MapItemEditorDialog.tsx directly instead of
+              // going through draftStack.openDraft.
+              label: "Add Map Item…",
+              perm: PERM_ADD_OBJ,
+              onClick: () => setMapItemOpened(true),
+              separatorBefore: true,
+            },
+          ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already
             has cached locally, and Tree's per-open fetch needs nothing
@@ -354,6 +373,17 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           setOverviewOpened(true);
         }}
       />
+      {mapItemOpened && (
+        <Suspense
+          fallback={
+            <Box style={{ position: "fixed", inset: 0, zIndex: 300 }}>
+              <Loader size="sm" style={{ position: "absolute", top: "50%", left: "50%" }} />
+            </Box>
+          }
+        >
+          <MapItemEditorDialog target={{ kind: "new" }} onClose={() => setMapItemOpened(false)} />
+        </Suspense>
+      )}
     </>
   );
 }
