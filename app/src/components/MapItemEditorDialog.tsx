@@ -25,6 +25,7 @@ import { featuresToKml, type ImageOverlay } from "../store/kmlWrite";
 import { uploadMedia, updateMediaFile, setMediaDesc } from "../store/jobsApi";
 import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
+import { getViewStore } from "../store/registry";
 import { KML_MIME } from "../store/visualData";
 import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { readVisualColors } from "./visuals/cssVar";
@@ -967,6 +968,13 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       let handle: string;
       if (target.kind === "new") {
         handle = await uploadMedia(token, blob, KML_MIME);
+        // Immediate feedback rather than waiting on historyPoll's next
+        // tick (same reasoning as draftStack.ts's saveAll/useMediaDrop.ts):
+        // visualData.ts's kmlMedia derivation cross-references a place's
+        // media_list against the Media ViewStore's own local `mime`
+        // column, so this new handle has to land there before the Map
+        // view can recognize it as a KML overlay.
+        getViewStore("media").requeryDebounced();
         notifications.show({
           color: "green",
           title: t("Map item added"),
@@ -998,6 +1006,11 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             token, PLACE_VIEW, place.handle, "media_list", { _class: "MediaRef", ref: handle }
           ).catch(() => {});
         }
+        // Same reasoning as the media requery above -- the Place's own
+        // media_refs column (what visualData.ts reads to find its kmlMedia)
+        // just changed server-side and would otherwise sit stale in the
+        // local cache until historyPoll's next tick.
+        getViewStore("place").requeryDebounced();
       }
       onClose();
     } catch (err: any) {
