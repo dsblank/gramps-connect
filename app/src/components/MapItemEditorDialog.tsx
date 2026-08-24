@@ -507,6 +507,53 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     };
     canvas.addEventListener("keydown", onCanvasKeyDown);
 
+    // Some WebKit-based environments (found live: the standalone desktop
+    // build's native window, see standalone/launcher.py) never dispatch
+    // PointerEvents for mouse input, even though ordinary MouseEvents work
+    // fine there -- map pan/zoom and the image-overlay drag above both ride
+    // on mousedown/mousemove/mouseup and both work. terra-draw's own Select
+    // mode listens *exclusively* for pointerdown/pointermove/pointerup on
+    // the map canvas (see TerraDrawBaseAdapter), so without a bridge,
+    // selecting a shape to drag it silently does nothing on such a
+    // platform while every other gesture in this editor keeps working.
+    // Detected once at runtime -- a "mousedown" on the canvas not followed
+    // by a real "pointerdown" within a frame means this environment isn't
+    // dispatching pointer events for mouse input at all, so from then on
+    // every mouse event on the canvas is re-dispatched as the equivalent
+    // pointer event. terra-draw's own listeners only read
+    // clientX/clientY/button/isPrimary/target, none of which require an
+    // actual PointerEvent instance -- a MouseEvent with `isPrimary` patched
+    // on satisfies them exactly the same.
+    let sawNativePointerdown = false;
+    let pointerBridgeActive = false;
+    let pendingFirstMouseDown: MouseEvent | null = null;
+    const onNativePointerDown = () => { sawNativePointerdown = true; };
+    canvas.addEventListener("pointerdown", onNativePointerDown, { once: true });
+    const dispatchAsPointerEvent = (type: string, e: MouseEvent) => {
+      const synthetic = new MouseEvent(type, {
+        bubbles: true, cancelable: true, view: window,
+        clientX: e.clientX, clientY: e.clientY, button: e.button, buttons: e.buttons,
+      });
+      Object.defineProperty(synthetic, "isPrimary", { value: true });
+      canvas.dispatchEvent(synthetic);
+    };
+    const onMouseDownBridge = (e: MouseEvent) => {
+      if (pointerBridgeActive) { dispatchAsPointerEvent("pointerdown", e); return; }
+      if (sawNativePointerdown) return;
+      pendingFirstMouseDown = e;
+      requestAnimationFrame(() => {
+        if (sawNativePointerdown || !pendingFirstMouseDown) return;
+        pointerBridgeActive = true;
+        dispatchAsPointerEvent("pointerdown", pendingFirstMouseDown);
+        pendingFirstMouseDown = null;
+      });
+    };
+    const onMouseMoveBridge = (e: MouseEvent) => { if (pointerBridgeActive) dispatchAsPointerEvent("pointermove", e); };
+    const onMouseUpBridge = (e: MouseEvent) => { if (pointerBridgeActive) dispatchAsPointerEvent("pointerup", e); };
+    canvas.addEventListener("mousedown", onMouseDownBridge);
+    canvas.addEventListener("mousemove", onMouseMoveBridge);
+    canvas.addEventListener("mouseup", onMouseUpBridge);
+
     // Selects whichever image overlay (if any) was clicked, deselects
     // otherwise, and kicks off that overlay's move-drag -- all in one
     // map-wide handler rather than a per-overlay one, since raster/image
@@ -611,6 +658,10 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     return () => {
       draw.stop();
       canvas.removeEventListener("keydown", onCanvasKeyDown);
+      canvas.removeEventListener("pointerdown", onNativePointerDown);
+      canvas.removeEventListener("mousedown", onMouseDownBridge);
+      canvas.removeEventListener("mousemove", onMouseMoveBridge);
+      canvas.removeEventListener("mouseup", onMouseUpBridge);
       // Markers aren't part of the map's own style/source tree -- map.remove()
       // below doesn't clean these up on its own.
       for (const mount of overlayMountsRef.current.values()) {
