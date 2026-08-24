@@ -9,7 +9,7 @@ import {
 } from "terra-draw";
 import type { GeoJSONStoreFeatures, HexColor } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import type { Feature, Geometry, LineString, Point, Polygon } from "geojson";
+import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
 import {
   Alert, Anchor, Box, Button, ColorInput, Group, Kbd, List, Loader, Modal, Stack, Text, TextInput,
   useComputedColorScheme,
@@ -27,6 +27,7 @@ import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
 import { KML_MIME } from "../store/visualData";
 import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
+import { readVisualColors } from "./visuals/cssVar";
 import { seriesColor } from "./visuals/eventCategories";
 import { mapStyleUrl } from "./visuals/mapStyles";
 import { CircleGlyphButton } from "./CircleGlyphButton";
@@ -43,10 +44,11 @@ import { t } from "../i18n/i18n";
 // module happens not to have loaded yet in this session costs nothing.
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
-type DrawMode = "point" | "linestring" | "polygon" | "rectangle" | "select";
+type DrawMode = "point" | "linestring" | "polygon" | "rectangle" | "label" | "select";
 
 const TOOLBAR: { mode: DrawMode; label: string }[] = [
   { mode: "point", label: "Point" },
+  { mode: "label", label: "Label" },
   { mode: "linestring", label: "Line" },
   { mode: "polygon", label: "Polygon" },
   { mode: "rectangle", label: "Rectangle" },
@@ -59,6 +61,8 @@ const TOOLBAR: { mode: DrawMode; label: string }[] = [
 const COLOR_SWATCHES = [
   "#2a78d6", "#d64545", "#3aa657", "#e0a325", "#8654c9", "#2aa7a0", "#e0678a", "#555555",
 ];
+
+const EMPTY_LABEL_PREVIEW: FeatureCollection = { type: "FeatureCollection", features: [] };
 
 export type MapItemEditorTarget = { kind: "new" } | { kind: "edit"; handle: string };
 
@@ -105,6 +109,14 @@ interface OverlayMount {
  * rather than wherever addLayer's default "on top of everything" would
  * otherwise put it. */
 const OVERLAY_ANCHOR_LAYER = "image-overlay-anchor";
+
+/** terra-draw's own point mode has no text-label styling (see
+ * refreshLabelPreview's own doc comment below), so a labeled point's text
+ * is drawn by this separate, independent geojson source/layer stacked on
+ * top of terra-draw's own -- purely visual, never saved from directly
+ * (handleSave reads terra-draw's own snapshot, this is a mirror of it). */
+const LABEL_PREVIEW_SOURCE = "label-preview";
+const LABEL_PREVIEW_LAYER = "label-preview-text";
 
 /** The rotate handle's own position, unrotated -- above the box's north
  * edge, offset further out by a fraction of the box's own height so it
@@ -198,6 +210,13 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   const overlayMountsRef = useRef<Map<string, OverlayMount>>(new Map());
   const dark = useComputedColorScheme("light") === "dark";
   const [mode, setMode] = useState<DrawMode>("select");
+  // Mirrors `mode` state for the finish listener set up once below (same
+  // reasoning as colorRef just under this) -- "label" isn't a real
+  // terra-draw mode (it draws via the "point" mode, see handleModeChange),
+  // so this is how that listener tells a just-placed label apart from an
+  // ordinary point.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -212,6 +231,18 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // doesn't need the whole map/draw instance rebuilt to see it.
   const colorRef = useRef(color);
   colorRef.current = color;
+  // The selected point's label text, mirroring `color`'s own pattern --
+  // NOT derived from getSnapshot() on every render, since
+  // updateFeatureProperties (called on every keystroke below) doesn't
+  // itself trigger a re-render, which would leave a derived value stuck
+  // showing whatever it read on the last unrelated render. Seeded/cleared
+  // by the select/deselect listeners below instead.
+  const [labelText, setLabelText] = useState("");
+  // Populated fresh every render by the effect below -- lets the map-setup
+  // effect's own terra-draw listeners (registered once, see colorRef's own
+  // doc comment on this pattern) call the latest refreshLabelPreview
+  // without closing over a stale `labelText`.
+  const refreshLabelPreviewRef = useRef<(() => void) | null>(null);
   // terra-draw's own select mode only ever has zero or one feature
   // selected at a time (see TOOLBAR's "select" mode) -- this mirrors that
   // via draw.on("select"/"deselect") so the color picker knows whether a
@@ -222,6 +253,38 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // below (Backspace-deletes-the-selection), same reasoning as colorRef.
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
+  // Keeps LABEL_PREVIEW_SOURCE (the editor's own text-rendering layer,
+  // added in the style.load handler below since terra-draw's point mode
+  // can't render text itself) in sync with every named point -- including,
+  // for the currently selected feature only, `labelText` itself rather
+  // than its last-saved `name` property, so a keystroke shows up
+  // immediately instead of only once the point is deselected (terra-draw's
+  // updateFeatureProperties, called on every keystroke by the text field
+  // below, doesn't reliably fire draw's own "change" event).
+  useEffect(() => {
+    const draw = drawRef.current;
+    const map = mapRef.current;
+    const source = map?.getSource(LABEL_PREVIEW_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const refresh = () => {
+      const currentDraw = drawRef.current;
+      const currentSource = mapRef.current?.getSource(LABEL_PREVIEW_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      if (!currentDraw || !currentSource) return;
+      const features: Feature[] = [];
+      for (const f of currentDraw.getSnapshot()) {
+        if (f.geometry?.type !== "Point") continue;
+        const isSelected = String(f.id) === selectedId;
+        const name = (isSelected ? labelText : (f.properties?.name as string | undefined))?.trim();
+        if (!name) continue;
+        features.push({
+          type: "Feature", geometry: f.geometry,
+          properties: { name, color: f.properties?.color as string | undefined },
+        });
+      }
+      currentSource.setData({ type: "FeatureCollection", features });
+    };
+    refreshLabelPreviewRef.current = refresh;
+    if (draw && source) refresh();
+  }, [labelText, selectedId]);
   // Every placed image overlay (KML GroundOverlay) -- a wholly separate
   // system from terra-draw (which has no image geometry type), see the
   // block of effects/handlers below this component's map-setup effect.
@@ -344,6 +407,12 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         // to mean something -- not `point`, a single vertex has nothing to
         // rotate around.
         new TerraDrawSelectMode({
+          // Half terra-draw's own default (40px) -- with labels sitting
+          // right next to their point (see LABEL_PREVIEW_LAYER's
+          // text-offset above) and vertices sometimes placed close
+          // together, the default hit-test radius made clicking one point
+          // too likely to grab a neighboring one instead. Found live.
+          pointerDistance: 20,
           // Every field restated (terra-draw's own type doesn't allow a
           // partial override), only `rotate` actually changed from its
           // default -- plain "r" instead of the default Ctrl+R, an
@@ -378,13 +447,37 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       ],
     });
     drawRef.current = draw;
-    draw.on("change", () => setHasFeatures(draw.getSnapshot().length > 0));
+    draw.on("change", () => {
+      setHasFeatures(draw.getSnapshot().length > 0);
+      refreshLabelPreviewRef.current?.();
+    });
     // A shape takes the toolbar's current color the moment it's finished
     // drawing -- colorRef (not `color` state) since this listener, like
     // the mode instances above, is registered once per map.
-    draw.on("finish", (id) => draw.updateFeatureProperties(id, { color: colorRef.current }));
-    draw.on("select", (id) => setSelectedId(String(id)));
-    draw.on("deselect", () => setSelectedId(null));
+    draw.on("finish", (id) => {
+      draw.updateFeatureProperties(id, { color: colorRef.current });
+      // A label is a plain terra-draw point (see handleModeChange) placed
+      // with the express purpose of carrying text -- jump straight to
+      // Select and select it so the text field below is ready to type
+      // into immediately, rather than making the user switch to Select
+      // and click the point they just placed.
+      if (modeRef.current === "label") {
+        draw.setMode("select");
+        setMode("select");
+        draw.selectFeature(id);
+        setSelectedId(String(id));
+        setLabelText("");
+      }
+    });
+    draw.on("select", (id) => {
+      setSelectedId(String(id));
+      const feature = draw.getSnapshot().find((f) => f.id === id);
+      setLabelText((feature?.properties?.name as string | undefined) ?? "");
+    });
+    draw.on("deselect", () => {
+      setSelectedId(null);
+      setLabelText("");
+    });
 
     // terra-draw's own delete keybinding only recognizes the literal
     // "Delete" key (terra-draw-maplibre-gl-adapter's default keyEvents) --
@@ -474,6 +567,34 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         map.addLayer({ id: OVERLAY_ANCHOR_LAYER, type: "background", paint: { "background-opacity": 0 } });
         draw.start();
         draw.setMode("select");
+        // Added after draw.start() so it stacks above terra-draw's own
+        // point layer -- see LABEL_PREVIEW_SOURCE's own doc comment on why
+        // this mirror exists at all. refreshLabelPreviewRef is populated by
+        // the effect below; called once here too, in case any features
+        // were already loaded before this handler ran.
+        const colors = readVisualColors();
+        map.addSource(LABEL_PREVIEW_SOURCE, { type: "geojson", data: EMPTY_LABEL_PREVIEW });
+        map.addLayer({
+          id: LABEL_PREVIEW_LAYER,
+          type: "symbol",
+          source: LABEL_PREVIEW_SOURCE,
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 12,
+            "text-font": ["Noto Sans Regular"],
+            // Offset right rather than centered on the point -- centered
+            // text sat directly on top of the point, making it hard to see
+            // (and, in the real map views, click) the point itself.
+            "text-anchor": "left",
+            "text-offset": [0.6, 0],
+          },
+          paint: {
+            "text-color": ["coalesce", ["get", "color"], colors.text],
+            "text-halo-color": colors.surface,
+            "text-halo-width": 1.5,
+          },
+        });
+        refreshLabelPreviewRef.current?.();
       } catch (err: any) {
         setError(err.message ?? String(err));
       } finally {
@@ -747,7 +868,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     let cancelled = false;
     fetchAllKmlFeatures([target.handle]).then((features) => {
       if (cancelled || features.length === 0) return;
-      const loadable: { type: "Feature"; geometry: Point | LineString | Polygon; properties: { mode: DrawMode; color?: string } }[] = [];
+      const loadable: { type: "Feature"; geometry: Point | LineString | Polygon; properties: { mode: DrawMode; color?: string; name?: string } }[] = [];
       for (const feature of features) {
         const geometry = feature.geometry;
         // A direct literal check here (rather than a separate
@@ -763,7 +884,10 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           geometry.type === "Point" ? "point" : geometry.type === "LineString" ? "linestring" : "polygon";
         loadable.push({
           type: "Feature", geometry,
-          properties: { mode: featureMode, color: feature.properties?.color as string | undefined },
+          properties: {
+            mode: featureMode, color: feature.properties?.color as string | undefined,
+            name: feature.properties?.name as string | undefined,
+          },
         });
       }
       draw.addFeatures(loadable);
@@ -802,7 +926,10 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // exception -- found live.
     if (!ready) return;
     setMode(next);
-    drawRef.current?.setMode(next);
+    // "label" has no terra-draw mode of its own -- a label is just a point
+    // with text (see the finish listener above and the text field below),
+    // so it draws via terra-draw's own "point" mode.
+    drawRef.current?.setMode(next === "label" ? "point" : next);
   }
 
   async function handleSave() {
@@ -815,11 +942,19 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // why that beats KML's simplestyle styling here).
     const features: Feature[] = draw.getSnapshot()
       .filter((f) => f.geometry != null)
-      .map((f) => ({
-        type: "Feature",
-        geometry: f.geometry,
-        properties: { color: (f.properties?.color as string | undefined) ?? color },
-      }));
+      .map((f) => {
+        // Trimmed, and omitted entirely rather than written as "" -- a
+        // label point placed but never typed into should round-trip as a
+        // plain, nameless point (see kmlWrite.ts/MapCanvas.tsx: presence of
+        // `name` is itself what marks a point as a label), not an
+        // invisible label with empty text.
+        const name = (f.properties?.name as string | undefined)?.trim();
+        return {
+          type: "Feature",
+          geometry: f.geometry,
+          properties: { color: (f.properties?.color as string | undefined) ?? color, ...(name ? { name } : {}) },
+        };
+      });
     if (features.length === 0 && overlays.length === 0) return;
     setSaving(true);
     setError(null);
@@ -873,6 +1008,15 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   }
 
   const title = target.kind === "new" ? t("Add Map Item") : t("Edit Map Item");
+
+  // Cheap to recompute on every render (getSnapshot() is just an array
+  // read) rather than mirrored into its own state -- selectedId already
+  // triggers a re-render via draw.on("select"/"deselect") above, so this
+  // stays in sync for free. Gated on Point geometry, not on how the point
+  // was created (Point tool vs Label tool): any selected point can carry
+  // text, an untouched one just renders as a plain dot (see MapCanvas.tsx).
+  const selectedFeature = selectedId ? drawRef.current?.getSnapshot().find((f) => String(f.id) === selectedId) : undefined;
+  const selectedIsPoint = selectedFeature?.geometry?.type === "Point";
 
   function renderModeButton(entry: { mode: DrawMode; label: string }) {
     return (
@@ -1006,6 +1150,22 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
               disabled={!ready}
               popoverProps={{ withinPortal: true, zIndex: 1000 }}
             />
+            {/* Only a selected point offers this -- lines/polygons have no
+                well-supported KML label placement (see this feature's own
+                design discussion), so a label is always its own point. */}
+            {selectedIsPoint && (
+              <TextInput
+                size="xs"
+                placeholder={t("Label text")}
+                value={labelText}
+                onChange={(e) => {
+                  setLabelText(e.currentTarget.value);
+                  const draw = drawRef.current;
+                  if (draw && selectedId) draw.updateFeatureProperties(selectedId, { name: e.currentTarget.value });
+                }}
+                disabled={!ready}
+              />
+            )}
           </Stack>
         )}
 

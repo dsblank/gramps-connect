@@ -29,6 +29,7 @@ const KML_SOURCE = "story-kml-overlay";
 const KML_FILL_LAYER = "story-kml-fill";
 const KML_LINE_LAYER = "story-kml-line";
 const KML_POINT_LAYER = "story-kml-points";
+const KML_LABEL_LAYER = "story-kml-labels";
 const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
 
 export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, panelFraction, ohmYear }: {
@@ -175,12 +176,34 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
       id: KML_POINT_LAYER,
       type: "circle",
       source: KML_SOURCE,
-      filter: ["==", ["geometry-type"], "Point"],
+      // See MapCanvas.tsx's own version of this filter: a named point is a
+      // label (KML_LABEL_LAYER just below), drawn as text only.
+      filter: ["all", ["==", ["geometry-type"], "Point"], ["!", ["has", "name"]]],
       paint: {
         "circle-radius": 5,
         "circle-color": ["coalesce", ["get", "color"], markColor],
         "circle-stroke-width": 1,
         "circle-stroke-color": colors.surface,
+      },
+    });
+    map.addLayer({
+      id: KML_LABEL_LAYER,
+      type: "symbol",
+      source: KML_SOURCE,
+      filter: ["all", ["==", ["geometry-type"], "Point"], ["has", "name"]],
+      layout: {
+        "text-field": ["get", "name"],
+        "text-size": 12,
+        "text-font": ["Noto Sans Regular"],
+        // Offset right rather than centered on the point -- see
+        // MapItemEditorDialog.tsx's own version of this layer for why.
+        "text-anchor": "left",
+        "text-offset": [0.6, 0],
+      },
+      paint: {
+        "text-color": ["coalesce", ["get", "color"], colors.text],
+        "text-halo-color": colors.surface,
+        "text-halo-width": 1.5,
       },
     });
   }, [ready]);

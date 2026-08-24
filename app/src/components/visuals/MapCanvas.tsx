@@ -84,6 +84,7 @@ const KML_SOURCE = "kml-overlay";
 const KML_FILL_LAYER = "kml-fill";
 const KML_LINE_LAYER = "kml-line";
 const KML_POINT_LAYER = "kml-points";
+const KML_LABEL_LAYER = "kml-labels";
 const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
 
 interface MapCanvasProps {
@@ -322,12 +323,38 @@ export function MapCanvas({
         id: KML_POINT_LAYER,
         type: "circle",
         source: KML_SOURCE,
-        filter: ["==", ["geometry-type"], "Point"],
+        // A named point is a label (see KML_LABEL_LAYER just below), drawn
+        // as text only -- excluded here so it doesn't also get a dot.
+        filter: ["all", ["==", ["geometry-type"], "Point"], ["!", ["has", "name"]]],
         paint: {
           "circle-radius": 5,
           "circle-color": ["coalesce", ["get", "color"], markColor],
           "circle-stroke-width": 1,
           "circle-stroke-color": colors.surface,
+        },
+      });
+      // A label placed via MapItemEditorDialog.tsx's "Label" tool -- a
+      // Point feature whose only purpose is its `name` text, so it's
+      // rendered as text alone (no dot underneath to anchor against,
+      // unlike LABEL_LAYER below which labels an already-drawn marker).
+      map.addLayer({
+        id: KML_LABEL_LAYER,
+        type: "symbol",
+        source: KML_SOURCE,
+        filter: ["all", ["==", ["geometry-type"], "Point"], ["has", "name"]],
+        layout: {
+          "text-field": ["get", "name"],
+          "text-size": 12,
+          "text-font": ["Noto Sans Regular"],
+          // Offset right rather than centered on the point -- see
+          // MapItemEditorDialog.tsx's own version of this layer for why.
+          "text-anchor": "left",
+          "text-offset": [0.6, 0],
+        },
+        paint: {
+          "text-color": ["coalesce", ["get", "color"], colors.text],
+          "text-halo-color": colors.surface,
+          "text-halo-width": 1.5,
         },
       });
     }
