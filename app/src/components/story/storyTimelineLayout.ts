@@ -1,4 +1,8 @@
-// Pure layout math for StoryTimelineStrip -- deliberately not a reuse of
+// Pure layout math for StoryTimelineStrip.tsx (moved to a distinctly-cased
+// filename -- storyTimelineStrip.ts vs StoryTimelineStrip.tsx collided on
+// case-insensitive filesystems, breaking Windows/macOS CI builds even though
+// Linux's case-sensitive filesystem never saw a problem) -- deliberately not
+// a reuse of
 // visuals/timelineLayout.ts's own fullDomain: that function is typed to
 // TimelineEvent[] (and assumes its caller's pre-sorted-by-year array), which
 // a story's dated slides aren't shaped like. axisTicks/tickLabel are

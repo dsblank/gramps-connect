@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { readVisualColors } from "../visuals/cssVar";
 import { seriesColor } from "../visuals/eventCategories";
 import { PIN_PATH_D } from "./storyMarker";
-import { axisTicks, storyDomain, tickLabel, xForYear } from "./storyTimelineStrip";
+import { axisTicks, storyDomain, tickLabel, xForYear } from "./storyTimelineLayout";
 
 const HEIGHT = 70;
 const MARGIN = 28;
