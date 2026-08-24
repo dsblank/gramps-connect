@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Image } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { API_BASE } from "../../config";
+import { ImageLightbox } from "./ImageLightbox";
 
 /** MIME types gramps-web-api's thumbnailer actually handles (see
  * ThumbnailHandler.__init__ in gramps_webapi/api/image.py): any image/* or
@@ -21,7 +22,7 @@ function isThumbnailable(mime: string | undefined): boolean {
  * icon) for a non-thumbnailable MIME type, a signed-out gap before the
  * token resolves, or a failed load (private/missing file, thumbnailer
  * dependency not installed server-side, ...). */
-export function MediaThumbnail({ handle, mime, size, radius = "sm" }: {
+export function MediaThumbnail({ handle, mime, size, radius = "sm", zoomable = false }: {
   handle: string;
   mime?: string;
   size: number;
@@ -31,9 +32,19 @@ export function MediaThumbnail({ handle, mime, size, radius = "sm" }: {
    * or a landscape/group photo doesn't survive being cropped to a
    * circle the way a portrait does. */
   radius?: string;
+  /** Clicking the thumbnail itself opens ImageLightbox.tsx on the original
+   * file. Deliberately doesn't stop the click from also reaching whatever
+   * onClick the caller already put on an ancestor button (promote,
+   * navigate) -- both fire, so e.g. clicking a media-gallery tile still
+   * selects it (its detail is there once the lightbox is closed) as well as
+   * popping the full-size view immediately. Only offered for true images: a
+   * video/PDF thumbnail is just a first-frame/first-page preview, so "view
+   * full size" wouldn't show the whole file the way it does for a photo. */
+  zoomable?: boolean;
 }) {
   const [token, setToken] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     setFailed(false);
@@ -51,15 +62,24 @@ export function MediaThumbnail({ handle, mime, size, radius = "sm" }: {
 
   if (!isThumbnailable(mime) || !token || failed) return null;
 
+  const showZoom = zoomable && mime?.startsWith("image/");
+
   return (
-    <Image
-      src={`${API_BASE}/api/media/${encodeURIComponent(handle)}/thumbnail/${size}?jwt=${encodeURIComponent(token)}`}
-      alt=""
-      w={size}
-      h={size}
-      fit="cover"
-      radius={radius}
-      onError={() => setFailed(true)}
-    />
+    <>
+      <Image
+        src={`${API_BASE}/api/media/${encodeURIComponent(handle)}/thumbnail/${size}?jwt=${encodeURIComponent(token)}`}
+        alt=""
+        w={size}
+        h={size}
+        fit="cover"
+        radius={radius}
+        onError={() => setFailed(true)}
+        onClick={showZoom ? () => setLightboxOpen(true) : undefined}
+        style={showZoom ? { cursor: "zoom-in" } : undefined}
+      />
+      {showZoom && (
+        <ImageLightbox opened={lightboxOpen} onClose={() => setLightboxOpen(false)} handle={handle} />
+      )}
+    </>
   );
 }

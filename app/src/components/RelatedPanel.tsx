@@ -170,7 +170,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
   if (view.key === "media" || view.key === "generated") {
     return (
       <div>
-        <MediaThumbnail handle={detail.handle} mime={detail.mime as string | undefined} size={240} />
+        <MediaThumbnail handle={detail.handle} mime={detail.mime as string | undefined} size={240} zoomable />
         <div style={{ marginTop: "var(--mantine-spacing-xs)" }}>
           <ClickableTitle onClick={navigateToSelf}>{summaryLine(view.key, detail) || t(view.label)}</ClickableTitle>
         </div>
@@ -242,7 +242,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     <Group align="center" gap="md" wrap="nowrap">
       {profilePic && (
         <UnstyledButton onClick={() => onNavigate("media", profilePic.handle)}>
-          <MediaThumbnail handle={profilePic.handle} mime={profilePic.mime} size={72} radius="md" />
+          <MediaThumbnail handle={profilePic.handle} mime={profilePic.mime} size={72} radius="md" zoomable />
         </UnstyledButton>
       )}
       <div>

@@ -26,7 +26,7 @@ export function MediaGallery({ items, label, onPromote, flow }: {
       <Group gap="sm">
         {items.map((item) => (
           <UnstyledButton key={item.handle} onClick={() => onPromote("media", item.handle)}>
-            <MediaThumbnail handle={item.handle} mime={item.mime} size={110} />
+            <MediaThumbnail handle={item.handle} mime={item.mime} size={110} zoomable />
           </UnstyledButton>
         ))}
       </Group>
