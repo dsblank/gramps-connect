@@ -449,7 +449,12 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     });
     drawRef.current = draw;
     draw.on("change", () => {
-      setHasFeatures(draw.getSnapshot().length > 0);
+      // Same guidance-point exclusion as handleSave's own filter below --
+      // otherwise a shape's selection handles alone (nothing actually
+      // drawn) would count as "has features".
+      setHasFeatures(
+        draw.getSnapshot().some((f) => f.geometry != null && !f.properties?.selectionPoint && !f.properties?.midPoint),
+      );
       refreshLabelPreviewRef.current?.();
     });
     // A shape takes the toolbar's current color the moment it's finished
@@ -941,8 +946,17 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // have no KML counterpart worth writing. color rides through as a
     // plain ExtendedData property (see kmlWrite.ts's own doc comment on
     // why that beats KML's simplestyle styling here).
+    //
+    // Also excluded: terra-draw's own selection-mode guidance points --
+    // the small vertex/midpoint handle dots it draws on a shape's corners
+    // and edges while selected. Select mode stores those as ordinary Point
+    // features in the same snapshot (tagged `selectionPoint`/`midPoint`),
+    // so saving mid-selection without this filter wrote them into the KML
+    // as if they were real map-item points, and MapCanvas/StoryMapBackground
+    // (which render every unnamed Point as a small circle) then reproduced
+    // the edit-mode handle look in read-only views. Found live.
     const features: Feature[] = draw.getSnapshot()
-      .filter((f) => f.geometry != null)
+      .filter((f) => f.geometry != null && !f.properties?.selectionPoint && !f.properties?.midPoint)
       .map((f) => {
         // Trimmed, and omitted entirely rather than written as "" -- a
         // label point placed but never typed into should round-trip as a
