@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Stack, Group, TextInput, CloseButton, Text, ActionIcon, Tooltip, Checkbox } from "@mantine/core";
+import { Stack, Group, TextInput, CloseButton, Text, Tooltip, Checkbox } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import { getSearchHelp } from "../store/searchHelp";
 import { getSearchState, setSearchState } from "../store/searchState";
+import { InfoButton } from "./InfoButton";
 import { SearchHelpDialog } from "./SearchHelpDialog";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -152,17 +153,7 @@ export function FilterBar({ view }: FilterBarProps) {
           </Tooltip>
         )}
         {help && (
-          <Tooltip label={`${t("How to search")} ${t(view.label)}`} withArrow>
-            <ActionIcon
-              variant="default"
-              radius="xl"
-              size="sm"
-              aria-label={`${t("How to search")} ${t(view.label)}`}
-              onClick={() => setHelpOpen(true)}
-            >
-              <Text component="span" size="xs" fw={700} ff="serif" fs="italic">{t("i")}</Text>
-            </ActionIcon>
-          </Tooltip>
+          <InfoButton label={`${t("How to search")} ${t(view.label)}`} onClick={() => setHelpOpen(true)} />
         )}
       </Group>
       {error && <Text size="xs" c="red">{error}</Text>}

@@ -5,7 +5,9 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point as GeoJsonPoint } from "geojson";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
-import { fetchAllKmlFeatures, kmlBounds } from "../../store/kmlMedia";
+import { fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds, rotatedOverlayCorners } from "../../store/kmlMedia";
+import { getToken } from "../../auth/auth";
+import { API_BASE } from "../../config";
 import { readVisualColors } from "./cssVar";
 import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -294,12 +296,18 @@ export function MapCanvas({
     // underneath the markers rather than obscuring them.
     if (!map.getSource(KML_SOURCE)) {
       map.addSource(KML_SOURCE, { type: "geojson", data: EMPTY_FEATURE_COLLECTION });
+      // ["get", "color"] reads the per-feature colour MapItemEditorDialog.tsx
+      // writes (see its own doc comment); coalesced with the fixed
+      // markColor default so a KML file saved before per-feature colour
+      // existed keeps rendering exactly as it always has. Inlined per
+      // layer (rather than a shared variable) so each paint object keeps
+      // maplibre's own contextual expression typing.
       map.addLayer({
         id: KML_FILL_LAYER,
         type: "fill",
         source: KML_SOURCE,
         filter: ["==", ["geometry-type"], "Polygon"],
-        paint: { "fill-color": markColor, "fill-opacity": 0.25 },
+        paint: { "fill-color": ["coalesce", ["get", "color"], markColor], "fill-opacity": 0.25 },
       });
       map.addLayer({
         id: KML_LINE_LAYER,
@@ -308,7 +316,7 @@ export function MapCanvas({
         // Polygon outline and bare LineString (a route) share one style --
         // there's no second thing a line width/colour would need to say.
         filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
-        paint: { "line-color": markColor, "line-width": 2 },
+        paint: { "line-color": ["coalesce", ["get", "color"], markColor], "line-width": 2 },
       });
       map.addLayer({
         id: KML_POINT_LAYER,
@@ -317,7 +325,7 @@ export function MapCanvas({
         filter: ["==", ["geometry-type"], "Point"],
         paint: {
           "circle-radius": 5,
-          "circle-color": markColor,
+          "circle-color": ["coalesce", ["get", "color"], markColor],
           "circle-stroke-width": 1,
           "circle-stroke-color": colors.surface,
         },
@@ -494,6 +502,45 @@ export function MapCanvas({
     });
     return () => {
       cancelled = true;
+    };
+  }, [kmlKey, ready]);
+
+  // Image overlays (KML GroundOverlay -- see MapItemEditorDialog.tsx's own
+  // doc comment on that feature) attached to any currently-plotted place.
+  // Not a geojson source like the shapes above: maplibre has no "image"
+  // geometry type inside a geojson source, each overlay needs its own
+  // `type: "image"` source + raster layer. Rebuilt wholesale on every
+  // `kmlKey` change (add-then-remove rather than a finer diff) -- this only
+  // runs when the set of KML-attached places on screen actually changes,
+  // same trigger as the geojson overlay above, so it's not a hot path.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    let cancelled = false;
+    const addedIds: string[] = [];
+    (async () => {
+      const overlays = kmlKey === "" ? [] : await fetchAllKmlImageOverlays(kmlKey.split(","));
+      if (cancelled || overlays.length === 0) return;
+      const token = await getToken();
+      if (cancelled) return;
+      overlays.forEach((overlay, i) => {
+        const id = `${KML_SOURCE}-image-${i}`;
+        if (map.getSource(id)) return;
+        const url = `${API_BASE}/api/media/${encodeURIComponent(overlay.imageHandle)}/file?jwt=${encodeURIComponent(token)}`;
+        map.addSource(id, { type: "image", url, coordinates: rotatedOverlayCorners(overlay) });
+        // Inserted below the KML shape layers (same "underneath the place
+        // markers" reasoning as those) so a place pin sitting on top of an
+        // old-map overlay stays clickable.
+        map.addLayer({ id, type: "raster", source: id }, KML_FILL_LAYER);
+        addedIds.push(id);
+      });
+    })();
+    return () => {
+      cancelled = true;
+      for (const id of addedIds) {
+        if (map.getLayer(id)) map.removeLayer(id);
+        if (map.getSource(id)) map.removeSource(id);
+      }
     };
   }, [kmlKey, ready]);
 

@@ -49,11 +49,103 @@ function fetchKmlFeatures(handle: string): Promise<Feature[]> {
 
 /** Every feature across a place's KML attachment(s), combined -- a place
  * can carry more than one such file, and both the overlay and the
- * position-guessing below want them treated as one shape. */
+ * position-guessing below want them treated as one shape. Excludes
+ * GroundOverlay placemarks (see fetchAllKmlImageOverlays) -- those aren't a
+ * drawable Point/LineString/Polygon shape, and left in here would leak a
+ * bogus extra polygon into MapCanvas/StoryMapBackground's ordinary
+ * fill/line layers on top of the actual image. */
 export async function fetchAllKmlFeatures(handles: string[]): Promise<Feature[]> {
   if (handles.length === 0) return [];
   const collections = await Promise.all(handles.map(fetchKmlFeatures));
-  return collections.flat();
+  return collections.flat().filter((f) => f.properties?.["@geometry-type"] !== "groundoverlay");
+}
+
+/** An image overlay drawn in MapItemEditorDialog.tsx (kmlWrite.ts's
+ * ImageOverlay, round-tripped) -- an axis-aligned box plus a rotation
+ * about its own center (KML's own <LatLonBox><rotation> model; see
+ * rotatePoint's own doc comment). */
+export interface KmlImageOverlay {
+  imageHandle: string;
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+  rotation: number;
+}
+
+const DEG_TO_RAD = Math.PI / 180;
+
+/** Rotates one point by `rotationDeg` around `center`, in plain lng/lat
+ * space -- exactly KML's <LatLonBox><rotation> semantics (positive =
+ * counterclockwise), matching @tmcw/togeojson's own internal rotateBox
+ * (which this mirrors) so a rotated overlay this app writes renders
+ * identically everywhere it's read back, KML round-trip included. Not
+ * Mercator-corrected -- a rotated box won't be a pixel-perfect visual
+ * rotation at high latitudes, but that's an accepted quirk of LatLonBox
+ * itself (Google Earth has the same one), not something introduced here.
+ * Pass a negative `rotationDeg` to go the other way (world -> local). */
+export function rotatePoint(point: [number, number], center: [number, number], rotationDeg: number): [number, number] {
+  const angle = rotationDeg * DEG_TO_RAD;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dx = point[0] - center[0];
+  const dy = point[1] - center[1];
+  return [center[0] + dx * cos - dy * sin, center[1] + dx * sin + dy * cos];
+}
+
+/** An overlay's 4 corners, rotated about its own center -- top-left,
+ * top-right, bottom-right, bottom-left, maplibre's own ImageSource
+ * `coordinates` order. The one place both the editor and every read-only
+ * renderer (MapCanvas.tsx, StoryMapBackground.tsx) compute an overlay's
+ * actual on-map footprint, so they can never disagree. */
+export function rotatedOverlayCorners(
+  overlay: { north: number; south: number; east: number; west: number; rotation: number },
+): [[number, number], [number, number], [number, number], [number, number]] {
+  const center: [number, number] = [(overlay.west + overlay.east) / 2, (overlay.north + overlay.south) / 2];
+  const corners: [number, number][] = [
+    [overlay.west, overlay.north], [overlay.east, overlay.north], [overlay.east, overlay.south], [overlay.west, overlay.south],
+  ];
+  return corners.map((p) => rotatePoint(p, center, overlay.rotation)) as [
+    [number, number], [number, number], [number, number], [number, number],
+  ];
+}
+
+/** kmlWrite.ts writes an overlay's href as this marker string (not a real
+ * URL) -- see that file's own doc comment on why. */
+const MEDIA_HANDLE_PREFIX = "media-handle:";
+
+/** Every GroundOverlay across a place's KML attachment(s) -- the same
+ * shared per-handle cache as fetchAllKmlFeatures, so fetching both for the
+ * same place only pays for the underlying file fetch/parse once. Anything
+ * that doesn't parse (a foreign href not written by this app, a missing
+ * bbox) is skipped rather than failing the whole caller, same as
+ * fetchKmlFeatures' own best-effort fetch. */
+export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlImageOverlay[]> {
+  if (handles.length === 0) return [];
+  const collections = await Promise.all(handles.map(fetchKmlFeatures));
+  const overlays: KmlImageOverlay[] = [];
+  for (const feature of collections.flat()) {
+    if (feature.properties?.["@geometry-type"] !== "groundoverlay") continue;
+    const icon = feature.properties?.icon as string | undefined;
+    if (!icon || !icon.startsWith(MEDIA_HANDLE_PREFIX)) continue;
+    const bbox = feature.bbox as [number, number, number, number] | undefined;
+    if (!bbox) continue;
+    // @tmcw/togeojson's own LatLonBox parsing folds <rotation> straight
+    // into the geometry ring it returns (bakes it into already-rotated
+    // coordinates) rather than exposing the raw number anywhere -- so
+    // kmlWrite.ts also writes it redundantly as a plain ExtendedData
+    // property, the same round-trip trick used for a drawn shape's
+    // `color`, read back here instead of reverse-engineering the angle
+    // from the ring. Missing/unparsed (a pre-rotation save, or a file this
+    // app didn't write) defaults to 0 -- an unrotated box, same as before
+    // this feature existed.
+    const rotation = Number(feature.properties?.rotation ?? 0) || 0;
+    overlays.push({
+      imageHandle: icon.slice(MEDIA_HANDLE_PREFIX.length),
+      west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3], rotation,
+    });
+  }
+  return overlays;
 }
 
 /** Drops a handle's cached parse -- called after MapItemEditorDialog.tsx

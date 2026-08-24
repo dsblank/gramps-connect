@@ -14,6 +14,8 @@ import type { GeoJSONSource, Map as MapLibreMap, Marker as MapLibreMarker } from
 import type { FeatureCollection } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Box } from "@mantine/core";
+import { getToken } from "../../auth/auth";
+import { API_BASE } from "../../config";
 import { readVisualColors } from "../visuals/cssVar";
 import { seriesColor } from "../visuals/eventCategories";
 import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl } from "../visuals/mapStyles";
@@ -152,19 +154,22 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
     const markColor = seriesColor(darkRef.current);
     const colors = readVisualColors();
     map.addSource(KML_SOURCE, { type: "geojson", data: EMPTY_FEATURE_COLLECTION });
+    // See MapCanvas.tsx's own version of this coalesce for why: reads the
+    // per-feature colour MapItemEditorDialog.tsx writes, falling back to
+    // the fixed markColor for a KML file saved before that existed.
     map.addLayer({
       id: KML_FILL_LAYER,
       type: "fill",
       source: KML_SOURCE,
       filter: ["==", ["geometry-type"], "Polygon"],
-      paint: { "fill-color": markColor, "fill-opacity": 0.25 },
+      paint: { "fill-color": ["coalesce", ["get", "color"], markColor], "fill-opacity": 0.25 },
     });
     map.addLayer({
       id: KML_LINE_LAYER,
       type: "line",
       source: KML_SOURCE,
       filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
-      paint: { "line-color": markColor, "line-width": 2 },
+      paint: { "line-color": ["coalesce", ["get", "color"], markColor], "line-width": 2 },
     });
     map.addLayer({
       id: KML_POINT_LAYER,
@@ -173,7 +178,7 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
       filter: ["==", ["geometry-type"], "Point"],
       paint: {
         "circle-radius": 5,
-        "circle-color": markColor,
+        "circle-color": ["coalesce", ["get", "color"], markColor],
         "circle-stroke-width": 1,
         "circle-stroke-color": colors.surface,
       },
@@ -235,6 +240,41 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
       });
     return () => {
       cancelled = true;
+    };
+  }, [kmlKey, ready]);
+
+  // Image overlays (KML GroundOverlay) on the current slide's place -- see
+  // MapCanvas.tsx's own version of this effect for the full reasoning
+  // (a maplibre geojson source can't hold an image, so each overlay gets
+  // its own `type: "image"` source + raster layer, rebuilt wholesale
+  // whenever the KML attachment set changes).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    let cancelled = false;
+    const addedIds: string[] = [];
+    (async () => {
+      if (kmlKey === "") return;
+      const { fetchAllKmlImageOverlays, rotatedOverlayCorners } = await import("../../store/kmlMedia");
+      const overlays = await fetchAllKmlImageOverlays(kmlKey.split(","));
+      if (cancelled || overlays.length === 0) return;
+      const token = await getToken();
+      if (cancelled) return;
+      overlays.forEach((overlay, i) => {
+        const id = `${KML_SOURCE}-image-${i}`;
+        if (map.getSource(id)) return;
+        const url = `${API_BASE}/api/media/${encodeURIComponent(overlay.imageHandle)}/file?jwt=${encodeURIComponent(token)}`;
+        map.addSource(id, { type: "image", url, coordinates: rotatedOverlayCorners(overlay) });
+        map.addLayer({ id, type: "raster", source: id }, KML_FILL_LAYER);
+        addedIds.push(id);
+      });
+    })();
+    return () => {
+      cancelled = true;
+      for (const id of addedIds) {
+        if (map.getLayer(id)) map.removeLayer(id);
+        if (map.getSource(id)) map.removeSource(id);
+      }
     };
   }, [kmlKey, ready]);
 
