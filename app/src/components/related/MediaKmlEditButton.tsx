@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { Box, Loader, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { Box, Button, Loader } from "@mantine/core";
 import { hasPermissions } from "../../auth/auth";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { KML_MIME } from "../../store/visualData";
@@ -13,9 +13,9 @@ const MapItemEditorDialog = lazy(() =>
   import("../MapItemEditorDialog").then((m) => ({ default: m.MapItemEditorDialog })));
 
 /** A KML media object's own "edit its shapes" action -- same header slot as
- * EditButton.tsx's ✎ (which excludes Media, see its own doc comment: a
- * generic Media has no form to edit, only an uploaded file), but for the
- * one Media type this app *can* meaningfully edit in place: its own drawn
+ * EditButton.tsx's Edit button (which excludes Media, see its own doc
+ * comment: a generic Media has no form to edit, only an uploaded file), but
+ * for the one Media type this app *can* meaningfully edit in place: its own drawn
  * points/lines/polygons, via MapItemEditorDialog.tsx's terra-draw canvas
  * re-opened on this object's existing shapes. Non-KML media still has
  * nothing here to edit, so this renders nothing for any other mime. */
@@ -27,11 +27,9 @@ export function MediaKmlEditButton({ detail, onSaved }: { detail: ObjectDetail; 
 
   return (
     <>
-      <Tooltip label={label} withArrow>
-        <UnstyledButton onClick={() => setOpened(true)} aria-label={label} p={6} style={{ borderRadius: "50%" }}>
-          <Text fz={22} lh={1}>✎</Text>
-        </UnstyledButton>
-      </Tooltip>
+      <Button variant="default" size="xs" onClick={() => setOpened(true)} aria-label={label}>
+        {t("Edit shapes")}
+      </Button>
       {opened && (
         <Suspense
           fallback={

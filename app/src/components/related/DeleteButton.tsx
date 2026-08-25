@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Checkbox, Group, Modal, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { Alert, Button, Checkbox, Group, Modal, Stack, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
 import { deleteObject } from "../../store/objectsApi";
@@ -8,8 +8,10 @@ import type { ViewConfig } from "../../store/views";
 import { summaryLine } from "./summary";
 import { t } from "../../i18n/i18n";
 
-/** Top-right icon on a RelatedPanel (in the same header action slot as
+/** Top-right button on a RelatedPanel (in the same header action slot as
  * EditButton/MessageButton) that deletes this record, after confirmation.
+ * A labeled secondary button rather than an icon, same reasoning as
+ * EditButton.tsx.
  *
  * Deliberately a plain single-object delete, nothing more: gramps-web-api
  * has no "clean up now-orphaned linked items" capability to lean on (the
@@ -76,11 +78,9 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
 
   return (
     <>
-      <Tooltip label={label} withArrow>
-        <UnstyledButton onClick={openConfirm} aria-label={label} p={6} style={{ borderRadius: "50%" }}>
-          <Text fz={22} lh={1}>🗑</Text>
-        </UnstyledButton>
-      </Tooltip>
+      <Button variant="default" size="xs" onClick={openConfirm} aria-label={label}>
+        {t("Delete")}
+      </Button>
       <Modal opened={confirmOpen} onClose={() => setConfirmOpen(false)} title={`Delete this ${view.key}?`}>
         <Stack gap="md">
           <Text size="sm">
