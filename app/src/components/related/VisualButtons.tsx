@@ -37,7 +37,7 @@ const HINTS: Record<string, Partial<Record<VisualKey, string>>> = {
   },
 };
 
-const LABELS: Record<VisualKey, string> = { map: "Map", timeline: "Timeline", tree: "Tree" };
+const LABELS: Record<VisualKey, string> = { map: "Map", timeline: "Timeline", tree: "Graphs" };
 
 /** Map/Timeline/Tree buttons on their own row directly beneath a
  * RelatedPanel's title, for the four types a visual can be scoped to

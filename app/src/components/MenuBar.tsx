@@ -322,7 +322,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already
-            has cached locally, and Tree's per-open fetch needs nothing
+            has cached locally, and Graphs' per-open fetch needs nothing
             beyond being logged in, same as opening any other table. Each is
             a route rather than a dialog (see hash.ts), so picking one is an
             ordinary navigation -- App.tsx renders it over the whole content
@@ -332,7 +332,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           items={[
             { label: "Map", onClick: () => goTo("map") },
             { label: "Timeline", onClick: () => goTo("timeline") },
-            { label: "Tree", onClick: () => goTo("tree") },
+            { label: "Graphs", onClick: () => goTo("tree") },
           ]}
         />
         <AppMenu

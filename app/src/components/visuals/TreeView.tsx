@@ -429,7 +429,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
 
   return (
     <VisualFrame
-      title={t("Tree")}
+      title={t("Graphs")}
       scope={
         subject && root ? (
           <Text size="xs" c="dimmed">
@@ -472,7 +472,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
               value={chartStyle}
               onChange={(v) => setChartStyle(v as "box" | "fan")}
               data={[
-                { value: "box", label: t("Box") },
+                { value: "box", label: t("Tree") },
                 { value: "fan", label: t("Fan") },
               ]}
             />
