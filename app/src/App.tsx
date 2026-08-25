@@ -13,7 +13,7 @@ import { HomeView } from "./components/HomeView";
 import { MenuBar } from "./components/MenuBar";
 import { UserMenu } from "./components/UserMenu";
 import { FilterBar } from "./components/FilterBar";
-import { MessageComposer } from "./components/MessageComposer";
+import { ListHeader } from "./components/ListHeader";
 import { DataTable } from "./components/DataTable";
 import { AsideSplit } from "./components/AsideSplit";
 import { StatusBar } from "./components/StatusBar";
@@ -264,7 +264,7 @@ function AuthenticatedApp() {
           {/* Bounded to visualHeight (same formula the map/timeline Box above
               uses) and laid out as a flex column so DataTable's own wrapper
               (flex: 1; min-height: 0 -- see DataTable.module.css) fills
-              whatever's left under FilterBar/MessageComposer, instead of the
+              whatever's left under ListHeader/FilterBar, instead of the
               table guessing its own height via a magic-number vh calc. Only
               done when !stacked: stacked lets the whole page scroll instead
               (panes flow below the table, footer inline at the end), so the
@@ -272,8 +272,8 @@ function AuthenticatedApp() {
               being bounded to the pane. */}
           {view && (
             <Box style={stacked ? undefined : { height: visualHeight, display: "flex", flexDirection: "column" }}>
+              <ListHeader key={`header-${view.key}`} view={view} draftStack={draftStack} />
               <FilterBar key={`filter-${view.key}`} view={view} />
-              {view.key === "messages" && <MessageComposer key={`compose-${view.key}`} />}
               <DataTable key={`table-${view.key}`} view={view} />
             </Box>
           )}

@@ -6,12 +6,11 @@ import { createMessage } from "../store/notesApi";
 import { t } from "../i18n/i18n";
 
 interface MessageComposerProps {
-  /** Defaults to the plain "+ New message" button App.tsx has always shown
-   * for the untargeted Messages-view composer. A caller wanting a
-   * different trigger (e.g. MessageButton's small icon, opening the same
-   * modal pre-targeted at one object) passes its own render function
-   * instead; either way it just needs to call the given `open`. */
-  renderTrigger?: (open: () => void) => ReactNode;
+  /** The trigger UI, wrapping the given `open` call -- ListHeader.tsx
+   * renders it as the Messages view's own "Add" button (matching every
+   * other view's), MessageButton.tsx as a small icon that pre-targets the
+   * modal at one object. */
+  renderTrigger: (open: () => void) => ReactNode;
   /** Called with the newly created note's handle (and the token already
    * fetched to create it, so callers needing a follow-up authenticated
    * request -- MessageButton's attachNoteToObject -- don't need a second
@@ -22,20 +21,19 @@ interface MessageComposerProps {
    * attached somewhere" step. */
   onSaved?: (noteHandle: string, token: string) => Promise<void> | void;
   /** Which object this message will be attached to, shown as a hint line
-   * above the text area. The composer's own trigger (the Messages view's
-   * "+ New message") leaves it unset -- that message is about nothing in
-   * particular -- while MessageButton passes the panel's current object, so
-   * the author can tell from the modal alone whose record they are about to
-   * comment on (the modal covers the panel that would otherwise say). */
+   * above the text area. ListHeader's own trigger leaves it unset -- that
+   * message is about nothing in particular -- while MessageButton passes the
+   * panel's current object, so the author can tell from the modal alone
+   * whose record they are about to comment on (the modal covers the panel
+   * that would otherwise say). */
   about?: ReactNode;
 }
 
 /** Compose form for a new Gramps Connect message -- the app's first Mantine
- * Modal (no dialog/overlay component exists anywhere else yet). Default
- * mounting is in App.tsx's AppShell.Main for the "messages" view only, in
- * the space FilterBar leaves empty there (MESSAGES_VIEW.searchable is
- * false); also mounted per-object by MessageButton.tsx with a custom
- * trigger and an onSaved that links the note to that object. */
+ * Modal (no dialog/overlay component exists anywhere else yet). Mounted by
+ * ListHeader.tsx for the "messages" view's own "Add" button, and per-object
+ * by MessageButton.tsx with a custom trigger and an onSaved that links the
+ * note to that object. */
 export function MessageComposer({ renderTrigger, onSaved, about }: MessageComposerProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -69,13 +67,7 @@ export function MessageComposer({ renderTrigger, onSaved, about }: MessageCompos
 
   return (
     <>
-      {renderTrigger ? (
-        renderTrigger(() => setOpen(true))
-      ) : (
-        <Group mb="sm">
-          <Button size="xs" onClick={() => setOpen(true)}>{t("+ New message")}</Button>
-        </Group>
-      )}
+      {renderTrigger(() => setOpen(true))}
       <Modal opened={open} onClose={close} title={t("New Gramps Connect message")}>
         {about && (
           <Text size="sm" c="dimmed" mb="xs">
