@@ -5,7 +5,7 @@
 // is a cheap glance at the whole tree, not loading all ten of it locally.
 import { fetchPage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
-import { VIEWS, MESSAGES_VIEW, formatChange, type ViewConfig } from "./views";
+import { VIEWS, MESSAGES_VIEW, STORY_VIEW, formatChange, type ViewConfig } from "./views";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -132,6 +132,31 @@ export async function fetchLatestMessages(token: string, limit: number): Promise
     grampsId: typeof item.gramps_id === "string" ? item.gramps_id : "",
     author: cellText(MESSAGES_VIEW, item, "author"),
     message: cellText(MESSAGES_VIEW, item, "text"),
+    changeUnix: Number(item.change ?? 0),
+  }));
+}
+
+export interface StoryItem {
+  handle: string;
+  grampsId: string;
+  title: string;
+  changeUnix: number;
+}
+
+/** The `limit` newest Gramps Connect stories -- same query STORY_VIEW's own
+ * table sends (its baseFilter, "tagged story", still applies -- see
+ * combinedFilter above), just capped and unfiltered by search. Mirrors
+ * fetchLatestMessages above, minus the author/message split a story's
+ * single `title` column has no equivalent of. */
+export async function fetchLatestStories(token: string, limit: number): Promise<StoryItem[]> {
+  const { page } = await fetchPage(
+    STORY_VIEW, token, null, false, combinedFilter(STORY_VIEW),
+    [{ column: "change", direction: "desc" }], limit
+  );
+  return page.items.map((item) => ({
+    handle: item.handle,
+    grampsId: typeof item.gramps_id === "string" ? item.gramps_id : "",
+    title: cellText(STORY_VIEW, item, "title"),
     changeUnix: Number(item.change ?? 0),
   }));
 }

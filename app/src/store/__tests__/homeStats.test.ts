@@ -10,7 +10,7 @@ vi.mock("../cacheMeta", () => ({
 
 import { fetchPage, type QueryItem } from "../api";
 import { fetchServerState } from "../cacheMeta";
-import { fetchHomeCounts, fetchLatestMessages, fetchRecentlyChanged, STAT_VIEWS, timeAgo } from "../homeStats";
+import { fetchHomeCounts, fetchLatestMessages, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo } from "../homeStats";
 
 function page(items: QueryItem[]) {
   return { page: { items, next_after: null }, totalCount: items.length };
@@ -116,6 +116,31 @@ describe("fetchLatestMessages", () => {
 
     const call = vi.mocked(fetchPage).mock.calls[0];
     expect(call[4]).toBe("type.string == 'message'");
+  });
+});
+
+describe("fetchLatestStories", () => {
+  it("reads each note's title out of its JSON-stringified StorySpec", async () => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchPage).mockResolvedValueOnce(
+      page([{ handle: "N2", gramps_id: "N0002", title: JSON.stringify({ title: "Ada's Early Years" }), change: 900 }])
+    );
+
+    const result = await fetchLatestStories("tok", 5);
+
+    expect(result).toEqual([
+      { handle: "N2", grampsId: "N0002", title: "Ada's Early Years", changeUnix: 900 },
+    ]);
+  });
+
+  it("sends STORY_VIEW's own baseFilter -- same regression this function's fetchLatestMessages counterpart guards against", async () => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchPage).mockResolvedValueOnce(page([]));
+
+    await fetchLatestStories("tok", 5);
+
+    const call = vi.mocked(fetchPage).mock.calls[0];
+    expect(call[4]).toBe("type.string == 'story'");
   });
 });
 
