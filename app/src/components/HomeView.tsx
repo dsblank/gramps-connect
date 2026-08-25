@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Anchor, Box, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import { getToken, hasPermissions } from "../auth/auth";
+import { getToken } from "../auth/auth";
 import { fetchByHandle, type QueryItem } from "../store/api";
 import { formatHash } from "../hash";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -8,7 +8,7 @@ import {
   fetchHomeCounts, fetchLatestMessages, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo,
   type MessageItem, type RecentItem, type StoryItem,
 } from "../store/homeStats";
-import { fetchDefaultPersonHandle, setDefaultPersonHandle } from "../store/homePersonApi";
+import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
 import { PERSON_VIEW } from "../store/views";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { RecordPicker } from "./RecordPicker";
@@ -43,13 +43,13 @@ export function HomeView() {
     let cancelled = false;
     (async () => {
       const token = await getToken();
-      const defaultHandle = await fetchDefaultPersonHandle(token);
+      const homeHandle = getHomePersonHandle();
       const [countsResult, recentResult, messagesResult, storiesResult, homePersonResult] = await Promise.all([
         fetchHomeCounts(),
         fetchRecentlyChanged(token, RECENT_LIMIT),
         fetchLatestMessages(token, MESSAGE_LIMIT),
         fetchLatestStories(token, STORY_LIMIT),
-        defaultHandle ? fetchByHandle(PERSON_VIEW, token, defaultHandle) : Promise.resolve(null),
+        homeHandle ? fetchByHandle(PERSON_VIEW, token, homeHandle) : Promise.resolve(null),
       ]);
       if (cancelled) return;
       setCounts(countsResult);
@@ -226,14 +226,15 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** The Home-person panel's body: a clickable name+icon once one is set
- * (its handle lives in gramps-web-api's /api/metadata/default-person/ --
- * the actual Gramps "home person", db.get_default_handle(), same one
- * Gramps desktop's Edit > Set Home Person writes -- not a per-browser
- * preference), or -- while unset, and only for an EditTree-permitted user
- * (owner role; matches the PUT's own server-side permission check) -- the
- * same circled "+" -> Modal -> RecordPicker pattern AttachControl.tsx's
- * SetFieldControl uses for every other empty singular-ref slot. */
+/** The Home-person panel's body: a clickable name+icon once one is set, or
+ * a circled "+" -> Modal -> RecordPicker (AttachControl.tsx's
+ * SetFieldControl pattern) to pick one. Purely a per-browser preference
+ * (homePersonPreference.ts's localStorage, tree-scoped) -- same convention
+ * gramps-web's own GrampsjsHomePerson.js uses (appState.updateSettings(),
+ * itself a plain localStorage write), not Gramps' own db.default_person
+ * (Edit > Set Home Person in Gramps desktop) -- so no permission check:
+ * every user can set their own shortcut, the same as gramps-web lets any
+ * logged-in user set theirs. */
 function HomePersonContent({
   homePerson, onChange,
 }: {
@@ -242,10 +243,9 @@ function HomePersonContent({
 }) {
   const [opened, setOpened] = useState(false);
 
-  async function handlePick(item: QueryItem) {
+  function handlePick(item: QueryItem) {
     setOpened(false);
-    const token = await getToken();
-    await setDefaultPersonHandle(token, item.handle);
+    setHomePersonHandle(item.handle);
     onChange(item);
   }
 
@@ -263,10 +263,6 @@ function HomePersonContent({
         </Group>
       </Anchor>
     );
-  }
-
-  if (!hasPermissions("EditTree")) {
-    return <Text size="sm" c="dimmed">{t("No home person set.")}</Text>;
   }
 
   return (
