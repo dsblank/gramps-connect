@@ -31,12 +31,25 @@ datas = [
     # straight from the source checkout's data/ dir, not a meson-built
     # build/share/ -- CI runners (and most contributors' checkouts) won't
     # have run the meson build, and this whole build is meant to work with
-    # nothing more than the raw git checkouts. Cost: no compiled
-    # translations (English only) and no offline docs -- both bundled from
-    # build/ output that a bare checkout doesn't have; acceptable for a
-    # beta build.
+    # nothing more than the raw git checkouts. Cost: no offline docs
+    # (bundled from build/ output that a bare checkout doesn't have);
+    # acceptable for a beta build.
     (os.path.join(GRAMPS_ROOT, "data"), "gramps-resources/gramps"),
 ]
+
+# Compiled Gramps desktop-vocabulary translations (Person, Birth, Family,
+# ...), served by gramps_webapi's /api/translations/<lang>/ endpoint --
+# app/src/i18n/i18n.ts's desktopStrings corpus. Normally compiled as a side
+# effect of gramps' own `setup.py build`, which the plain editable install
+# above (see the workflow's "Install gramps + gramps-web-api" step) never
+# runs -- so scripts/compile-gramps-translations.py is run first (both in
+# CI and by anyone building locally) to produce GRAMPS_ROOT/build/mo. Best-
+# effort: if that step was skipped, ResourcePath.locale_dir just won't
+# exist inside gramps-resources/ and translations silently stay English,
+# same as before -- doesn't block a raw-checkout build.
+_gramps_mo_dir = os.path.join(GRAMPS_ROOT, "build", "mo")
+if os.path.isdir(_gramps_mo_dir):
+    datas.append((_gramps_mo_dir, "gramps-resources/locale"))
 
 # NOT collect_submodules("gramps_webapi") -- that was the actual cause of
 # the original 11GB/2.4GB bloat. It force-imports every optional-feature

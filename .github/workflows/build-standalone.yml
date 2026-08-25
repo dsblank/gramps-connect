@@ -111,6 +111,19 @@ jobs:
           pip install -e gramps --no-deps
           pip install -e gramps-web-api --no-deps
 
+      # gramps' own po/*.po catalogs (Person, Birth, Family, ...) only get
+      # compiled to .mo as a side effect of `setup.py build`, which the
+      # plain editable install above never runs -- see
+      # scripts/compile-gramps-translations.py's docstring. Without this,
+      # gramps_webapi's /api/translations/<lang>/ endpoint silently stays
+      # English no matter what language is picked. polib keeps this working
+      # the same on Windows/macOS (no system gettext) as on Linux.
+      - name: Compile gramps desktop-vocabulary translations
+        shell: bash
+        run: |
+          pip install polib
+          python gramps-connect/scripts/compile-gramps-translations.py gramps
+
       # Read straight out of gramps-web-api's own pyproject.toml rather than
       # hand-copied, using the same filter deploy/Dockerfile.slim already
       # uses -- a hand-copied list here had already drifted (it pinned
@@ -238,6 +251,15 @@ jobs:
           /tmp/venv/bin/python -m pip install --upgrade pip
           /tmp/venv/bin/pip install -e gramps --no-deps
           /tmp/venv/bin/pip install -e gramps-web-api --no-deps
+
+      # See the matching step in the Windows/macOS job above -- editable
+      # installs never compile gramps' po/*.po catalogs, so
+      # /api/translations/<lang>/ would silently stay English otherwise.
+      - name: Compile gramps desktop-vocabulary translations
+        shell: bash
+        run: |
+          pip install polib
+          python gramps-connect/scripts/compile-gramps-translations.py gramps
 
       - name: Install remaining Python dependencies
         shell: bash

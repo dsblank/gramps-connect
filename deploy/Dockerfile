@@ -45,6 +45,20 @@ RUN git clone --depth 1 --branch maintenance/gramps60 \
       https://github.com/gramps-project/gramps /app/gramps-src && \
     pip install --no-cache-dir -e /app/gramps-src --no-deps
 
+# gramps' po/*.po catalogs (Person, Birth, Family, ...) only get compiled to
+# .mo as a side effect of `setup.py build`, which the editable install above
+# never runs -- confirmed empirically, an editable install produces zero
+# .mo files anywhere. Without this, gramps_webapi's /api/translations/
+# <lang>/ endpoint (what app/src/i18n/i18n.ts's desktopStrings corpus is
+# translated through) silently falls back to English regardless of the
+# language picked. deploy/Dockerfile.slim doesn't need this: its
+# non-editable `pip install /src/gramps` builds a wheel, which does run
+# build_trans() via the normal build command.
+COPY scripts/compile-gramps-translations.py /tmp/compile-gramps-translations.py
+RUN pip install --no-cache-dir polib && \
+    python /tmp/compile-gramps-translations.py /app/gramps-src && \
+    rm /tmp/compile-gramps-translations.py
+
 # The ten /api/<type>/query/ endpoints this project's client is built on
 # (https://github.com/gramps-project/gramps-web-api/pull/913) are merged
 # upstream now, so this tracks gramps-project master rather than the
