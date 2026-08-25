@@ -238,6 +238,28 @@ export async function fetchPersonExpansion(
     : fetchTreeData(token, grampsId, 0, 1);
 }
 
+/** The fan chart's "Increase depth" button firing fetchPersonExpansion once
+ * per boundary wedge was an N+1 round trip -- dozens of tiny GETs at once,
+ * each paying full request latency, with the browser's own per-origin
+ * connection cap serializing most of them anyway. One `IsLessThanNth
+ * GenerationAncestorOf(id, 2)` clause per person, OR'd together in a single
+ * rules query (same shape fetchTreeData's own ancestor+descendant OR
+ * already uses, just many clauses instead of two), gets the same union of
+ * "each of these people plus their immediate parents" in one request. */
+export async function fetchBatchAncestorExpansion(token: string, grampsIds: string[]): Promise<TreePersonRaw[]> {
+  if (grampsIds.length === 0) return [];
+  const rules = {
+    function: "or",
+    rules: grampsIds.map((id) => ({ name: "IsLessThanNthGenerationAncestorOf", values: [id, 2] })),
+  };
+  const url = `${API_BASE}/api/people/?rules=${encodeURIComponent(JSON.stringify(rules))}&profile=self&extend=primary_parent_family,family_list`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  const body = await res.json();
+  if (Array.isArray(body)) return body as TreePersonRaw[];
+  throw new Error(body?.error?.message ?? "Failed to load tree data");
+}
+
 /** Merges a newly-fetched batch into the flat person list TreeView holds, by
  * handle -- the same person can legitimately arrive via two branches (e.g. a
  * cousin marriage), so this keeps `data` deduplicated rather than growing an
