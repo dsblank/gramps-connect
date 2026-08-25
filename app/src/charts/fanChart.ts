@@ -643,6 +643,7 @@ export function renderFanChart(
     .attr("y", -6)
     .attr("fill", "var(--mantine-color-text)")
     .attr("font-size", (d) => nameFontSize(d.depth))
+    .attr("font-weight", 600)
     .text((d) => {
       const p = d.node!.person!;
       return nameLabel(p.profile?.name_given, p.profile?.name_surname, labelWidth(d), nameFontSize(d.depth));
@@ -653,7 +654,11 @@ export function renderFanChart(
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "middle")
     .attr("y", 8)
-    .attr("fill", "var(--mantine-color-dimmed)")
+    // Fixed dark tone rather than var(--mantine-color-dimmed): the wedges'
+    // own fills (GEN_COLORS/DEATH_COLORS above) are the same hex in both
+    // themes, but dimmed is a theme-relative gray that goes light-on-light
+    // in dark mode -- too low-contrast against these mid-toned fills.
+    .attr("fill", "rgba(0, 0, 0, 0.65)")
     .attr("font-size", (d) => dateFontSize(d.depth))
     .text((d) => {
       const p = d.node!.person!;
