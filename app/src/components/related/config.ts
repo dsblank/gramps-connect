@@ -46,21 +46,21 @@ export type RelatedSection =
 // list. Events sits on Person/Family only (Event's own entry below has no
 // `events` of its own) -- both share EventBase's event_ref_list.
 export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
-  person: ["parents", "families", "associations", "attributes", "addresses", "urls", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],
-  family: ["parents", "children", "attributes", "ldsOrdinances", "citations", "notes", "media", "events", "tags", "backlinks"],
-  event: ["place", "participants", "attributes", "citations", "notes", "media", "tags", "backlinks"],
-  place: ["parentPlaces", "urls", "citations", "notes", "media", "tags", "backlinks"],
-  repository: ["addresses", "urls", "notes", "tags", "backlinks"],
+  person: ["events", "tags", "media", "parents", "families", "addresses", "urls", "ldsOrdinances", "notes", "attributes", "citations", "associations", "backlinks"],
+  family: ["parents", "children", "events", "tags", "media", "ldsOrdinances", "notes", "attributes", "citations", "backlinks"],
+  event: ["tags", "media", "place", "participants", "notes", "attributes", "citations", "backlinks"],
+  place: ["tags", "media", "parentPlaces", "urls", "notes", "citations", "backlinks"],
+  repository: ["tags", "addresses", "urls", "notes", "backlinks"],
   // Source has no forward citation_list of its own -- citations point *at*
   // a source via their own source_handle, so "which citations use this
   // source" only ever shows up as a backlink, not a forward ref here.
-  source: ["repositories", "attributes", "media", "notes", "tags", "backlinks"],
-  citation: ["source", "attributes", "media", "notes", "tags", "backlinks"],
-  media: ["comparisons", "attributes", "citations", "notes", "tags", "backlinks"],
+  source: ["tags", "media", "repositories", "notes", "attributes", "backlinks"],
+  citation: ["tags", "media", "source", "notes", "attributes", "backlinks"],
+  media: ["tags", "comparisons", "notes", "attributes", "citations", "backlinks"],
   // The Output view (store/views.ts's GENERATED_VIEW) is Media
   // rows under a fixed tag filter, not a distinct object type -- same
   // sections as the ordinary Media view.
-  generated: ["comparisons", "attributes", "citations", "notes", "tags", "backlinks"],
+  generated: ["tags", "comparisons", "notes", "attributes", "citations", "backlinks"],
   note: ["tags", "backlinks"],
   messages: ["tags", "backlinks"],
   story: ["tags", "backlinks"],
