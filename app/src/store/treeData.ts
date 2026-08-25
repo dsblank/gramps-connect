@@ -72,6 +72,7 @@ function ancestorNode(
   i: number,
   baseDepth: number,
   expanded: ReadonlySet<string>,
+  collapsed: ReadonlySet<string>,
   includeEmpty: boolean,
   label: string,
 ): TreeNode {
@@ -90,17 +91,21 @@ function ancestorNode(
   // has been explicitly expanded (treeData's per-node lazy-expand) -- until
   // then this box is a real edge of the loaded tree, not a true leaf, iff
   // the person's own already-fetched `extended` data names a parent we
-  // haven't loaded/shown yet.
-  if (i >= baseDepth && !expanded.has(label)) {
+  // haven't loaded/shown yet. A label in `collapsed` (the "Collapse
+  // ancestors" button) forces the same boundary even *within* base depth --
+  // unless `expanded` (a later click on its own "+") says otherwise, so
+  // re-expanding always wins over a stale collapse.
+  const isExpanded = expanded.has(label);
+  if ((i >= baseDepth && !isExpanded) || (collapsed.has(label) && !isExpanded)) {
     node.hasMore = !!(fatherHandle || motherHandle);
     return node;
   }
   node.children = [];
   if (fatherHandle || includeEmpty) {
-    node.children.push(ancestorNode(data, fatherHandle, i + 1, baseDepth, expanded, includeEmpty, `${label}f`));
+    node.children.push(ancestorNode(data, fatherHandle, i + 1, baseDepth, expanded, collapsed, includeEmpty, `${label}f`));
   }
   if (motherHandle || includeEmpty) {
-    node.children.push(ancestorNode(data, motherHandle, i + 1, baseDepth, expanded, includeEmpty, `${label}m`));
+    node.children.push(ancestorNode(data, motherHandle, i + 1, baseDepth, expanded, collapsed, includeEmpty, `${label}m`));
   }
   return node;
 }
@@ -127,9 +132,10 @@ export function buildAncestorTree(
   handle: string,
   baseDepth: number,
   expanded: ReadonlySet<string> = new Set(),
+  collapsed: ReadonlySet<string> = new Set(),
   includeEmpty = false,
 ): TreeNode {
-  return ancestorNode(data, handle, 0, baseDepth, expanded, includeEmpty, "p");
+  return ancestorNode(data, handle, 0, baseDepth, expanded, collapsed, includeEmpty, "p");
 }
 
 function descendantNode(
@@ -138,6 +144,7 @@ function descendantNode(
   i: number,
   baseDepth: number,
   expanded: ReadonlySet<string>,
+  collapsed: ReadonlySet<string>,
   label: string,
 ): TreeNode {
   if (!handle) return {};
@@ -161,12 +168,16 @@ function descendantNode(
       .filter((ref) => ref[relationKey] === "Birth")
       .map((ref) => ref.ref);
   });
-  if (i >= baseDepth && !expanded.has(label)) {
+  // See ancestorNode's matching comment -- `collapsed` forces the same
+  // boundary within base depth, unless a later re-expand of this exact
+  // label overrides it.
+  const isExpanded = expanded.has(label);
+  if ((i >= baseDepth && !isExpanded) || (collapsed.has(label) && !isExpanded)) {
     node.hasMore = childHandles.length > 0;
     return node;
   }
   node.children = childHandles.map((childHandle, idx) =>
-    descendantNode(data, childHandle, i + 1, baseDepth, expanded, `${label}c${idx}`)
+    descendantNode(data, childHandle, i + 1, baseDepth, expanded, collapsed, `${label}c${idx}`)
   );
   return node;
 }
@@ -180,8 +191,9 @@ export function buildDescendantTree(
   handle: string,
   baseDepth: number,
   expanded: ReadonlySet<string> = new Set(),
+  collapsed: ReadonlySet<string> = new Set(),
 ): TreeNode {
-  return descendantNode(data, handle, 0, baseDepth, expanded, "p");
+  return descendantNode(data, handle, 0, baseDepth, expanded, collapsed, "p");
 }
 
 /** GET /api/people/?rules=...&profile=self&extend=primary_parent_family,

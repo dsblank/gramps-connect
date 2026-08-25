@@ -8,7 +8,7 @@ import { RecordPicker } from "../RecordPicker";
 import type { QueryItem } from "../../store/api";
 import {
   buildAncestorTree, buildDescendantTree, fetchPersonExpansion, fetchTreeData, mergeTreeData, resolveTreeRoot,
-  type TreePersonRaw, type TreeRoot,
+  type TreeNode, type TreePersonRaw, type TreeRoot,
 } from "../../store/treeData";
 import { isManualExpandEnabled, setManualExpandEnabled } from "../../store/treeExpandPreference";
 import { PERSON_VIEW } from "../../store/views";
@@ -44,6 +44,17 @@ const SHOW_MANUAL_EXPAND_TOGGLE = false;
  * click is one pixel-precise gesture doing double duty as "tell me about
  * this" for a glance and "take me there" for a commit would make the more
  * common one (skimming the tree) accidentally leave it constantly. */
+/** Every node in `tree` whose person is `handle` and that's currently
+ * showing children -- whether those children came from base-depth
+ * auto-expansion or a manual "+" -- i.e. everywhere "collapse" has
+ * something to revert back to a "+". A person can legitimately appear more
+ * than once (remarriage, cousin marriage), so this collapses all of them
+ * rather than guessing which one the user meant. */
+function collectExpandableLabelsForHandle(node: TreeNode, handle: string, acc: string[]) {
+  if (node.id && node.person?.handle === handle && node.children && node.children.length > 0) acc.push(node.id);
+  node.children?.forEach((child) => collectExpandableLabelsForHandle(child, handle, acc));
+}
+
 export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const [root, setRoot] = useState<TreeRoot | null>(null);
   const [rootLoading, setRootLoading] = useState(false);
@@ -72,6 +83,14 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // render itself).
   const [expandedAncestor, setExpandedAncestor] = useState<Set<string>>(new Set());
   const [expandedDescendant, setExpandedDescendant] = useState<Set<string>>(new Set());
+  // The reverse of the above: labels forced back to a "+" by the
+  // "Collapse ancestors"/"Collapse descendants" buttons, overriding even
+  // base-depth auto-expansion -- see treeData.ts's ancestorNode/
+  // descendantNode. A later re-expand of that exact label (click or
+  // auto-reveal) wins over a stale collapse, so these never need to be
+  // cleared from here -- only added.
+  const [collapsedAncestor, setCollapsedAncestor] = useState<Set<string>>(new Set());
+  const [collapsedDescendant, setCollapsedDescendant] = useState<Set<string>>(new Set());
   const [expandingKeys, setExpandingKeys] = useState<Set<string>>(new Set());
   const fetchedExpansionsRef = useRef<Set<string>>(new Set());
   const expandingRef = useRef<Set<string>>(new Set());
@@ -94,6 +113,8 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     setSelectedHandle(null);
     setExpandedAncestor(new Set());
     setExpandedDescendant(new Set());
+    setCollapsedAncestor(new Set());
+    setCollapsedDescendant(new Set());
     setExpandingKeys(new Set());
     setExpandCenterHandle(null);
     fetchedExpansionsRef.current = new Set();
@@ -147,10 +168,10 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const trees = useMemo(() => {
     if (!data || !root) return null;
     return {
-      ancestorTree: buildAncestorTree(data, root.handle, BASE_ANC, expandedAncestor),
-      descendantTree: buildDescendantTree(data, root.handle, BASE_DESC, expandedDescendant),
+      ancestorTree: buildAncestorTree(data, root.handle, BASE_ANC, expandedAncestor, collapsedAncestor),
+      descendantTree: buildDescendantTree(data, root.handle, BASE_DESC, expandedDescendant, collapsedDescendant),
     };
-  }, [data, root, expandedAncestor, expandedDescendant]);
+  }, [data, root, expandedAncestor, expandedDescendant, collapsedAncestor, collapsedDescendant]);
 
   // The single funnel auto-expand-on-reveal (TreeChart.tsx's own
   // IntersectionObserver) calls through -- there's no click affordance, so
@@ -220,6 +241,66 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     // mirrors TimelineView's EventCard/MapView's PlaceCard onOpen.
     window.location.hash = formatHash({ viewKey: "person", handle });
   }
+
+  // Same navigation pickRoot uses -- re-rooting the tree on the clicked
+  // person is a fresh subject, not local state, so it goes through the same
+  // hash-driven load as picking from the empty-state search.
+  function makeRoot(handle: string) {
+    window.location.hash = formatHash({ viewKey: "tree", subject: { type: "person", handle } });
+  }
+
+  function collapseDescendants(handle: string) {
+    if (!trees) return;
+    const labels: string[] = [];
+    collectExpandableLabelsForHandle(trees.descendantTree, handle, labels);
+    if (labels.length === 0) return;
+    // Both sides: drop from `expanded` (it would otherwise override the
+    // collapse) and add to `collapsed` (forces the "+" even within base
+    // depth) -- see treeData.ts's descendantNode.
+    setExpandedDescendant((prev) => {
+      const next = new Set(prev);
+      labels.forEach((l) => next.delete(l));
+      return next;
+    });
+    setCollapsedDescendant((prev) => {
+      const next = new Set(prev);
+      labels.forEach((l) => next.add(l));
+      return next;
+    });
+  }
+
+  function collapseAncestors(handle: string) {
+    if (!trees) return;
+    const labels: string[] = [];
+    collectExpandableLabelsForHandle(trees.ancestorTree, handle, labels);
+    if (labels.length === 0) return;
+    setExpandedAncestor((prev) => {
+      const next = new Set(prev);
+      labels.forEach((l) => next.delete(l));
+      return next;
+    });
+    setCollapsedAncestor((prev) => {
+      const next = new Set(prev);
+      labels.forEach((l) => next.add(l));
+      return next;
+    });
+  }
+
+  // Whether the selected person actually has anything to collapse -- greys
+  // out the option when this node isn't currently showing any children in
+  // that direction (a true leaf, or already collapsed).
+  const canCollapseDescendants = useMemo(() => {
+    if (!trees || !selectedHandle) return false;
+    const labels: string[] = [];
+    collectExpandableLabelsForHandle(trees.descendantTree, selectedHandle, labels);
+    return labels.length > 0;
+  }, [trees, selectedHandle]);
+  const canCollapseAncestors = useMemo(() => {
+    if (!trees || !selectedHandle) return false;
+    const labels: string[] = [];
+    collectExpandableLabelsForHandle(trees.ancestorTree, selectedHandle, labels);
+    return labels.length > 0;
+  }, [trees, selectedHandle]);
 
   // A subject that resolved to nothing: a family with neither parent set, or
   // a handle this cache doesn't have yet (stale link, still syncing).
@@ -303,6 +384,12 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           person={selectedPerson}
           onOpen={() => openPerson(selectedPerson.handle)}
           onClose={() => setSelectedHandle(null)}
+          onMakeRoot={() => makeRoot(selectedPerson.handle)}
+          onCollapseDescendants={() => collapseDescendants(selectedPerson.handle)}
+          onCollapseAncestors={() => collapseAncestors(selectedPerson.handle)}
+          canMakeRoot={selectedPerson.handle !== root?.handle}
+          canCollapseDescendants={canCollapseDescendants}
+          canCollapseAncestors={canCollapseAncestors}
         />
       )}
     </VisualFrame>
@@ -313,14 +400,27 @@ interface PersonCardProps {
   person: TreePersonRaw;
   onOpen: () => void;
   onClose: () => void;
+  onMakeRoot: () => void;
+  onCollapseDescendants: () => void;
+  onCollapseAncestors: () => void;
+  canMakeRoot: boolean;
+  canCollapseDescendants: boolean;
+  canCollapseAncestors: boolean;
 }
 
 /** The clicked box's details, and the one control that leaves the tree for
  * the People view -- same corner, shape and commit button as
  * TimelineView's EventCard/MapView's PlaceCard, because all three plots now
  * answer a click the same way. Bottom-left, clear of the status strip
- * below and the zoom controls a pointer might reach for at the right. */
-function PersonCard({ person, onOpen, onClose }: PersonCardProps) {
+ * below and the zoom controls a pointer might reach for at the right.
+ * The three re-shape-this-view actions above "Open in People" are
+ * `variant="default"` (this app's secondary-button convention, see
+ * DeleteButton.tsx/RefPickerField.tsx) precisely because they don't leave
+ * the tree the way that filled button does. */
+function PersonCard({
+  person, onOpen, onClose, onMakeRoot, onCollapseDescendants, onCollapseAncestors,
+  canMakeRoot, canCollapseDescendants, canCollapseAncestors,
+}: PersonCardProps) {
   const name = [person.profile?.name_given, person.profile?.name_surname].filter(Boolean).join(" ") || "(unnamed person)";
   return (
     <Paper
@@ -338,6 +438,17 @@ function PersonCard({ person, onOpen, onClose }: PersonCardProps) {
         {person.profile?.birth?.date && <Badge size="xs" variant="light">*{person.profile.birth.date}</Badge>}
         {person.profile?.death?.date && <Badge size="xs" variant="light">†{person.profile.death.date}</Badge>}
       </Group>
+      <Stack gap={4} mb={4}>
+        <Button size="xs" fullWidth variant="default" onClick={onMakeRoot} disabled={!canMakeRoot}>
+          {t("Make this person the root")}
+        </Button>
+        <Button size="xs" fullWidth variant="default" onClick={onCollapseDescendants} disabled={!canCollapseDescendants}>
+          {t("Collapse descendants")}
+        </Button>
+        <Button size="xs" fullWidth variant="default" onClick={onCollapseAncestors} disabled={!canCollapseAncestors}>
+          {t("Collapse ancestors")}
+        </Button>
+      </Stack>
       <Button size="xs" fullWidth onClick={onOpen}>{t("Open in People")}</Button>
     </Paper>
   );
