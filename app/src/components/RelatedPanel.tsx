@@ -119,18 +119,33 @@ function firstImageRef(detail: ObjectDetail): { handle: string; mime?: string } 
  * -- the panel showing its own current-page record (see
  * CurrentPageContext): a link back to the record already on screen would
  * be a pointless round trip, same treatment RefRow gives a self-reference
- * inside a section. */
+ * inside a section.
+ *
+ * Rendered in link-blue (var(--mantine-color-blue-6)) rather than the
+ * default heading color -- the same "blue text = clickable" convention as
+ * any web link -- so the bottom (Reference detail) pane's title -- the
+ * one case where onClick is ever set -- visibly reads as "leaves this
+ * page", not just a preview like the rest of that pane's reference rows. */
 function ClickableTitle({ onClick, children }: { onClick?: () => void; children: ReactNode }) {
   if (!onClick) return <Title order={4}>{children}</Title>;
   return (
-    <Title
-      order={4}
-      component="button"
-      onClick={onClick}
-      style={{ cursor: "pointer", background: "none", border: "none", padding: 0, textAlign: "left" }}
-    >
-      {children}
-    </Title>
+    <Tooltip label={t("Open in its list page")} withArrow>
+      <Title
+        order={4}
+        component="button"
+        onClick={onClick}
+        style={{
+          cursor: "pointer",
+          background: "none",
+          border: "none",
+          padding: 0,
+          textAlign: "left",
+          color: "var(--mantine-color-blue-6)",
+        }}
+      >
+        {children}
+      </Title>
+    </Tooltip>
   );
 }
 
