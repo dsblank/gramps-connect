@@ -1,13 +1,20 @@
 // Ancestor fan chart (View > Tree's "Fan" chart style) -- a radial sibling to
 // treeChart.ts's box tree, sharing its overall shape (imperative d3, one SVG
 // built and returned per render, d3-zoom for pan/zoom, `var(--mantine-...)`
-// tokens for most chrome) but a completely different layout: concentric
-// generation rings split by the father/mother binary already baked into
-// TreeNode.children ([father, mother], see treeData.ts's ancestorNode) rather
-// than d3-hierarchy's tree() layout. Two color schemes (Generation, Age at
-// death), ported from harrywind.nl's own reference implementation -- see
-// GEN_COLORS/DEATH_COLORS -- plus an optional "size by lifespan" radial mode
-// ported instead from a fanchart.py a Gramps discourse contributor shared
+// tokens for most chrome) but a completely different layout: a full 360°
+// circle split by the father/mother binary already baked into
+// TreeNode.children ([father, mother], see treeData.ts's ancestorNode)
+// rather than d3-hierarchy's tree() layout -- root sits at the panel's own
+// visual center, a full disc at its own radius, with each generation
+// beyond it splitting the remaining circle in half again (so a parent
+// fills an entire half-circle, a grandparent a quarter, and so on), not
+// the half-dome (-90°..+90°) shape an ahnentafel fan chart more typically
+// uses -- doubling the angular room every generation gets reads better at
+// depth than the extra "which way is up" orientation cost, for this app's
+// own tree sizes. Two color schemes (Generation, Age at death), ported
+// from harrywind.nl's own reference implementation -- see GEN_COLORS/
+// DEATH_COLORS -- plus an optional "size by lifespan" radial mode ported
+// instead from a fanchart.py a Gramps discourse contributor shared
 // (nodeRadii/computeYearScale below): every wedge's own inner/outer radius
 // is that person's own death/birth year on a shared today-anchored scale,
 // independent of its parent's position, so overlapping generations (a
@@ -41,15 +48,6 @@ export const PER_GEN_INSET_RAD = (1 * Math.PI) / 180;
 export const MIN_RENDERED_WIDTH_RAD = (0.5 * Math.PI) / 180;
 
 const CORNER_RADIUS = 2;
-/** Root sits this many px above the viewport's bottom edge at zoom 1 -- same
- * "frame on the root's own position, not the whole tree's bounding box"
- * instinct as treeChart.ts's own xOffset/yOffset (its own doc comment
- * explains why: a deep tree routinely exceeds the viewport, and centering
- * the whole thing pushes the root -- the one thing the user opened this for
- * -- off-frame). A fan's dome only grows *upward* from the root, so here
- * that just means anchoring the root near the bottom instead of the middle.
- */
-const BOTTOM_MARGIN = 40;
 
 /** Both palettes below are ported verbatim from harrywind.nl's own compiled
  * JS (its `GEN_COLORS`/`DEATH_COLORS` constants), not this app's usual
@@ -211,7 +209,7 @@ const MIN_THICKNESS = 20;
 /** The fixed logical radius the *oldest currently-loaded* ancestor's own
  * birth year is scaled to land on -- see computeYearScale's own doc
  * comment. Arbitrary in absolute terms (computeFitTransform's own
- * zoom-to-fit rescales the whole dome to the panel regardless), chosen
+ * zoom-to-fit rescales the whole circle to the panel regardless), chosen
  * just to be comfortably larger than RING * a typical loaded depth so
  * fixed and lifespan modes feel similarly sized at a glance. */
 const CHART_MAX_RADIUS = 640;
@@ -265,7 +263,7 @@ function hasFullLifespan(node: TreeNode | null): boolean {
  * ancestor's own birth year lands exactly on CHART_MAX_RADIUS -- a 3-
  * generation tree and a 10-generation tree both fill the same logical
  * radius; "Increase depth" loading more/older ancestors just makes every
- * wedge's own scale finer, not the dome bigger. Walks the same
+ * wedge's own scale finer, not the circle bigger. Walks the same
  * hasFullLifespan nodes nodeRadii itself will actually place by calendar
  * math (an unresearched or partially-dated branch can't skew the shared
  * scale), floors the oldest of their birth years to the nearest decade
@@ -343,8 +341,9 @@ function ageAtDeath(node: TreeNode | null): number | null {
  * function's original approach) breaks down on a shallow tree: a small
  * totalYears still divided into ~6 ticks packs them at whatever spacing
  * falls out, with no floor -- exactly the overlapping-numerals mess a
- * short dome produced. Driving off a pixel floor instead means every tree
- * depth gets legible ticks, just fewer of them when the dome is small. */
+ * short circle produced. Driving off a pixel floor instead means every
+ * tree depth gets legible ticks, just fewer of them when the circle is
+ * small. */
 const MIN_TICK_SPACING_PX = 92;
 
 /** The smallest "nice" round year step (1/2/5 x a power of ten) whose own
@@ -471,40 +470,35 @@ export function collectWedges(
 }
 
 /** Caps how far "fit to window" will zoom IN for a very shallow tree (e.g.
- * just root + one generation) -- fitting a tiny dome to a large panel would
- * otherwise blow it up to an ungainly size. */
+ * just root + one generation) -- fitting a tiny circle to a large panel
+ * would otherwise blow it up to an ungainly size. */
 const MAX_FIT_SCALE = 2.5;
 const FIT_PAD = 24;
 
-/** The zoom transform that frames the *whole* currently-drawn dome within
- * bboxWidth x bboxHeight, root still anchored at its own BOTTOM_MARGIN line
- * rather than re-centered vertically -- same "anchor the root, don't center
- * the bounding box" instinct as the chart's own default framing, just with
- * a computed scale instead of a fixed 1:1 one (renderTreeChart's own doc
- * comment makes the same call, for the same reason). The dome's bounding
- * box is well-approximated by a half-disc of radius maxR (x in
- * [-maxR,maxR], y in [-maxR,0]) even when branches reach unevenly far,
- * since every wedge's angular span is still within the fixed -90..+90
- * domain -- generous enough for "fits in the window", not a tight bound.
- * Root (content (0,0)) already renders at its default screen position from
- * the svg's own viewBox alone (xOffset/yOffset below), with the zoom
- * transform at identity -- so `k=scale` with tx=ty=0 (zoomIdentity's own
- * defaults, untouched here) keeps it exactly there while changing only the
- * scale, since scaling never moves the origin. */
+/** The zoom transform that frames the *whole* currently-drawn circle within
+ * bboxWidth x bboxHeight, root re-centered in the panel -- a computed scale
+ * instead of a fixed 1:1 one (renderTreeChart's own doc comment makes the
+ * same call, for the same reason). The bounding box is a full disc of
+ * radius maxR (x and y both in [-maxR,maxR]), so both dimensions divide by
+ * `2*maxR`. Root (content (0,0)) already renders at its default screen
+ * position from the svg's own viewBox alone (xOffset/yOffset below), with
+ * the zoom transform at identity -- so `k=scale` with tx=ty=0
+ * (zoomIdentity's own defaults, untouched here) keeps it exactly there
+ * while changing only the scale, since scaling never moves the origin. */
 function computeFitTransform(wedges: Wedge[], bboxWidth: number, bboxHeight: number): ZoomTransform {
   const maxR = Math.max(RING, ...wedges.map((w) => w.outerR));
   const availWidth = Math.max(40, bboxWidth - 2 * FIT_PAD);
-  const availHeight = Math.max(40, bboxHeight - FIT_PAD - BOTTOM_MARGIN);
-  const scale = Math.min(availWidth / (2 * maxR), availHeight / maxR, MAX_FIT_SCALE);
+  const availHeight = Math.max(40, bboxHeight - 2 * FIT_PAD);
+  const scale = Math.min(availWidth / (2 * maxR), availHeight / (2 * maxR), MAX_FIT_SCALE);
   return zoomIdentity.scale(scale);
 }
 
 /** Click-to-center's own zoom cap/floor -- much more permissive than
- * MAX_FIT_SCALE (which bounds fitting the *whole dome*): a single clicked
+ * MAX_FIT_SCALE (which bounds fitting the *whole circle*): a single clicked
  * wedge, especially several generations out, is routinely a small sliver of
  * the full chart, and the whole point of centering on it is to zoom in on
  * that detail. MIN_SLICE_ZOOM is mostly defensive (root's own wedge is the
- * one realistic case that zooms *out*, since it spans the full -90..+90 at
+ * one realistic case that zooms *out*, since it spans the full circle at
  * radius 0..RING). */
 const MAX_SLICE_ZOOM = 8;
 const MIN_SLICE_ZOOM = 0.4;
@@ -520,9 +514,11 @@ const SLICE_ZOOM_HEADROOM = 0.55;
  * bboxWidth x bboxHeight, and the box's own center to frame on. Checked
  * against all 4 corners (innerR/outerR x a0/a1, each mapped through the
  * same (r sinθ, -r cosθ) point formula collectWedges' own callers use) plus,
- * when the wedge's own angular span crosses θ=0, the point straight out at
- * (0, -outerR) -- the true topmost extent in that case, not captured by any
- * corner. */
+ * for each of the 4 cardinal directions (top/right/bottom/left) the wedge's
+ * own angular span crosses, that direction's own true extremum at outerR --
+ * not captured by any corner. A wide top-level wedge (root's own two
+ * children each span a full 180°) routinely crosses 2-3 of the 4 cardinal
+ * directions, unlike a half-dome layout's own top-only case. */
 function wedgeFrame(w: Wedge, bboxWidth: number, bboxHeight: number): { cx: number; cy: number; scale: number } {
   const point = (r: number, theta: number): [number, number] => [r * Math.sin(theta), -r * Math.cos(theta)];
   const pts: [number, number][] = [
@@ -531,7 +527,9 @@ function wedgeFrame(w: Wedge, bboxWidth: number, bboxHeight: number): { cx: numb
     point(w.innerR, w.a1),
     point(w.outerR, w.a1),
   ];
-  if (w.a0 <= 0 && w.a1 >= 0) pts.push([0, -w.outerR]);
+  for (const cardinal of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    if (w.a0 <= cardinal && w.a1 >= cardinal) pts.push(point(w.outerR, cardinal));
+  }
   const xMin = Math.min(...pts.map((p) => p[0]));
   const xMax = Math.max(...pts.map((p) => p[0]));
   const yMin = Math.min(...pts.map((p) => p[1]));
@@ -615,9 +613,11 @@ export interface FanChartOptions {
 /** Draws the ancestor fan into a fresh SVG sized to bboxWidth/bboxHeight and
  * returns it -- the caller (components/visuals/FanChart.tsx) owns inserting
  * and removing it from the DOM, same contract as renderTreeChart. Root sits
- * at the bottom-center with generations fanning upward into a half-circle
- * dome (angle -90°..+90° in d3-arc's own 0=north/clockwise convention),
- * matching the reference layout this is modeled on. */
+ * at the panel's own center as a full disc, with each generation beyond it
+ * splitting the remaining full circle in half again (angle -180°..+180° in
+ * d3-arc's own 0=north/clockwise convention) -- see this file's own header
+ * comment on why a full circle rather than the more typical half-dome
+ * ahnentafel layout. */
 export function renderFanChart(
   ancestorTree: TreeNode | null,
   {
@@ -652,24 +652,12 @@ export function renderFanChart(
 
   const chartContent = svg.append("g").attr("id", "fan-chart-content");
 
-  // Root (content (0,0)) always renders at exactly (transform.x,
-  // transform.y) on screen -- scaling doesn't move the origin -- so
-  // clamping ty to a floor of 0 is exactly "root can't be dragged above its
-  // default resting line" (BOTTOM_MARGIN's own position), with x and k
-  // (zoom level) left completely free. Below that floor there's nothing
-  // drawn (the dome only grows upward from root), so dragging past it would
-  // otherwise just reveal blank panel background under the chart. Forcing
-  // the internal `__zoom` to match (not just the DOM attr) keeps the next
-  // drag frame's delta computed from the clamped position too -- a hard
-  // stop, not a rubber-band lag -- same direct-`__zoom`-write technique
-  // renderTreeChart's own initialZoom restore already uses below.
+  // Root (content (0,0)) sits at the panel's own visual center (xOffset/
+  // yOffset below), with the chart free to pan in every direction -- no
+  // resting-line floor to clamp against, unlike a half-dome layout's own
+  // root-anchored-at-the-bottom convention.
   const zoomBehavior = zoom<SVGSVGElement, undefined>().on("zoom", (e) => {
-    let t = e.transform;
-    if (t.y < 0) {
-      t = t.translate(0, -t.y / t.k);
-      (svg.node() as unknown as { __zoom: ZoomTransform }).__zoom = t;
-    }
-    chartContent.attr("transform", t.toString());
+    chartContent.attr("transform", e.transform.toString());
   });
   svg.call(zoomBehavior);
 
@@ -679,7 +667,7 @@ export function renderFanChart(
     : (n, fallbackInnerR) => ({ innerR: fallbackInnerR, outerR: fallbackInnerR + RING });
   const wedges: Wedge[] = [];
   if (ancestorTree) {
-    collectWedges(ancestorTree, 0, -Math.PI / 2, Math.PI / 2, "none", 0, radiiFor, sizeByLifespan, wedges);
+    collectWedges(ancestorTree, 0, -Math.PI, Math.PI, "none", 0, radiiFor, sizeByLifespan, wedges);
   }
 
   const axisData = yearScale ? computeAxisData(yearScale.pxPerYear) : null;
@@ -690,7 +678,7 @@ export function renderFanChart(
   // dashing across their fill -- the axis line/ticks/labels themselves stay
   // on top, drawn later, since those need to stay readable as an overlay.
   // A faint dashed reference arc at each tick's own radius, spanning the
-  // whole dome -- so a wedge far from the x-axis can still be read against
+  // whole circle -- so a wedge far from the x-axis can still be read against
   // the year scale, not just the two wedges the tick label itself sits
   // under. Same idea (and stroke-dasharray) as harrywind's own
   // `.refCircle`. Degenerate innerRadius=outerRadius arc -- a d3-shape
@@ -700,8 +688,8 @@ export function renderFanChart(
     const refArc = d3arc<number>()
       .innerRadius((r) => r)
       .outerRadius((r) => r)
-      .startAngle(-Math.PI / 2)
-      .endAngle(Math.PI / 2);
+      .startAngle(-Math.PI)
+      .endAngle(Math.PI);
     chartContent
       .append("g")
       .attr("class", "ref-circles")
@@ -946,8 +934,12 @@ export function renderFanChart(
       .text((d) => String(d.year));
   }
 
+  // Root sits at the panel's own visual center -- both offsets are a plain
+  // half-dimension, unlike a half-dome layout's own above-the-bottom-edge
+  // anchor, since the circle grows in every direction rather than only
+  // upward.
   const xOffset = -bboxWidth / 2;
-  const yOffset = -(bboxHeight - BOTTOM_MARGIN);
+  const yOffset = -bboxHeight / 2;
   svg.attr("viewBox", `${xOffset} ${yOffset} ${bboxWidth} ${bboxHeight}`);
   svg.attr("width", bboxWidth).attr("height", bboxHeight);
 
@@ -959,12 +951,12 @@ export function renderFanChart(
   //     its own bounding box (wedgeFrame). Root is the one exception: its
   //     own wedge is a thin center sliver, and "focus on root" reads as
   //     "back out to the overview" rather than "zoom into this" -- so a
-  //     root click animates to the same whole-dome fit computeFitTransform
+  //     root click animates to the same whole-circle fit computeFitTransform
   //     gives the initial-draw case, the fan chart's equivalent of a
   //     "reset view" / breadcrumb-home click.
   //  2. No `initialZoom` at all -- FanChart.tsx only omits it on a fresh
   //     root, once the tree's just grown deeper (treeMaxDepth), or a "Size
-  //     by lifespan" flip, so this is "fit the whole dome to the window."
+  //     by lifespan" flip, so this is "fit the whole circle to the window."
   //  3. Otherwise, just restore whatever pan/zoom was already showing.
   const centerTarget = centerHandle ? wedges.find((w) => w.node?.person?.handle === centerHandle) : undefined;
   if (centerOnSelect && centerTarget) {
@@ -977,15 +969,10 @@ export function renderFanChart(
       centered = computeFitTransform(wedges, bboxWidth, bboxHeight);
     } else {
       const { cx, cy, scale } = wedgeFrame(centerTarget, bboxWidth, bboxHeight);
-      // The svg-user-space point that the viewBox itself (xOffset/yOffset
-      // above) maps to the panel's literal visual center -- *not*
-      // (bboxWidth/2, bboxHeight/2) directly, since that pair is already
-      // screen pixels and the viewBox has its own offset baked in (root's
-      // default position is svg-space (0,0), not the panel's visual center
-      // -- see BOTTOM_MARGIN's own doc comment on why). xOffset's own
-      // contribution always cancels to 0 given xOffset = -bboxWidth/2.
-      const svgCenterY = BOTTOM_MARGIN - bboxHeight / 2;
-      centered = zoomIdentity.translate(0, svgCenterY).scale(scale).translate(-cx, -cy);
+      // content-space (0,0) *is* the panel's own visual center (xOffset/
+      // yOffset above are a plain half-dimension each), so there's no extra
+      // offset to translate by before centering on (cx,cy).
+      centered = zoomIdentity.scale(scale).translate(-cx, -cy);
     }
     // Start from wherever the view already was and animate *from* there --
     // without the initialZoom restore just above, this would interpolate
