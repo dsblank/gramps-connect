@@ -94,23 +94,25 @@ export function isStorelessKey(key: string): boolean {
 
 /** Parses "#/<viewKey>", "#/<viewKey>/<handle>", "#/home", or a visual's
  * "#/<visualKey>/<type>:<handle>" (also tolerates a missing leading slash,
- * or no hash at all). An unrecognized/missing view key falls back to the
- * first view rather than erroring -- a stale or hand-edited URL should still
- * land somewhere sane, and by the same rule an unparseable subject degrades
- * to the unscoped whole-tree visual rather than to no page at all. A visual
- * still has no selection to restore, so it never carries a plain `handle`;
- * neither does Home. */
+ * or no hash at all). An unrecognized/missing view key falls back to Home
+ * rather than erroring -- a fresh load, or a stale/hand-edited URL, should
+ * still land somewhere sane, and by the same rule an unparseable subject
+ * degrades to the unscoped whole-tree visual rather than to no page at all.
+ * A visual still has no selection to restore, so it never carries a plain
+ * `handle`; neither does Home. */
 export function parseHash(hash: string = window.location.hash): HashRoute {
   const parts = hash.slice(1).split("/").filter(Boolean);
   const [viewKey, handle] = parts;
   if (viewKey && isVisualKey(viewKey)) {
     return { viewKey, handle: null, subject: parseSubject(handle) };
   }
-  if (viewKey && isHomeKey(viewKey)) {
-    return { viewKey, handle: null, subject: null };
+  if (!viewKey || isHomeKey(viewKey)) {
+    return { viewKey: HOME_KEY, handle: null, subject: null };
   }
-  const resolvedKey = VIEWS.some((v) => v.key === viewKey) ? viewKey : VIEWS[0].key;
-  return { viewKey: resolvedKey, handle: handle ?? null, subject: null };
+  if (!VIEWS.some((v) => v.key === viewKey)) {
+    return { viewKey: HOME_KEY, handle: null, subject: null };
+  }
+  return { viewKey, handle: handle ?? null, subject: null };
 }
 
 export function formatHash(route: Partial<HashRoute> & { viewKey: string }): string {

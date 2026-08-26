@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { formatHash, isHomeKey, isStorelessKey, isSubjectKey, isVisualKey, parseHash } from "../hash";
-import { VIEWS } from "../store/views";
 
 describe("parseHash", () => {
   it("reads a plain view route", () => {
@@ -11,9 +10,9 @@ describe("parseHash", () => {
     expect(parseHash("#/place/abc123")).toEqual({ viewKey: "place", handle: "abc123", subject: null });
   });
 
-  it("falls back to the first view for a missing or unknown key", () => {
+  it("falls back to Home for a missing or unknown key", () => {
     for (const hash of ["", "#", "#/", "#/nonsense"]) {
-      expect(parseHash(hash).viewKey).toBe(VIEWS[0].key);
+      expect(parseHash(hash)).toEqual({ viewKey: "home", handle: null, subject: null });
     }
   });
 
