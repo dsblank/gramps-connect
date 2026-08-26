@@ -3,6 +3,7 @@
 // to await its own completion directly (import, delete-all, ...), as
 // opposed to jobsPoll.ts's trackJob(), which is fire-and-forget with
 // callbacks and specific to the report/export -> Media promotion pipeline.
+import { getToken } from "../auth/auth";
 import { getTaskStatus, type TaskStatus } from "./jobsApi";
 
 function sleep(ms: number): Promise<void> {
@@ -12,9 +13,15 @@ function sleep(ms: number): Promise<void> {
 const POLL_MS = 1500;
 const ACTIVE_STATES = new Set(["PENDING", "STARTED", "PROGRESS"]);
 
-/** Polls GET /api/tasks/<id> until the task leaves PENDING/STARTED/PROGRESS. */
-export async function waitForTask(token: string, taskId: string): Promise<TaskStatus> {
+/** Polls GET /api/tasks/<id> until the task leaves PENDING/STARTED/PROGRESS.
+ * Long-running tasks (imports especially) can easily outlive a 15-minute
+ * access token, so this re-derives the token from getToken() on every poll
+ * rather than reusing the caller's snapshot -- getToken() itself only
+ * refreshes when the cached token is expiring soon, so this doesn't add a
+ * refresh call to every poll's happy path. */
+export async function waitForTask(taskId: string): Promise<TaskStatus> {
   for (;;) {
+    const token = await getToken();
     const status = await getTaskStatus(token, taskId);
     if (!ACTIVE_STATES.has(status.state)) return status;
     await sleep(POLL_MS);

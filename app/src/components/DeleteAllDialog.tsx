@@ -62,7 +62,7 @@ export function DeleteAllDialog({ opened, onClose }: DeleteAllDialogProps) {
       const token = await getToken();
       const result = await deleteAllObjects(token, selected as DeleteNamespace[]);
       if (result.kind === "task") {
-        const status = await waitForTask(token, result.task.id);
+        const status = await waitForTask(result.task.id);
         if (status.state !== "SUCCESS") {
           throw new Error(describeTaskFailure(status));
         }

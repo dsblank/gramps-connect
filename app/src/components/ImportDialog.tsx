@@ -71,7 +71,7 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
       const result = await previewImport(token, ext, file);
       const finalCounts =
         result.kind === "task"
-          ? ((await waitForTask(token, result.task.id)).result_object as ImportCounts)
+          ? ((await waitForTask(result.task.id)).result_object as ImportCounts)
           : result.kind === "counts"
             ? result.counts
             : {};
@@ -91,7 +91,7 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
       const token = await getToken();
       const result = await runImport(token, ext, file);
       if (result.kind === "task") {
-        const status = await waitForTask(token, result.task.id);
+        const status = await waitForTask(result.task.id);
         if (status.state !== "SUCCESS") {
           throw new Error(describeTaskFailure(status));
         }

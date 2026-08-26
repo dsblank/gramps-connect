@@ -63,7 +63,7 @@ export function ImportMediaDialog({ opened, onClose }: ImportMediaDialogProps) {
       const result = await postMediaZip(token, file);
       let resolvedCounts: MediaImportCounts;
       if (result.kind === "task") {
-        const status = await waitForTask(token, result.task.id);
+        const status = await waitForTask(result.task.id);
         if (status.state !== "SUCCESS") {
           throw new Error(describeTaskFailure(status));
         }
