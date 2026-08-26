@@ -95,9 +95,10 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // re-rooting (Make root, or picking a new person) stays in whichever
   // style the user was already looking at.
   const [chartStyle, setChartStyle] = useState<"box" | "fan">("box");
-  // Fan mode's own "Show lifespan" toggle -- wedge radial thickness
-  // becomes death year minus birth year (fanChart.ts's own
-  // lifespanThickness) instead of a fixed per-generation width.
+  // Fan mode's own "Show lifespan" toggle -- each wedge's own radius
+  // becomes that person's actual birth/death year on a shared calendar
+  // axis (fanChart.ts's own nodeRadii) instead of a fixed per-generation
+  // width.
   const [sizeByLifespan, setSizeByLifespan] = useState(false);
   // Fan mode's own wedge-color scheme -- "Age at death" is the only other
   // one wired up so far (fanChart.ts's own doc comment on why: harrywind.nl

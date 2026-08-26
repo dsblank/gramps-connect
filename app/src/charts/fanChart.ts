@@ -5,23 +5,41 @@
 // generation rings split by the father/mother binary already baked into
 // TreeNode.children ([father, mother], see treeData.ts's ancestorNode) rather
 // than d3-hierarchy's tree() layout. Two color schemes (Generation, Age at
-// death) and an optional "size by lifespan" radial mode, both ported from
-// harrywind.nl's own reference implementation -- see GEN_COLORS/DEATH_COLORS
-// and lifespanThickness below.
+// death), ported from harrywind.nl's own reference implementation -- see
+// GEN_COLORS/DEATH_COLORS -- plus an optional "size by lifespan" radial mode
+// ported instead from a fanchart.py a Gramps discourse contributor shared
+// (nodeRadii/computeYearScale below): every wedge's own inner/outer radius
+// is that person's own death/birth year on a shared today-anchored scale,
+// independent of its parent's position, so overlapping generations (a
+// child is almost always born while their parent is still alive) draw as
+// genuinely overlapping wedges rather than a nested ring per generation --
+// legible because paint order is ascending by depth (root under, oldest
+// ancestors on top) combined with each generation's angular span always
+// being a proper subset of its own child's, not any special-cased shape.
 import { arc as d3arc } from "d3-shape";
-import { create } from "d3-selection";
+import { create, select } from "d3-selection";
 import "d3-transition";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
-import type { TreeNode } from "../store/treeData";
+import type { TreeNode, TreePersonRaw } from "../store/treeData";
 
 const RING = 70;
-/** A fixed *angle* gap sweeps an ever-wider arc length the further out it's
- * drawn (arc length = angle x radius) -- exactly the "gaps get huge near
- * the rim" effect a screenshot flagged. GAP_PX/MAX_PAD_ANGLE below drive a
- * per-wedge angle instead (see arcGen's own padAngle accessor), so the
- * visual gap stays the same few px at every depth. */
-const GAP_PX = 1.5;
-const MAX_PAD_ANGLE = 0.08;
+/** The parent-inherited edge's own inset, per generation -- edgeInset's own
+ * doc comment on why a flat amount here is enough to guarantee nesting
+ * without needing to track/grow anything across levels, and why it doesn't
+ * bias a wedge's own center angle despite only ever touching one edge.
+ * Deliberately *not* used for the edge a wedge shares with its own sibling
+ * -- see collectWedges' own insetSide split, which leaves that edge exactly
+ * at the raw midpoint instead: the two siblings share that boundary line
+ * outright, separated only by their own strokes, per feedback that they
+ * should be "almost touching" and could just "share that inside line
+ * between them". */
+export const PER_GEN_INSET_RAD = (1 * Math.PI) / 180;
+/** Floor under a wedge's own *rendered* angular width -- edgeInset's own
+ * ceiling keeps the parent-inherited edge's inset from eating past this, so
+ * a wedge can shrink toward a sliver at extreme depth but never invert to a
+ * negative span. */
+export const MIN_RENDERED_WIDTH_RAD = (0.5 * Math.PI) / 180;
+
 const CORNER_RADIUS = 2;
 /** Root sits this many px above the viewport's bottom edge at zoom 1 -- same
  * "frame on the root's own position, not the whole tree's bounding box"
@@ -144,6 +162,19 @@ function nameLabel(
   return clipString(surname || full, widthPx, fontSize);
 }
 
+/** The native-tooltip text for one wedge's own `<title>` -- name plus
+ * birth/death dates when known, so hovering a wedge too small to carry its
+ * own on-wedge text (hasRoomForLabel's own doc comment) still surfaces who
+ * it is and when they lived. `\n` renders as a real line break in every
+ * major browser's own title tooltip. */
+function personTooltip(p: TreePersonRaw): string {
+  const name = [p.profile?.name_given, p.profile?.name_surname].filter(Boolean).join(" ") || "(unnamed person)";
+  const birth = p.profile?.birth?.date;
+  const death = p.profile?.death?.date;
+  const dates = [birth ? `b. ${birth}` : null, death ? `d. ${death}` : null].filter(Boolean).join(", ");
+  return dates ? `${name}\n${dates}` : name;
+}
+
 /** Shrinks with depth, floor NAME_FONT_MIN -- harrywind's own labels do the
  * same (its own `fits()`/shrink loop uses live DOM text measurement to hit
  * an exact per-wedge fit; this is the same idea, a fixed depth-based curve
@@ -173,16 +204,23 @@ export function treeMaxDepth(node: TreeNode | null | undefined): number {
   return 1 + Math.max(treeMaxDepth(node.children[0]), treeMaxDepth(node.children[1]));
 }
 
-/** "Show lifespan" mode's px-per-year scale, and the floor/ceiling
- * around it -- MIN_THICKNESS keeps a short life (or an infant death)
- * visibly clickable rather than collapsing to a sliver; MAX_THICKNESS
- * guards against one bad/OCR'd date blowing up the whole chart. An 80-year
- * life comes out to 200px, comparable to RING's own 70px "one generation"
- * width in fixed mode, so switching modes doesn't wildly rescale the
- * chart. */
-const PX_PER_YEAR = 2.5;
+/** MIN_THICKNESS keeps a short life (or an infant death) visibly clickable
+ * rather than collapsing to a sliver -- not part of the reference port
+ * below, just a defensive floor on top of it. */
 const MIN_THICKNESS = 20;
-const MAX_THICKNESS = 320;
+/** The fixed logical radius the *oldest currently-loaded* ancestor's own
+ * birth year is scaled to land on -- see computeYearScale's own doc
+ * comment. Arbitrary in absolute terms (computeFitTransform's own
+ * zoom-to-fit rescales the whole dome to the panel regardless), chosen
+ * just to be comfortably larger than RING * a typical loaded depth so
+ * fixed and lifespan modes feel similarly sized at a glance. */
+const CHART_MAX_RADIUS = 640;
+/** Floor under how far back computeYearScale's own min-birth-year scan
+ * will look -- not in the reference port (its CSV input is presumably
+ * already reasonable), added here since extractYear can occasionally grab
+ * the wrong 4 digits out of a garbled date string, and a single such
+ * outlier would otherwise compress the *entire* chart's scale to fit it. */
+const MAX_YEARS_BACK = 400;
 
 /** Pulls the first 4-digit year out of a profile date string -- these
  * arrive already display-formatted ("12 Jan 1982", "about 1900", "bef
@@ -195,23 +233,105 @@ function extractYear(dateStr: string | undefined): number | null {
   return m ? Number(m[0]) : null;
 }
 
-/** A wedge's radial thickness in "size by lifespan" mode: death year minus
- * birth year, clamped to [MIN_THICKNESS, MAX_THICKNESS] px. Falls back to
- * the fixed generation width (RING) whenever either date is missing or
- * unparsable, or the slot has no known person at all -- better than
- * guessing, and keeps an unresearched or partially-dated branch from
- * collapsing to nothing instead of just looking like fixed mode there. */
-function lifespanThickness(node: TreeNode | null): number {
-  const birthYear = extractYear(node?.person?.profile?.birth?.date);
-  const deathYear = extractYear(node?.person?.profile?.death?.date);
-  if (birthYear == null || deathYear == null || deathYear <= birthYear) return RING;
-  return Math.min(MAX_THICKNESS, Math.max(MIN_THICKNESS, (deathYear - birthYear) * PX_PER_YEAR));
+/** The calendar axis's own scale: r=0 is *today*, not the root's own birth
+ * year -- the only anchor that lets a still-living root (or ancestor)
+ * reach the center rather than needing negative radius for "now". */
+function currentYear(): number {
+  return new Date().getFullYear();
 }
 
-/** Same birth/death parsing as lifespanThickness, for the "Age at death"
- * color scheme -- kept separate since it has no MIN/MAX_THICKNESS clamp
- * (those exist for *layout*, a color scale wants the real extremes) and
- * applies regardless of whether "size by lifespan" is also on. */
+/** True only for a known person with *both* a parseable birth and death
+ * year -- the only case nodeRadii places by real calendar math below.
+ * Deliberately narrower than "not still living": a missing death date
+ * ordinarily means "presumed still living" for gramps-web's own alive-name-
+ * privacy purposes, but that's a separate question from what to draw here,
+ * and not one this function answers yet -- see fillFor's own doc comment.
+ * For now, anyone missing either date -- including a plausibly-alive person
+ * with no recorded death -- falls back to the same fixed-width placeholder
+ * an empty {} slot gets, so calendar-anchored mode only ever draws (and
+ * only needs verifying against the axis on) wedges backed by two real
+ * years. */
+function hasFullLifespan(node: TreeNode | null): boolean {
+  return (
+    extractYear(node?.person?.profile?.birth?.date) != null &&
+    extractYear(node?.person?.profile?.death?.date) != null
+  );
+}
+
+/** Ported from a Gramps-discourse-contributed fanchart.py's own
+ * `outer_radius`/`inner_radius` normalization: rather than a fixed
+ * px-per-year constant, the scale is *derived* each render from the
+ * currently-loaded tree itself, so that the oldest currently-loaded
+ * ancestor's own birth year lands exactly on CHART_MAX_RADIUS -- a 3-
+ * generation tree and a 10-generation tree both fill the same logical
+ * radius; "Increase depth" loading more/older ancestors just makes every
+ * wedge's own scale finer, not the dome bigger. Walks the same
+ * hasFullLifespan nodes nodeRadii itself will actually place by calendar
+ * math (an unresearched or partially-dated branch can't skew the shared
+ * scale), floors the oldest of their birth years to the nearest decade
+ * (the reference's own `min_ref_year`) the same way the year-axis ticks
+ * below land on round numbers, and never looks back further than
+ * MAX_YEARS_BACK regardless of what the data says. Null when nothing
+ * loaded yet has a full lifespan to scale by (computeAxisData mirrors this
+ * null case the same way it always has). */
+function computeYearScale(ancestorTree: TreeNode | null): { minRefYear: number; pxPerYear: number } | null {
+  const years: number[] = [];
+  const walk = (node: TreeNode | null | undefined): void => {
+    if (!node) return;
+    if (hasFullLifespan(node)) years.push(extractYear(node.person!.profile!.birth!.date)!);
+    node.children?.forEach(walk);
+  };
+  walk(ancestorTree);
+  if (years.length === 0) return null;
+  const now = currentYear();
+  const oldest = Math.max(now - MAX_YEARS_BACK, Math.min(...years));
+  const minRefYear = Math.floor(oldest / 10) * 10;
+  const totalYears = Math.max(1, now - minRefYear);
+  return { minRefYear, pxPerYear: CHART_MAX_RADIUS / totalYears };
+}
+
+function yearToRadius(year: number, pxPerYear: number): number {
+  return Math.max(0, currentYear() - year) * pxPerYear;
+}
+
+/** "Size by lifespan" mode's radius for one wedge -- computed straight from
+ * that person's *own* birth/death years against the shared today-anchored
+ * scale (computeYearScale's own `pxPerYear`, threaded down from
+ * renderFanChart), independent of its parent wedge's own position: outerR
+ * (farther from center = further back in time) is the birth year's own
+ * radius, innerR (closer to center = more recent) is the death year's own
+ * radius. Because an ancestor is essentially always still alive when their
+ * own child is born, a parent's innerR routinely lands at a *smaller*
+ * radius than their child's own outerR -- the two wedges genuinely overlap
+ * on the calendar axis, same as their real lives did. The reference's own
+ * fix for that isn't a taper -- it's paint order: renderFanChart draws
+ * ascending by depth (root first/bottom, oldest ancestors last/top), and
+ * since every ancestor's own angular slice is a proper *subset* of their
+ * descendant's (the same recursive halving collectWedges always did), an
+ * ancestor drawn on top only ever covers its own narrower slice of its
+ * descendant -- the descendant stays visible everywhere outside that
+ * slice, no artificial narrowing required. `fallbackInnerR` -- the calling
+ * child's own outerR, the same "stack from where the descendant left off"
+ * fallback fixed mode always uses -- kicks in whenever hasFullLifespan is
+ * false: an empty {} placeholder, or a known person missing either date,
+ * so this function is never asked to guess at a radius from a single known
+ * year. */
+function nodeRadii(
+  node: TreeNode | null,
+  fallbackInnerR: number,
+  pxPerYear: number,
+): { innerR: number; outerR: number } {
+  if (!hasFullLifespan(node)) return { innerR: fallbackInnerR, outerR: fallbackInnerR + RING };
+  const outerR = yearToRadius(extractYear(node!.person!.profile!.birth!.date)!, pxPerYear);
+  const rawInnerR = yearToRadius(extractYear(node!.person!.profile!.death!.date)!, pxPerYear);
+  const innerR = Math.max(0, Math.min(rawInnerR, outerR - MIN_THICKNESS));
+  return { innerR, outerR: Math.max(outerR, innerR + MIN_THICKNESS) };
+}
+
+/** Same birth/death parsing as nodeRadii, for the "Age at death" color
+ * scheme -- kept separate since it has no MIN_THICKNESS clamp (that exists
+ * for *layout*, a color scale wants the real extremes) and applies
+ * regardless of whether "size by lifespan" is also on. */
 function ageAtDeath(node: TreeNode | null): number | null {
   const birthYear = extractYear(node?.person?.profile?.birth?.date);
   const deathYear = extractYear(node?.person?.profile?.death?.date);
@@ -228,7 +348,7 @@ function ageAtDeath(node: TreeNode | null): number | null {
 const MIN_TICK_SPACING_PX = 92;
 
 /** The smallest "nice" round year step (1/2/5 x a power of ten) whose own
- * px spacing (step * PX_PER_YEAR) clears MIN_TICK_SPACING_PX -- rounds
+ * px spacing (step * pxPerYear) clears MIN_TICK_SPACING_PX -- rounds
  * `minStepYears` (already converted from that px floor by the caller) UP
  * to the next nice number, the standard d3-axis "nice ticks" heuristic,
  * hand-rolled since this chart doesn't otherwise depend on d3-scale/
@@ -241,13 +361,51 @@ function niceYearStep(minStepYears: number): number {
   return step * mag;
 }
 
-interface Wedge {
+// Exported for __tests__/fanChart.test.ts, which checks the angular
+// geometry directly (siblings meet exactly at their parent's own rendered
+// center, every wedge nests strictly inside its parent, no inversion at
+// depth) rather than by eyeballing screenshots -- see that file's own doc
+// comment for why.
+export interface Wedge {
   node: TreeNode | null;
   depth: number;
+  /** This wedge's own raw angular allotment, inherited unchanged from
+   * whichever side of its *parent's rendered* [drawA0,drawA1] split it
+   * came from (collectWedges' own doc comment) -- i.e. already reflects
+   * every ancestor's own inset, just not this node's. */
   a0: number;
   a1: number;
+  /** The *rendered* angular bounds actually passed to arcGen -- a subset of
+   * [a0,a1], insetting only the edge this wedge inherits from its own
+   * parent (edgeInset's own doc comment); the edge it shares with its
+   * sibling is left exactly at the raw midpoint (a "father" keeps its own
+   * a1 unchanged as drawA1, a "mother" keeps a0 unchanged as drawA0), so
+   * two siblings meet exactly, separated only by their own strokes. Equal
+   * to a0/a1 outright for the root, which has no parent edge to inset
+   * from. */
+  drawA0: number;
+  drawA1: number;
   innerR: number;
   outerR: number;
+}
+
+/** The parent-inherited edge's own inset for one wedge, given its raw
+ * angular width -- a flat amount (PER_GEN_INSET_RAD), clamped so it can't
+ * eat past MIN_RENDERED_WIDTH_RAD of the wedge's own rendered span. Looks
+ * like it should need to *grow* with depth to keep a child from rendering
+ * outside its own parent -- an earlier version threaded exactly that kind
+ * of cumulative value through the recursion -- but it doesn't: each child's
+ * raw [a0,a1] (the input to this function) is already a sub-range of its
+ * parent's own *rendered* bounds (collectWedges splits children at the
+ * parent's rendered center, not its raw one), so inserting any positive
+ * amount off an already-contained sub-range keeps it contained, with no
+ * cross-generation bookkeeping required. That parent/rendered-center split
+ * is also what keeps a wedge's own center angle from drifting even though
+ * only one of its two edges ever gets inset: a child's own two edges start
+ * from its parent's *actual drawn* midpoint, not the parent's differently-
+ * placed raw one, so nothing to correct for downstream. */
+export function edgeInset(rawWidth: number): number {
+  return Math.min(PER_GEN_INSET_RAD, Math.max(0, rawWidth - MIN_RENDERED_WIDTH_RAD));
 }
 
 /** Walks the ahnentafel binary tree (TreeNode.children is always exactly
@@ -266,28 +424,50 @@ interface Wedge {
  * happened -- expected, not a bug, the same way a box tree's boundary can
  * sit at different depths per branch.
  *
- * `thickness` decouples radial layout from depth entirely: fixed mode
- * passes a constant-RING function, "size by lifespan" mode passes
- * lifespanThickness -- either way each wedge's own outerR (= its child
- * wedges' innerR) is just its parent's outerR plus its own thickness, so
- * the same recursion produces both layouts with no other change. */
-function collectWedges(
+ * `radiiFor` decouples radial layout from depth entirely: fixed mode just
+ * stacks a constant RING width off the running radius, "size by lifespan"
+ * mode (nodeRadii) computes each wedge's own radii from its own dates
+ * instead, only falling back to the running radius when a date's missing
+ * -- either way the same recursion produces both layouts with no other
+ * change, and each node's own outerR is still what its own two children
+ * get passed down as *their* fallback radius.
+ *
+ * `insetSide` says which of *this* node's two edges it inherited from its
+ * own parent -- "a0" for a father, "a1" for a mother, "none" for the root
+ * (which has no parent edge at all, so neither side insets). Children are
+ * split at `(drawA0+drawA1)/2` -- this node's own *rendered* center, not
+ * `(a0+a1)/2` -- which is what makes edgeInset's "just don't invert your
+ * own wedge" guarantee sufficient for containment on its own.
+ *
+ * `applyInset` is fixed mode's own escape hatch: false forces every inset
+ * to 0 (drawA0/drawA1 always equal a0/a1), so fixed mode's rings stay the
+ * classic edge-to-edge annular sectors they always were -- the nesting
+ * problem edgeInset solves is specific to calendar-anchored mode's
+ * genuinely-overlapping radii (nodeRadii's own doc comment); fixed mode's
+ * generations never overlap in the first place, so there's nothing for an
+ * inset to fix and no reason to give up the flush look for it. */
+export function collectWedges(
   node: TreeNode | undefined,
   depth: number,
   a0: number,
   a1: number,
-  innerR: number,
-  thickness: (node: TreeNode | null) => number,
+  insetSide: "a0" | "a1" | "none",
+  fallbackInnerR: number,
+  radiiFor: (node: TreeNode | null, fallbackInnerR: number) => { innerR: number; outerR: number },
+  applyInset: boolean,
   out: Wedge[],
 ): void {
   const n = node ?? null;
-  const outerR = innerR + thickness(n);
-  out.push({ node: n, depth, a0, a1, innerR, outerR });
+  const { innerR, outerR } = radiiFor(n, fallbackInnerR);
+  const inset = insetSide === "none" || !applyInset ? 0 : edgeInset(a1 - a0);
+  const drawA0 = insetSide === "a0" ? a0 + inset : a0;
+  const drawA1 = insetSide === "a1" ? a1 - inset : a1;
+  out.push({ node: n, depth, a0, a1, drawA0, drawA1, innerR, outerR });
   const kids = node?.children;
   if (!kids) return;
-  const mid = (a0 + a1) / 2;
-  collectWedges(kids[0], depth + 1, a0, mid, outerR, thickness, out);
-  collectWedges(kids[1], depth + 1, mid, a1, outerR, thickness, out);
+  const mid = (drawA0 + drawA1) / 2;
+  collectWedges(kids[0], depth + 1, drawA0, mid, "a0", outerR, radiiFor, applyInset, out);
+  collectWedges(kids[1], depth + 1, mid, drawA1, "a1", outerR, radiiFor, applyInset, out);
 }
 
 /** Caps how far "fit to window" will zoom IN for a very shallow tree (e.g.
@@ -375,20 +555,25 @@ interface AxisData {
 /** "Show lifespan" mode's year-axis geometry -- computed once and used
  * twice (renderFanChart draws the reference arcs from it *before* the
  * wedges, so they sit behind them, then the solid axis line/ticks/labels
- * after, so those stay readable on top). Null whenever there's nothing to
- * center it on (root's own birth year doesn't parse). */
-function computeAxisData(ancestorTree: TreeNode | null, wedges: Wedge[]): AxisData | null {
-  const rootBirthYear = extractYear(ancestorTree?.person?.profile?.birth?.date);
-  if (rootBirthYear == null) return null;
-  const maxR = Math.max(RING, ...wedges.map((d) => d.outerR));
-  const totalYears = maxR / PX_PER_YEAR;
-  const step = niceYearStep(MIN_TICK_SPACING_PX / PX_PER_YEAR);
-  const ticks: { x: number; year: number }[] = [{ x: 0, year: rootBirthYear }];
+ * after, so those stay readable on top). Centered on *today* (currentYear),
+ * the same r=0 anchor nodeRadii uses -- not the root's own birth year -- so
+ * this is a real, exact calendar scale: any wedge's own inner/outer edge
+ * lines up with its actual death/birth year read straight off this axis.
+ * `maxR` is just CHART_MAX_RADIUS itself now (computeYearScale's own doc
+ * comment): by construction the oldest currently-loaded, fully-dated
+ * wedge's own outerR lands there, not some looser bound recomputed from
+ * `wedges`. */
+function computeAxisData(pxPerYear: number): AxisData {
+  const maxR = CHART_MAX_RADIUS;
+  const totalYears = maxR / pxPerYear;
+  const step = niceYearStep(MIN_TICK_SPACING_PX / pxPerYear);
+  const nowYear = currentYear();
+  const ticks: { x: number; year: number }[] = [{ x: 0, year: nowYear }];
   const tickRadii: number[] = [];
   for (let i = 1; i * step <= totalYears; i++) {
-    const r = i * step * PX_PER_YEAR;
+    const r = i * step * pxPerYear;
     tickRadii.push(r);
-    ticks.push({ x: -r, year: rootBirthYear - i * step }, { x: r, year: rootBirthYear - i * step });
+    ticks.push({ x: -r, year: nowYear - i * step }, { x: r, year: nowYear - i * step });
   }
   return { maxR, ticks, tickRadii };
 }
@@ -488,11 +673,16 @@ export function renderFanChart(
   });
   svg.call(zoomBehavior);
 
-  const thickness = sizeByLifespan ? lifespanThickness : () => RING;
+  const yearScale = sizeByLifespan ? computeYearScale(ancestorTree) : null;
+  const radiiFor: (node: TreeNode | null, fallbackInnerR: number) => { innerR: number; outerR: number } = yearScale
+    ? (n, fallbackInnerR) => nodeRadii(n, fallbackInnerR, yearScale.pxPerYear)
+    : (n, fallbackInnerR) => ({ innerR: fallbackInnerR, outerR: fallbackInnerR + RING });
   const wedges: Wedge[] = [];
-  if (ancestorTree) collectWedges(ancestorTree, 0, -Math.PI / 2, Math.PI / 2, 0, thickness, wedges);
+  if (ancestorTree) {
+    collectWedges(ancestorTree, 0, -Math.PI / 2, Math.PI / 2, "none", 0, radiiFor, sizeByLifespan, wedges);
+  }
 
-  const axisData = sizeByLifespan ? computeAxisData(ancestorTree, wedges) : null;
+  const axisData = yearScale ? computeAxisData(yearScale.pxPerYear) : null;
 
   // The reference arcs draw *before* the wedge group below, so they sit
   // behind the wedges (a `<circle>`/`<path>` painted later covers one
@@ -541,11 +731,22 @@ export function renderFanChart(
   // missing a birth or death date) -- unlike the hatch pattern, which means
   // "no person at all" -- so it reads as a distinct, deliberately neutral
   // grey rather than either an accent color or the hatch's "unresearched"
-  // texture.
+  // texture. Moot in calendar-anchored mode below, where that same "missing
+  // a date" person already gets the hatch treatment instead (nodeRadii has
+  // nothing real to place them by either) -- still used in fixed mode, and
+  // in calendar mode for the "Age at death" scheme's own reachable case
+  // (both dates present, but birth >= death -- ageAtDeath's own guard).
   const NO_SCHEME_DATA = "#c9c2b3";
 
+  // In calendar-anchored mode, a known person missing either date has no
+  // real geometry to show either -- nodeRadii already fell back to the
+  // same fixed placeholder radius an empty {} slot gets, so the fill
+  // matches that same "unresearched" hatch rather than implying their
+  // wedge boundary means something it doesn't. Fixed mode is unaffected:
+  // its wedges never depend on dates in the first place.
   const fillFor = (d: Wedge): string => {
     if (!d.node?.person) return "url(#fan-hatch)";
+    if (sizeByLifespan && !hasFullLifespan(d.node)) return "url(#fan-hatch)";
     if (colorScheme === "death") {
       const age = ageAtDeath(d.node);
       return age != null ? deathColorFor(age) : NO_SCHEME_DATA;
@@ -554,6 +755,7 @@ export function renderFanChart(
   };
   const strokeBaseFor = (d: Wedge): string => {
     if (!d.node?.person) return "var(--mantine-color-default-border)";
+    if (sizeByLifespan && !hasFullLifespan(d.node)) return "var(--mantine-color-default-border)";
     if (colorScheme === "death") {
       const age = ageAtDeath(d.node);
       return age != null ? darken(deathColorFor(age)) : darken(NO_SCHEME_DATA);
@@ -561,24 +763,35 @@ export function renderFanChart(
     return genStroke(d.depth);
   };
 
+  // A true annular sector (d3-arc) for every wedge in both modes -- the
+  // reference port needs no taper: since every ancestor's own angular span
+  // is a proper subset of its descendant's (collectWedges' own recursive
+  // halving), painting ascending by depth below already keeps a descendant
+  // visible everywhere its own ancestor's narrower slice doesn't cover it.
+  // drawA0/drawA1 (collectWedges' own doc comment) are already the final
+  // rendered bounds -- a growing inset on the parent-inherited edge only,
+  // nothing on the sibling-shared edge -- so arcGen just draws them as-is.
   const arcGen = d3arc<Wedge>()
     .innerRadius((d) => d.innerR)
     .outerRadius((d) => Math.max(d.innerR + 1, d.outerR - 1))
-    .startAngle((d) => d.a0)
-    .endAngle((d) => d.a1)
-    // GAP_PX / outerR converts the constant target gap into whatever angle
-    // sweeps that many px at *this* wedge's own outer radius -- a deep,
-    // narrow wedge gets a tiny padAngle, a shallow wide one a larger one,
-    // so the drawn gap reads the same width everywhere. Capped at
-    // MAX_PAD_ANGLE so a very-small-radius wedge (root, or an early
-    // generation) never has the pad eat a chunk of its own angular span.
-    .padAngle((d) => Math.min(MAX_PAD_ANGLE, GAP_PX / Math.max(1, d.outerR)))
+    .startAngle((d) => d.drawA0)
+    .endAngle((d) => d.drawA1)
     .cornerRadius(CORNER_RADIUS);
+
+  // Root painted first/bottom, oldest ancestors last/top -- the reference's
+  // own paint order (ascending ahnentafel number) for calendar-anchored
+  // mode. SVG's own painter's-algorithm order is all "z-order" means here.
+  // Only matters in calendar-anchored mode (fixed mode's rings never
+  // overlap in the first place), but sorting unconditionally is harmless:
+  // draw order doesn't affect anything else keyed off `wedges` itself
+  // (axisData, deathAges, centerTarget lookups below all use the unsorted
+  // array).
+  const renderOrder = sizeByLifespan ? [...wedges].sort((a, b) => a.depth - b.depth) : wedges;
 
   const group = chartContent
     .append("g")
     .selectAll("g.wedge")
-    .data(wedges)
+    .data(renderOrder)
     .join("g")
     .attr("class", "wedge")
     .style("cursor", (d) => (d.node?.person ? "pointer" : "default"))
@@ -587,6 +800,21 @@ export function renderFanChart(
         event.stopPropagation();
         onSelectPerson?.(d.node.person.handle);
       }
+    })
+    // Hover raises the wedge under the pointer to the very top of the
+    // paint order (d3 selection.raise(), a same-parent "move to last
+    // child" reorder -- cheap, no re-render) so a wedge buried under later-
+    // painted ancestors is still fully visible on mouseover. group.order()
+    // on mouseleave puts every wedge straight back into `renderOrder`'s own
+    // sequence, undoing the raise() -- otherwise the ascending-by-depth
+    // paint order this chart relies on for legible overlaps (nodeRadii's
+    // own doc comment) would stay permanently scrambled by whichever wedge
+    // was hovered last.
+    .on("mouseenter", (event) => {
+      select(event.currentTarget as Element).raise();
+    })
+    .on("mouseleave", () => {
+      group.order();
     });
 
   group
@@ -598,9 +826,18 @@ export function renderFanChart(
 
   const withPerson = group.filter((d) => !!d.node?.person);
 
-  withPerson
-    .append("title")
-    .text((d) => [d.node!.person!.profile?.name_given, d.node!.person!.profile?.name_surname].filter(Boolean).join(" ") || "(unnamed person)");
+  withPerson.append("title").text((d) => personTooltip(d.node!.person!));
+
+  // Below this rendered arc width, even a single truncated character plus
+  // clipString's own "…" reads as clutter rather than information -- skip
+  // the on-wedge name/date text entirely rather than force a fit. The
+  // native <title> tooltip above still covers every wedge regardless, so
+  // hovering one still surfaces who it is. Root is always labeled (its own
+  // labelWidth below uses radial thickness, not this angular measure, and
+  // it's never anywhere near this small in practice).
+  const MIN_LABEL_ARC_PX = 22;
+  const hasRoomForLabel = (d: Wedge): boolean =>
+    d.depth === 0 || (d.drawA1 - d.drawA0) * ((d.innerR + d.outerR) / 2) >= MIN_LABEL_ARC_PX;
 
   // Root gets a plain upright label (it's not meaningfully "along a radius"
   // -- it's the center point) -- placed at half its own wedge's own height
@@ -626,15 +863,17 @@ export function renderFanChart(
   // father-to-mother reading order the wedges are already laid out in -- so
   // it stays upright and consistently ordered from the west edge, through
   // top-center, to the east edge with no discontinuity to correct for.
-  const labelGroup = withPerson.append("g").attr("transform", (d) => {
+  const labelGroup = withPerson.filter(hasRoomForLabel).append("g").attr("transform", (d) => {
     if (d.depth === 0) return `translate(0,${-(d.innerR + d.outerR) / 2})`;
-    const thetaDeg = (((d.a0 + d.a1) / 2) * 180) / Math.PI;
+    const thetaDeg = (((d.drawA0 + d.drawA1) / 2) * 180) / Math.PI;
     const midR = (d.innerR + d.outerR) / 2;
     return `rotate(${thetaDeg - 90}) translate(${midR},0) rotate(90)`;
   });
 
   const labelWidth = (d: Wedge): number =>
-    d.depth === 0 ? (d.outerR - d.innerR) * 1.6 : Math.max(30, (d.a1 - d.a0) * ((d.innerR + d.outerR) / 2) - 8);
+    d.depth === 0
+      ? (d.outerR - d.innerR) * 1.6
+      : Math.max(30, (d.drawA1 - d.drawA0) * ((d.innerR + d.outerR) / 2) - 8);
 
   labelGroup
     .append("text")
@@ -667,17 +906,16 @@ export function renderFanChart(
 
   // Lifespan mode's own year axis: a horizontal rule at y=0 (root's own
   // line -- the same line the pan clamp above keeps anchored near the
-  // bottom of the panel), centered on root's own birth year, using the
-  // exact same PX_PER_YEAR scale lifespanThickness already draws wedges
-  // with. It's a rough reference, not a precise per-branch calendar axis --
-  // an individual wedge's own radius is the sum of that lineage's own
-  // ancestors' lifespans, which only tracks elapsed calendar time loosely
-  // (overlapping lifespans, generation-gap differences) -- good enough to
-  // orient by, not meant to line up exactly with any one wedge's boundary.
-  // The reference arcs at these same tick radii were already drawn *before*
-  // the wedges, above (axisData's own doc comment). Lives in `chartContent`
-  // like everything else here, so it pans and scales with the wedges rather
-  // than staying pinned to the viewport.
+  // bottom of the panel), centered on *today* (currentYear), using the
+  // exact same derived pxPerYear scale (computeYearScale) nodeRadii already
+  // draws wedges with. This is a precise calendar axis, not a rough
+  // approximation: every wedge's
+  // own inner/outer edge is that specific person's own death/birth year
+  // radius, so reading a wedge's boundary against this axis gives back
+  // their real dates. The reference arcs at these same tick radii were
+  // already drawn *before* the wedges, above (axisData's own doc comment).
+  // Lives in `chartContent` like everything else here, so it pans and
+  // scales with the wedges rather than staying pinned to the viewport.
   if (axisData) {
     const axisG = chartContent.append("g").attr("class", "year-axis");
 
