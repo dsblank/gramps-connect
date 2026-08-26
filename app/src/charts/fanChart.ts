@@ -471,9 +471,20 @@ export function collectWedges(
 
 /** Caps how far "fit to window" will zoom IN for a very shallow tree (e.g.
  * just root + one generation) -- fitting a tiny circle to a large panel
- * would otherwise blow it up to an ungainly size. */
-const MAX_FIT_SCALE = 2.5;
+ * would otherwise blow it up to an ungainly size. Already includes
+ * FIT_ZOOM_BOOST (both this and computeFitTransform's own padding-limited
+ * case are boosted by the same factor, so a shallow tree capped here and a
+ * deep one capped by panel size end up feeling equally "zoomed in"). */
+const MAX_FIT_SCALE = 2.5 * 1.25;
 const FIT_PAD = 24;
+/** The initial "fit whole circle to window" scale, on top of whatever the
+ * padded-panel math alone would give -- per feedback that the tight fit
+ * read as sitting too far back, about 25%. Applied uniformly to both the
+ * panel-size-limited case and MAX_FIT_SCALE's own shallow-tree cap (rolled
+ * into that constant directly) rather than only one of the two, so a
+ * shallow and a deep tree still feel consistently zoomed relative to each
+ * other. */
+const FIT_ZOOM_BOOST = 1.25;
 
 /** The zoom transform that frames the *whole* currently-drawn circle within
  * bboxWidth x bboxHeight, root re-centered in the panel -- a computed scale
@@ -489,7 +500,7 @@ function computeFitTransform(wedges: Wedge[], bboxWidth: number, bboxHeight: num
   const maxR = Math.max(RING, ...wedges.map((w) => w.outerR));
   const availWidth = Math.max(40, bboxWidth - 2 * FIT_PAD);
   const availHeight = Math.max(40, bboxHeight - 2 * FIT_PAD);
-  const scale = Math.min(availWidth / (2 * maxR), availHeight / (2 * maxR), MAX_FIT_SCALE);
+  const scale = Math.min((availWidth / (2 * maxR)) * FIT_ZOOM_BOOST, (availHeight / (2 * maxR)) * FIT_ZOOM_BOOST, MAX_FIT_SCALE);
   return zoomIdentity.scale(scale);
 }
 
