@@ -48,7 +48,7 @@ export function toRowValues(view: ViewConfig, item: Record<string, unknown> & { 
     item.handle,
     ...view.columns.map((c) => {
       const raw = item[c.key];
-      return c.toSql ? c.toSql(raw) : (raw as string | number | null | undefined) ?? null;
+      return c.toSql ? c.toSql(raw, item) : (raw as string | number | null | undefined) ?? null;
     }),
   ];
 }

@@ -34,8 +34,10 @@ export interface ColumnConfig {
   select: string | { json_path: (string | number)[] };
   sqlType: "TEXT" | "INTEGER";
   /** API response value -> value to store in local SQLite. Default:
-   * stored as-is. */
-  toSql?: (apiValue: unknown) => string | number | null;
+   * stored as-is. `item` is the row's full (pre-toSql) API response, for a
+   * column whose stored value depends on more than just its own selected
+   * field -- see `title`'s fallback to `name` below. */
+  toSql?: (apiValue: unknown, item?: Record<string, unknown>) => string | number | null;
   /** Stored SQLite value -> displayed cell text. Default: String(value),
    * or "" for null/undefined. */
   toDisplay?: (sqlValue: unknown) => string;
@@ -153,6 +155,22 @@ function toRefHandles(value: unknown): string | null {
   const refs = value as { ref?: string }[] | null | undefined;
   if (!refs?.length) return null;
   return refs.map((ref) => ref.ref).filter(Boolean).join(",") || null;
+}
+
+/** Falls back to a place's own primary name when `title` is empty --
+ * desktop's "Automate Place Format" preference (on by default, see
+ * gramps/gui/editors/editplace.py) hides the title field from the place
+ * editor entirely and never writes it, so most users' places have no title
+ * at all; desktop never notices because it recomputes a display string from
+ * the place hierarchy live, on every call. Matches gramps-web's own
+ * priority order (GrampsjsPlace.js: `name.value || title`), not a
+ * reimplementation of desktop's hierarchy walk. `nameKey` is the sibling
+ * hidden column (json_path-selected as a whole PlaceName
+ * object, e.g. ["name"] or ["place", "name"]) to read `.value` off. */
+function placeTitleOrName(title: unknown, item: Record<string, unknown> | undefined, nameKey: string): string | null {
+  if (typeof title === "string" && title !== "") return title;
+  const name = item?.[nameKey] as { value?: string } | undefined;
+  return name?.value || null;
 }
 
 /** Same, for a list that's already bare handle strings (Person.family_list)
@@ -381,6 +399,12 @@ export const EVENT_VIEW: ViewConfig = {
     },
     {
       key: "place_title", label: "Place", select: { json_path: ["place", "title"] }, sqlType: "TEXT",
+      toSql: (title, item) => placeTitleOrName(title, item, "place_name"),
+    },
+    // Hidden: place_title's own fallback source -- see placeTitleOrName.
+    {
+      key: "place_name", label: "Place name", select: { json_path: ["place", "name"] },
+      sqlType: "TEXT", hidden: true, toSql: toSqlJson,
     },
     // An Event's raw `place` *is* the target handle, so this is a flat
     // column, not a json_path -- the sibling place_title above is what
@@ -407,14 +431,28 @@ export const PLACE_VIEW: ViewConfig = {
   wherePlaceholder: 'e.g. like(title, "%, TX")',
   simpleSearch: {
     placeholder: "Enter a Gramps ID, or a place name…",
-    buildExpr: buildSimpleSearchExpr(["gramps_id", "title"]),
+    // "title" alone misses every place left title-less by desktop's
+    // "Automate Place Format" (see placeTitleOrName) -- name.value is the
+    // field that's actually populated then.
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "title", "name.value"]),
   },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
-    { key: "title", label: "Title", select: "title", sqlType: "TEXT" },
+    {
+      key: "title", label: "Title", select: "title", sqlType: "TEXT",
+      toSql: (title, item) => placeTitleOrName(title, item, "name"),
+    },
     { key: "lat", label: "Lat", select: "lat", sqlType: "TEXT" },
     { key: "long", label: "Long", select: "long", sqlType: "TEXT" },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    // Hidden: title's own fallback source -- see placeTitleOrName. Selected
+    // as the whole PlaceName object (like father_name/mother_name above
+    // select the whole primary_name) since a scalar-only path isn't needed
+    // anywhere else this column could be reused for.
+    {
+      key: "name", label: "Primary name", select: { json_path: ["name"] },
+      sqlType: "TEXT", hidden: true, toSql: toSqlJson,
+    },
     // Hidden: the handles of the places this one sits inside (PlaceRef.ref).
     // Gramps places are a containment hierarchy -- an event is usually
     // recorded against a specific town, not the county or country above it
