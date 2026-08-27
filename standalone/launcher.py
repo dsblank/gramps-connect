@@ -196,46 +196,64 @@ def main() -> None:
     print(f"Gramps Connect Desktop running at http://{HOST}:{PORT}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
 
-    # pywebview defaults ALLOW_DOWNLOADS to False, which on the GTK backend
-    # means it never even connects WebKit's download-started signal --
-    # clicking a report/export "Download" link still gets marked for
-    # download internally (on_navigation's decide-policy handler calls
-    # decision.download() regardless), but nothing is listening for it, so
-    # it just silently vanishes with no error, dialog, or file. Enabling
-    # this makes pywebview wire up a native GTK save-file dialog instead
-    # (webview/platforms/gtk.py's on_download_decide_destination).
+    if sys.platform.startswith("linux"):
+        # Linux's only pywebview backend here is GTK/WebKitGTK, which lags
+        # upstream WebKit/Chromium enough to have already produced two
+        # confirmed bugs (PointerEvents never dispatched, breaking
+        # terra-draw's drag; ALLOW_DOWNLOADS's decision.download() called
+        # with nothing listening, silently dropping report/export
+        # downloads) plus an unverified one (ES module Worker support,
+        # needed by the Pyodide add-on PoC). Rather than chase WebKitGTK
+        # compatibility issue by issue, Linux always opens in the tester's
+        # own actual browser instead of a native window -- whatever they
+        # already have there is a real, currently-maintained engine, the
+        # same tradeoff the except branch below already falls back to when
+        # no native backend is found at all.
+        print("Linux: opening in your default browser instead of a native window ...")
+        webbrowser.open(f"http://{HOST}:{PORT}")
+        print("Press Control+C to quit")
+        server_thread.join()
+        return
+
+    # Only macOS (WKWebView) and Windows (WebView2) reach here now -- Linux
+    # returned above. pywebview defaults ALLOW_DOWNLOADS to False, which on
+    # the GTK backend used to mean it never even connected WebKit's
+    # download-started signal -- clicking a report/export "Download" link
+    # still got marked for download internally (on_navigation's
+    # decide-policy handler calls decision.download() regardless), but
+    # nothing was listening for it, so it silently vanished with no error,
+    # dialog, or file. Left enabled here too since it's harmless on the
+    # remaining backends (each just wires up its own native save dialog).
     webview.settings["ALLOW_DOWNLOADS"] = True
 
     webview.create_window(APP_NAME, f"http://{HOST}:{PORT}")
     try:
-        # webview.start() resolves the platform backend (GTK/Qt on Linux,
-        # WKWebView on macOS, WebView2 on Windows) before showing anything --
-        # it raises WebViewException synchronously if none is found, so this
-        # is a safe point to fall back rather than a partial/failed launch.
+        # webview.start() resolves the platform backend (WKWebView on
+        # macOS, WebView2 on Windows) before showing anything -- it raises
+        # WebViewException synchronously if none is found, so this is a
+        # safe point to fall back rather than a partial/failed launch.
         #
         # private_mode=False: pywebview defaults to private_mode=True, which
-        # on the GTK backend explicitly disables WebKit's local storage/
-        # IndexedDB (enable_html5_local_storage=False) -- not flaky, just
-        # off. That breaks anything using localStorage with no defensive
-        # try/catch (confirmed live: browserNotifications.ts's
-        # notifyBrowser(), fired on report/job completion, throws
-        # "Can't find variable: localStorage" since the API isn't merely
-        # empty but doesn't exist as a global at all), and silently no-ops
-        # column-width/search-state/map-viewport persistence besides. This
-        # is a single-user local app that already persists real data to
-        # disk (GRAMPSHOME under DATA_DIR) -- there's no incognito-style
-        # privacy need here, so private browsing was actively working
-        # against the app's own design. storage_path keeps the resulting
-        # WebKit profile under DATA_DIR too, consistent with "delete this
-        # folder to reset" covering everything, not just the tree.
+        # (at least on the GTK backend this was found against) explicitly
+        # disables local storage/IndexedDB -- not flaky, just off. That
+        # breaks anything using localStorage with no defensive try/catch
+        # (confirmed live, pre-dating the Linux-goes-to-a-browser branch
+        # above: browserNotifications.ts's notifyBrowser(), fired on
+        # report/job completion, threw "Can't find variable: localStorage"
+        # since the API isn't merely empty but doesn't exist as a global at
+        # all), and silently no-ops column-width/search-state/map-viewport
+        # persistence besides. This is a single-user local app that already
+        # persists real data to disk (GRAMPSHOME under DATA_DIR) -- there's
+        # no incognito-style privacy need here, so private browsing was
+        # actively working against the app's own design. storage_path keeps
+        # the resulting profile under DATA_DIR too, consistent with "delete
+        # this folder to reset" covering everything, not just the tree.
         webview.start(private_mode=False, storage_path=data_path("webkit-storage"))
     except Exception as exc:
         # webview.WebViewException covers "no backend found at all", but a
-        # host whose real GTK/WebKit2 gi bindings import fine (see
-        # rthook_gi_stub.py's _try_real_gi()) yet fail at actual use --
-        # e.g. an ABI/library-version mismatch -- surfaces as some other
-        # exception type from deep inside pywebview's GTK backend (seen in
-        # practice: gi.repository.GLib.GError from a failed native call).
+        # host whose native bindings import fine yet fail at actual use --
+        # e.g. an ABI/library-version mismatch -- can surface as some other
+        # exception type from deep inside pywebview's platform backend.
         # Anything here means no working native window either way, so fall
         # back the same way rather than crashing.
         print(f"Native webview backend unavailable ({exc}) -- opening in your browser instead.")

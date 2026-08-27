@@ -25,6 +25,12 @@ import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 const MapItemEditorDialog = lazy(() =>
   import("./MapItemEditorDialog").then((m) => ({ default: m.MapItemEditorDialog })));
 
+// pyodidePoc/ pulls in prismjs/react-simple-code-editor -- lazy for the
+// same reason MapItemEditorDialog above is: a session that never opens
+// "Add Gramplet…" never fetches either.
+const GrampletEditDialog = lazy(() =>
+  import("../pyodidePoc/GrampletEditDialog").then((m) => ({ default: m.GrampletEditDialog })));
+
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
 // at ROLE_OWNER and above.
 const PERM_IMPORT_FILE = "ImportFile";
@@ -222,6 +228,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
   const [systemInfoOpened, setSystemInfoOpened] = useState(false);
   const [aboutOpened, setAboutOpened] = useState(false);
   const [mapItemOpened, setMapItemOpened] = useState(false);
+  const [grampletOpened, setGrampletOpened] = useState(false);
 
   // App.tsx mounts a second MenuBar when the header switches layouts, so
   // the fetch is deduplicated in loadReports() and only its result is
@@ -319,6 +326,16 @@ export function MenuBar({ draftStack }: MenuBarProps) {
               onClick: () => setMapItemOpened(true),
               separatorBefore: true,
             },
+            {
+              // Also not a draft type -- opens GrampletEditDialog.tsx
+              // directly, same as Add Map Item just above. Needs
+              // EditObject too, same reasoning as Family above: creating a
+              // Gramplet is upload-then-tag (grampletMedia.ts's
+              // uploadGramplet), and tagging is a generic object PUT.
+              label: "Add Gramplet…",
+              perm: [PERM_ADD_OBJ, PERM_EDIT_OBJ],
+              onClick: () => setGrampletOpened(true),
+            },
           ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already
@@ -382,6 +399,17 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           }
         >
           <MapItemEditorDialog target={{ kind: "new" }} onClose={() => setMapItemOpened(false)} />
+        </Suspense>
+      )}
+      {grampletOpened && (
+        <Suspense
+          fallback={
+            <Box style={{ position: "fixed", inset: 0, zIndex: 300 }}>
+              <Loader size="sm" style={{ position: "absolute", top: "50%", left: "50%" }} />
+            </Box>
+          }
+        >
+          <GrampletEditDialog target={{ kind: "new" }} onClose={() => setGrampletOpened(false)} />
         </Suspense>
       )}
     </>

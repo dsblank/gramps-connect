@@ -15,6 +15,7 @@ import { gtkColorToCss } from "./related/color";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MediaMapButton } from "./related/MediaMapButton";
 import { MediaKmlEditButton } from "./related/MediaKmlEditButton";
+import { MediaGrampletEditButton } from "./related/MediaGrampletEditButton";
 import { MessageButton } from "./related/MessageButton";
 import { EditButton } from "./related/EditButton";
 import { DeleteButton } from "./related/DeleteButton";
@@ -387,7 +388,10 @@ export function RelatedPanel({
         <Group gap="xs" wrap="nowrap" style={{ flex: "none" }}>
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           {view.key === "media" && (
-            <MediaKmlEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
+            <>
+              <MediaKmlEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
+              <MediaGrampletEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
+            </>
           )}
           <DeleteButton view={view} detail={detail} />
           <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />

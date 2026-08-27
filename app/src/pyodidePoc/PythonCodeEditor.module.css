@@ -1,0 +1,55 @@
+/* Same border/background convention as DataTable.module.css's
+   .tableWrapper, so this reads as one more bordered field in the app
+   rather than a visually foreign widget. */
+.wrapper {
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-sm);
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  overflow: auto;
+}
+
+.textarea,
+.pre {
+  outline: none;
+}
+
+/* Prism's Python grammar token classes -- light-dark() throughout (see
+   this app's own convention, e.g. DataTable.module.css) rather than one
+   of Prism's bundled themes, which only ever style one direction. */
+.wrapper :global(.token.comment) {
+  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-gray-5));
+  font-style: italic;
+}
+
+.wrapper :global(.token.string),
+.wrapper :global(.token.triple-quoted-string) {
+  color: light-dark(var(--mantine-color-green-8), var(--mantine-color-green-4));
+}
+
+.wrapper :global(.token.keyword) {
+  color: light-dark(var(--mantine-color-grape-8), var(--mantine-color-grape-4));
+  font-weight: 600;
+}
+
+.wrapper :global(.token.boolean),
+.wrapper :global(.token.number) {
+  color: light-dark(var(--mantine-color-orange-8), var(--mantine-color-orange-4));
+}
+
+.wrapper :global(.token.function) {
+  color: light-dark(var(--mantine-color-blue-8), var(--mantine-color-blue-4));
+}
+
+.wrapper :global(.token.class-name),
+.wrapper :global(.token.builtin) {
+  color: light-dark(var(--mantine-color-teal-8), var(--mantine-color-teal-4));
+}
+
+.wrapper :global(.token.decorator),
+.wrapper :global(.token.punctuation) {
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-gray-4));
+}
+
+.wrapper :global(.token.operator) {
+  color: light-dark(var(--mantine-color-pink-8), var(--mantine-color-pink-4));
+}

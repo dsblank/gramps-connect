@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { pollHistory, type TreeChangeNotification } from "../store/historyPoll";
 import { getViewStoresForTable } from "../store/registry";
+import { publishTreeChange } from "../store/treeChangeBus";
 import { getCurrentUsername } from "../auth/auth";
 
 export type LiveSyncStatus = "connecting" | "connected" | "disconnected";
@@ -13,7 +14,8 @@ export type LiveSyncStatus = "connecting" | "connected" | "disconnected";
  * "media" and "generated" both watch Media), so a notification isn't routed
  * to just one. Every view is live-synced this way, not just one hardcoded
  * table, since /api/transactions/history/ already reports every object type
- * that changed in one response.
+ * that changed in one response. Also fans every notification out over
+ * treeChangeBus.ts, for a consumer that isn't a ViewStore (PyodidePocPanel.tsx).
  *
  * `onRemoteNoteChange`, if given, fires for Notes-table changes made by
  * someone other than the current user (v1 scope: Notes only, not every
@@ -27,6 +29,7 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
 
   useEffect(() => {
     function onNotification(notification: TreeChangeNotification) {
+      publishTreeChange(notification);
       if (
         notification.table === "note" &&
         notification.changedBy &&

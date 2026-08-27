@@ -14,6 +14,13 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
+  // Default worker output format ("iife") can't code-split -- pyodideWorker.ts
+  // (PoC, see src/pyodidePoc/) imports "pyodide", whose loader dynamically
+  // imports Node builtins that Vite splits into their own externalized
+  // chunks, which only the "es" format supports emitting for a worker entry.
+  worker: {
+    format: "es",
+  },
   optimizeDeps: {
     exclude: [
       // Workspace-linked @gramps-connect/gramps-date ships raw .ts with no

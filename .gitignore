@@ -39,6 +39,16 @@ dev-fixtures/layer3-sync/api-fixture/server.log
 app/public/*.wasm
 app/public/*.mjs
 
+# app: pyodide runtime assets (PoC, see app/src/pyodidePoc/), also copied
+# in by scripts/copy-wasm.mjs -- whole subdirectory since it's several
+# files (.wasm/.mjs/.json/.zip) all generated, none of them source.
+app/public/pyodide/
+
+# app: gramps wheel (PoC, see app/src/pyodidePoc/), best-effort copy by
+# scripts/copy-wasm.mjs from dist/gramps-wheel/ (itself gitignored via the
+# blanket `dist/` rule above) -- generated, not source.
+app/public/gramps-wheel/
+
 # app: local dev overrides of .env.example -- machine-specific, not source
 app/.env.local
 

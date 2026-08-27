@@ -1,0 +1,13 @@
+/* The tab's own edit-pencil/"remove from this list" glyphs -- hidden
+   until the tab is hovered (or a glyph itself has keyboard focus, so
+   they aren't only reachable by sighted/mouse users -- a known
+   accessibility gap with hover-only reveal patterns otherwise). */
+.tabActions {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tab:hover .tabActions,
+.tab:focus-within .tabActions {
+  opacity: 1;
+}

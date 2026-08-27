@@ -30,6 +30,8 @@ import { useDraftStack } from "./store/draftStack";
 import { EditDialogs } from "./components/EditDialogs";
 import { useMediaDrop } from "./hooks/useMediaDrop";
 import { MediaDropOverlay } from "./components/MediaDropOverlay";
+import { PyodidePocPanel } from "./pyodidePoc/PyodidePocPanel";
+import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 
 export function App() {
@@ -275,6 +277,15 @@ function AuthenticatedApp() {
               <ListHeader key={`header-${view.key}`} view={view} draftStack={draftStack} />
               <FilterBar key={`filter-${view.key}`} view={view} />
               <DataTable key={`table-${view.key}`} view={view} />
+              {/* Pyodide add-on PoC, see pyodidePoc/ -- every real Gramps
+                  object-type list (not the synthetic generated/messages/
+                  story views layered on Media/Note), since a Gramplet
+                  itself is tree-wide, not scoped to whichever table
+                  happens to be open. OBJECT_QUERY_ENDPOINTS is the same
+                  10-type map pyodideWorker.ts's filter()/get_object()
+                  bridge already keys off of -- reused here rather than a
+                  second, separately-maintained list of the same 10 keys. */}
+              {view.key in OBJECT_QUERY_ENDPOINTS && <PyodidePocPanel viewKey={view.key} />}
             </Box>
           )}
           {/* Stacked layout only -- the same panes the aside holds when
