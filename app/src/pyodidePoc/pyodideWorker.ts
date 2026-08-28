@@ -612,6 +612,33 @@ del _object_type
 db = Db()
 
 
+# selected -- the record currently shown in the detail pane of the view
+# this Gramplet is running on (the same one the app's own Related Panel
+# shows -- see ViewStore's own selectedHandle), already resolved to a
+# real Gramps object (Person, Family, ...): the closest equivalent here
+# to Gramps Desktop's own "active person" a sidebar gramplet can react
+# to. None when nothing is selected (an empty list, for instance) or when
+# there's no view context at all (a run from the standalone Gramplet
+# editor's own preview). A Gramplet author never has to know which of the
+# 10 types they got, call the right db.get_<type>_from_handle() itself,
+# or write await to do it -- deliberately not exposed as a separate
+# type+handle pair the way earlier revisions of this did, precisely to
+# avoid that dispatch/await boilerplate; type(selected).__name__ (e.g.
+# "Person") is there if a Gramplet genuinely needs to branch on it.
+# Reassigned fresh by _set_selected() before every run (see runOne() in
+# this file) -- a real network fetch each time there IS a selection (same
+# cost as calling db.get_<type>_from_handle() by hand, just automatic),
+# and a plain global, not per-Gramplet persisted state the way
+# stBootstrap.ts's st.session_state is, since this always reflects
+# whatever the *current* request said, never a previous run's value.
+selected = None
+
+
+async def _set_selected(new_type, new_handle):
+    global selected
+    selected = await get_object(new_type, new_handle) if new_handle is not None else None
+
+
 # columns()/row(): named and shaped after Gramps desktop's own GrampyScript
 # addon (../addons-source/GrampyScript/) -- call columns(...) once (optional)
 # and row(...) per row to build a table instead of returning a plain
@@ -1151,6 +1178,20 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     const grampletIdArg = JSON.stringify(request.grampletId);
     const widgetEventArg = request.widgetEvent ? JSON.stringify(JSON.stringify(request.widgetEvent)) : "None";
     await pyodide.runPythonAsync(`_st_begin_run(${grampletIdArg}, ${widgetEventArg})`);
+    // selected (see this file's own definition of it, just above
+    // columns()/row()) -- same JSON-then-JS-string encoding as
+    // grampletIdArg/widgetEventArg above, so `None` lands as the bare
+    // Python literal rather than the string `"None"`. Checked against
+    // `undefined` too, not just `null` -- JSON.stringify(undefined)
+    // returns the actual JS value `undefined` (not a string), which the
+    // template literal below would otherwise splice in as the bare,
+    // unquoted word `undefined` -- a Python NameError, not a Python `None`.
+    // `await` (unlike _st_begin_run above, a plain def) -- _set_selected
+    // is `async def` now, since it does a real get_object() fetch when
+    // there's a selection, not just a synchronous variable assignment.
+    const selectedTypeArg = request.selectedType != null ? JSON.stringify(request.selectedType) : "None";
+    const selectedHandleArg = request.selectedHandle != null ? JSON.stringify(request.selectedHandle) : "None";
+    await pyodide.runPythonAsync(`await _set_selected(${selectedTypeArg}, ${selectedHandleArg})`);
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
     // _finalize_blocks() flushes any pending print buffer and/or table
     // (see pyodideWorker's BOOTSTRAP_PY) and hands back every block the

@@ -101,6 +101,17 @@ export interface Gramplet {
    * the full edit dialog. Same "missing means every type" normalization
    * as `views`. */
   addedViews?: string[];
+  /** Whether this Gramplet should automatically re-run when the *selected*
+   * record on whichever view it's currently a tab of changes (a different
+   * row clicked, or arriving via a link) -- off (undefined/false) by
+   * default, since most Gramplets are tree-wide summaries with no reason
+   * to care what's selected. Edited via a toggle in GrampletEditDialog,
+   * next to `views`. Read by PyodidePocPanel.tsx (only for the active
+   * tab -- a backgrounded listening Gramplet just picks up the latest
+   * selection next time it's reactivated, same as every other rerun
+   * trigger here). See RunGrampletRequest's own selectedType/
+   * selectedHandle for what a listening Gramplet's code actually reads. */
+  listensToSelection?: boolean;
   /** The underlying "Gramplet"-tagged Media object's handle -- NOT part of
    * the stored JSON manifest itself (undefined for a brand new, not-yet-
    * uploaded Gramplet); attached by grampletMedia.ts's fetchGramplets()/
@@ -145,6 +156,22 @@ export interface RunGrampletRequest {
    * `_st_event_value` before running the code, so e.g. st.button() can
    * tell "was I the one just clicked" apart from every other run. */
   widgetEvent?: { key: string; value: unknown };
+  /** The type ("person", "family", ...) and handle of whichever record is
+   * currently selected on the view this Gramplet is running under (see
+   * ViewStore's own `selectedHandle`, the same value that drives the
+   * app's own Related Panel) -- null/null when nothing is selected yet
+   * (e.g. an empty list) or when there's no view context at all (the
+   * standalone Gramplet editor's own preview run, see
+   * GrampletEditDialog.tsx). Required (not optional) so every call site
+   * has to decide explicitly rather than leaving it undefined by
+   * accident. Seeded into the Python namespace as `selected_type`/
+   * `selected_handle` (see pyodideWorker.ts's BOOTSTRAP_PY) on every run
+   * -- whether or not the Gramplet actually asked to be *re-run* when
+   * selection changes (Gramplet.listensToSelection): a non-listening
+   * Gramplet still sees whatever was selected at the time it ran for
+   * some other reason. */
+  selectedType: string | null;
+  selectedHandle: string | null;
 }
 
 export type PyodideWorkerRequest = RunGrampletRequest;

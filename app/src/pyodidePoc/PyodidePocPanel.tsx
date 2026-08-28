@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { ActionIcon, Alert, Box, Group, Loader, Menu, Tabs, Text, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
+import { getViewStore } from "../store/registry";
 import { subscribeTreeChange } from "../store/treeChangeBus";
 import { fetchGramplets, saveGrampletManifest } from "./grampletMedia";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
@@ -90,6 +91,12 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // Gramplet to re-run even when `gramplets` itself hasn't changed (e.g. a
   // Person was edited, not a Gramplet). Part of the run-effect's own deps.
   const [runNonce, setRunNonce] = useState(0);
+  // Bumped by the selection-subscription effect below, but only while the
+  // active tab's Gramplet has listensToSelection set -- a second, separate
+  // nonce from runNonce above (a different trigger: "the row selected on
+  // this view changed" vs. "some tree data changed"), even though both
+  // just force the run-effect to reconsider the same way.
+  const [selectionNonce, setSelectionNonce] = useState(0);
   const workerRef = useRef<Worker | null>(null);
   // One cached result per Gramplet id, so switching back to an
   // already-run tab reuses it instead of re-executing -- see the
@@ -97,7 +104,10 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // Only ever holds *finished* runs (status "done"/"error") -- a run still
   // queued or executing lives in runningRef below instead, until it ends.
   const resultCacheRef = useRef<
-    Map<string, { code: string; runNonce: number; status: RunStatus; response: PyodideWorkerResponse | null }>
+    Map<
+      string,
+      { code: string; runNonce: number; selectedHandle: string | null; status: RunStatus; response: PyodideWorkerResponse | null }
+    >
   >(new Map());
   // One in-flight run per Gramplet id, queued or actively running (see
   // RunStatus) -- separate from resultCacheRef so re-selecting a tab whose
@@ -109,9 +119,19 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // (see getWorker()'s own onmessage handler below) -- kept updated for
   // *every* in-flight Gramplet, active tab or not, so switching back to a
   // backgrounded one shows its latest progress rather than nothing.
-  const runningRef = useRef<Map<string, { code: string; runNonce: number; runId: string; status: RunStatus; response: PyodideWorkerResponse | null }>>(
-    new Map()
-  );
+  const runningRef = useRef<
+    Map<
+      string,
+      {
+        code: string;
+        runNonce: number;
+        selectedHandle: string | null;
+        runId: string;
+        status: RunStatus;
+        response: PyodideWorkerResponse | null;
+      }
+    >
+  >(new Map());
   // runId -> Gramplet id, so the one shared worker.onmessage handler below
   // (set up once, not per-run) knows which runningRef entry a given
   // PyodideWorkerResponse belongs to -- the message itself only carries
@@ -126,6 +146,12 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   activeIdRef.current = activeId;
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rerunTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The last selectedHandle the selection-subscription effect below has
+  // seen, so it can tell a real change apart from ViewStore's subscribe()
+  // firing for some *other* snapshot field (loadedCount, revision, ...) --
+  // subscribe() itself carries no payload, just "something changed",
+  // see viewStore.ts.
+  const lastSelectedHandleRef = useRef<string | null>(null);
 
   function getWorker(): Worker {
     if (!workerRef.current) {
@@ -158,7 +184,13 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
           entry.response = data;
           runningRef.current.delete(gid);
           runIdToGrampletRef.current.delete(data.runId);
-          resultCacheRef.current.set(gid, { code: entry.code, runNonce: entry.runNonce, status: entry.status, response: entry.response });
+          resultCacheRef.current.set(gid, {
+            code: entry.code,
+            runNonce: entry.runNonce,
+            selectedHandle: entry.selectedHandle,
+            status: entry.status,
+            response: entry.response,
+          });
         }
 
         if (gid === activeIdRef.current) {
@@ -226,6 +258,31 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Selection reactivity, opt-in per Gramplet (Gramplet.listensToSelection)
+  // -- unlike the tree-change effect above (deliberately broad: any change,
+  // any Gramplet), this only subscribes at all when the *active* tab's own
+  // Gramplet asked for it, so a plain tree-wide summary Gramplet (most of
+  // them) pays nothing extra just because some other row got clicked.
+  // ViewStore.subscribe() carries no payload (just "something in this
+  // view's snapshot changed" -- loadedCount, revision, whereExpr, ... as
+  // well as selectedHandle), so lastSelectedHandleRef is what tells a real
+  // selection change apart from one of those unrelated snapshot updates.
+  // Only the active tab reacts, same as the tree-change effect -- a
+  // backgrounded listening Gramplet just picks up the latest selection
+  // next time it's reactivated (its own activeId-driven run, below).
+  useEffect(() => {
+    const gramplet = gramplets.find((g) => g.id === activeId);
+    if (!gramplet?.listensToSelection) return;
+    const store = getViewStore(viewKey);
+    lastSelectedHandleRef.current = store.getSnapshot().selectedHandle;
+    return store.subscribe(() => {
+      const handle = store.getSnapshot().selectedHandle;
+      if (handle === lastSelectedHandleRef.current) return;
+      lastSelectedHandleRef.current = handle;
+      setSelectionNonce((n) => n + 1);
+    });
+  }, [viewKey, activeId, gramplets]);
 
   // Which of the fetched Gramplets show as a tab on *this* view
   // (`addedViews`, toggled via the (+)/(-) glyphs below) vs. which are
@@ -305,23 +362,33 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
 
   // Runs the selected tab's gramplet -- on mount (the initially-active
   // tab), again whenever `gramplets` itself changes (e.g. a live-sync
-  // reload picked up an edited Gramplet), and again whenever `runNonce` is
+  // reload picked up an edited Gramplet), again whenever `runNonce` is
   // bumped (the live-sync subscription above, for a tree change to
-  // something other than a Gramplet itself). Three cases, checked in
-  // order:
+  // something other than a Gramplet itself), again whenever `viewKey`
+  // changes (the same Gramplet id can be a tab on more than one view --
+  // its selectedType/selectedHandle below differ per view even when
+  // nothing else does), and again whenever `selectionNonce` is bumped
+  // (the selection-subscription effect above, only for a Gramplet with
+  // listensToSelection set). Three cases, checked in order:
   //  1. resultCacheRef already has a *finished* result for this exact
-  //     code/runNonce -- reuse it, no re-run. A Gramplet's code is
-  //     typically a one-shot query, not something that needs re-executing
-  //     just because the user looked away and back.
-  //  2. runningRef already has this exact code/runNonce *in flight*
-  //     (queued or actively running, from an earlier selection of this
-  //     same tab that hasn't finished yet) -- reattach to it (show
-  //     whatever it's at right now) rather than posting a second,
-  //     redundant RunGrampletRequest that would restart it from scratch.
-  //  3. Neither -- genuinely new, so post a RunGrampletRequest and record
-  //     it in runningRef. getWorker()'s own onmessage handler (set up
-  //     once, not here) tracks it from here on, whether or not this tab
-  //     stays selected until it finishes.
+  //     code/runNonce (and, only if this Gramplet listens, selectedHandle
+  //     too) -- reuse it, no re-run. A Gramplet's code is typically a
+  //     one-shot query, not something that needs re-executing just
+  //     because the user looked away and back -- and a non-listening
+  //     Gramplet's cache stays valid across a selection change it never
+  //     asked to know about, same as it always has.
+  //  2. runningRef already has this exact code/runNonce/selectedHandle
+  //     *in flight* (queued or actively running, from an earlier
+  //     selection of this same tab that hasn't finished yet) -- reattach
+  //     to it (show whatever it's at right now) rather than posting a
+  //     second, redundant RunGrampletRequest that would restart it from
+  //     scratch.
+  //  3. Neither -- genuinely new, so post a RunGrampletRequest (carrying
+  //     the view's *current* selectedType/selectedHandle, read fresh here
+  //     regardless of whether this particular run was triggered BY a
+  //     selection change) and record it in runningRef. getWorker()'s own
+  //     onmessage handler (set up once, not here) tracks it from here on,
+  //     whether or not this tab stays selected until it finishes.
   // `cancelled` guards only the getToken() gap in case 3: a real async
   // call (may silently refresh), so a fast tab switch away before it
   // resolves shouldn't register/post a run for a tab already abandoned.
@@ -329,16 +396,29 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     const gramplet = gramplets.find((g) => g.id === activeId);
     if (!gramplet) return;
     const cacheKey = gramplet.id;
+    const listensToSelection = gramplet.listensToSelection ?? false;
+    const selectedHandle = getViewStore(viewKey).getSnapshot().selectedHandle;
+    const selectedType = selectedHandle !== null ? viewKey : null;
 
     const cached = resultCacheRef.current.get(cacheKey);
-    if (cached && cached.code === gramplet.code && cached.runNonce === runNonce) {
+    if (
+      cached &&
+      cached.code === gramplet.code &&
+      cached.runNonce === runNonce &&
+      (!listensToSelection || cached.selectedHandle === selectedHandle)
+    ) {
       setRunStatus(cached.status);
       setResponse(cached.response);
       return;
     }
 
     const inFlight = runningRef.current.get(cacheKey);
-    if (inFlight && inFlight.code === gramplet.code && inFlight.runNonce === runNonce) {
+    if (
+      inFlight &&
+      inFlight.code === gramplet.code &&
+      inFlight.runNonce === runNonce &&
+      (!listensToSelection || inFlight.selectedHandle === selectedHandle)
+    ) {
       setRunStatus(inFlight.status);
       setResponse(inFlight.response);
       return;
@@ -362,20 +442,28 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
           };
           setRunStatus("error");
           setResponse(errorResponse);
-          resultCacheRef.current.set(cacheKey, { code: gramplet.code, runNonce, status: "error", response: errorResponse });
+          resultCacheRef.current.set(cacheKey, { code: gramplet.code, runNonce, selectedHandle, status: "error", response: errorResponse });
         }
         return;
       }
       if (cancelled) return;
       runIdToGrampletRef.current.set(runId, cacheKey);
-      runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, runId, status: "queued", response: null });
-      getWorker().postMessage({ type: "run-gramplet", code: gramplet.code, token, runId, grampletId: gramplet.id });
+      runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, selectedHandle, runId, status: "queued", response: null });
+      getWorker().postMessage({
+        type: "run-gramplet",
+        code: gramplet.code,
+        token,
+        runId,
+        grampletId: gramplet.id,
+        selectedType,
+        selectedHandle,
+      });
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, gramplets, runNonce]);
+  }, [activeId, gramplets, runNonce, selectionNonce, viewKey]);
 
   // A click on an st.*-widget in the active tab's own rendered output (see
   // GrampletResultView's onWidgetEvent prop / stBootstrap.ts's st.button())
@@ -391,6 +479,13 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     if (!gramplet) return;
     const cacheKey = gramplet.id;
     const runId = crypto.randomUUID();
+    // Read fresh, same as the run-effect above -- a widget click always
+    // carries whatever's currently selected, regardless of
+    // listensToSelection (that flag only governs whether a selection
+    // change *by itself* triggers a rerun, not what a rerun for some
+    // other reason sees).
+    const selectedHandle = getViewStore(viewKey).getSnapshot().selectedHandle;
+    const selectedType = selectedHandle !== null ? viewKey : null;
     setRunStatus("queued");
     // Deliberately not setResponse(null) here, unlike the effect above --
     // GrampletResultView.tsx keeps rendering the *previous* response's
@@ -412,13 +507,15 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       return;
     }
     runIdToGrampletRef.current.set(runId, cacheKey);
-    runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, runId, status: "queued", response: null });
+    runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, selectedHandle, runId, status: "queued", response: null });
     getWorker().postMessage({
       type: "run-gramplet",
       code: gramplet.code,
       token,
       runId,
       grampletId: gramplet.id,
+      selectedType,
+      selectedHandle,
       widgetEvent: { key, value },
     });
   }

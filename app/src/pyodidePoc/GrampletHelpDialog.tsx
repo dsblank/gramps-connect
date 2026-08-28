@@ -77,6 +77,36 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Code>
         </Section>
 
+        <Section title={t("The selected record")}>
+          <Table verticalSpacing={6} withRowBorders={false}>
+            <Table.Tbody>
+              <SymbolRow
+                symbol="selected"
+                meaning={t(
+                  "Whichever record is currently open on this list's own detail pane, already fetched as a real Gramps object -- None if nothing is selected."
+                )}
+              />
+            </Table.Tbody>
+          </Table>
+          <Text size="sm" c="dimmed">
+            {t(
+              "Turn on \"Re-run automatically when the selected record changes\" (next to View, above the code box) to have this Gramplet re-run itself the moment a different row is selected -- off by default, since most Gramplets are tree-wide summaries that don't care."
+            )}
+          </Text>
+          <Code block>
+            {'if selected is not None:\n'
+              + '    columns("Selected")\n'
+              + '    row(selected)  # renders as a clickable link, not str(selected)\n'
+              + "else:\n"
+              + '    print("Nothing selected.")'}
+          </Code>
+          <Text size="sm" c="dimmed">
+            {t(
+              "A Gramplet attached to \"All\" views (rather than one specific type) can be handed any kind of record -- import the class you're checking for (from gramps.gen.lib import Person, Family) and use isinstance(selected, Person) to tell them apart; type(selected).__name__ (e.g. \"Person\") is there too, if all you need is a label to display rather than a branch."
+            )}
+          </Text>
+        </Section>
+
         <Section title={t("Building a result")}>
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>

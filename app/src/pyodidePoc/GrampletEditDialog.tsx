@@ -16,7 +16,7 @@
 // identifies its options by name alone, so a duplicate would be
 // indistinguishable there.
 import { useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { InfoButton } from "../components/InfoButton";
 import { fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
@@ -217,6 +217,11 @@ export function GrampletEditDialog({
         token,
         runId,
         grampletId: gramplet.id,
+        // No view context here -- this is the standalone preview, not
+        // attached to any one list's own selection (see the Switch's own
+        // description above).
+        selectedType: null,
+        selectedHandle: null,
         ...(widgetEvent ? { widgetEvent } : {}),
       });
     } catch (err) {
@@ -281,6 +286,14 @@ export function GrampletEditDialog({
               setGramplet({ ...gramplet, views: value === ALL_VIEWS_OPTION ? OBJECT_TYPES : [value] });
             }}
             allowDeselect={false}
+          />
+          <Switch
+            label={t("Re-run automatically when the selected record changes")}
+            description={t(
+              "Only meaningful with a specific View above (not \"All\") -- reads the record currently open on that list as selected_type/selected_handle. Leave off for a tree-wide summary that doesn't care what's selected; this preview here never has a selection either way."
+            )}
+            checked={gramplet.listensToSelection ?? false}
+            onChange={(e) => setGramplet({ ...gramplet, listensToSelection: e.currentTarget.checked })}
           />
           <Group gap="xs">
             <Text size="sm" fw={500}>
