@@ -7,7 +7,7 @@ import { loadPyodide, type PyodideInterface } from "pyodide";
 import { API_BASE } from "../config";
 import { autoAwaitGrampletCode } from "./autoAwait";
 import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
-import type { PyodideWorkerRequest, PyodideWorkerResponse, TableCell } from "./types";
+import type { GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse } from "./types";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -15,18 +15,19 @@ import type { PyodideWorkerRequest, PyodideWorkerResponse, TableCell } from "./t
 let pyodidePromise: Promise<PyodideInterface> | null = null;
 function getPyodide(): Promise<PyodideInterface> {
   if (!pyodidePromise) {
-    pyodidePromise = loadPyodide({ indexURL: "/pyodide/", stdout: (msg) => printedLines.push(msg) });
+    // No `stdout` option -- a Gramplet's own print() calls are captured by
+    // BOOTSTRAP_PY's own redefined print() (see pyodideWorker's BOOTSTRAP_PY
+    // below), not this JS-level hook, so they land in call order alongside
+    // html()/row() output instead of a separate side channel always shown
+    // first regardless of when they were actually printed. Whatever else
+    // still writes to real stdout (Pyodide's own bootstrap-time chatter,
+    // an uncaught low-level warning, ...) just falls through to the
+    // default console.log -- fine for a Gramplet dev tool with nothing
+    // else consuming this worker's console.
+    pyodidePromise = loadPyodide({ indexURL: "/pyodide/" });
   }
   return pyodidePromise;
 }
-
-// A Gramplet's own print() calls -- pyodide's `stdout` option above is
-// called once per line written to sys.stdout, for the lifetime of this
-// worker (loadPyodide() runs once, see pyodidePromise). Reset right before
-// each run (onmessage below), not once at load, so bootstrap-time chatter
-// (module imports, the gramps wheel install, ...) never leaks into a run's
-// own output, and this run's lines don't leak into the next one's.
-let printedLines: string[] = [];
 
 // Set fresh from each RunGrampletRequest, read by the bridge functions
 // below -- the worker can't call getToken() itself (reads localStorage,
@@ -34,6 +35,14 @@ let printedLines: string[] = [];
 // hands it over per-message instead. See types.ts's RunGrampletRequest
 // doc comment for the known "not refreshed mid-run" limitation.
 let currentToken = "";
+
+// The RunGrampletRequest currently executing (see runOne() below) -- read
+// by bridge.reportProgress() to tag its own message, the same way currentToken
+// above is read by the bridge's network calls. Safe to keep as one shared
+// variable rather than threading it through every call: onmessage below
+// never runs two requests' Python concurrently, so there's only ever one
+// meaningful value for this at a time.
+let currentRunId = "";
 
 // The JS side of filter()/get_object() -- registered into Pyodide once
 // (see BOOTSTRAP_PY) as the `_gramps_connect_bridge` module, wrapped by
@@ -135,6 +144,19 @@ const bridge = {
     const total = res.headers.get("X-Total-Count");
     if (total === null) throw new Error("count(): missing X-Total-Count response header");
     return total;
+  },
+  // Deliberately plain (not async), unlike every other bridge function --
+  // BOOTSTRAP_PY's print() calls this synchronously, with no `await`, right
+  // after buffering each line, so a live-updating loop (print() then
+  // time.sleep()) shows each line as it's printed instead of only once the
+  // whole run finishes. This works even though a Worker's own JS thread can
+  // genuinely block afterward (Pyodide's time.sleep() uses Atomics.wait, or
+  // a busy-wait if SharedArrayBuffer isn't available) because postMessage()
+  // hands the message off to the browser's own cross-thread queue at call
+  // time -- delivery to the main thread doesn't require this worker to
+  // keep running JS afterward, so it still arrives and renders mid-sleep.
+  reportProgress(blocksJson: string): void {
+    reply({ type: "progress", blocks: JSON.parse(blocksJson) as GrampletBlock[], runId: currentRunId });
   },
 };
 
@@ -492,54 +514,92 @@ db = Db()
 # just once at bootstrap, so a previous run's table can't leak into the
 # next one's result. A row() argument can be a whole primary object
 # (Person/Event/...), not just a hand-picked field -- see _cell()/
-# _describe_object() below -- and renders as a link, not a repr. Skipping
-# columns() no longer always names a column "Column N" either: if every
-# row's value in it was the same recognized kind, that kind names the
-# column instead ("Person", "Date", ...) -- see _cell_kind(). html(markup)
-# is the third way to switch the result, for raw HTML/SVG instead of a
-# table -- see html() below, and onmessage's priority order between the two.
+# _describe_object() below -- and renders as a link, not a repr. html(markup)
+# is a second way to add to the result, for raw HTML/SVG instead of a
+# table -- see html() below. print() is a third (redefined below, not left
+# as the real builtin hooked via pyodide's own stdout option): all three
+# accumulate into _gramplet_blocks, one block per table (a run of row()
+# calls), per html() call, and per run of consecutive print() calls, in
+# call order -- see _flush_table()/_flush_print()/html()/print() below and
+# GrampletBlock in types.ts. A Gramplet that only ever calls one of the
+# three still gets exactly the single block it always did.
 _gramplet_columns = None
 _gramplet_rows = []
 # One set per column index, of every _cell_kind() seen there across every
-# row() call -- how _table_json() names an un-columns()'d column "Person"/
+# row() call -- how _build_table() names an un-columns()'d column "Person"/
 # "Date"/... instead of "Column N" when every value it saw agreed on one
 # kind (a None in some rows doesn't break that -- _cell_kind(None) is None
 # and contributes nothing to the set).
 _gramplet_column_kinds = []
-# Set by html(markup) -- see below. None means the code never called it.
-_gramplet_html = None
+# Appended to by _flush_table()/_flush_print()/html() -- see above. Empty
+# means the code never called row(), html(), or print().
+_gramplet_blocks = []
+# Text from consecutive print() calls, not yet flushed into its own block --
+# see print()/_flush_print() below.
+_gramplet_print_buffer = []
 
 def _reset_table():
     # Name kept from when this only reset the table (still called that way
     # from onmessage below) -- now the one place every per-run global gets
     # cleared, table or not, so nothing from one run leaks into the next.
-    global _gramplet_columns, _gramplet_rows, _gramplet_column_kinds, _gramplet_html
+    global _gramplet_columns, _gramplet_rows, _gramplet_column_kinds, _gramplet_blocks, _gramplet_print_buffer
     _gramplet_columns = None
     _gramplet_rows = []
     _gramplet_column_kinds = []
-    _gramplet_html = None
+    _gramplet_blocks = []
+    _gramplet_print_buffer = []
 
 def columns(*names):
     global _gramplet_columns
+    # Flushes any print() output buffered since the last row()/html() call
+    # into its own block first, so a print() -> columns()/row() sequence
+    # keeps the print output's place ahead of the table it precedes instead
+    # of folding it into whatever comes next.
+    _flush_print()
     _gramplet_columns = [str(n) for n in names]
 
 def html(markup):
-    # Switches the result to raw HTML/SVG -- e.g. an SVG string built by
-    # hand, or a chart library's own .render() output (pygal's Pie, say):
-    # html(chart.render(is_unicode=True)). Unsanitized here on purpose --
-    # GrampletResultView.tsx runs it through DOMPurify right before it ever
-    # touches the DOM, the one place that actually matters for an XSS
-    # boundary, rather than trusting a second copy of that logic re-done in
-    # Pyodide. Wins over a table the same run also built (see onmessage's
-    # priority order), same as row() winning over a plain result.
-    global _gramplet_html
+    # Adds a block to the result, for raw HTML/SVG -- e.g. an SVG string
+    # built by hand, or a chart library's own .render() output (pygal's Pie,
+    # say): html(chart.render(is_unicode=True)). Unsanitized here on
+    # purpose -- GrampletResultView.tsx runs it through DOMPurify right
+    # before it ever touches the DOM, the one place that actually matters
+    # for an XSS boundary, rather than trusting a second copy of that logic
+    # re-done in Pyodide. Flushes any pending print buffer and/or table
+    # first, so html()/row()/print() calls interleaved in any order each
+    # keep their own place in the result instead of one silently discarding
+    # another.
     # pygal (and other chart libs) default render() to bytes, not str --
     # str(b"...") would give the literal "b'...'" repr instead of the
     # markup, so decode bytes here rather than requiring every Gramplet to
     # remember render(is_unicode=True).
     if isinstance(markup, (bytes, bytearray)):
         markup = markup.decode("utf-8")
-    _gramplet_html = str(markup)
+    _flush_print()
+    _flush_table()
+    _gramplet_blocks.append({"type": "html", "markup": str(markup)})
+
+def print(*args, sep=" ", end="\\n", **kwargs):
+    # Redefined rather than left as the real builtin captured via pyodide's
+    # own stdout option (see getPyodide() below) -- that captures every
+    # line written to sys.stdout into one buffer for the whole run, always
+    # shown before the run's own html()/row() output no matter when it was
+    # actually printed relative to them. Routing print() through the same
+    # _gramplet_blocks list as html()/row() instead keeps it in true call
+    # order with them. Buffers consecutive calls into one block (like row()
+    # does for a table) rather than one block per call, flushed by
+    # _flush_print() -- called from columns()/row()/html() when one of
+    # those interrupts a run of prints, and from _finalize_blocks() at the
+    # run's end. Swallows **kwargs (file=, flush=, ...) -- none of them
+    # mean anything without a real stdout stream to honor them.
+    _flush_table()
+    _gramplet_print_buffer.append(sep.join(str(a) for a in args) + end)
+    # Pushes what the result would look like right now (not yet flushed
+    # into _gramplet_blocks -- see _report_progress() below) back to the
+    # main thread immediately, so a print()-then-time.sleep() loop shows
+    # each line as it's printed instead of only once the whole run
+    # finishes and _finalize_blocks() is called.
+    _report_progress()
 
 # No install_packages()-style builtin needed for pygal (or anything else
 # scripts/copy-wasm.mjs pre-bundles this way): those are registered as
@@ -750,7 +810,7 @@ def _cell_kind(value):
     # What a default (un-columns()'d) header should call this column, if
     # every row agrees -- the primary object's own _class ("Person",
     # "Family", ...) or "Date"; anything else (plain strings/numbers, or a
-    # column mixing kinds) has no opinion, so _table_json() falls back to
+    # column mixing kinds) has no opinion, so _build_table() falls back to
     # "Column N" for it exactly as before.
     if _is_primary_dict(value):
         return value.get("_class")
@@ -761,6 +821,10 @@ def _cell_kind(value):
     return None
 
 def row(*values):
+    # Flushes any print() output buffered since the last flush into its
+    # own block first -- same reasoning as columns() above, since a
+    # Gramplet can call row() straight off without ever calling columns().
+    _flush_print()
     for i, v in enumerate(values):
         if i >= len(_gramplet_column_kinds):
             _gramplet_column_kinds.append(set())
@@ -769,10 +833,7 @@ def row(*values):
             _gramplet_column_kinds[i].add(kind)
     _gramplet_rows.append([_cell(v) for v in values])
 
-def _table_json():
-    import json as _json
-    if not _gramplet_rows:
-        return "null"
+def _build_table():
     if _gramplet_columns:
         cols = _gramplet_columns
     else:
@@ -780,7 +841,69 @@ def _table_json():
         for i in range(len(_gramplet_rows[0])):
             kinds = _gramplet_column_kinds[i] if i < len(_gramplet_column_kinds) else set()
             cols.append(next(iter(kinds)) if len(kinds) == 1 else f"Column {i + 1}")
-    return _json.dumps({"columns": cols, "rows": _gramplet_rows})
+    return {"columns": cols, "rows": _gramplet_rows}
+
+def _flush_table():
+    # Turns whatever row()/columns() have built up since the last flush
+    # into a table block and clears them, so a later html() call (or the
+    # run ending, via _finalize_blocks()) starts a fresh table instead of
+    # folding more rows into one already emitted. No-op if row() wasn't
+    # called since the last flush.
+    global _gramplet_columns, _gramplet_rows, _gramplet_column_kinds
+    if not _gramplet_rows:
+        return
+    table = _build_table()
+    _gramplet_blocks.append({"type": "table", "columns": table["columns"], "rows": table["rows"]})
+    _gramplet_columns = None
+    _gramplet_rows = []
+    _gramplet_column_kinds = []
+
+def _print_buffer_block():
+    # The print buffer's contents (see print() above), as the same
+    # escaped/<pre>-wrapped html block shape _flush_print()/_report_
+    # progress() below each append -- factored out since both need it,
+    # one destructively (clearing the buffer) and one not.
+    import html as _html_stdlib
+    text = "".join(_gramplet_print_buffer)
+    return {"type": "html", "markup": f"<pre>{_html_stdlib.escape(text)}</pre>"}
+
+def _flush_print():
+    # Turns whatever print() calls have built up since the last flush into
+    # one block and clears the buffer -- see print() above. Sanitized by
+    # DOMPurify same as any other html block (GrampletResultView.tsx)
+    # rather than needing a whole separate "this one is plain text" block
+    # kind. No-op if print() wasn't called since the last flush.
+    global _gramplet_print_buffer
+    if not _gramplet_print_buffer:
+        return
+    _gramplet_blocks.append(_print_buffer_block())
+    _gramplet_print_buffer = []
+
+def _report_progress():
+    # Sends what _finalize_blocks() would return right now -- every block
+    # already flushed, plus the print buffer's contents so far as one more
+    # (without actually flushing it, so a later print() call still keeps
+    # accumulating into the same block rather than starting a new one each
+    # time) -- back to the main thread as a {type: "progress"} message, so
+    # a print()-then-time.sleep() loop's output shows up live instead of
+    # only once the whole run finishes. See print()'s own call to this and
+    # bridge.reportProgress()/pyodideWorker.ts's onmessage for the JS side.
+    import json as _json
+    blocks = list(_gramplet_blocks)
+    if _gramplet_print_buffer:
+        blocks.append(_print_buffer_block())
+    _bridge.reportProgress(_json.dumps(blocks))
+
+def _finalize_blocks():
+    # Called once from onmessage after the code has finished running --
+    # flushes any print buffer and/or table still pending (the common
+    # cases: a Gramplet that calls print() and/or row() and never flushes
+    # mid-run by also calling html()) and hands back every block the run
+    # produced, in call order.
+    import json as _json
+    _flush_print()
+    _flush_table()
+    return _json.dumps(_gramplet_blocks)
 `;
 
 let bootstrapPromise: Promise<void> | null = null;
@@ -796,9 +919,33 @@ function reply(response: PyodideWorkerResponse): void {
   postMessage(response);
 }
 
-self.onmessage = async (event: MessageEvent<PyodideWorkerRequest>) => {
-  const { code, token } = event.data;
+// For the code's own trailing expression value -- see onmessage below.
+// No DOM available in a worker to lean on for this (no `document` to build
+// a text node and read back its escaped innerHTML), and this only ever
+// feeds a `<pre>...</pre>` text node's contents (see _flush_print()'s own
+// html.escape() call in BOOTSTRAP_PY, which this mirrors), so this doesn't
+// need to also escape quotes the way an attribute value would.
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Queue of (at most) one -- see self.onmessage below. A newer request
+// replaces whatever was queued, never appends: switching tabs three times
+// while the first is still running should run the first request, then
+// (once it's done) skip straight to the third, not visibly run the second
+// too on the way there.
+let queuedRequest: PyodideWorkerRequest | null = null;
+let running = false;
+
+async function runOne(request: PyodideWorkerRequest): Promise<void> {
+  const { code, token, runId } = request;
   currentToken = token;
+  currentRunId = runId;
+  // Sent right as this request is dequeued and actually starts using the
+  // interpreter -- the gap between postMessage() and this arriving is how
+  // the caller tells "queued behind another Gramplet" apart from
+  // "running" (see RunStatus/PyodideWorkerResponse's own doc comments).
+  reply({ type: "started", runId });
   try {
     const pyodide = await getPyodide();
     await ensureBootstrap(pyodide);
@@ -821,49 +968,82 @@ self.onmessage = async (event: MessageEvent<PyodideWorkerRequest>) => {
     // registry (public/pyodide/pyodide-lock.json, extended by
     // scripts/copy-wasm.mjs -- see BOOTSTRAP_PY's own comment on this) and
     // pre-loads anything found, e.g. `import pygal`, before the code that
-    // uses it runs. messageCallback suppressed for the same reason
-    // getGramps()'s own pyodide.loadPackage("micropip", ...) call is: its
-    // default "Loading X"/"Loaded X" progress otherwise routes through
-    // this run's own captured stdout (see printedLines above) and would
-    // show up in the Gramplet's own output.
+    // uses it runs. messageCallback suppressed the same way
+    // getGramps()'s own pyodide.loadPackage("micropip", ...) call is: this
+    // is a separate JS-side progress callback, not routed through Python's
+    // sys.stdout (and so not something BOOTSTRAP_PY's redefined print()
+    // ever sees either) -- suppressed purely so it doesn't spam the real
+    // browser console for every run.
     await pyodide.loadPackagesFromImports(code, { messageCallback: () => {} });
     await pyodide.runPythonAsync("_reset_table()");
-    printedLines = [];
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(code));
-    const printed = printedLines.join("\n");
-    // html() wins over everything -- checked first, same "crosses as a
-    // plain string" reasoning as filter()/get_object() above (a bare
-    // global reference as the trailing expression needs no _table_json()-
-    // style JSON wrapper the way a list-of-dicts table does).
-    const htmlMarkup = (await pyodide.runPythonAsync("_gramplet_html")) as string | undefined;
-    // Table wins over the plain result if the code called row() at all --
-    // same "crosses as a plain string, not a live PyProxy" reasoning as
-    // filter()/get_object() above.
-    const tableJson = (await pyodide.runPythonAsync("_table_json()")) as string;
-    const table = JSON.parse(tableJson) as { columns: string[]; rows: TableCell[][] } | null;
-    if (htmlMarkup) {
-      reply({ type: "html", markup: htmlMarkup, printed });
-    } else if (table) {
-      reply({ type: "table", columns: table.columns, rows: table.rows, printed });
-    } else {
-      // runPythonAsync() returns Python's `None` (a code body that never
-      // reaches a trailing expression -- e.g. a `for` loop, whether or
-      // not it ever iterated) as JS `undefined`, not the string "None" --
-      // found live from `for person in filter(...): row(person)` with
-      // zero matches: no rows were ever appended (so `table` above is
-      // null too), and String(undefined) is literally the text
-      // "undefined", which reads as an error when it just means "this
-      // code produced no result or table". Empty string here, rendered
-      // as a friendlier message by GrampletResultView.tsx.
-      reply({ type: "result", text: result === undefined ? "" : String(result), printed });
+    // _finalize_blocks() flushes any pending print buffer and/or table
+    // (see pyodideWorker's BOOTSTRAP_PY) and hands back every block the
+    // run produced -- one per table, per html() call, and per run of
+    // consecutive print() calls, all in call order.
+    const blocksJson = (await pyodide.runPythonAsync("_finalize_blocks()")) as string;
+    const blocks = JSON.parse(blocksJson) as GrampletBlock[];
+    // The code's own trailing expression value, if it has one -- appended
+    // last (it's always chronologically last: everything above already
+    // flushed by the time runPythonAsync resolves) as one more block, the
+    // same pre-wrapped/escaped shape print() output gets. runPythonAsync()
+    // returns Python's `None` (a code body that never reaches a trailing
+    // expression -- e.g. a `for` loop, whether or not it ever iterated) as
+    // JS `undefined`, not the string "None" -- found live from `for person
+    // in filter(...): row(person)` with zero matches: nothing was ever
+    // appended, so this is skipped and blocks stays whatever _finalize_
+    // blocks() returned (empty, here), rendered as a friendlier "no
+    // output" message by GrampletResultView.tsx rather than the literal
+    // text "undefined".
+    if (result !== undefined) {
+      blocks.push({ type: "html", markup: `<pre>${escapeHtml(String(result))}</pre>` });
     }
+    reply({ type: "blocks", blocks, runId });
   } catch (err) {
-    reply({
-      type: "error",
-      text: err instanceof Error ? err.message : String(err),
-      // Whatever printed before the crash -- often the most useful part
-      // of a traceback-only failure, so it isn't dropped on the error path.
-      printed: printedLines.join("\n"),
-    });
+    // Whatever the run produced before the crash -- often the most useful
+    // part of a traceback-only failure, so it isn't dropped on the error
+    // path. Best-effort: pyodide/BOOTSTRAP_PY may not have finished
+    // loading yet if the crash happened that early, in which case there's
+    // nothing to recover.
+    let blocks: GrampletBlock[] = [];
+    try {
+      const pyodide = await getPyodide();
+      const blocksJson = (await pyodide.runPythonAsync("_finalize_blocks()")) as string;
+      blocks = JSON.parse(blocksJson) as GrampletBlock[];
+    } catch {
+      // Nothing to recover -- fall through with the empty blocks default.
+    }
+    reply({ type: "error", text: err instanceof Error ? err.message : String(err), blocks, runId });
   }
+}
+
+self.onmessage = (event: MessageEvent<PyodideWorkerRequest>) => {
+  // Replaces (never appends to) whatever was queued -- see queuedRequest's
+  // own doc comment above.
+  queuedRequest = event.data;
+  if (running) {
+    // A Gramplet is already executing Python in this worker -- its own
+    // globals (_gramplet_blocks and friends, all module-level in
+    // BOOTSTRAP_PY, not per-run) would be corrupted by a second one
+    // running concurrently, so this new request just waits in
+    // queuedRequest; the loop below picks it up once the current one ends.
+    // It can't be cancelled early either -- once Python's actually
+    // running (e.g. mid time.sleep()), there's no clean way to interrupt
+    // it from here.
+    return;
+  }
+  running = true;
+  (async () => {
+    // queuedRequest may itself be replaced again *while* runOne() below is
+    // still awaiting (a third tab switch before the first request even
+    // starts) -- re-reading it fresh each iteration, rather than capturing
+    // one value up front, is what makes that "always run the latest, skip
+    // whatever was superseded in between" behavior work.
+    while (queuedRequest) {
+      const request = queuedRequest;
+      queuedRequest = null;
+      await runOne(request);
+    }
+    running = false;
+  })();
 };

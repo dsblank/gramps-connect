@@ -81,7 +81,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Table>
           <Text size="sm" c="dimmed">
             {t(
-              "Calling row() or html() switches the result from plain text to a table or a rendered graphic (html() wins if both were called). print() works too -- anything printed is shown above whatever the result was, even above a traceback if the code crashed."
+              "row(), html(), and print() all add to the result instead of replacing it -- call any of them as many times as you like, in any order, and each shows up in the order it was called, even a traceback if the code crashed partway through."
             )}
           </Text>
         </Section>

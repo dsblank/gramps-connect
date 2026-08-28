@@ -80,19 +80,79 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // One cached result per Gramplet id, so switching back to an
   // already-run tab reuses it instead of re-executing -- see the
   // run-effect below for how `code`/`runNonce` decide a cache hit vs. miss.
+  // Only ever holds *finished* runs (status "done"/"error") -- a run still
+  // queued or executing lives in runningRef below instead, until it ends.
   const resultCacheRef = useRef<
     Map<string, { code: string; runNonce: number; status: RunStatus; response: PyodideWorkerResponse | null }>
   >(new Map());
+  // One in-flight run per Gramplet id, queued or actively running (see
+  // RunStatus) -- separate from resultCacheRef so re-selecting a tab whose
+  // run hasn't finished yet (switch away, switch back before it's done)
+  // reattaches to what's already running instead of the run-effect below
+  // mistaking "not in resultCacheRef yet" for "never started" and posting
+  // a duplicate RunGrampletRequest, restarting it from scratch. Entries
+  // move to resultCacheRef and are deleted from here once their run ends
+  // (see getWorker()'s own onmessage handler below) -- kept updated for
+  // *every* in-flight Gramplet, active tab or not, so switching back to a
+  // backgrounded one shows its latest progress rather than nothing.
+  const runningRef = useRef<Map<string, { code: string; runNonce: number; runId: string; status: RunStatus; response: PyodideWorkerResponse | null }>>(
+    new Map()
+  );
+  // runId -> Gramplet id, so the one shared worker.onmessage handler below
+  // (set up once, not per-run) knows which runningRef entry a given
+  // PyodideWorkerResponse belongs to -- the message itself only carries
+  // the runId (see PyodideWorkerResponse in types.ts), not the Gramplet id.
+  const runIdToGrampletRef = useRef<Map<string, string>>(new Map());
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
+  // Kept in sync every render (same pattern as collapsedRef above) so
+  // getWorker()'s own onmessage handler -- set up once, long-lived -- can
+  // read the *current* activeId without closing over a stale one.
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rerunTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function getWorker(): Worker {
     if (!workerRef.current) {
-      workerRef.current = new Worker(new URL("./pyodideWorker.ts", import.meta.url), {
-        type: "module",
-      });
+      const worker = new Worker(new URL("./pyodideWorker.ts", import.meta.url), { type: "module" });
+      // Set up once for the worker's whole lifetime (not reassigned per
+      // run, the way it used to be) -- pyodideWorker.ts serializes
+      // execution but keeps running a backgrounded tab's Gramplet to
+      // completion, so messages for *any* in-flight run can arrive at any
+      // time, not just the currently active tab's. Routes each one via
+      // runIdToGrampletRef/runningRef instead of assuming the latest
+      // message belongs to whichever run was posted most recently.
+      worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
+        const data = event.data;
+        const gid = runIdToGrampletRef.current.get(data.runId);
+        if (!gid) return; // Unknown/already-cleaned-up runId -- nothing to do.
+        const entry = runningRef.current.get(gid);
+        if (!entry || entry.runId !== data.runId) return; // Superseded by a newer run for this same tab.
+
+        if (data.type === "started") {
+          entry.status = "loading";
+        } else if (data.type === "progress") {
+          entry.status = "loading";
+          entry.response = data;
+        } else {
+          // Terminal ("blocks" or "error") -- this run is over. Move it
+          // from runningRef into the finished-results cache and stop
+          // routing further messages for this runId (there shouldn't be
+          // any more, but belt-and-suspenders).
+          entry.status = data.type === "error" ? "error" : "done";
+          entry.response = data;
+          runningRef.current.delete(gid);
+          runIdToGrampletRef.current.delete(data.runId);
+          resultCacheRef.current.set(gid, { code: entry.code, runNonce: entry.runNonce, status: entry.status, response: entry.response });
+        }
+
+        if (gid === activeIdRef.current) {
+          setRunStatus(entry.status);
+          setResponse(entry.response);
+        }
+      };
+      workerRef.current = worker;
     }
     return workerRef.current;
   }
@@ -222,22 +282,29 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // tab), again whenever `gramplets` itself changes (e.g. a live-sync
   // reload picked up an edited Gramplet), and again whenever `runNonce` is
   // bumped (the live-sync subscription above, for a tree change to
-  // something other than a Gramplet itself). Switching *back* to a tab
-  // that already ran under the current code/runNonce reuses its cached
-  // result instead of re-running -- a Gramplet's code is typically a
-  // one-shot query, not something that needs re-executing just because
-  // the user looked away and back. `resultCacheRef` is keyed by Gramplet
-  // id and records the `code`/`runNonce` it ran under, so a cache entry
-  // goes stale (and the next select re-runs it) the moment either changes.
-  // `cancelled` guards against a fast tab switch: getToken() is a real
-  // async call (may silently refresh), so a stale response landing after
-  // the user has already moved to another tab shouldn't overwrite that
-  // tab's output.
+  // something other than a Gramplet itself). Three cases, checked in
+  // order:
+  //  1. resultCacheRef already has a *finished* result for this exact
+  //     code/runNonce -- reuse it, no re-run. A Gramplet's code is
+  //     typically a one-shot query, not something that needs re-executing
+  //     just because the user looked away and back.
+  //  2. runningRef already has this exact code/runNonce *in flight*
+  //     (queued or actively running, from an earlier selection of this
+  //     same tab that hasn't finished yet) -- reattach to it (show
+  //     whatever it's at right now) rather than posting a second,
+  //     redundant RunGrampletRequest that would restart it from scratch.
+  //  3. Neither -- genuinely new, so post a RunGrampletRequest and record
+  //     it in runningRef. getWorker()'s own onmessage handler (set up
+  //     once, not here) tracks it from here on, whether or not this tab
+  //     stays selected until it finishes.
+  // `cancelled` guards only the getToken() gap in case 3: a real async
+  // call (may silently refresh), so a fast tab switch away before it
+  // resolves shouldn't register/post a run for a tab already abandoned.
   useEffect(() => {
     const gramplet = gramplets.find((g) => g.id === activeId);
     if (!gramplet) return;
-
     const cacheKey = gramplet.id;
+
     const cached = resultCacheRef.current.get(cacheKey);
     if (cached && cached.code === gramplet.code && cached.runNonce === runNonce) {
       setRunStatus(cached.status);
@@ -245,9 +312,17 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       return;
     }
 
+    const inFlight = runningRef.current.get(cacheKey);
+    if (inFlight && inFlight.code === gramplet.code && inFlight.runNonce === runNonce) {
+      setRunStatus(inFlight.status);
+      setResponse(inFlight.response);
+      return;
+    }
+
     let cancelled = false;
+    const runId = crypto.randomUUID();
     (async () => {
-      setRunStatus("loading");
+      setRunStatus("queued");
       setResponse(null);
       let token: string;
       try {
@@ -257,7 +332,8 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
           const errorResponse: PyodideWorkerResponse = {
             type: "error",
             text: err instanceof Error ? err.message : String(err),
-            printed: "",
+            blocks: [],
+            runId,
           };
           setRunStatus("error");
           setResponse(errorResponse);
@@ -266,15 +342,9 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         return;
       }
       if (cancelled) return;
-      const worker = getWorker();
-      worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
-        if (cancelled) return;
-        const status: RunStatus = event.data.type === "error" ? "error" : "done";
-        setRunStatus(status);
-        setResponse(event.data);
-        resultCacheRef.current.set(cacheKey, { code: gramplet.code, runNonce, status, response: event.data });
-      };
-      worker.postMessage({ type: "run-gramplet", code: gramplet.code, token });
+      runIdToGrampletRef.current.set(runId, cacheKey);
+      runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, runId, status: "queued", response: null });
+      getWorker().postMessage({ type: "run-gramplet", code: gramplet.code, token, runId });
     })();
     return () => {
       cancelled = true;

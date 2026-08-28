@@ -64,7 +64,7 @@
 // once (optional -- if skipped, columns are auto-named "Column 1", "Column
 // 2", ...) and `row(...)` per row, and the result renders as a real GUI
 // table (GrampletResultView.tsx) instead of a Code block, if any rows were
-// ever appended -- see pyodideWorker.ts's `_table_json()`. A `row()`
+// ever appended -- see pyodideWorker.ts's `_build_table()`. A `row()`
 // argument can be a primary object itself (whatever `get_object()`/
 // `get_raw_object()`/`filter()` handed back) rather than a hand-picked
 // field -- e.g. `row(person, event)` -- and renders as clickable link text
@@ -119,6 +119,18 @@ export interface RunGrampletRequest {
    * not refreshed mid-run, so a Gramplet running longer than the token's
    * lifetime would start failing its own filter()/get_object() calls. */
   token: string;
+  /** Generated fresh by the caller (PyodidePocPanel.tsx/GrampletEditDialog.
+   * tsx) for every request, e.g. a switched-to tab's own run -- echoed back
+   * on every PyodideWorkerResponse for this run (see below) so the caller
+   * can tell a stale run's messages apart from the current one's and
+   * ignore them, and so pyodideWorker.ts can serialize execution (one
+   * Gramplet actually running Python at a time in the shared worker/
+   * interpreter -- BOOTSTRAP_PY's globals aren't per-run, so two running
+   * concurrently would corrupt each other's row()/print()/html() output)
+   * without silently dropping a request made while a previous one (e.g. a
+   * `time.sleep()` loop) was still in flight -- it just queues, replacing
+   * any earlier still-queued request, and runs once the current one ends. */
+  runId: string;
 }
 
 export type PyodideWorkerRequest = RunGrampletRequest;
@@ -139,21 +151,65 @@ export interface ObjectCell {
 
 export type TableCell = string | ObjectCell;
 
-/** Every variant carries `printed` -- whatever the code's own print() calls
- * wrote to stdout during this run (pyodideWorker.ts's `stdout` callback,
- * captured into a buffer reset right before the code runs and joined with
- * "\n" once it's done), independent of the table/result/error outcome
- * below. On `error` too, so print() calls made before a mid-run exception
- * still show -- often the most useful debugging output of all. */
+/** One piece of a `blocks` response (see PyodideWorkerResponse below) --
+ * either a table built by columns()/row() calls, or raw markup from a single
+ * html(markup) call, a run of consecutive print() calls (escaped and
+ * `<pre>`-wrapped -- see pyodideWorker.ts's `print()`/`_flush_print()`), or
+ * the code's own trailing expression value (same treatment, appended by
+ * onmessage once the run finishes -- it's always chronologically last).
+ * pyodideWorker.ts's `html()`/`row()`/`print()` each flush whatever the
+ * *other* two have pending into their own block first, so calling any of
+ * them more than once, or interleaving them in any order, produces one
+ * block per call (or per uninterrupted run of print() calls) in the order
+ * the code made them, instead of one silently overwriting another. */
+export type GrampletBlock =
+  | { type: "table"; columns: string[]; rows: TableCell[][] }
+  /** UNSANITIZED HTML/SVG source (see pyodideWorker.ts's `html()`).
+   * GrampletResultView.tsx runs it through DOMPurify before ever touching
+   * the DOM -- Gramplet code is arbitrary Python, and a Gramplet is a Media
+   * object that could end up imported/shared from someone else, not just
+   * self-authored. print() output and the trailing result value are HTML-
+   * escaped before landing here (unlike an explicit html() call's markup),
+   * so DOMPurify only ever has to sanitize markup a Gramplet asked for by
+   * name. */
+  | { type: "html"; markup: string };
+
+/** No `printed` field -- unlike the pre-blocks design, a Gramplet's own
+ * print() calls aren't captured as a separate side channel (pyodideWorker.
+ * ts's `stdout` option) shown before the run's own output regardless of
+ * when they actually happened; they're just more blocks, in true call
+ * order alongside everything else (see GrampletBlock above).
+ *
+ * Every variant carries `runId`, echoing the RunGrampletRequest it's for --
+ * pyodideWorker.ts serializes execution (never two Gramplets running Python
+ * at once in the shared worker/interpreter), but a still-running earlier
+ * run's own messages (a `progress` from before it was superseded, or its
+ * eventual `blocks`/`error` once it does finish) can still arrive after a
+ * newer request was made. The caller checks `runId` against the request it
+ * most recently made and ignores anything that doesn't match, rather than
+ * assuming the very next message received must belong to that request. */
 export type PyodideWorkerResponse =
-  | { type: "result"; text: string; printed: string }
-  | { type: "table"; columns: string[]; rows: TableCell[][]; printed: string }
-  /** From calling html(markup) -- raw, UNSANITIZED HTML/SVG source (see
-   * pyodideWorker.ts's `html()`/`_gramplet_html`). GrampletResultView.tsx
-   * runs it through DOMPurify before ever touching the DOM -- Gramplet code
-   * is arbitrary Python, and a Gramplet is a Media object that could end up
-   * imported/shared from someone else, not just self-authored. Wins over a
-   * table the same run also built, same "the most specific thing the code
-   * did wins" reasoning row()/table already gets over a plain result. */
-  | { type: "html"; markup: string; printed: string }
-  | { type: "error"; text: string; printed: string };
+  /** Sent once execution actually begins -- when a request was already
+   * queued behind another one (pyodideWorker.ts serializes: at most one
+   * Gramplet runs Python at a time), there can be an arbitrarily long gap
+   * between posting a RunGrampletRequest and this arriving, during which
+   * the caller shows a "queued" status rather than "running". */
+  | { type: "started"; runId: string }
+  /** From columns()/row()/html()/print() calls, and/or the code's own
+   * trailing expression value -- see GrampletBlock above. Empty only when
+   * the run produced none of the above. */
+  | { type: "blocks"; blocks: GrampletBlock[]; runId: string }
+  /** Not a terminal message -- zero or more of these can arrive mid-run,
+   * each time print() is called (see pyodideWorker.ts's `_report_progress`/
+   * `bridge.reportProgress`), always followed by exactly one `blocks` or
+   * `error` message once the run actually finishes. `blocks` here is a
+   * snapshot of everything produced so far, so the UI can just replace
+   * whatever it was showing rather than trying to append/diff -- lets a
+   * print()-then-time.sleep() loop's output show up live instead of only
+   * once the whole run finishes. */
+  | { type: "progress"; blocks: GrampletBlock[]; runId: string }
+  /** `blocks` here is whatever the run produced before it crashed (also
+   * flushed via pyodideWorker.ts's `_finalize_blocks()`) -- often the most
+   * useful part of a traceback-only failure, so it isn't dropped on the
+   * error path. */
+  | { type: "error"; text: string; blocks: GrampletBlock[]; runId: string };

@@ -126,6 +126,12 @@ export function GrampletEditDialog({
   const [otherNames, setOtherNames] = useState<{ handle?: string; label: string }[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   const workerRef = useRef<Worker | null>(null);
+  // The runId (see RunGrampletRequest in types.ts) of the most recent
+  // handleExecute() call -- pyodideWorker.ts serializes execution but can't
+  // cancel a still-running earlier Gramplet outright, so its messages can
+  // still arrive after a newer Execute click; worker.onmessage below drops
+  // anything whose runId doesn't match this.
+  const activeRunIdRef = useRef("");
 
   useEffect(() => {
     fetchGramplets()
@@ -168,19 +174,37 @@ export function GrampletEditDialog({
   // edit again) without round-tripping through Media each time.
   async function handleExecute() {
     if (!gramplet) return;
+    const runId = crypto.randomUUID();
+    activeRunIdRef.current = runId;
     setRunStatus("loading");
     setRunResponse(null);
     try {
       const token = await getToken();
       const worker = getWorker();
       worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
-        setRunStatus(event.data.type === "error" ? "error" : "done");
+        // Stale -- pyodideWorker.ts serializes execution but can't cancel a
+        // still-running earlier Gramplet outright (see activeRunIdRef's own
+        // doc comment above), so a message for a run superseded by a later
+        // Execute click can still arrive; drop it rather than clobbering
+        // what's now showing.
+        if (event.data.runId !== activeRunIdRef.current) return;
+        // "started" and "progress" aren't terminal (see PyodideWorkerResponse
+        // in types.ts) -- "started" just confirms execution actually began
+        // (nothing to show yet, runStatus already reads "loading" from
+        // handleExecute() above), and "progress" is a fresher snapshot of
+        // the same status. Status only moves to "done"/"error" on the one
+        // message that actually ends the run, and only that one (plus
+        // "progress") carries a response worth displaying.
+        if (event.data.type === "started") return;
+        if (event.data.type !== "progress") {
+          setRunStatus(event.data.type === "error" ? "error" : "done");
+        }
         setRunResponse(event.data);
       };
-      worker.postMessage({ type: "run-gramplet", code: gramplet.code, token });
+      worker.postMessage({ type: "run-gramplet", code: gramplet.code, token, runId });
     } catch (err) {
       setRunStatus("error");
-      setRunResponse({ type: "error", text: err instanceof Error ? err.message : String(err), printed: "" });
+      setRunResponse({ type: "error", text: err instanceof Error ? err.message : String(err), blocks: [], runId });
     }
   }
 
