@@ -3,7 +3,7 @@
 // store/liveSync.ts + dev-fixtures/layer3-sync/relay.py + triggers.sql,
 // removed once this replaced them). Same downstream consumer contract as
 // before (see ../hooks/useLiveSync.ts): one TreeChangeNotification per real
-// object change. The cursor here is just a timestamp on a plain
+// object change. The cursor here is just a transaction id on a plain
 // authenticated GET, not a persistent connection to a Postgres-fronting
 // relay process -- a missed poll (tab backgrounded, laptop asleep) simply
 // gets caught up on the next one, and it works against any backend
@@ -33,6 +33,9 @@ interface HistoryChange {
 }
 
 interface HistoryTransaction {
+  // Only read by pollHistory()'s own after_id bookkeeping below --
+  // transactionsToNotifications() (and its tests) never touch it.
+  id: number;
   timestamp: number;
   changes: HistoryChange[];
   connection?: { user?: { name: string | null } | null };
@@ -72,11 +75,21 @@ export function transactionsToNotifications(transactions: HistoryTransaction[]):
   }));
 }
 
-/** Polls GET /api/transactions/history/?after=<cursor> on a fixed interval
- * and calls onNotification once per real (non-reference) object change --
- * a background enhancement (the app is fully usable without it, just not
- * live) rather than something worth failing loudly over. Returns a cleanup
- * function that stops polling. */
+/** Polls GET /api/transactions/history/?after_id=<cursor> on a fixed
+ * interval and calls onNotification once per real (non-reference) object
+ * change -- a background enhancement (the app is fully usable without it,
+ * just not live) rather than something worth failing loudly over. Returns a
+ * cleanup function that stops polling.
+ *
+ * Cursors on the transaction `id`, not `timestamp`: the timestamp-based
+ * `after` param is a float compared server-side as `after * 1e9`, and that
+ * round-trip (server float -> JS double -> string -> back to a server
+ * float) loses enough precision that the same last transaction can compare
+ * as "still after the cursor" forever -- an infinite redelivery loop where
+ * every 5s poll re-reports the same stale change (e.g. re-running every
+ * Gramplet on every tick, see git history for the bug report). `after_id`
+ * is an exact integer compare, no precision loss. See gramps-web-api's
+ * TransactionsHistoryQueryArgs.after_id docstring. */
 export function pollHistory(
   onNotification: (notification: TreeChangeNotification) => void,
   onStatus?: (status: "connected" | "disconnected") => void
@@ -84,14 +97,27 @@ export function pollHistory(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   // Only changes from here forward -- ViewStore.ensureLoaded() already
-  // fetched current state via the normal /query/ endpoints.
-  let after = Date.now() / 1000;
+  // fetched current state via the normal /query/ endpoints. Seeded from the
+  // newest existing transaction id on the first poll tick below (0 would
+  // mean "from the beginning", replaying the whole history).
+  let afterId = 0;
+  let bootstrapped = false;
 
   async function poll() {
     if (stopped) return;
     try {
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/transactions/history/?after=${after}&sort=id`, {
+      if (!bootstrapped) {
+        const res = await fetch(
+          `${API_BASE}/api/transactions/history/?after_id=0&page=1&pagesize=1&sort=-id`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) throw new Error(`history poll bootstrap failed: ${res.status}`);
+        const latest: HistoryTransaction[] = await res.json();
+        afterId = latest[0]?.id ?? 0;
+        bootstrapped = true;
+      }
+      const res = await fetch(`${API_BASE}/api/transactions/history/?after_id=${afterId}&sort=id`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error(`history poll failed: ${res.status}`);
@@ -102,10 +128,7 @@ export function pollHistory(
         for (const notification of transactionsToNotifications(transactions)) {
           onNotification(notification);
         }
-        // Strictly-greater filter server-side (Transaction.timestamp >
-        // after * 1e9) means reusing the max seen timestamp as the next
-        // `after` can't return the same transaction twice.
-        after = Math.max(...transactions.map((t) => t.timestamp));
+        afterId = Math.max(...transactions.map((t) => t.id));
       }
     } catch (err) {
       console.error("history poll failed", err);
