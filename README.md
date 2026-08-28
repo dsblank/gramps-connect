@@ -132,21 +132,15 @@ For M1/M2/M3/M4 Macs.
 1. Download `gramps-connect-desktop-macos-arm64.zip` from the
    [latest release](https://github.com/dsblank/gramps-connect/releases/latest)
    and unzip it (double-click, or right-click → Open, depending on your
-   Mac's settings).
-2. Open Terminal, `cd` into the extracted folder, and run:
-   ```
-   xattr -cr gramps-connect-desktop
-   ```
-   This strips the "downloaded from the internet" quarantine flag from
-   every file in the folder at once. **This step matters more than it
-   looks** — this build isn't signed/notarized, so without it macOS will
-   show a whole *series* of "malware"/"cannot be verified" warnings, one
-   for the main app, then one each for Python and several bundled `.so`
-   files, since each gets checked individually the first time it loads.
-   Allowing them one-by-one via Privacy & Security does eventually get you
-   through, but `xattr -cr` avoids the whole cascade up front.
-3. Run `./gramps-connect-desktop`.
-4. A window opens automatically, running the app. Log in as `admin` /
+   Mac's settings) to get `gramps-connect-desktop.app`.
+2. Double-click `gramps-connect-desktop.app`. This build is ad-hoc signed
+   but not notarized, so macOS will still show **one** Gatekeeper prompt
+   ("cannot be opened because Apple cannot check it for malicious
+   software") — right-click the app → **Open** → **Open Anyway** to get past
+   it; you only need to do this once. You should *not* see the whole series
+   of separate warnings for Python and individual `.so` files that older
+   releases of this build caused — if you do, see Troubleshooting.
+3. A window opens automatically, running the app. Log in as `admin` /
    `admin`.
 
 ### macOS (Intel)
@@ -189,16 +183,17 @@ above, but download `gramps-connect-desktop-macos-intel.zip` instead.
 
 - **Windows SmartScreen ("Windows protected your PC")** — expected, since
   this build isn't code-signed. Click **More info** → **Run anyway**.
-- **macOS Gatekeeper ("cannot be opened because the developer cannot be
-  verified", or a series of "malware" warnings for the app, then Python,
-  then each of several `.so` files)** — expected, since this build isn't
-  signed/notarized. Every file extracted from the downloaded zip carries a
-  quarantine flag, and since nothing is signed, macOS checks each binary
-  individually as it loads — allowing them one at a time via
-  Privacy & Security does eventually get you through, but it's much faster
-  to clear the flag from the whole folder at once before running anything:
-  `xattr -cr gramps-connect-desktop` (run from Terminal in the extracted
-  folder's parent directory). See the macOS install steps above.
+- **macOS Gatekeeper ("cannot be opened because Apple cannot check it for
+  malicious software")** — expected for the `.app` itself, since this build
+  is ad-hoc signed but not notarized. Right-click → **Open** → **Open
+  Anyway**, once. If you instead see a whole *series* of separate "malware"
+  warnings — one for the app, then Python, then several individual `.so`
+  files — that means the fix below didn't take for some reason; work around
+  it by clearing the quarantine flag from the whole `.app` at once before
+  opening it: `xattr -cr gramps-connect-desktop.app` (run from Terminal, in
+  the folder you unzipped it into) and please report it, since it means the
+  build's ad-hoc signing didn't survive being downloaded/unzipped as
+  expected.
 - **apt/dnf warns the `.deb`/`.rpm` isn't signed, or skips an OpenPGP
   check** — expected. These packages are built by this repo's own CI, not
   published to a signed distro repository, so installing them from a local

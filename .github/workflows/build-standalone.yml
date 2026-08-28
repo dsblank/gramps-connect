@@ -171,11 +171,42 @@ jobs:
         working-directory: gramps-connect/standalone
         run: pyinstaller gramps-connect-desktop.spec --noconfirm
 
+      # Ad-hoc (no Apple Developer account, no notarization) but recursive
+      # -- every nested Mach-O (the main exe, embedded Python, each bundled
+      # .so) ends up with *a* signature instead of none at all. This is what
+      # actually stops the cascading per-file "malware" warnings users hit
+      # on unsigned onedir builds; it does NOT eliminate the one expected
+      # "unidentified developer" Gatekeeper prompt for the .app itself,
+      # since ad-hoc signing isn't notarization -- see the README.
+      - name: Ad-hoc code-sign the macOS .app bundle
+        if: runner.os == 'macOS'
+        working-directory: gramps-connect/standalone
+        run: |
+          codesign --force --deep --sign - --timestamp=none dist/gramps-connect-desktop.app
+          codesign --verify --deep --strict --verbose=2 dist/gramps-connect-desktop.app
+
+      # A green codesign check only proves the signature is internally
+      # consistent, not that Gatekeeper will actually accept it once a real
+      # user has downloaded and unzipped it -- and this project has been
+      # burned before by trusting a build's own success as proof of anything
+      # (see gramps-connect memory on the standalone build). Manually
+      # applying com.apple.quarantine to every file, the same way Safari +
+      # unzip do, and then running the actual Gatekeeper assessment tool
+      # against it is the closest CI can get to that real scenario without a
+      # GUI session.
+      - name: Simulate a quarantined download and assess with Gatekeeper
+        if: runner.os == 'macOS'
+        working-directory: gramps-connect/standalone
+        run: |
+          find dist/gramps-connect-desktop.app -type f -exec xattr -w com.apple.quarantine "0181;00000000;Safari;" {} \;
+          xattr -w com.apple.quarantine "0181;00000000;Safari;" dist/gramps-connect-desktop.app
+          spctl -a -vvv --type execute dist/gramps-connect-desktop.app
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: gramps-connect-desktop-${{ matrix.label }}
-          path: gramps-connect/standalone/dist/gramps-connect-desktop
+          path: ${{ runner.os == 'macOS' && 'gramps-connect/standalone/dist/gramps-connect-desktop.app' || 'gramps-connect/standalone/dist/gramps-connect-desktop' }}
           if-no-files-found: error
 
   # Packaged as .deb/.rpm rather than a raw portable binary (unlike the
@@ -359,10 +390,23 @@ jobs:
       - name: Zip Windows/macOS artifacts
         shell: bash
         run: |
-          for label in windows macos-arm64 macos-intel; do
-            mv "artifacts/gramps-connect-desktop-$label" artifacts/gramps-connect-desktop
-            (cd artifacts && zip -q -r "gramps-connect-desktop-$label.zip" gramps-connect-desktop)
-            rm -rf artifacts/gramps-connect-desktop
+          mv "artifacts/gramps-connect-desktop-windows" artifacts/gramps-connect-desktop
+          (cd artifacts && zip -q -r "gramps-connect-desktop-windows.zip" gramps-connect-desktop)
+          rm -rf artifacts/gramps-connect-desktop
+
+          # upload-artifact stores a directory's *contents*, not the
+          # directory itself, so the downloaded macOS artifacts land here as
+          # a bare Contents/ tree missing the ".app" suffix Finder needs to
+          # recognize + double-click it as an app bundle -- restore that by
+          # naming the destination directory back to gramps-connect-desktop.app
+          # before zipping. -y (--symlinks) preserves symlinks as-is rather
+          # than dereferencing them into copies, which would invalidate the
+          # bundle's code signature (macOS .app bundles routinely contain
+          # versioned-dylib symlinks).
+          for label in macos-arm64 macos-intel; do
+            mv "artifacts/gramps-connect-desktop-$label" artifacts/gramps-connect-desktop.app
+            (cd artifacts && zip -q -r -y "gramps-connect-desktop-$label.zip" gramps-connect-desktop.app)
+            rm -rf artifacts/gramps-connect-desktop.app
           done
           ls artifacts/gramps-connect-desktop-linux
 

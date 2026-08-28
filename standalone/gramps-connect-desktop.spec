@@ -308,7 +308,15 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    # console=True everywhere except macOS: launching a console-mode
+    # bootloader via Finder (double-click) makes macOS auto-open Terminal.app
+    # to host its stdio -- fine for Windows (SmartScreen path already has
+    # users double-click the .exe directly) but wrong once macOS ships as a
+    # real .app bundle below, where the whole point is "double-click, a
+    # pywebview window opens, no Terminal". Running the frozen binary
+    # directly from an actual terminal (`./gramps-connect-desktop`) still
+    # attaches stdio normally either way, so this doesn't affect debugging.
+    console=not sys.platform == "darwin",
     disable_windowed_traceback=False,
     argv_emulation=False,
 )
@@ -321,3 +329,20 @@ coll = COLLECT(
     upx_exclude=[],
     name="gramps-connect-desktop",
 )
+
+# macOS only: wrap the onedir COLLECT output in a real .app bundle. A raw
+# onedir folder (what ships on Windows/Linux) is what caused the cascading
+# Gatekeeper "malware" warnings users hit -- one per unsigned Mach-O binary
+# (main exe, embedded Python, each bundled .so) as it's individually
+# checked/dlopen'd, since none of them carry any code signature at all. The
+# CI workflow ad-hoc signs this .app (every nested binary + the bundle
+# itself) after this build step, which gives every Mach-O a signature and
+# should collapse that cascade into at most the one standard "unidentified
+# developer" prompt Gatekeeper shows for any non-notarized .app.
+if sys.platform == "darwin":
+    app = BUNDLE(
+        coll,
+        name="gramps-connect-desktop.app",
+        icon=None,
+        bundle_identifier="io.github.dsblank.gramps-connect-desktop",
+    )
