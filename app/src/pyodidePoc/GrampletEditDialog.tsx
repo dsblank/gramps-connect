@@ -65,16 +65,17 @@ function viewSelectValue(views: string[] | undefined): string {
 }
 
 // people() (and where -- Gramps Object Query Language, see the (i) button
-// above) plus row()/columns() -- the last 10 people changed, most recent
-// first. Also shows off DataDict's lazy real-object fallback:
-// person.get_primary_name() isn't a raw field, so it builds the real
-// Person object on that first access and delegates -- see GrampletHelpDialog.
+// above) plus row() -- the last 10 people changed, most recent first.
+// row() takes person and when straight (no columns() call, no field
+// picked out by hand): a primary object renders as a clickable link
+// (ObjectCellButton.tsx) and a datetime renders as a formatted date
+// (pyodideWorker.ts's _pp()/_format_stdlib_datetime()), and since every
+// row agrees on each column's kind, the table heads them "Person"/"Date"
+// on its own too (_cell_kind()).
 const NEW_GRAMPLET_CODE = `import datetime
 
-columns("Name", "Last changed")
 for person in people(order=[{"column": "change", "direction": "desc"}], limit=10):
-    when = datetime.datetime.fromtimestamp(person.change).strftime("%Y-%m-%d %H:%M")
-    row(person.get_primary_name().get_regular_name(), when)
+    row(person, datetime.datetime.fromtimestamp(person.change))
 `;
 
 // With no `defaultViewKey` (MenuBar's generic "Add Gramplet…"): usable
@@ -179,7 +180,7 @@ export function GrampletEditDialog({
       worker.postMessage({ type: "run-gramplet", code: gramplet.code, token });
     } catch (err) {
       setRunStatus("error");
-      setRunResponse({ type: "error", text: err instanceof Error ? err.message : String(err) });
+      setRunResponse({ type: "error", text: err instanceof Error ? err.message : String(err), printed: "" });
     }
   }
 
@@ -270,7 +271,7 @@ export function GrampletEditDialog({
                 borderRadius: "var(--mantine-radius-sm)",
               }}
             >
-              <GrampletResultView status={runStatus} response={runResponse} />
+              <GrampletResultView status={runStatus} response={runResponse} interactive={false} />
             </Box>
           </Box>
           {error && <Alert color="red">{error}</Alert>}

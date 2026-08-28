@@ -64,7 +64,14 @@
 // once (optional -- if skipped, columns are auto-named "Column 1", "Column
 // 2", ...) and `row(...)` per row, and the result renders as a real GUI
 // table (GrampletResultView.tsx) instead of a Code block, if any rows were
-// ever appended -- see pyodideWorker.ts's `_table_json()`.
+// ever appended -- see pyodideWorker.ts's `_table_json()`. A `row()`
+// argument can be a primary object itself (whatever `get_object()`/
+// `get_raw_object()`/`filter()` handed back) rather than a hand-picked
+// field -- e.g. `row(person, event)` -- and renders as clickable link text
+// (a default description, ported from Gramps desktop's own
+// SimpleAccess.describe()) with a popup to open that record or place it on
+// the Map/Timeline/Tree, exactly like the app's own reference panels do.
+// See `ObjectCell` below and pyodideWorker.ts's `_describe_object`/`_cell`.
 //
 // A Gramplet author never has to write `await` before any of the async
 // builtins above, despite all being real async functions -- pyodideWorker.ts
@@ -116,7 +123,37 @@ export interface RunGrampletRequest {
 
 export type PyodideWorkerRequest = RunGrampletRequest;
 
+/** A `row()` argument that pyodideWorker.ts recognized as a primary Gramps
+ * object (a real `gramps.gen.lib` object, or its raw JSON/DataDict form --
+ * anything with a `_class` in objectEndpoints.ts's OBJECT_TYPES) renders as
+ * this instead of a plain string -- `text` is a default description (ported
+ * from Gramps desktop's own SimpleAccess.describe(), see pyodideWorker.ts's
+ * `_describe_object`), `objectType`/`handle` are what ObjectCellButton.tsx
+ * needs to build a navigation link via hash.ts's formatHash(). */
+export interface ObjectCell {
+  kind: "object";
+  objectType: string;
+  handle: string;
+  text: string;
+}
+
+export type TableCell = string | ObjectCell;
+
+/** Every variant carries `printed` -- whatever the code's own print() calls
+ * wrote to stdout during this run (pyodideWorker.ts's `stdout` callback,
+ * captured into a buffer reset right before the code runs and joined with
+ * "\n" once it's done), independent of the table/result/error outcome
+ * below. On `error` too, so print() calls made before a mid-run exception
+ * still show -- often the most useful debugging output of all. */
 export type PyodideWorkerResponse =
-  | { type: "result"; text: string }
-  | { type: "table"; columns: string[]; rows: string[][] }
-  | { type: "error"; text: string };
+  | { type: "result"; text: string; printed: string }
+  | { type: "table"; columns: string[]; rows: TableCell[][]; printed: string }
+  /** From calling html(markup) -- raw, UNSANITIZED HTML/SVG source (see
+   * pyodideWorker.ts's `html()`/`_gramplet_html`). GrampletResultView.tsx
+   * runs it through DOMPurify before ever touching the DOM -- Gramplet code
+   * is arbitrary Python, and a Gramplet is a Media object that could end up
+   * imported/shared from someone else, not just self-authored. Wins over a
+   * table the same run also built, same "the most specific thing the code
+   * did wins" reasoning row()/table already gets over a plain result. */
+  | { type: "html"; markup: string; printed: string }
+  | { type: "error"; text: string; printed: string };

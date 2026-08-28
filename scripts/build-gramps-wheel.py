@@ -18,29 +18,31 @@ that one lives under standalone/), then diff sys.modules before/after
     from gramps.gen.lib.json_utils import data_to_object, object_to_dict
 and take every "gramps.*" name that appeared.
 
-Three things gen/const.py needs are stubbed rather than shipped for real,
-matching "stub the missing native dependency, don't touch vendor source"
-(same call standalone/runtime_hooks/rthook_gi_stub.py already made for
-gi):
+Two things gen/const.py needs and this minimal wheel can't ship for real:
   1. gen/const.py unconditionally does `from gi.repository import GLib`
-     (XDG directory helpers, never reached by gen.lib's own logic).
-  2. gen/lib/json_utils.py unconditionally does `import orjson` -- only
-     its *_string()/dict_to_string()/string_to_dict() helpers actually
-     call it; data_to_object()/object_to_dict(), the two functions this
-     wheel exists for, are pure stdlib, so a plain-json shim is a correct
-     replacement, not just an expedient one.
-  3. gen/utils/resourcepath.py's `ResourcePath` is a genuine singleton
-     wanting real installed-package files (authors.xml, locale/,
-     images/) that this minimal wheel deliberately doesn't ship --
+     (XDG directory helpers, never reached by gen.lib's own logic) and
+     gen/lib/json_utils.py unconditionally does `import orjson` (only its
+     *_string()/dict_to_string()/string_to_dict() helpers actually call
+     it; data_to_object()/object_to_dict(), the two functions this wheel
+     exists for, are pure stdlib). Real stand-ins for both -- actual
+     installable wheels, not sys.modules injection -- are
+     scripts/build-stub-wheels.py's job, registered as this wheel's own
+     `depends` by app/scripts/copy-wasm.mjs, so Pyodide's own
+     loadPackage()/loadPackagesFromImports() pulls them in automatically
+     the same way it does for any other package's dependencies.
+  2. gen/utils/resourcepath.py's real `ResourcePath` is a genuine
+     singleton wanting real installed-package files (authors.xml,
+     locale/, images/) this minimal wheel deliberately doesn't ship --
      gen/const.py's `ResourcePath()` call at import time calls
-     `sys.exit(1)` if it can't find them. So this file is left out of
-     INCLUDE_FILES entirely and its class is stubbed instead of shipped.
-Whoever loads this wheel in Pyodide must install all three sys.modules
-stand-ins *before* importing gramps -- that loader-side code doesn't
-exist yet; this script only builds the wheel. verify_wheel() below does
-exactly that stubbing to prove the built wheel is genuinely
-self-contained (installed into an isolated dir with no access to the real
-gramps checkout on sys.path).
+     `sys.exit(1)` if it can't find them. Unlike gi/orjson this is a
+     module *within* gramps itself, not a third-party dependency, so the
+     fix is simpler: RESOURCEPATH_STUB_PY below replaces the real file's
+     content in the wheel outright (stage_source()), rather than being
+     excluded and patched in at runtime -- the wheel is self-contained
+     with no loader-side setup needed at all, for this or the gi/orjson
+     case, confirmed by verify_wheel() below installing nothing but this
+     wheel + build-stub-wheels.py's own two into a bare, isolated
+     environment and importing gramps.gen.lib directly.
 
 Usage: python3 scripts/build-gramps-wheel.py [--out DIR] [--no-verify]
 Requires: gramps importable (pip -e installed, see
@@ -53,7 +55,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import types
 from pathlib import Path
 
 import gramps
@@ -82,8 +83,8 @@ INCLUDE_FILES = [
     "gen/utils/grampslocale.py",
     "gen/utils/grampstranslation.py",
     "gen/utils/win32locale.py",
-    # gen/utils/resourcepath.py is deliberately NOT included -- see this
-    # file's docstring point 3. install_stubs() below replaces it.
+    # gen/utils/resourcepath.py deliberately isn't copied from the real
+    # checkout -- RESOURCEPATH_STUB_PY below is written in its place.
 ]
 
 # gen/lib/test/ isn't reached at import time and adds nothing a Gramplet
@@ -107,6 +108,26 @@ requires-python = ">=3.9"
 include = ["gramps*"]
 """
 
+# Replaces the real gen/utils/resourcepath.py in the wheel -- see this
+# file's docstring point 2. gen.const only reads these four attributes
+# (data_dir/image_dir/doc_dir/locale_dir) to build further path constants;
+# none of it matters for gen.lib's own object model, so placeholder
+# strings (no backing directory needed) are enough.
+RESOURCEPATH_STUB_PY = '''\
+"""Stand-in for the real gen/utils/resourcepath.py, baked into this wheel
+by build-gramps-wheel.py -- the real ResourcePath wants real
+installed-package files (authors.xml, locale/, images/) this minimal
+wheel doesn't ship, and calls sys.exit(1) if it can't find them."""
+
+
+class ResourcePath:
+    def __init__(self):
+        self.data_dir = "/gramps-wheel-stub/data"
+        self.image_dir = "/gramps-wheel-stub/images"
+        self.doc_dir = "/gramps-wheel-stub/doc"
+        self.locale_dir = "/gramps-wheel-stub/locale"
+'''
+
 
 def stage_source(build_root: Path) -> None:
     pkg_root = build_root / "gramps"
@@ -117,70 +138,35 @@ def stage_source(build_root: Path) -> None:
         dest = pkg_root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(GRAMPS_PKG_DIR / rel, dest)
+    resourcepath_dest = pkg_root / "gen/utils/resourcepath.py"
+    resourcepath_dest.parent.mkdir(parents=True, exist_ok=True)
+    resourcepath_dest.write_text(RESOURCEPATH_STUB_PY, encoding="utf-8")
     (build_root / "pyproject.toml").write_text(PYPROJECT_TOML, encoding="utf-8")
 
 
-def install_stubs() -> None:
-    """The gi/orjson stand-ins described in this file's docstring -- used
-    here only to prove the wheel is self-contained; a Pyodide-side loader
-    will need its own copy of this before `import gramps...`."""
-    glib = types.ModuleType("gi.repository.GLib")
-    glib.GError = type("GError", (Exception,), {})
-    glib.UserDirectory = type("UserDirectory", (), {"DIRECTORY_PICTURES": "PICTURES"})
-    glib.get_user_data_dir = lambda: "/tmp/gramps-wheel-check/data"
-    glib.get_user_config_dir = lambda: "/tmp/gramps-wheel-check/config"
-    glib.get_user_cache_dir = lambda: "/tmp/gramps-wheel-check/cache"
-    glib.get_user_special_dir = lambda directory: None
-    repository = types.ModuleType("gi.repository")
-    repository.GLib = glib
-    gi = types.ModuleType("gi")
-    gi.require_version = lambda namespace, version: None
-    gi.repository = repository
-    sys.modules["gi"] = gi
-    sys.modules["gi.repository"] = repository
-    sys.modules["gi.repository.GLib"] = glib
-
-    import json as _json
-
-    orjson = types.ModuleType("orjson")
-    orjson.loads = _json.loads
-    orjson.dumps = lambda obj, default=None: _json.dumps(obj, default=default).encode()
-    sys.modules["orjson"] = orjson
-
-    resourcepath = types.ModuleType("gramps.gen.utils.resourcepath")
-
-    class ResourcePath:
-        """Stand-in for the real singleton (gen/utils/resourcepath.py) --
-        that one wants real installed-package files (authors.xml, locale/,
-        images/) this minimal wheel doesn't ship, and calls sys.exit(1) if
-        it can't find them. gen.const only reads these four attributes
-        (data_dir/image_dir/doc_dir/locale_dir) to build further path
-        constants -- none of it matters for gen.lib's own object model, so
-        placeholder strings (no backing directory needed) are enough."""
-
-        def __init__(self):
-            self.data_dir = "/gramps-wheel-stub/data"
-            self.image_dir = "/gramps-wheel-stub/images"
-            self.doc_dir = "/gramps-wheel-stub/doc"
-            self.locale_dir = "/gramps-wheel-stub/locale"
-
-    resourcepath.ResourcePath = ResourcePath
-    sys.modules["gramps.gen.utils.resourcepath"] = resourcepath
-
-
-def verify_wheel(wheel_path: Path) -> None:
-    """Installs the built wheel into an isolated, empty directory (no
-    access to GRAMPS_PKG_DIR or anything else on this machine's normal
-    sys.path) and round-trips a Person through object_to_dict/
-    data_to_object -- the actual thing this wheel exists to let a Gramplet
-    do. A real Pyodide run is the only full proof, but this at least
-    proves the wheel is genuinely self-contained under plain CPython
-    before anyone tries it in a browser."""
-    with tempfile.TemporaryDirectory() as install_dir:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", str(wheel_path), "--no-deps", "--target", install_dir],
-            check=True,
+def verify_wheel(wheel_path: Path, stub_wheels_dir: Path) -> None:
+    """Installs the built wheel -- plus build-stub-wheels.py's gi/orjson
+    stand-ins, the only other things gramps.gen.lib needs that aren't
+    stdlib -- into an isolated, empty directory (no access to
+    GRAMPS_PKG_DIR or anything else on this machine's normal sys.path)
+    and round-trips a Person through object_to_dict/data_to_object -- the
+    actual thing this wheel exists to let a Gramplet do. A real Pyodide
+    run is the only full proof, but this at least proves the wheel is
+    genuinely self-contained under plain CPython first, with zero
+    loader-side setup beyond installing these three wheels."""
+    stub_wheels = sorted(stub_wheels_dir.glob("*.whl"))
+    if not stub_wheels:
+        print(
+            f"verify: skipped -- no wheels in {stub_wheels_dir} "
+            "(run scripts/build-stub-wheels.py first)"
         )
+        return
+    with tempfile.TemporaryDirectory() as install_dir:
+        for whl in [wheel_path, *stub_wheels]:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", str(whl), "--no-deps", "--target", install_dir],
+                check=True,
+            )
         old_path = sys.path[:]
         old_modules = dict(sys.modules)
         sys.path = [install_dir] + [p for p in sys.path if "gramps" not in p.lower()]
@@ -188,7 +174,6 @@ def verify_wheel(wheel_path: Path) -> None:
             if name == "gramps" or name.startswith("gramps."):
                 del sys.modules[name]
         try:
-            install_stubs()
             import gramps.gen.lib as lib
             from gramps.gen.lib.json_utils import data_to_object, object_to_dict
 
@@ -208,6 +193,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--out", type=Path, default=Path(__file__).resolve().parent.parent / "dist" / "gramps-wheel"
+    )
+    parser.add_argument(
+        "--stub-wheels-dir", type=Path, default=Path(__file__).resolve().parent.parent / "dist" / "stub-wheels"
     )
     parser.add_argument("--no-verify", action="store_true", help="Skip the isolated-install round-trip check")
     args = parser.parse_args()
@@ -229,7 +217,7 @@ def main() -> None:
     print(f"Built {wheel_path}")
 
     if not args.no_verify:
-        verify_wheel(wheel_path)
+        verify_wheel(wheel_path, args.stub_wheels_dir)
 
 
 if __name__ == "__main__":

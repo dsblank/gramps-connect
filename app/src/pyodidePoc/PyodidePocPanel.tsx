@@ -235,7 +235,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       } catch (err) {
         if (!cancelled) {
           setRunStatus("error");
-          setResponse({ type: "error", text: err instanceof Error ? err.message : String(err) });
+          setResponse({ type: "error", text: err instanceof Error ? err.message : String(err), printed: "" });
         }
         return;
       }

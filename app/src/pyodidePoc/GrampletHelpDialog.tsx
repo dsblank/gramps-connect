@@ -71,25 +71,38 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Code>
         </Section>
 
-        <Section title={t("Building a table")}>
+        <Section title={t("Building a result")}>
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>
-              <SymbolRow symbol="columns(*names)" meaning="Names the table's columns. Optional -- left out, they're just numbered." />
-              <SymbolRow symbol="row(*values)" meaning="Adds one row. Dates format automatically; anything else is shown as text." />
+              <SymbolRow symbol="columns(*names)" meaning="Names the table's columns. Optional -- left out, a column is named after what it holds (Person, Date, ...) when every row agrees, otherwise just numbered." />
+              <SymbolRow symbol="row(*values)" meaning="Adds one row. Dates format automatically; a person/event/etc. becomes a clickable link to that record; anything else is shown as text." />
+              <SymbolRow symbol="html(markup)" meaning="Shows raw HTML/SVG instead of a table -- a hand-built SVG string, or a chart library's own render() output. Sanitized before display, so scripts/event handlers are stripped." />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">
             {t(
-              "Calling row() at all switches the result from plain text to a table. There's no console to print() to -- what's shown is either a table (if row() was called) or whatever the code's last line evaluates to."
+              "Calling row() or html() switches the result from plain text to a table or a rendered graphic (html() wins if both were called). print() works too -- anything printed is shown above whatever the result was, even above a traceback if the code crashed."
             )}
           </Text>
         </Section>
 
         <Section title={t("Example")}>
           <Code block>
-            {'columns("Name", "Gramps ID")\n'
-              + 'for person in people("gender == 1", limit=10):\n'
-              + '    row(person.primary_name.first_name, person.gramps_id)'}
+            {'for person in people("gender == 1", limit=10):\n'
+              + '    row(person, person.gramps_id)'}
+          </Code>
+        </Section>
+
+        <Section title={t("Drawing graphics")}>
+          <Text size="sm">
+            {t("html() also takes a chart library's own SVG output, e.g. pygal (pre-bundled -- a plain import works offline, no PyPI round trip):")}
+          </Text>
+          <Code block>
+            {'import pygal\n\n'
+              + 'chart = pygal.Pie()\n'
+              + 'chart.add("Female", 12)\n'
+              + 'chart.add("Male", 15)\n'
+              + 'html(chart.render(is_unicode=True))'}
           </Code>
         </Section>
 

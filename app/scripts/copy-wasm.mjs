@@ -33,8 +33,32 @@
 //   pyodide-lock.json) so it's already sitting in public/pyodide/ by the
 //   time anyone's browser asks for it.
 //
-//   gramps wheel (PoC, see pyodideWorker.ts): best-effort only, see the
-//   separate block below -- unlike the above, not an npm dependency.
+//   extra packages (PoC, see pyodideWorker.ts's onmessage): pure-Python
+//   PyPI wheels a Gramplet might want (pygal, for html() chart output)
+//   that aren't part of Pyodide's own distribution -- same offline
+//   concern as the micropip block above, so fetched once here (sha256-
+//   pinned) into public/pyodide/ (not a separate directory: these are
+//   registered as real entries in public/pyodide/pyodide-lock.json
+//   itself, the exact mechanism micropip's own entry already lives in,
+//   rather than a second bespoke registry/loader). Once registered there,
+//   a Gramplet just writes a plain `import pygal` -- onmessage calls
+//   pyodide.loadPackagesFromImports() on the code before running it,
+//   Pyodide's own static-import scanner, so this needs no install()
+//   builtin of our own and no special-casing in the Gramplet's own code.
+//
+//   local packages (PoC, see pyodideWorker.ts's onmessage): same
+//   registry/mechanism as extra packages above, but for wheels this repo
+//   builds itself rather than fetches from PyPI -- scripts/
+//   build-stub-wheels.py's gi/orjson (real installable stand-ins for
+//   gramps.gen.lib's two non-stdlib deps, replacing what used to be
+//   runtime sys.modules injection -- see that script's own docstring) and
+//   scripts/build-gramps-wheel.py's gramps wheel itself, `depends`-linked
+//   to gi+orjson so a Gramplet's own `import gramps.gen.lib` pulls both
+//   in automatically via Pyodide's own dependency resolution -- confirmed
+//   live. Best-effort: most contributors haven't run either Python
+//   script (the gramps one specifically needs a working gramps install),
+//   so a missing dist/ subdirectory just means that package isn't
+//   registered, not a failed `npm install` for everyone else.
 //
 // Each source resolved via require.resolve rather than a fixed
 // node_modules/<pkg> path, since npm workspaces hoist both to the repo
@@ -113,27 +137,130 @@ for (const { src, files, destSubdir } of copies) {
   }
 }
 
-// Minimal gramps wheel (PoC, see pyodideWorker.ts): unlike everything
-// above, this isn't an npm dependency -- it's built by
-// scripts/build-gramps-wheel.py (a Python script, needs a working gramps
-// install) into <repo root>/dist/gramps-wheel/*.whl, so most contributors
-// won't have it. Best-effort only: silently skipped if that directory or
-// a .whl in it doesn't exist, rather than failing `npm install` for
-// everyone else. manifest.json records the exact filename (it's
-// version-stamped, e.g. gramps_gen_lib-6.0.8-py3-none-any.whl) so
-// pyodideWorker.ts doesn't need to hardcode a version that'll go stale.
-const wheelSrcDir = path.join(repoRoot, "dist", "gramps-wheel");
-try {
-  const wheelFiles = (await readdir(wheelSrcDir)).filter((f) => f.endsWith(".whl")).sort();
-  const wheelFile = wheelFiles.at(-1);
-  if (wheelFile) {
-    const wheelDest = path.join(destDir, "gramps-wheel");
-    await mkdir(wheelDest, { recursive: true });
-    await copyFile(path.join(wheelSrcDir, wheelFile), path.join(wheelDest, wheelFile));
-    await writeFile(path.join(wheelDest, "manifest.json"), JSON.stringify({ wheel: wheelFile }));
-    console.log(`copy-wasm: copied ${wheelFile} to public/gramps-wheel/`);
+// Extra packages -- see the doc comment above. `name` is PEP 503
+// normalized (hyphens, matching pygal's own PyPI distribution name) --
+// confirmed live that Pyodide's own dependency walker normalizes `depends`
+// references that way when resolving them against its repository, even
+// though this doesn't affect file_name (the literal wheel filename PyPI
+// publishes, which importlib_metadata's own project keeps underscored) or
+// the Python import name (also underscored -- `import importlib_metadata`,
+// unrelated to the distribution-name field here). `depends` chains
+// pygal -> importlib-metadata -> zipp (both plain runtime imports at
+// pygal's own top level, not extras -- verified against the installed
+// package's own metadata, not guessed) so requesting just "pygal" pulls
+// in the whole closure via Pyodide's own resolution, the same as it does
+// for every package already in its distribution.
+const EXTRA_PACKAGES = [
+  {
+    name: "pygal",
+    file_name: "pygal-3.1.3-py3-none-any.whl",
+    url: "https://files.pythonhosted.org/packages/c3/43/5441ea0f9a35a0f2d30a79712cc21c737cf959a3451565d41e09d2fd90de/pygal-3.1.3-py3-none-any.whl",
+    sha256: "c0b9bc2d31df4094c9f65b0969b62571a47b28197aced081b1a9433c3a760f32",
+    imports: ["pygal"],
+    depends: ["importlib-metadata"],
+  },
+  {
+    name: "importlib-metadata",
+    file_name: "importlib_metadata-9.0.0-py3-none-any.whl",
+    url: "https://files.pythonhosted.org/packages/38/3d/2d244233ac4f76e38533cfcb2991c9eb4c7bf688ae0a036d30725b8faafe/importlib_metadata-9.0.0-py3-none-any.whl",
+    sha256: "2d21d1cc5a017bd0559e36150c21c830ab1dc304dedd1b7ea85d20f45ef3edd7",
+    imports: ["importlib_metadata"],
+    depends: ["zipp"],
+  },
+  {
+    name: "zipp",
+    file_name: "zipp-4.1.0-py3-none-any.whl",
+    url: "https://files.pythonhosted.org/packages/3a/13/547360d81e6d88d58492968ffda9f9542854f11310ee556fef14260cc886/zipp-4.1.0-py3-none-any.whl",
+    sha256: "25ad4e16390cd314347dd8f1de67a2ac538ae658ed4ab9db16029c07c188e97f",
+    imports: ["zipp"],
+    depends: [],
+  },
+];
+
+{
+  const pyodideDir = path.join(destDir, "pyodide");
+  const lockPath = path.join(pyodideDir, "pyodide-lock.json");
+  const lock = JSON.parse(await readFile(lockPath, "utf8"));
+  for (const { name, file_name, url, sha256, imports, depends } of EXTRA_PACKAGES) {
+    const dest = path.join(pyodideDir, file_name);
+    const alreadyValid = await readFile(dest).then(
+      (buf) => createHash("sha256").update(buf).digest("hex") === sha256,
+      () => false
+    );
+    if (alreadyValid) {
+      console.log(`copy-wasm: ${file_name} already present in public/pyodide/`);
+    } else {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const buf = Buffer.from(await res.arrayBuffer());
+        const gotSha256 = createHash("sha256").update(buf).digest("hex");
+        if (gotSha256 !== sha256) throw new Error(`sha256 mismatch: expected ${sha256}, got ${gotSha256}`);
+        await writeFile(dest, buf);
+        console.log(`copy-wasm: fetched ${file_name} to public/pyodide/`);
+      } catch (err) {
+        console.warn(`copy-wasm: could not pre-fetch ${file_name} (${err.message}) -- \`import ${imports[0]}\` will fail until this succeeds (rerun npm install)`);
+        continue; // don't register a lock entry for a wheel that isn't actually there
+      }
+    }
+    // version omitted -- Pyodide's loader doesn't require it for a
+    // package it's just about to fetch by file_name, and pinning would go
+    // stale independently of PYODIDE_VERSION the way it does for every
+    // other package here.
+    lock.packages[name] = {
+      name, version: "0", file_name, install_dir: "site",
+      sha256, package_type: "package", imports, depends,
+      unvendored_tests: false,
+    };
   }
-} catch (err) {
-  if (err.code !== "ENOENT") throw err;
-  console.log("copy-wasm: no dist/gramps-wheel/*.whl found -- skipping (run scripts/build-gramps-wheel.py to enable real gramps objects in Gramplets)");
+  await writeFile(lockPath, JSON.stringify(lock));
+  console.log(`copy-wasm: registered ${EXTRA_PACKAGES.map((p) => p.name).join(", ")} in public/pyodide/pyodide-lock.json`);
+}
+
+// Locally-built packages -- see the doc comment above. srcDir is relative
+// to <repo root>/dist/; filePrefix picks out that package's wheel (each
+// script's own version stamp makes the exact filename unpredictable, so
+// this discovers it the same way the old gramps-wheel-only version of
+// this block did: newest matching file in the directory, sorted).
+const LOCAL_PACKAGES = [
+  { name: "gi", srcDir: "stub-wheels", filePrefix: "gi-", imports: ["gi"], depends: [], buildHint: "scripts/build-stub-wheels.py" },
+  { name: "orjson", srcDir: "stub-wheels", filePrefix: "orjson-", imports: ["orjson"], depends: [], buildHint: "scripts/build-stub-wheels.py" },
+  {
+    name: "gramps-gen-lib", srcDir: "gramps-wheel", filePrefix: "gramps_gen_lib-",
+    imports: ["gramps"], depends: ["gi", "orjson"], buildHint: "scripts/build-gramps-wheel.py",
+  },
+];
+
+{
+  const pyodideDir = path.join(destDir, "pyodide");
+  const lockPath = path.join(pyodideDir, "pyodide-lock.json");
+  const lock = JSON.parse(await readFile(lockPath, "utf8"));
+  const registered = [];
+  for (const { name, srcDir, filePrefix, imports, depends, buildHint } of LOCAL_PACKAGES) {
+    const wheelSrcDir = path.join(repoRoot, "dist", srcDir);
+    let files = [];
+    try {
+      files = (await readdir(wheelSrcDir)).filter((f) => f.startsWith(filePrefix) && f.endsWith(".whl")).sort();
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+    const wheelFile = files.at(-1);
+    if (!wheelFile) {
+      console.log(`copy-wasm: no dist/${srcDir}/${filePrefix}*.whl found -- skipping ${name} (run ${buildHint} to enable it)`);
+      continue;
+    }
+    const buf = await readFile(path.join(wheelSrcDir, wheelFile));
+    await writeFile(path.join(pyodideDir, wheelFile), buf);
+    lock.packages[name] = {
+      name, version: "0", file_name: wheelFile, install_dir: "site",
+      sha256: createHash("sha256").update(buf).digest("hex"),
+      package_type: "package", imports, depends, unvendored_tests: false,
+    };
+    registered.push(name);
+    console.log(`copy-wasm: copied ${wheelFile} to public/pyodide/`);
+  }
+  await writeFile(lockPath, JSON.stringify(lock));
+  if (registered.length) {
+    console.log(`copy-wasm: registered ${registered.join(", ")} in public/pyodide/pyodide-lock.json`);
+  }
 }
