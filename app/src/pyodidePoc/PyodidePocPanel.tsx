@@ -687,7 +687,12 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                   </Menu>
                 </Group>
               </Tabs>
-              <Box p="sm" pos="relative" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+              <Box
+                p="sm"
+                pos="relative"
+                className={classes.resultArea}
+                style={{ flex: 1, minHeight: 0, overflow: "auto" }}
+              >
                 {tabGramplets.length === 0 ? (
                   <Text size="xs" c="dimmed">
                     {gramplets.length === 0
@@ -704,11 +709,14 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                       aria-label="Expand"
                       title="Expand"
                       onClick={() => setResultExpanded(true)}
-                      // Solid dark + round, not the subtle default -- this
+                      className={classes.expandButton}
+                      // Solid + round, not the subtle default -- this
                       // sits directly over whatever the Gramplet rendered
                       // (a white chart, say), where a low-contrast subtle
-                      // button disappears.
-                      style={{ position: "absolute", top: 14, right: 14, zIndex: 1, opacity: 0.85 }}
+                      // button disappears. Hidden until resultArea is
+                      // hovered/focused (see .expandButton in the CSS
+                      // module) so it doesn't permanently cover content.
+                      style={{ position: "absolute", top: 14, right: 14, zIndex: 1 }}
                     >
                       <Text size="lg" c="white">
                         ⤢

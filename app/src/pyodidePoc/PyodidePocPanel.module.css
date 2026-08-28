@@ -46,3 +46,18 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Hidden until resultArea is hovered (or the button itself has keyboard
+   focus, for the same reachability reason as .tabActions above) so the
+   expand glyph doesn't permanently sit over the Gramplet's own content. */
+.expandButton {
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.resultArea:hover .expandButton,
+.expandButton:focus-visible {
+  opacity: 0.85 !important;
+  pointer-events: auto;
+}
