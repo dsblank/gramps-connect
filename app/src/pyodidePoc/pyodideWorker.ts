@@ -29,6 +29,111 @@ function getPyodide(): Promise<PyodideInterface> {
   return pyodidePromise;
 }
 
+// Pyodide's own CDN fallback for a package missing from indexURL --
+// confirmed live by tracing pyodide.asm.mjs's PackageManager -- only fires
+// when its internal IN_NODE check is true. In a real browser (main thread
+// or Worker, no difference), that branch unconditionally rethrows the
+// local 404 instead, so `pyodide.loadPackagesFromImports()` never reaches
+// cdn.jsdelivr.net at all -- a package scripts/copy-wasm.mjs hasn't
+// pre-fetched into public/pyodide/ is permanently, deterministically
+// unavailable there, not just occasionally flaky. (This is exactly why a
+// plain Node test script -- IN_NODE true -- "just works" for a package
+// this app's browser build can't actually reach.) What follows is our own
+// explicit, environment-independent replacement for that fallback: it
+// never depends on Pyodide's internal branching, so it behaves the same
+// under Node and in the real Worker.
+interface LockPackage {
+  file_name: string;
+  imports: string[];
+  depends: string[];
+}
+interface LockFile {
+  packages: Record<string, LockPackage>;
+}
+
+let lockFilePromise: Promise<LockFile> | null = null;
+function getLockFile(): Promise<LockFile> {
+  if (!lockFilePromise) {
+    lockFilePromise = fetch("/pyodide/pyodide-lock.json").then((res) => res.json() as Promise<LockFile>);
+  }
+  return lockFilePromise;
+}
+
+// Regex-scanned, not a real parser -- same documented tradeoff as
+// autoAwait.ts's own regex-based scan (see that file). Only catches the
+// first name on a comma-separated `import a, b` line, and only top-level
+// imports (not ones inside a function body) -- good enough for the
+// one-per-line style every Gramplet we've seen uses, and no worse than
+// Pyodide's own loadPackagesFromImports(), which has the identical
+// static-scan limitation.
+function scanTopLevelImports(code: string): string[] {
+  const names = new Set<string>();
+  const importRe = /^[ \t]*import\s+([A-Za-z_]\w*(?:\.\w+)*)/gm;
+  const fromRe = /^[ \t]*from\s+([A-Za-z_]\w*(?:\.\w+)*)\s+import\b/gm;
+  for (const re of [importRe, fromRe]) {
+    for (const match of code.matchAll(re)) {
+      names.add(match[1].split(".")[0]);
+    }
+  }
+  return [...names];
+}
+
+function transitivePackageClosure(lock: LockFile, packageNames: string[]): string[] {
+  const seen = new Set<string>();
+  const stack = [...packageNames];
+  while (stack.length > 0) {
+    const name = stack.pop();
+    if (name === undefined || seen.has(name)) continue;
+    const pkg = lock.packages[name];
+    if (!pkg) continue; // not a catalog package (e.g. gramps-gen-lib, or a genuine PyPI-only name) -- nothing more we can do automatically
+    seen.add(name);
+    stack.push(...pkg.depends);
+  }
+  return [...seen];
+}
+
+// Ensures every catalog package the code's own top-level imports need
+// (transitively, via `depends`) is actually loaded, whether that means
+// finding it in public/pyodide/ (everything scripts/copy-wasm.mjs
+// pre-fetches -- the fast, fully-offline path) or, for anything not
+// pre-fetched, fetching it directly from cdn.jsdelivr.net ourselves right
+// here instead of relying on Pyodide's own browser-incompatible fallback.
+// A genuine network failure at that point is allowed to throw for real
+// (not swallowed the way loadPackagesFromImports()'s internal per-package
+// handling does) -- surfaces as a clear error instead of a bare
+// ModuleNotFoundError several lines into the Gramplet's own code.
+async function ensureCatalogPackagesForCode(pyodide: PyodideInterface, code: string): Promise<void> {
+  await pyodide.loadPackagesFromImports(code, { messageCallback: () => {} });
+
+  const lock = await getLockFile();
+  const importToPackage = new Map<string, string>();
+  for (const [name, pkg] of Object.entries(lock.packages)) {
+    for (const imp of pkg.imports) importToPackage.set(imp, name);
+  }
+  const topLevelPackages = scanTopLevelImports(code)
+    .map((imp) => importToPackage.get(imp))
+    .filter((name): name is string => name !== undefined);
+
+  for (const name of transitivePackageClosure(lock, topLevelPackages)) {
+    if (pyodide.loadedPackages[name]) continue;
+    // Confirmed live: pyodide.loadPackage()'s own promise resolves (never
+    // rejects) even when the package it was asked for fails to download --
+    // true for a plain name AND for an explicit URL alike. It only ever
+    // reports failure via messageCallback/errorCallback (both suppressed
+    // here). So loadedPackages[name] after the call, not a try/catch
+    // around it, is the only reliable way to tell whether either attempt
+    // actually worked -- and if neither did, this throws itself instead of
+    // silently leaving the package missing.
+    await pyodide.loadPackage(name, { messageCallback: () => {}, errorCallback: () => {} });
+    if (pyodide.loadedPackages[name]) continue;
+    const cdnUrl = `https://cdn.jsdelivr.net/pyodide/v${pyodide.version}/full/${lock.packages[name].file_name}`;
+    await pyodide.loadPackage(cdnUrl, { messageCallback: () => {}, errorCallback: () => {} });
+    if (!pyodide.loadedPackages[name]) {
+      throw new Error(`Could not load package '${name}' from public/pyodide/ or from ${cdnUrl}`);
+    }
+  }
+}
+
 // Set fresh from each RunGrampletRequest, read by the bridge functions
 // below -- the worker can't call getToken() itself (reads localStorage,
 // not available inside a Worker), so the main thread resolves a token and
@@ -579,6 +684,25 @@ def html(markup):
     _flush_table()
     _gramplet_blocks.append({"type": "html", "markup": str(markup)})
 
+def _matplotlib_figure_from(obj):
+    # Never imports matplotlib itself -- only recognizes it if the
+    # Gramplet's own code already did (sys.modules lookup), so a Gramplet
+    # that never touches matplotlib never pays for loading it just because
+    # print() knows how to handle one. Handles both \`print(fig)\` and the
+    # bare \`print(plt)\` case (the latter matching the habit of ending a
+    # matplotlib script with a trailing \`plt\`, e.g. from JupyterLite/IPython,
+    # where it means "the current figure").
+    import sys
+    plt_mod = sys.modules.get("matplotlib.pyplot")
+    if plt_mod is None:
+        return None
+    if obj is plt_mod:
+        return plt_mod.gcf()
+    figure_mod = sys.modules.get("matplotlib.figure")
+    if figure_mod is not None and isinstance(obj, figure_mod.Figure):
+        return obj
+    return None
+
 def print(*args, sep=" ", end="\\n", **kwargs):
     # Redefined rather than left as the real builtin captured via pyodide's
     # own stdout option (see getPyodide() below) -- that captures every
@@ -592,6 +716,18 @@ def print(*args, sep=" ", end="\\n", **kwargs):
     # those interrupts a run of prints, and from _finalize_blocks() at the
     # run's end. Swallows **kwargs (file=, flush=, ...) -- none of them
     # mean anything without a real stdout stream to honor them.
+    if len(args) == 1:
+        fig = _matplotlib_figure_from(args[0])
+        if fig is not None:
+            # html() itself calls _flush_print()/_flush_table(), so any
+            # print() output queued before this call keeps its place ahead
+            # of the image rather than being reordered.
+            import io, base64, sys
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", bbox_inches="tight")
+            sys.modules["matplotlib.pyplot"].close(fig)
+            html(f'<img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}">')
+            return
     _flush_table()
     _gramplet_print_buffer.append(sep.join(str(a) for a in args) + end)
     # Pushes what the result would look like right now (not yet flushed
@@ -968,13 +1104,17 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     // registry (public/pyodide/pyodide-lock.json, extended by
     // scripts/copy-wasm.mjs -- see BOOTSTRAP_PY's own comment on this) and
     // pre-loads anything found, e.g. `import pygal`, before the code that
-    // uses it runs. messageCallback suppressed the same way
-    // getGramps()'s own pyodide.loadPackage("micropip", ...) call is: this
-    // is a separate JS-side progress callback, not routed through Python's
-    // sys.stdout (and so not something BOOTSTRAP_PY's redefined print()
-    // ever sees either) -- suppressed purely so it doesn't spam the real
-    // browser console for every run.
-    await pyodide.loadPackagesFromImports(code, { messageCallback: () => {} });
+    // uses it runs -- then, for anything that's a real Pyodide catalog
+    // package but wasn't pre-fetched into public/pyodide/, fetches it
+    // directly from cdn.jsdelivr.net (see ensureCatalogPackagesForCode's
+    // own comment for why this can't just be left to Pyodide's own
+    // fallback). messageCallback suppressed the same way getGramps()'s own
+    // pyodide.loadPackage("micropip", ...) call is: this is a separate
+    // JS-side progress callback, not routed through Python's sys.stdout
+    // (and so not something BOOTSTRAP_PY's redefined print() ever sees
+    // either) -- suppressed purely so it doesn't spam the real browser
+    // console for every run.
+    await ensureCatalogPackagesForCode(pyodide, code);
     await pyodide.runPythonAsync("_reset_table()");
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(code));
     // _finalize_blocks() flushes any pending print buffer and/or table

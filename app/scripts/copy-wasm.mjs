@@ -35,7 +35,12 @@
 //
 //   extra packages (PoC, see pyodideWorker.ts's onmessage): pure-Python
 //   PyPI wheels a Gramplet might want (pygal, for html() chart output)
-//   that aren't part of Pyodide's own distribution -- same offline
+//   that aren't part of Pyodide's own catalog at all -- unlike the
+//   "bundled-but-unshipped official Pyodide packages" block further down
+//   (numpy, matplotlib, networkx, ...), which *are* in Pyodide's own
+//   catalog and so keep that catalog's own dependency metadata; these
+//   don't exist there under any name, so this block supplies its own
+//   file_name/sha256/depends by hand. Same offline
 //   concern as the micropip block above, so fetched once here (sha256-
 //   pinned) into public/pyodide/ (not a separate directory: these are
 //   registered as real entries in public/pyodide/pyodide-lock.json
@@ -100,37 +105,107 @@ for (const { src, files, destSubdir } of copies) {
   console.log(`copy-wasm: copied ${files.join(", ")} to ${path.relative(appDir, dest)}/`);
 }
 
-// micropip -- see the doc comment above. Version pin comes from the
+// Bundled-but-unshipped official Pyodide packages -- packages already
+// listed (with real file_name/sha256) in the base pyodide-lock.json the
+// "pyodide" npm package ships, but whose .whl the npm package doesn't
+// actually include (it ships only its own core runtime -- asm/wasm/stdlib
+// -- plus, as of the current version, micropip's wheel). Confirmed live:
+// leaving one of these unfetched doesn't break the Gramplet that imports
+// it -- Pyodide's own loader falls back to fetching it from
+// cdn.jsdelivr.net at runtime instead -- but that's exactly the runtime
+// CDN dependency this project avoids everywhere else (offline Docker/
+// standalone builds), so each is fetched once here instead (same jsdelivr
+// URL Pyodide's own loader falls back to, sha256-checked against the
+// lock file's own entry) so it's already sitting in public/pyodide/ by
+// the time anyone's browser asks for it. Version pin comes from the
 // "pyodide" npm package's own version (the CDN path segment pyodide's own
 // loader uses, e.g. v314.0.6), not the lock file (which has no such field
 // -- it only names packages, not the pyodide release they belong to).
+//
+//   micropip: needed to satisfy `import micropip` if a Gramplet still
+//   uses it directly (see the "extra packages" block below for the
+//   preferred offline alternative).
+//
+//   numpy: not imported by any Gramplet boilerplate itself, but pulled in
+//   transitively by `networkx`'s and `matplotlib`'s own `depends` entries
+//   already present in the base lock file (several of networkx's
+//   algorithms, e.g. spring_layout, `import numpy` lazily at call time).
+//
+//   matplotlib (+ its full dependency closure -- contourpy/cycler/
+//   fonttools/kiwisolver/packaging/pillow/pyparsing/python-dateutil/pytz/
+//   six): confirmed live that leaving even one of these unfetched doesn't
+//   surface as a load error at all -- loadPackagesFromImports() catches
+//   each package's fetch failure individually and reports it only via the
+//   (suppressed) messageCallback, then silently proceeds, so a Gramplet's
+//   `import matplotlib` fails downstream with a bare ModuleNotFoundError
+//   instead of anything pointing at the real cause. Every entry needs to
+//   be listed explicitly here (unlike EXTRA_PACKAGES's `depends` chains,
+//   which Pyodide's resolver walks on its own once one entry is
+//   registered) because this list is what actually gets pre-fetched --
+//   the resolver only walks `depends` at load time to know what to ask
+//   for, not to decide what this script fetches ahead of time.
+//
+//   networkx (+ decorator/setuptools, the two of its four `depends` --
+//   matplotlib/numpy are already covered above -- not otherwise needed by
+//   anything else here): it's a real Pyodide catalog package, confirmed
+//   against the base lock file, so it belongs in this list rather than
+//   EXTRA_PACKAGES below -- an earlier version of this file fetched a
+//   plain PyPI wheel for it under EXTRA_PACKAGES instead, which
+//   *overwrote* this correct catalog entry's `depends` (decorator,
+//   setuptools, matplotlib, numpy) with an incomplete hand-written one
+//   (just numpy), silently missing the same way matplotlib's own gap did
+//   above until a code path that actually needs decorator/setuptools hit
+//   it. Same file_name/sha256 either way (3.6.1), so no behavior changed
+//   here beyond fixing `depends`.
+const BUNDLED_PYODIDE_PACKAGES = [
+  "micropip",
+  "numpy",
+  "matplotlib",
+  "contourpy",
+  "cycler",
+  "fonttools",
+  "kiwisolver",
+  "packaging",
+  "pillow",
+  "pyparsing",
+  "python-dateutil",
+  "pytz",
+  "six",
+  "networkx",
+  "decorator",
+  "setuptools",
+];
+
 {
   const pyodideDir = path.join(destDir, "pyodide");
-  const lock = JSON.parse(await readFile(path.join(pyodideDir, "pyodide-lock.json"), "utf8"));
-  const micropip = lock.packages.micropip;
-  const dest = path.join(pyodideDir, micropip.file_name);
-  const alreadyValid = await readFile(dest).then(
-    (buf) => createHash("sha256").update(buf).digest("hex") === micropip.sha256,
-    () => false
-  );
-  if (alreadyValid) {
-    console.log(`copy-wasm: ${micropip.file_name} already present in public/pyodide/`);
-  } else {
-    const pyodideVersion = require("pyodide/package.json").version;
-    const url = `https://cdn.jsdelivr.net/pyodide/v${pyodideVersion}/full/${micropip.file_name}`;
+  const lockPath = path.join(pyodideDir, "pyodide-lock.json");
+  const lock = JSON.parse(await readFile(lockPath, "utf8"));
+  const pyodideVersion = require("pyodide/package.json").version;
+  for (const name of BUNDLED_PYODIDE_PACKAGES) {
+    const pkg = lock.packages[name];
+    const dest = path.join(pyodideDir, pkg.file_name);
+    const alreadyValid = await readFile(dest).then(
+      (buf) => createHash("sha256").update(buf).digest("hex") === pkg.sha256,
+      () => false
+    );
+    if (alreadyValid) {
+      console.log(`copy-wasm: ${pkg.file_name} already present in public/pyodide/`);
+      continue;
+    }
+    const url = `https://cdn.jsdelivr.net/pyodide/v${pyodideVersion}/full/${pkg.file_name}`;
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const buf = Buffer.from(await res.arrayBuffer());
       const sha256 = createHash("sha256").update(buf).digest("hex");
-      if (sha256 !== micropip.sha256) {
-        throw new Error(`sha256 mismatch: expected ${micropip.sha256}, got ${sha256}`);
+      if (sha256 !== pkg.sha256) {
+        throw new Error(`sha256 mismatch: expected ${pkg.sha256}, got ${sha256}`);
       }
       await writeFile(dest, buf);
-      console.log(`copy-wasm: fetched ${micropip.file_name} from jsdelivr to public/pyodide/`);
+      console.log(`copy-wasm: fetched ${pkg.file_name} from jsdelivr to public/pyodide/`);
     } catch (err) {
       console.warn(
-        `copy-wasm: could not pre-fetch ${micropip.file_name} (${err.message}) -- ` +
+        `copy-wasm: could not pre-fetch ${pkg.file_name} (${err.message}) -- ` +
           "pyodideWorker.ts will fall back to fetching it from jsdelivr.net at runtime instead"
       );
     }
