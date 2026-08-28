@@ -63,5 +63,11 @@ standalone/persistent_cache/
 standalone/request_cache/
 standalone/thumbnail_cache/
 
+# repo root: same gramps-web-api filesystem caches, this time from a
+# server process run with the repo root itself as cwd -- not source
+/persistent_cache/
+/request_cache/
+/thumbnail_cache/
+
 # deploy: real secrets/config, machine- and deployment-specific -- not source
 deploy/.env
