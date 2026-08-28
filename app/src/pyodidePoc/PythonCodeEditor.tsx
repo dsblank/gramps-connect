@@ -30,6 +30,8 @@ export function PythonCodeEditor({
         value={value}
         onValueChange={onChange}
         highlight={highlight}
+        tabSize={4}
+        insertSpaces
         padding={10}
         textareaClassName={classes.textarea}
         preClassName={classes.pre}
