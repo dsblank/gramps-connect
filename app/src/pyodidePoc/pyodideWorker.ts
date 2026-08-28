@@ -232,6 +232,24 @@ const bridge = {
     if (!res.ok) throw new Error(`get_object(): ${res.status} ${await res.text()}`);
     return res.text();
   },
+  // The single-object GET endpoint's own `?backlinks=true` (base.py's
+  // full_object(): `obj.backlinks = get_backlinks(self.db_handle, obj.handle)`)
+  // -- the real database's own reverse-reference index
+  // (find_backlink_handles()), computed server-side, not a client-side scan
+  // over every object of every type. Only the `backlinks` field is worth
+  // the round trip here (a handle map, {"family": [...], "citation": [...],
+  // ...}), so this discards the rest of the response rather than also
+  // reconstructing a whole object get_object() already exists for.
+  async getBacklinks(objectType: string, handle: string): Promise<string> {
+    const base = objectEndpointBase(objectType);
+    if (!base) throw new Error(`get_backlinks(): unknown object type ${JSON.stringify(objectType)}`);
+    const res = await fetch(`${API_BASE}${base}${encodeURIComponent(handle)}?backlinks=true`, {
+      headers: { Authorization: `Bearer ${currentToken}` },
+    });
+    if (!res.ok) throw new Error(`get_backlinks(): ${res.status} ${await res.text()}`);
+    const data = (await res.json()) as { backlinks?: Record<string, string[]> };
+    return JSON.stringify(data.backlinks ?? {});
+  },
   // get_number_of_<type>()'s bridge half -- limit=1 (only one row's worth
   // of deserialize/privacy-sanitize work, same as filter()'s own per-page
   // cost) plus count=true, whose match total comes back in the
@@ -436,6 +454,21 @@ async def get_object(object_type, handle):
     return data_to_object(_fix_object_dict(data, object_type.capitalize()))
 
 
+async def get_backlinks(object_type, handle):
+    """Every other record that refers to this one, grouped by object type
+    (e.g. {"family": [...], "citation": [...]}) -- values are handles, not
+    resolved objects (resolve the ones you actually display with
+    get_<type>_from_handle(), the same handle-indirection every other list
+    here already uses). A single real network round trip, backed by the
+    tree's own reverse-reference index server-side (gramps-web-api's
+    find_backlink_handles()) -- not a client-side scan over every object of
+    every type, so this is safe to call for one record, the same way
+    get_object() is."""
+    import json as _json
+    backlinks_json = await _bridge.getBacklinks(object_type, handle)
+    return _json.loads(backlinks_json)
+
+
 async def get_raw_object(object_type, handle):
     """Cheaper than get_object(): a full object fetch (still a real network
     round trip -- only call this for the specific item(s) you actually
@@ -495,16 +528,20 @@ class Db:
     plural (e.g. people()/families()), \`get_<type>_from_gramps_id(id)\`
     wraps filter()+get_object() (Tag has no gramps_id field in
     gramps.gen.lib, so it alone skips this one), and
-    \`get_number_of_<plural>()\` wraps count() -- for each of person/family/
-    event/place/repository/source/citation/media/note/tag. Unlike DbReadBase's
-    real iter_* methods, these take the same where/order/limit as
-    filter() and are capped at limit (default 50) rather than always
-    walking every row in the tree -- there's no local cache here, every
-    call is a real network round trip, so an uncapped iterator would be
-    an unbounded number of requests. No relationship traversal either
-    (that's SimpleAccess-territory on Gramps desktop, and not cheap even
-    there -- every access is still a real lookup, just against an
-    already-loaded local database this worker doesn't have). A single
+    \`get_number_of_<plural>()\` wraps count(), and \`get_<type>_backlinks(handle)\`
+    wraps get_backlinks() -- for each of person/family/event/place/
+    repository/source/citation/media/note/tag. Unlike DbReadBase's real
+    iter_* methods, these take the same where/order/limit as filter() and
+    are capped at limit (default 50) rather than always walking every row
+    in the tree -- there's no local cache here, every call is a real
+    network round trip, so an uncapped iterator would be an unbounded
+    number of requests. No forward relationship traversal (that's
+    SimpleAccess-territory on Gramps desktop, and not cheap even there --
+    every access is still a real lookup, just against an already-loaded
+    local database this worker doesn't have) -- get_<type>_backlinks() is
+    the one exception, since find_backlink_handles() is a genuine
+    DbReadBase primitive (backed by the tree's own reverse-reference
+    index), not a SimpleAccess convenience built on top of one. A single
     instance (\`db\`, below) is what a Gramplet actually uses."""
 
 
@@ -588,6 +625,14 @@ def _bind_db_count_method(object_type):
     setattr(Db, _get_number_of.__name__, _get_number_of)
 
 
+def _bind_db_backlinks_method(object_type):
+    async def _get_backlinks(self, handle):
+        return await get_backlinks(object_type, handle)
+
+    _get_backlinks.__name__ = f"get_{object_type}_backlinks"
+    setattr(Db, _get_backlinks.__name__, _get_backlinks)
+
+
 for _object_type in (
     "person",
     "family",
@@ -607,6 +652,7 @@ for _object_type in (
     if _object_type != "tag":  # Tag has no gramps_id field in gramps.gen.lib
         _bind_db_gramps_id_method(_object_type)
     _bind_db_count_method(_object_type)
+    _bind_db_backlinks_method(_object_type)
 del _object_type
 
 db = Db()

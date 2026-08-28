@@ -59,6 +59,12 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                   "The same one record, but as plain data (see 'Dot access' below) instead of a real object -- lighter, and what people()/families()/etc. use internally. Same for the other 9 types, e.g. db.get_raw_family_data(handle)."
                 )}
               />
+              <SymbolRow
+                symbol="db.get_person_backlinks(handle)"
+                meaning={t(
+                  "Every other record that refers to this one, grouped by object type, e.g. {'family': [...], 'citation': [...]} -- values are handles, not resolved objects. A single real network round trip, backed by the tree's own reverse-reference index server-side, not a scan over every object of every type. Same for the other 9 types, e.g. db.get_family_backlinks(handle)."
+                )}
+              />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">
