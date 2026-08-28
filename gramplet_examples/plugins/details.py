@@ -5,7 +5,7 @@
 # 4. Place the following as Code:
 
 if selected is None:
-    print("<i>A person is not selected</i>")
+    html("<i>A person is not selected</i>")
 else:
     person = selected
     from gramps.gen.lib import EventRoleType, EventType, Person
