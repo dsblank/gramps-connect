@@ -698,7 +698,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                   <>
                     <ActionIcon
                       variant="filled"
-                      color="dark"
+                      color="gray.6"
                       size={32}
                       radius="xl"
                       aria-label="Expand"
