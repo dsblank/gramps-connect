@@ -3,10 +3,10 @@
 // -- `filter`/`get_object`/`get_raw_object`, the 10 filter()+
 // get_raw_object() convenience functions (`people`/`families`/`events`/
 // `places`/`repositories`/`sources`/`citations`/`media`/`notes`/`tags`),
-// and `db`'s own `get_<type>_from_handle`/`get_raw_<type>_data` methods
-// are the *only* things in a Gramplet's namespace that ever need
-// awaiting, so this is a narrow, well-scoped transform, not a general
-// "find every awaitable call" preprocessor.
+// and any `db.<method>(...)` call (every method pyodideWorker.ts's `Db`
+// class binds is `async def`) are the *only* things in a Gramplet's
+// namespace that ever need awaiting, so this is a narrow, well-scoped
+// transform, not a general "find every awaitable call" preprocessor.
 //
 // Regex-based on purpose, not a real Python parser -- a small, fast,
 // dependency-free pass applied once per run, right before
@@ -56,16 +56,21 @@
 // hand); this makes it slightly easier to hit by accident, not a new
 // problem this introduces from scratch.
 //
-// The second call-site branch handles `db.get_person_from_handle(...)`/
-// `db.get_raw_person_data(...)`-style calls (pyodideWorker.ts's `Db`
-// class) -- these are inherently dotted, so they don't need (and can't
-// use) the bare branch's `(?<!\.)` guard; `\bdb\.` only matches the
-// literal name `db` (word-boundary before it means `mydb.` or `somedb.`
-// never match), so a Gramplet author's own unrelated `db` variable would
-// still collide if they used that exact name -- same class of accepted
-// limitation as the `filter` shadowing above.
+// The second call-site branch handles `db.<method>(...)`-style calls
+// (pyodideWorker.ts's `Db` class) -- every method `Db` binds
+// (get_<type>_from_handle, get_raw_<type>_data, iter_<type>_handles,
+// iter_<plural>, get_<type>_from_gramps_id, get_number_of_<plural>) is
+// `async def`, so rather than enumerate them here (and have this drift
+// out of sync again the next time a method is added to `Db`, as happened
+// with iter_*/get_number_of_*/get_*_from_gramps_id), this matches *any*
+// `db.<name>(` call site. These are inherently dotted, so they don't need
+// (and can't use) the bare branch's `(?<!\.)` guard; `\bdb\.` only
+// matches the literal name `db` (word-boundary before it means `mydb.`
+// or `somedb.` never match), so a Gramplet author's own unrelated `db`
+// variable would still collide if they used that exact name -- same
+// class of accepted limitation as the `filter` shadowing above.
 const CALL_SITE_RE =
-  /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*|(?<!\.)(?<!await\s{1,20})(?<!def\s{1,20})\b(filter|get_object|get_raw_object|people|families|events|places|repositories|sources|citations|media|notes|tags)\b(?=\s*\()|(?<!await\s{1,20})\b(db\.(?:get_\w+_from_handle|get_raw_\w+_data))(?=\s*\()/g;
+  /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*|(?<!\.)(?<!await\s{1,20})(?<!def\s{1,20})\b(filter|get_object|get_raw_object|people|families|events|places|repositories|sources|citations|media|notes|tags)\b(?=\s*\()|(?<!await\s{1,20})\b(db\.\w+)(?=\s*\()/g;
 
 export function autoAwaitGrampletCode(code: string): string {
   return code.replace(
