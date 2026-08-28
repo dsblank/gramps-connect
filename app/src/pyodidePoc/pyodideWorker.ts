@@ -7,6 +7,7 @@ import { loadPyodide, type PyodideInterface } from "pyodide";
 import { API_BASE } from "../config";
 import { autoAwaitGrampletCode } from "./autoAwait";
 import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
+import { preprocessPipInstalls } from "./pipInstall";
 import type { GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse } from "./types";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
@@ -1115,8 +1116,18 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     // either) -- suppressed purely so it doesn't spam the real browser
     // console for every run.
     await ensureCatalogPackagesForCode(pyodide, code);
+    // `%pip install ...` lines (Jupyter-magic syntax, not real Python) get
+    // rewritten to `await micropip.install([...])` before autoAwaitGrampletCode
+    // runs -- micropip itself isn't part of the catalog scan above (it's not
+    // an `import` the Gramplet's code contains), so it's loaded here, only
+    // when a run actually needs it.
+    const { code: pipInstalledCode, usesMicropip } = preprocessPipInstalls(code);
+    if (usesMicropip) {
+      await pyodide.loadPackage("micropip", { messageCallback: () => {} });
+      await pyodide.runPythonAsync("import micropip");
+    }
     await pyodide.runPythonAsync("_reset_table()");
-    const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(code));
+    const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
     // _finalize_blocks() flushes any pending print buffer and/or table
     // (see pyodideWorker's BOOTSTRAP_PY) and hands back every block the
     // run produced -- one per table, per html() call, and per run of
