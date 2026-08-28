@@ -49,6 +49,17 @@ to `main` with nothing catching it.
 - Full object-model UI redesign, design system, search-as-navigation — not
   scoped yet.
 
+## Feature ideas / backlog
+
+- Design and write `st.columns()` (Pyodide addon Gramplet API layout helper).
+- Allow gramplets to edit/create objects (currently read-only via
+  `filter()`/`get_object()`).
+- Allow more types of addons: tools, reports.
+- Ability to generate PDF forms (add PDF importer).
+- Move under gramps-project — would this enable translations?
+- Add recently visited items.
+- Add history of changes per object (once available in gramps-web-api).
+
 ## Editing gaps
 
 Not editable at all:
