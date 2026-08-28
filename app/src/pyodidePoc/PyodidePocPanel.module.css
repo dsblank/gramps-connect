@@ -1,13 +1,48 @@
-/* The tab's own edit-pencil/"remove from this list" glyphs -- hidden
-   until the tab is hovered (or a glyph itself has keyboard focus, so
-   they aren't only reachable by sighted/mouse users -- a known
+/* Mantine's Tabs.Tab still reserves layout width for rightSection even
+   when it's invisible (opacity 0 alone doesn't remove it from flow),
+   which was keeping tabs spaced apart. Pulling the rightSection wrapper
+   out of flow with position: absolute (Mantine's own .m_4ec4dce6 tab
+   class already sets position: relative, so this positions against the
+   tab itself) lets tabs sit at their label's natural width normally.
+   On hover/focus the tab's own end-padding grows to make room, so the
+   glyphs get real space next to the label instead of floating on top
+   of it (an earlier version floated them over static-width text and
+   the glyphs just overlapped the label -- confirmed live). */
+.tab {
+  padding-inline-end: var(--mantine-spacing-md);
+  transition: padding-inline-end 0.12s ease;
+}
+
+.tab [data-position="right"] {
+  position: absolute;
+  inset-block: 0;
+  /* Well clear of the tab's own right edge, which butts straight up
+     against the next tab's label -- Tabs.List sets no gap between tabs
+     (see --tabs-list-gap), so without this the glyphs read as closer to
+     the neighboring tab than to the one being hovered (confirmed live). */
+  right: 12px;
+  margin-inline-start: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* Hidden until the tab is hovered (or a glyph itself has keyboard focus,
+   so they aren't only reachable by sighted/mouse users -- a known
    accessibility gap with hover-only reveal patterns otherwise). */
 .tabActions {
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s ease;
+}
+
+.tab.tab:hover,
+.tab.tab:focus-within {
+  padding-inline-end: 46px;
 }
 
 .tab:hover .tabActions,
 .tab:focus-within .tabActions {
   opacity: 1;
+  pointer-events: auto;
 }
