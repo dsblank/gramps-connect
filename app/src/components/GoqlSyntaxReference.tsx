@@ -42,18 +42,18 @@ export function GoqlSyntaxReference() {
         <Text size="sm">{t("These work the same on every list:")}</Text>
         <Table verticalSpacing={6} withRowBorders={false}>
           <Table.Tbody>
-            <SymbolRow symbol="==  !=" meaning="Is / is not equal to" />
-            <SymbolRow symbol="<  <=  >  >=" meaning="Less than / greater than — earlier or later, smaller or bigger" />
-            <SymbolRow symbol="and" meaning="Both conditions must be true" />
-            <SymbolRow symbol="or" meaning="At least one of the two must be true" />
-            <SymbolRow symbol="not" meaning="Flips a condition — matches when it isn't true" />
-            <SymbolRow symbol="( )" meaning="Groups conditions, so you say exactly what you mean" />
-            <SymbolRow symbol="in ['a', 'b']" meaning="Matches any one of a list of values" />
-            <SymbolRow symbol="'text' in field" meaning="The field contains that text anywhere in it" />
-            <SymbolRow symbol="like(field, 'J%')" meaning="A text pattern, where % stands for anything and _ for a single character" />
-            <SymbolRow symbol="regex(field, 'J|M')" meaning="A regular expression, if you already know them" />
-            <SymbolRow symbol="is None" meaning="Nothing recorded in that field at all" />
-            <SymbolRow symbol="Date('Jan 1, 1968')" meaning="A date to compare against, written the way you would say it" />
+            <SymbolRow symbol="==  !=" meaning={t("Is / is not equal to")} />
+            <SymbolRow symbol="<  <=  >  >=" meaning={t("Less than / greater than — earlier or later, smaller or bigger")} />
+            <SymbolRow symbol="and" meaning={t("Both conditions must be true")} />
+            <SymbolRow symbol="or" meaning={t("At least one of the two must be true")} />
+            <SymbolRow symbol="not" meaning={t("Flips a condition — matches when it isn't true")} />
+            <SymbolRow symbol="( )" meaning={t("Groups conditions, so you say exactly what you mean")} />
+            <SymbolRow symbol="in ['a', 'b']" meaning={t("Matches any one of a list of values")} />
+            <SymbolRow symbol="'text' in field" meaning={t("The field contains that text anywhere in it")} />
+            <SymbolRow symbol="like(field, 'J%')" meaning={t("A text pattern, where % stands for anything and _ for a single character")} />
+            <SymbolRow symbol="regex(field, 'J|M')" meaning={t("A regular expression, if you already know them")} />
+            <SymbolRow symbol="is None" meaning={t("Nothing recorded in that field at all")} />
+            <SymbolRow symbol="Date('Jan 1, 1968')" meaning={t("A date to compare against, written the way you would say it")} />
           </Table.Tbody>
         </Table>
       </Section>

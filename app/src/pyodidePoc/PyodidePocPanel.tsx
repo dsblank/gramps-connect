@@ -11,7 +11,8 @@
 // fetched fresh on mount (see grampletMedia.ts) -- not a hardcoded list,
 // so this panel looks the same to every client/session on the same tree.
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Alert, Box, Group, Loader, Menu, Tabs, Text, UnstyledButton } from "@mantine/core";
+import { createPortal } from "react-dom";
+import { ActionIcon, Alert, Box, Group, Loader, Menu, Tabs, Text, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
 import { subscribeTreeChange } from "../store/treeChangeBus";
@@ -68,6 +69,19 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<RunStatus>("loading");
   const [response, setResponse] = useState<PyodideWorkerResponse | null>(null);
+  // "Expand" overlay -- state, not props, so the single <GrampletResultView>
+  // element further down stays at the exact same position in the JSX tree
+  // whether expanded or not (only which container its createPortal() call
+  // targets changes); that's what lets React move its already-rendered DOM
+  // into the overlay and back without unmounting it -- no rerun, no lost
+  // widget state (a not-yet-blurred text input, scroll position, ...), only
+  // a DOM reparent. Callback-ref state (not useRef) for both containers,
+  // since a plain ref wouldn't be readable during render before its first
+  // paint, and resultExpandedHost in particular doesn't exist at all until
+  // the overlay below actually mounts.
+  const [resultExpanded, setResultExpanded] = useState(false);
+  const [resultInlineHost, setResultInlineHost] = useState<HTMLDivElement | null>(null);
+  const [resultExpandedHost, setResultExpandedHost] = useState<HTMLDivElement | null>(null);
   const [height, setHeight] = useState<number>(readStoredHeight);
   const [collapsed, setCollapsed] = useState<boolean>(() => readStoredCollapsed(viewKey));
   const [creatingNew, setCreatingNew] = useState(false);
@@ -242,6 +256,17 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     setCollapsed(readStoredCollapsed(viewKey));
   }, [viewKey]);
 
+  // Escape closes the "expand" overlay, same as clicking its backdrop/close
+  // button below -- only listens while it's actually open.
+  useEffect(() => {
+    if (!resultExpanded) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setResultExpanded(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [resultExpanded]);
+
   async function removeFromView(gramplet: Gramplet) {
     if (!gramplet.handle) return;
     const updated = { ...gramplet, addedViews: (gramplet.addedViews ?? OBJECT_TYPES).filter((v) => v !== viewKey) };
@@ -344,13 +369,59 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       if (cancelled) return;
       runIdToGrampletRef.current.set(runId, cacheKey);
       runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, runId, status: "queued", response: null });
-      getWorker().postMessage({ type: "run-gramplet", code: gramplet.code, token, runId });
+      getWorker().postMessage({ type: "run-gramplet", code: gramplet.code, token, runId, grampletId: gramplet.id });
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, gramplets, runNonce]);
+
+  // A click on an st.*-widget in the active tab's own rendered output (see
+  // GrampletResultView's onWidgetEvent prop / stBootstrap.ts's st.button())
+  // -- posts a fresh RunGrampletRequest the same way the effect above does,
+  // registered into runningRef/runIdToGrampletRef so getWorker()'s one
+  // shared onmessage handler (below) drives it through queued/loading/done
+  // exactly like any other run, including caching the finished result into
+  // resultCacheRef. Unlike the effect, this always posts a genuinely new
+  // run -- a widget click is itself the reason to rerun, so there's no
+  // cache lookup to short-circuit here.
+  async function runWidgetEvent(key: string, value: unknown) {
+    const gramplet = gramplets.find((g) => g.id === activeId);
+    if (!gramplet) return;
+    const cacheKey = gramplet.id;
+    const runId = crypto.randomUUID();
+    setRunStatus("queued");
+    // Deliberately not setResponse(null) here, unlike the effect above --
+    // GrampletResultView.tsx keeps rendering the *previous* response's
+    // blocks through "queued"/"loading" now specifically so a widget
+    // rerun updates in place (the clicked button/input stays on screen)
+    // instead of flickering out to placeholder text and back.
+    let token: string;
+    try {
+      token = await getToken();
+    } catch (err) {
+      const errorResponse: PyodideWorkerResponse = {
+        type: "error",
+        text: err instanceof Error ? err.message : String(err),
+        blocks: [],
+        runId,
+      };
+      setRunStatus("error");
+      setResponse(errorResponse);
+      return;
+    }
+    runIdToGrampletRef.current.set(runId, cacheKey);
+    runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, runId, status: "queued", response: null });
+    getWorker().postMessage({
+      type: "run-gramplet",
+      code: gramplet.code,
+      token,
+      runId,
+      grampletId: gramplet.id,
+      widgetEvent: { key, value },
+    });
+  }
 
   // Divider sits above the panel and drags its height -- same pointer-
   // capture drag pattern as DataTable's column resizer (startResize
@@ -466,7 +537,14 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                         style={{ paddingInlineStart: 0 }}
                         rightSection={
                           <Group gap={2} wrap="nowrap" className={classes.tabActions}>
+                            {/* component="span" -- this Group sits inside
+                                Tabs.Tab's own rightSection, and Tabs.Tab
+                                itself renders as a real <button role="tab">;
+                                CircleGlyphButton's default <button> would
+                                otherwise nest inside it, invalid HTML (see
+                                its own doc comment on this prop). */}
                             <CircleGlyphButton
+                              component="span"
                               glyph="✏️"
                               label={`Edit ${gramplet.label}`}
                               size={14}
@@ -476,6 +554,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                               }}
                             />
                             <CircleGlyphButton
+                              component="span"
                               glyph="−"
                               label="Remove from view"
                               size={14}
@@ -511,7 +590,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                   </Menu>
                 </Group>
               </Tabs>
-              <Box p="sm" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+              <Box p="sm" pos="relative" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
                 {tabGramplets.length === 0 ? (
                   <Text size="xs" c="dimmed">
                     {gramplets.length === 0
@@ -519,7 +598,32 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                       : `No Gramplets added to ${typeLabel} yet -- use + Add Gramplet above.`}
                   </Text>
                 ) : (
-                  <GrampletResultView status={runStatus} response={response} />
+                  <>
+                    <ActionIcon
+                      variant="filled"
+                      color="dark"
+                      size={32}
+                      radius="xl"
+                      aria-label="Expand"
+                      title="Expand"
+                      onClick={() => setResultExpanded(true)}
+                      // Solid dark + round, not the subtle default -- this
+                      // sits directly over whatever the Gramplet rendered
+                      // (a white chart, say), where a low-contrast subtle
+                      // button disappears.
+                      style={{ position: "absolute", top: 14, right: 14, zIndex: 1, opacity: 0.85 }}
+                    >
+                      <Text size="lg" c="white">
+                        ⤢
+                      </Text>
+                    </ActionIcon>
+                    {/* The actual result content mounts here (see the
+                        createPortal() call below) -- kept as a plain empty
+                        div rather than rendering <GrampletResultView>
+                        directly so there's exactly one of it, portaled into
+                        either this div or the overlay's div below. */}
+                    <div ref={setResultInlineHost} />
+                  </>
                 )}
               </Box>
             </>
@@ -544,6 +648,97 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
           />
         </Suspense>
       )}
+      {/* Hand-rolled rather than Mantine's own <Modal> -- Modal unmounts its
+          content whenever closed, so resultExpandedHost would never be
+          ready in time for the very render that flips resultExpanded to
+          true, and every close would throw away + recreate the dialog's own
+          DOM instead of just detaching it (defeating the point below). */}
+      {resultExpanded &&
+        createPortal(
+          <Box
+            pos="fixed"
+            style={{
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 300,
+              background: "rgba(0, 0, 0, 0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onClick={() => setResultExpanded(false)}
+          >
+            <Box
+              onClick={(e) => e.stopPropagation()}
+              p="md"
+              pos="relative"
+              style={{
+                background: "var(--mantine-color-body)",
+                borderRadius: "var(--mantine-radius-md)",
+                width: "90vw",
+                height: "85vh",
+                maxWidth: 1200,
+                overflow: "auto",
+              }}
+            >
+              <ActionIcon
+                variant="filled"
+                color="dark"
+                size={32}
+                radius="xl"
+                aria-label="Close"
+                title="Close"
+                onClick={() => setResultExpanded(false)}
+                style={{ position: "absolute", top: 18, right: 18, zIndex: 1, opacity: 0.85 }}
+              >
+                <Text size="lg" c="white">
+                  ✕
+                </Text>
+              </ActionIcon>
+              <div ref={setResultExpandedHost} />
+            </Box>
+          </Box>,
+          // Not document.body -- React (since v17) scopes its synthetic
+          // event delegation to the DOM node createRoot() was given
+          // (main.tsx: document.getElementById("root")), not to `document`
+          // globally. A portal mounted directly under document.body sits
+          // outside that node's subtree, so React's own onClick/onChange
+          // never fire for anything inside it -- found live: closing this
+          // overlay via Escape (a plain window keydown listener) and the
+          // st.*-widgets inside it (real addEventListener, see
+          // GrampletResultView.tsx's HtmlOutput) both still worked, but
+          // ObjectCellButton's table-row click (a normal React onClick)
+          // silently didn't. document.getElementById("root") is that same
+          // node main.tsx renders into, so portaling into it instead keeps
+          // this overlay inside React's delegation scope while still
+          // escaping the tab's own scrolling/clipped container for
+          // position: fixed to cover the full viewport.
+          document.getElementById("root") ?? document.body,
+        )}
+      {/* The one and only <GrampletResultView> -- always at this same
+          position in the tree (see resultExpanded's own doc comment above),
+          portaled into whichever of the two divs above is currently live.
+          resultInlineHost stays mounted (just empty, once its content has
+          moved) the whole time the overlay's open -- not just hidden behind
+          it -- specifically so it's still there as a fallback target on the
+          one render where resultExpanded has already flipped true but
+          resultExpandedHost's own div hasn't committed/fired its ref
+          callback yet: falling straight to resultExpandedHost there (null,
+          on that one render) would make this whole expression falsy and
+          unmount <GrampletResultView> for a frame, then remount it once the
+          real target showed up -- found live as a visible flicker/flash of
+          its "Running…" placeholder replacing whatever was actually
+          showing. Falling back to resultInlineHost instead keeps it
+          continuously mounted throughout, so it only ever *moves* (this
+          same portal mechanic, just switching container a moment later),
+          never unmounts. */}
+      {(resultExpanded ? (resultExpandedHost ?? resultInlineHost) : resultInlineHost) &&
+        createPortal(
+          <GrampletResultView status={runStatus} response={response} onWidgetEvent={runWidgetEvent} />,
+          (resultExpanded ? (resultExpandedHost ?? resultInlineHost) : resultInlineHost) as HTMLDivElement,
+        )}
     </Box>
   );
 }

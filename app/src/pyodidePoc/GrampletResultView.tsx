@@ -7,10 +7,11 @@
 // block, in call order, as a real GUI table or raw markup instead of a
 // single Code block -- the whole point of that quartet existing, mirroring
 // Gramps desktop's own GrampyScript addon.
+import { useEffect, useRef, useState } from "react";
 import { Alert, Code, Table, Text } from "@mantine/core";
-import DOMPurify from "dompurify";
 import { t } from "../i18n/i18n";
 import { ObjectCellButton } from "./ObjectCellButton";
+import "./stWidgets.css";
 import type { GrampletBlock, PyodideWorkerResponse, TableCell } from "./types";
 
 // "queued": posted to the worker but not yet actually running -- another
@@ -21,24 +22,146 @@ import type { GrampletBlock, PyodideWorkerResponse, TableCell } from "./types";
 // reads as "waiting its turn", not "something's broken/stuck".
 export type RunStatus = "idle" | "queued" | "loading" | "done" | "error";
 
-// html(markup)'s result -- sanitized right here, the one place this
-// untrusted string (arbitrary Python's own choice of text, see types.ts's
-// ObjectCell doc comment) actually reaches the DOM, rather than trusting
-// pyodideWorker.ts to have done it. `interactive=false` (the editor's own
-// Execute preview) additionally blocks pointer events on the whole thing --
-// DOMPurify strips scripts/handlers but a plain, sanitized <a href> inside
-// the markup would still navigate the app away on click otherwise, same
+// html(markup)'s result -- reaches the DOM completely unsanitized (no
+// DOMPurify -- removed here; see types.ts's GrampletBlock doc comment and
+// pyodideWorker.ts's html() for the fuller trust-model note). Gramplet
+// authors are trusted the same as anyone who can already write Python
+// hitting the live tree's write-capable API with the user's own
+// credentials, so this deliberately allows real inline event handlers and
+// <script> tags -- e.g. pygal's SVG output embeds a <script> block for its
+// own hover-tooltip behavior, which needs both of the things below to
+// actually work. `interactive=false` (the editor's own Execute preview)
+// still blocks navigation from a plain <a href> inside the markup (same
 // "don't lose the unsaved edit" reasoning ObjectCellButton's own
-// interactive prop exists for.
-function HtmlOutput({ markup, interactive }: { markup: string; interactive: boolean }) {
-  const clean = DOMPurify.sanitize(markup);
+// interactive prop exists for) via onClickCapture's preventDefault() rather
+// than a blanket `pointer-events: none` -- that would also silently swallow
+// st.*-widget clicks below, since a widget click still has to reach
+// regardless of `interactive` (a widget rerun never navigates, only
+// <a href> does).
+//
+// <script> tags specifically: a browser never executes a <script> element
+// that arrives via dangerouslySetInnerHTML/.innerHTML= -- a deliberate,
+// unconditional restriction, unrelated to and not fixed by dropping
+// DOMPurify above. The scriptsEffect below rebuilds each one as a genuinely
+// new script node (document.createElement("script"), copying its
+// attributes/text, then swapping it in), which browsers do execute once
+// actually inserted -- the standard workaround for this restriction.
+//
+// st.*-widget wiring (see stBootstrap.ts): a widget's own markup carries
+// `data-gramplet-key`/`data-gramplet-event` attributes rather than inline
+// onclick/onchange, so there's exactly one listener per event type here
+// instead of one inline handler string per widget -- simpler to generate on
+// the Python side, not (anymore) a security workaround. Attached as *real*
+// DOM listeners via the ref/effect below, not React's onClick/onChange JSX
+// props -- found live: React's synthetic "click" delegation works fine on
+// injected, non-React-rendered markup (that's how st.button() already
+// worked), but its synthetic "change" relies on internal value-tracking it
+// only ever wires up for input/select/textarea elements it rendered itself,
+// so onChange on this div silently never fired for st.text_input()/
+// st.checkbox()/st.selectbox()'s raw injected <input>/<select> -- a real
+// addEventListener has no such requirement. onWidgetEvent is undefined
+// wherever the caller has nowhere to send a widget-triggered rerun (there
+// isn't one yet outside PyodidePocPanel.tsx/GrampletEditDialog.tsx), in
+// which case widget interactions are just inert.
+//
+// st.button() renders `data-gramplet-event="click"`; st.text_input()/
+// st.checkbox()/st.selectbox() render `data-gramplet-event="change"` --
+// matched separately below (rather than one handler reacting to either
+// event) so e.g. clicking into a text input to focus/type it doesn't also
+// fire a spurious click-sentinel widget event for that same key.
+function widgetEventValue(el: HTMLElement): unknown {
+  // A checkbox's own `.value` is always the fixed string "on" regardless of
+  // checked state (unless a Gramplet set a custom value=, which none here
+  // do) -- `.checked` is the only field that actually reflects it.
+  if (el instanceof HTMLInputElement && el.type === "checkbox") return el.checked;
+  if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) return el.value;
+  return true; // a button (or anything else) -- click sentinel
+}
+
+function HtmlOutput({
+  markup,
+  interactive,
+  onWidgetEvent,
+}: {
+  markup: string;
+  interactive: boolean;
+  onWidgetEvent?: (key: string, value: unknown) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Delegated on the wrapping div itself (never re-attached when `markup`
+  // changes -- new/replaced children still bubble up to the same stable
+  // parent node), so this only needs to re-run if `onWidgetEvent` itself
+  // changes identity.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !onWidgetEvent) return;
+    const fireEvent = onWidgetEvent; // stable through this closure's lifetime, unlike the possibly-undefined prop itself
+    function handleClick(event: Event) {
+      const target = (event.target as HTMLElement).closest<HTMLElement>('[data-gramplet-event="click"]');
+      const key = target?.dataset.grampletKey;
+      if (key !== undefined) fireEvent(key, true);
+    }
+    function handleChange(event: Event) {
+      const target = (event.target as HTMLElement).closest<HTMLElement>('[data-gramplet-event="change"]');
+      const key = target?.dataset.grampletKey;
+      if (target && key !== undefined) fireEvent(key, widgetEventValue(target));
+    }
+    container.addEventListener("click", handleClick);
+    container.addEventListener("change", handleChange);
+    return () => {
+      container.removeEventListener("click", handleClick);
+      container.removeEventListener("change", handleChange);
+    };
+  }, [onWidgetEvent]);
+
+  // Re-runs every time `markup` itself changes (unlike the widget-listener
+  // effect above) -- a fresh dangerouslySetInnerHTML means any <script>
+  // tags in it are brand new inert DOM nodes each time, none of which the
+  // browser will ever run on its own (see this function's own doc comment
+  // above for why). Swaps each one for a real, freshly created <script> --
+  // browsers do execute *those*, which is what makes e.g. a pygal chart's
+  // embedded hover-tooltip script actually run. pygal's own output
+  // (confirmed live) is two such scripts: one inline (sets up
+  // `window.pygal.config[...]`, copying its textContent below is enough),
+  // and a second, empty one that's an *external* reference to pygal's own
+  // tooltip-behavior JS -- as an SVG element, that one points at it via
+  // `xlink:href` (SVG's own attribute for this, no plain `href`/`src`
+  // involved), which a plain HTML <script> element doesn't understand as a
+  // source to fetch at all -- only its own `src` triggers that. Mapping
+  // xlink:href (or href) to src below is what makes that second, actually
+  // interactive-behavior-carrying script load in the first place.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    for (const old of Array.from(container.querySelectorAll("script"))) {
+      const script = document.createElement("script");
+      for (const attr of Array.from(old.attributes)) {
+        if (attr.name === "xlink:href" || attr.name === "href") {
+          script.src = attr.value;
+        } else {
+          script.setAttribute(attr.name, attr.value);
+        }
+      }
+      script.textContent = old.textContent;
+      old.replaceWith(script);
+    }
+  }, [markup]);
+
   return (
     <div
-      style={{
-        marginBottom: "var(--mantine-spacing-xs)",
-        ...(interactive ? undefined : { pointerEvents: "none" }),
-      }}
-      dangerouslySetInnerHTML={{ __html: clean }}
+      ref={containerRef}
+      style={{ marginBottom: "var(--mantine-spacing-xs)" }}
+      onClickCapture={
+        interactive
+          ? undefined
+          : (event) => {
+              if ((event.target as HTMLElement).closest("a")) {
+                event.preventDefault();
+              }
+            }
+      }
+      dangerouslySetInnerHTML={{ __html: markup }}
     />
   );
 }
@@ -94,9 +217,17 @@ function TableOutput({
 // One block's worth of output -- see GrampletBlock in types.ts. Rendered in
 // call order, so html()/row() calls interleaved in a single run each keep
 // their own place in the result instead of one silently overwriting another.
-function BlockOutput({ block, interactive }: { block: GrampletBlock; interactive: boolean }) {
+function BlockOutput({
+  block,
+  interactive,
+  onWidgetEvent,
+}: {
+  block: GrampletBlock;
+  interactive: boolean;
+  onWidgetEvent?: (key: string, value: unknown) => void;
+}) {
   if (block.type === "html") {
-    return <HtmlOutput markup={block.markup} interactive={interactive} />;
+    return <HtmlOutput markup={block.markup} interactive={interactive} onWidgetEvent={onWidgetEvent} />;
   }
   return <TableOutput columns={block.columns} rows={block.rows} interactive={interactive} />;
 }
@@ -112,11 +243,40 @@ export function GrampletResultView({
   // clickable ObjectCellButton so there's no dead-looking affordance to
   // click in the editor's own Execute-result preview.
   interactive = true,
+  // A widget (st.button(), see stBootstrap.ts) was clicked -- undefined
+  // wherever the caller doesn't wire up a rerun path. See HtmlOutput's own
+  // doc comment above for why this reaches all the way down there instead
+  // of each widget carrying an inline handler.
+  onWidgetEvent,
 }: {
   status: RunStatus;
   response: PyodideWorkerResponse | null;
   interactive?: boolean;
+  onWidgetEvent?: (key: string, value: unknown) => void;
 }) {
+  // Delays the "Running…" caption below (only that caption -- not the
+  // blocks above it, and not the two no-prior-content messages further
+  // down, both unaffected) by a second, rather than showing/hiding it the
+  // instant `status` enters/leaves "queued"/"loading". A widget rerun with
+  // existing content to keep showing is typically done well inside a
+  // second (nothing else was ever really occupying the worker) -- without
+  // this, that caption line was popping in and out for just that brief
+  // window on essentially every widget click, itself reading as a flicker
+  // even once its *text* stopped changing (fixed separately, still not
+  // enough on its own). One shared timer for the whole "queued" + "loading"
+  // span, not restarted at the queued -> loading sub-transition (see
+  // inFlight, a single boolean the effect's dependency actually watches).
+  const inFlight = status === "queued" || status === "loading";
+  const [showRunningCaption, setShowRunningCaption] = useState(false);
+  useEffect(() => {
+    if (!inFlight) {
+      setShowRunningCaption(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowRunningCaption(true), 1000);
+    return () => clearTimeout(timer);
+  }, [inFlight]);
+
   if (status === "idle") {
     return (
       <Text size="xs" c="dimmed">
@@ -124,31 +284,43 @@ export function GrampletResultView({
       </Text>
     );
   }
-  if (status === "queued") {
-    return (
-      <Text size="xs" c="dimmed">
-        {t("Waiting for another Gramplet to finish running…")}
-      </Text>
-    );
-  }
-  if (status === "loading") {
-    // A live "progress" message (see PyodideWorkerResponse in types.ts) --
-    // print()'s own snapshot-so-far, sent mid-run -- renders the same way
-    // a finished run's blocks do, so a print()-then-time.sleep() loop's
-    // output shows up as it happens instead of only once the whole run
-    // finishes. Falls through to the plain "Running…" text below until the
-    // first one arrives (nothing printed yet, or the code never calls
-    // print() at all).
-    if (response?.type === "progress" && response.blocks.length > 0) {
+  if (status === "queued" || status === "loading") {
+    // Whatever the *previous* run for this same Gramplet last rendered --
+    // callers deliberately don't null out `response` for a widget-triggered
+    // rerun (PyodidePocPanel.tsx's runWidgetEvent()/GrampletEditDialog.tsx's
+    // handleExecute()), so e.g. st.button()'s own rendered <button> stays
+    // on screen, still clickable, through its own rerun instead of
+    // flickering out to placeholder text and back. A `progress` message
+    // (print()'s own snapshot-so-far, sent mid-run) takes over from here
+    // once one arrives, same reason. Only a Gramplet's genuinely first-ever
+    // run (or one whose prior run produced no blocks at all) has nothing to
+    // fall back on, hence the plain-text branch below.
+    const priorBlocks = response && response.type !== "started" ? response.blocks : [];
+    if (priorBlocks.length > 0) {
+      // The caption below is gated on showRunningCaption (see its own doc
+      // comment above) rather than shown unconditionally -- and, same
+      // reasoning as that comment, always "Running…" rather than ever the
+      // "queued" wording below (which only applies to the no-prior-content
+      // branch further down) even on the rare rerun that's genuinely still
+      // "queued" a second later.
       return (
         <>
-          {response.blocks.map((block, i) => (
-            <BlockOutput key={i} block={block} interactive={interactive} />
+          {priorBlocks.map((block, i) => (
+            <BlockOutput key={i} block={block} interactive={interactive} onWidgetEvent={onWidgetEvent} />
           ))}
-          <Text size="xs" c="dimmed">
-            {t("Running…")}
-          </Text>
+          {showRunningCaption && (
+            <Text size="xs" c="dimmed">
+              {t("Running…")}
+            </Text>
+          )}
         </>
+      );
+    }
+    if (status === "queued") {
+      return (
+        <Text size="xs" c="dimmed">
+          {t("Waiting for another Gramplet to finish running…")}
+        </Text>
       );
     }
     return (
@@ -161,7 +333,9 @@ export function GrampletResultView({
     return (
       <>
         {response?.type === "error" &&
-          response.blocks.map((block, i) => <BlockOutput key={i} block={block} interactive={interactive} />)}
+          response.blocks.map((block, i) => (
+            <BlockOutput key={i} block={block} interactive={interactive} onWidgetEvent={onWidgetEvent} />
+          ))}
         <Alert color="red" title={t("Python error")}>
           <Code block>{response?.type === "error" ? response.text : ""}</Code>
         </Alert>
@@ -188,7 +362,7 @@ export function GrampletResultView({
     return (
       <>
         {response.blocks.map((block, i) => (
-          <BlockOutput key={i} block={block} interactive={interactive} />
+          <BlockOutput key={i} block={block} interactive={interactive} onWidgetEvent={onWidgetEvent} />
         ))}
       </>
     );

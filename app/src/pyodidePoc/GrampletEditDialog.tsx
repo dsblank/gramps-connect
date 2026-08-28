@@ -171,13 +171,23 @@ export function GrampletEditDialog({
 
   // Runs whatever's currently in the code editor -- deliberately not
   // gated on Save first, so a Gramplet author can iterate (edit, execute,
-  // edit again) without round-tripping through Media each time.
-  async function handleExecute() {
+  // edit again) without round-tripping through Media each time. `widgetEvent`
+  // is set when this run was triggered by clicking an st.*-widget in the
+  // preview below (GrampletResultView's onWidgetEvent prop / stBootstrap.ts's
+  // st.button()) rather than the Execute button itself.
+  async function handleExecute(widgetEvent?: { key: string; value: unknown }) {
     if (!gramplet) return;
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     setRunStatus("loading");
-    setRunResponse(null);
+    // Only for a genuine Execute click, not a widget rerun of the exact
+    // same code -- GrampletResultView.tsx keeps rendering the *previous*
+    // response's blocks through "loading" when one is available, so a
+    // widget rerun updates in place (the clicked button/input stays on
+    // screen) instead of flickering out to placeholder text and back. A
+    // fresh Execute, though, may be running just-edited code that no
+    // longer matches what's still on screen, so that one still clears it.
+    if (!widgetEvent) setRunResponse(null);
     try {
       const token = await getToken();
       const worker = getWorker();
@@ -201,7 +211,14 @@ export function GrampletEditDialog({
         }
         setRunResponse(event.data);
       };
-      worker.postMessage({ type: "run-gramplet", code: gramplet.code, token, runId });
+      worker.postMessage({
+        type: "run-gramplet",
+        code: gramplet.code,
+        token,
+        runId,
+        grampletId: gramplet.id,
+        ...(widgetEvent ? { widgetEvent } : {}),
+      });
     } catch (err) {
       setRunStatus("error");
       setRunResponse({ type: "error", text: err instanceof Error ? err.message : String(err), blocks: [], runId });
@@ -277,7 +294,7 @@ export function GrampletEditDialog({
             minHeight={320}
           />
           <Group justify="center">
-            <Button size="xs" color="green" onClick={handleExecute} loading={runStatus === "loading"}>
+            <Button size="xs" color="green" onClick={() => handleExecute()} loading={runStatus === "loading"}>
               {t("Execute")}
             </Button>
           </Group>
@@ -289,13 +306,16 @@ export function GrampletEditDialog({
               p="sm"
               style={{
                 minHeight: 100,
-                maxHeight: 240,
-                overflow: "auto",
                 border: "1px solid var(--mantine-color-default-border)",
                 borderRadius: "var(--mantine-radius-sm)",
               }}
             >
-              <GrampletResultView status={runStatus} response={runResponse} interactive={false} />
+              <GrampletResultView
+                status={runStatus}
+                response={runResponse}
+                interactive={false}
+                onWidgetEvent={(key, value) => handleExecute({ key, value })}
+              />
             </Box>
           </Box>
           {error && <Alert color="red">{error}</Alert>}

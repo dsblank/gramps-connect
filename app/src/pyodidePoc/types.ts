@@ -131,6 +131,20 @@ export interface RunGrampletRequest {
    * `time.sleep()` loop) was still in flight -- it just queues, replacing
    * any earlier still-queued request, and runs once the current one ends. */
   runId: string;
+  /** The Gramplet's own stable id (Gramplet.id above), unlike `runId` which
+   * changes every request -- not consumed yet (this PoC's st.button() only
+   * needs `widgetEvent` below), but both call sites already have it at
+   * hand, and a later widget needing state to persist across separate
+   * reruns (a counter, a typed-in string) will key its store by this. */
+  grampletId: string;
+  /** Set only when this run was triggered by a click on a previously
+   * rendered `st.*` widget (see GrampletResultView.tsx's delegated
+   * click listener) rather than a fresh Execute/tab-switch run -- `key`
+   * matches the `data-gramplet-key` the widget rendered itself with.
+   * pyodideWorker.ts's runOne() feeds this into `_st_event_key`/
+   * `_st_event_value` before running the code, so e.g. st.button() can
+   * tell "was I the one just clicked" apart from every other run. */
+  widgetEvent?: { key: string; value: unknown };
 }
 
 export type PyodideWorkerRequest = RunGrampletRequest;
@@ -164,14 +178,14 @@ export type TableCell = string | ObjectCell;
  * the code made them, instead of one silently overwriting another. */
 export type GrampletBlock =
   | { type: "table"; columns: string[]; rows: TableCell[][] }
-  /** UNSANITIZED HTML/SVG source (see pyodideWorker.ts's `html()`).
-   * GrampletResultView.tsx runs it through DOMPurify before ever touching
-   * the DOM -- Gramplet code is arbitrary Python, and a Gramplet is a Media
-   * object that could end up imported/shared from someone else, not just
-   * self-authored. print() output and the trailing result value are HTML-
-   * escaped before landing here (unlike an explicit html() call's markup),
-   * so DOMPurify only ever has to sanitize markup a Gramplet asked for by
-   * name. */
+  /** UNSANITIZED HTML/SVG source (see pyodideWorker.ts's `html()`), reaching
+   * the DOM exactly as-is -- GrampletResultView.tsx no longer runs this
+   * through DOMPurify (removed; see that file's own HtmlOutput doc comment
+   * for the trust-model reasoning), including real <script> tags and inline
+   * event handlers. print() output and the trailing result value are still
+   * HTML-escaped before landing here (unlike an explicit html() call's
+   * markup), simply because there's no reason for those specifically to
+   * ever contain markup. */
   | { type: "html"; markup: string };
 
 /** No `printed` field -- unlike the pre-blocks design, a Gramplet's own

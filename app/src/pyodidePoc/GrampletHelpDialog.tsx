@@ -43,15 +43,21 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
             <Table.Tbody>
               <SymbolRow
                 symbol="people(where=None, order=None, limit=50)"
-                meaning="Every person matching where (a query -- see below), as full records, in one call. Same for families(), events(), places(), repositories(), sources(), citations(), media(), notes(), tags()."
+                meaning={t(
+                  "Every person matching where (a query -- see below), as full records, in one call. Same for families(), events(), places(), repositories(), sources(), citations(), media(), notes(), tags()."
+                )}
               />
               <SymbolRow
                 symbol="db.get_person_from_handle(handle)"
-                meaning="One specific record by handle, as a real Gramps object (every method Gramps desktop's own addons use, e.g. .get_primary_name()). Same for the other 9 types, e.g. db.get_family_from_handle(handle)."
+                meaning={t(
+                  "One specific record by handle, as a real Gramps object (every method Gramps desktop's own addons use, e.g. .get_primary_name()). Same for the other 9 types, e.g. db.get_family_from_handle(handle)."
+                )}
               />
               <SymbolRow
                 symbol="db.get_raw_person_data(handle)"
-                meaning="The same one record, but as plain data (see 'Dot access' below) instead of a real object -- lighter, and what people()/families()/etc. use internally. Same for the other 9 types, e.g. db.get_raw_family_data(handle)."
+                meaning={t(
+                  "The same one record, but as plain data (see 'Dot access' below) instead of a real object -- lighter, and what people()/families()/etc. use internally. Same for the other 9 types, e.g. db.get_raw_family_data(handle)."
+                )}
               />
             </Table.Tbody>
           </Table>
@@ -74,9 +80,24 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
         <Section title={t("Building a result")}>
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>
-              <SymbolRow symbol="columns(*names)" meaning="Names the table's columns. Optional -- left out, a column is named after what it holds (Person, Date, ...) when every row agrees, otherwise just numbered." />
-              <SymbolRow symbol="row(*values)" meaning="Adds one row. Dates format automatically; a person/event/etc. becomes a clickable link to that record; anything else is shown as text." />
-              <SymbolRow symbol="html(markup)" meaning="Shows raw HTML/SVG instead of a table -- a hand-built SVG string, or a chart library's own render() output. Sanitized before display, so scripts/event handlers are stripped." />
+              <SymbolRow
+                symbol="columns(*names)"
+                meaning={t(
+                  "Names the table's columns. Optional -- left out, a column is named after what it holds (Person, Date, ...) when every row agrees, otherwise just numbered."
+                )}
+              />
+              <SymbolRow
+                symbol="row(*values)"
+                meaning={t(
+                  "Adds one row. Dates format automatically; a person/event/etc. becomes a clickable link to that record; anything else is shown as text."
+                )}
+              />
+              <SymbolRow
+                symbol="html(markup)"
+                meaning={t(
+                  "Shows raw HTML/SVG instead of a table -- a hand-built SVG string, or a chart library's own render() output. Reaches the page exactly as given, scripts and event handlers included (e.g. pygal's own hover tooltips) -- Gramplet code runs with the same trust as your own account."
+                )}
+              />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">
@@ -90,6 +111,53 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           <Code block>
             {'for person in people("gender == 1", limit=10):\n'
               + '    row(person, person.gramps_id)'}
+          </Code>
+        </Section>
+
+        <Section title={t("Interactive widgets")}>
+          <Text size="sm">
+            {t(
+              "Streamlit's own names, so Streamlit's docs work as a reference too. Clicking one reruns just this Gramplet's own code -- not the whole page -- and each widget's current value is remembered under its key (the label, unless you pass key= yourself) across those reruns, in st.session_state."
+            )}
+          </Text>
+          <Table verticalSpacing={6} withRowBorders={false}>
+            <Table.Tbody>
+              <SymbolRow
+                symbol="st.button(label, key=None)"
+                meaning={t("True on the one rerun triggered by clicking it, False every other time.")}
+              />
+              <SymbolRow
+                symbol={'st.text_input(label, value="", key=None)'}
+                meaning={t("A text box; returns its current value.")}
+              />
+              <SymbolRow
+                symbol="st.checkbox(label, value=False, key=None)"
+                meaning={t("A checkbox; returns its current checked state.")}
+              />
+              <SymbolRow
+                symbol="st.selectbox(label, options, index=0, key=None)"
+                meaning={t("A dropdown; returns the currently selected option.")}
+              />
+              <SymbolRow symbol="st.write(*args)" meaning={t("Same as print().")} />
+              <SymbolRow
+                symbol="st.session_state"
+                meaning={t(
+                  "A dict (both state.foo and state[\"foo\"] work) for remembering anything else across reruns, e.g. a counter -- not just what the widgets above already track for you."
+                )}
+              />
+            </Table.Tbody>
+          </Table>
+          <Text size="sm" c="dimmed">
+            {t(
+              "Two widgets sharing a label share a key too, and so silently share one value -- give them distinct labels, or pass key= yourself, if that's not what you want."
+            )}
+          </Text>
+          <Code block>
+            {'if "count" not in st.session_state:\n'
+              + '    st.session_state.count = 0\n'
+              + 'if st.button("Click me"):\n'
+              + '    st.session_state.count += 1\n'
+              + 'st.write("Clicked", st.session_state.count, "times")'}
           </Code>
         </Section>
 

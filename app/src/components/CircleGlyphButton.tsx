@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import type { MouseEvent } from "react";
+import type { KeyboardEvent, SyntheticEvent } from "react";
 import { Group, Text, Tooltip, UnstyledButton } from "@mantine/core";
 
 interface CircleGlyphButtonProps {
@@ -16,13 +16,29 @@ interface CircleGlyphButtonProps {
    * is glyph-shaped enough to confuse it with). */
   glyph: string;
   label: string;
-  onClick: (e: MouseEvent) => void;
+  // SyntheticEvent, not MouseEvent -- every caller only ever calls
+  // e.stopPropagation() (or ignores it), and component="span" below drives
+  // this from a keyboard event too, not just a click.
+  onClick: (e: SyntheticEvent) => void;
   size?: number;
   /** When set, the circle is followed by this text inside the *same*
    * clickable button (AttachControl.tsx's "+ Add a note" style triggers)
    * instead of rendering as a bare icon with only a hover tooltip -- the
    * whole phrase is the click target, not just the small circle. */
   textLabel?: string;
+  /** "span" for a caller nesting this inside another real `<button>`
+   * (PyodidePocPanel.tsx's per-tab edit/remove glyphs, inside a Mantine
+   * Tabs.Tab -- itself a `<button role="tab">`) -- a `<button>` inside a
+   * `<button>` is invalid HTML (React warns: "validateDOMNesting(...):
+   * <button> cannot appear as a descendant of <button>", and browsers don't
+   * agree on how to recover from it, which can break the outer button's own
+   * click handling, not just print a warning). Keyboard activation
+   * (Enter/Space) and focusability are native to a real <button> but not to
+   * a <span> -- both are added back by hand below rather than silently lost
+   * for this case, since these glyphs are specifically meant to be
+   * keyboard-reachable (see PyodidePocPanel.module.css's own
+   * :focus-within reveal rule for them). */
+  component?: "button" | "span";
 }
 
 const CIRCLE_STYLE = (size: number) =>
@@ -55,13 +71,33 @@ const CIRCLE_STYLE = (size: number) =>
  * comment on why its ✎ is text, not an SVG).
  *
  * forwardRef, not a plain function component, since this wraps a real
- * `<button>` a caller (or a future Mantine floating-element target) may
- * need a DOM ref to -- a plain function component would silently drop one. */
+ * `<button>` (component="button", the default -- see that prop's own doc
+ * comment for the component="span" exception, where the ref's actual
+ * element no longer matches this HTMLButtonElement typing, moot today since
+ * no caller passes one either way) a caller (or a future Mantine
+ * floating-element target) may need a DOM ref to -- a plain function
+ * component would silently drop one. */
 export const CircleGlyphButton = forwardRef<HTMLButtonElement, CircleGlyphButtonProps>(
-  function CircleGlyphButton({ glyph, label, onClick, size = 20, textLabel }, ref) {
+  function CircleGlyphButton({ glyph, label, onClick, size = 20, textLabel, component = "button" }, ref) {
+    // See the `component` prop's own doc comment -- a real <button> gets
+    // Enter/Space activation and focusability for free; a <span> doesn't,
+    // so component="span" adds both by hand instead of silently losing them.
+    const spanA11yProps =
+      component === "span"
+        ? {
+            role: "button" as const,
+            tabIndex: 0,
+            onKeyDown: (e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault(); // Space's default is to scroll the page
+                onClick(e);
+              }
+            },
+          }
+        : undefined;
     if (textLabel) {
       return (
-        <UnstyledButton ref={ref} onClick={onClick} aria-label={label}>
+        <UnstyledButton component={component} ref={ref} onClick={onClick} aria-label={label} {...spanA11yProps}>
           <Group gap={6} wrap="nowrap">
             <span style={CIRCLE_STYLE(size)}>{glyph}</span>
             <Text size="sm" c="dimmed">{textLabel}</Text>
@@ -71,7 +107,14 @@ export const CircleGlyphButton = forwardRef<HTMLButtonElement, CircleGlyphButton
     }
     return (
       <Tooltip label={label} withArrow>
-        <UnstyledButton ref={ref} onClick={onClick} aria-label={label} style={CIRCLE_STYLE(size)}>
+        <UnstyledButton
+          component={component}
+          ref={ref}
+          onClick={onClick}
+          aria-label={label}
+          style={CIRCLE_STYLE(size)}
+          {...spanA11yProps}
+        >
           {glyph}
         </UnstyledButton>
       </Tooltip>

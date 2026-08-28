@@ -8,6 +8,7 @@ import { API_BASE } from "../config";
 import { autoAwaitGrampletCode } from "./autoAwait";
 import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
 import { preprocessPipInstalls } from "./pipInstall";
+import { ST_BOOTSTRAP_PY } from "./stBootstrap";
 import type { GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse } from "./types";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
@@ -667,14 +668,15 @@ def columns(*names):
 def html(markup):
     # Adds a block to the result, for raw HTML/SVG -- e.g. an SVG string
     # built by hand, or a chart library's own .render() output (pygal's Pie,
-    # say): html(chart.render(is_unicode=True)). Unsanitized here on
-    # purpose -- GrampletResultView.tsx runs it through DOMPurify right
-    # before it ever touches the DOM, the one place that actually matters
-    # for an XSS boundary, rather than trusting a second copy of that logic
-    # re-done in Pyodide. Flushes any pending print buffer and/or table
-    # first, so html()/row()/print() calls interleaved in any order each
-    # keep their own place in the result instead of one silently discarding
-    # another.
+    # say): html(chart.render(is_unicode=True)). Unsanitized here, and
+    # GrampletResultView.tsx no longer sanitizes it either (DOMPurify
+    # removed there -- Gramplet authors are trusted, see that file's own
+    # HtmlOutput doc comment): markup reaches the DOM exactly as given,
+    # <script> tags included -- which is what actually makes pygal's own
+    # embedded hover-tooltip script run, for exactly that example. Flushes
+    # any pending print buffer and/or table first, so html()/row()/print()
+    # calls interleaved in any order each keep their own place in the result
+    # instead of one silently discarding another.
     # pygal (and other chart libs) default render() to bytes, not str --
     # str(b"...") would give the literal "b'...'" repr instead of the
     # markup, so decode bytes here rather than requiring every Gramplet to
@@ -1006,10 +1008,15 @@ def _print_buffer_block():
 
 def _flush_print():
     # Turns whatever print() calls have built up since the last flush into
-    # one block and clears the buffer -- see print() above. Sanitized by
-    # DOMPurify same as any other html block (GrampletResultView.tsx)
-    # rather than needing a whole separate "this one is plain text" block
-    # kind. No-op if print() wasn't called since the last flush.
+    # one block and clears the buffer -- see print() above. Reuses the same
+    # {type:"html"} block kind an explicit html() call produces (rather than
+    # needing a whole separate "this one is plain text" kind) precisely
+    # because _print_buffer_block() above already html.escape()s the text
+    # first -- print()'s own semantics are "show this value", never "render
+    # this as markup", so it stays plain text regardless of what a Gramplet
+    # passes it, unlike html()'s markup argument (which reaches the DOM
+    # completely unsanitized, see html()'s own doc comment above). No-op if
+    # print() wasn't called since the last flush.
     global _gramplet_print_buffer
     if not _gramplet_print_buffer:
         return
@@ -1047,7 +1054,14 @@ let bootstrapPromise: Promise<void> | null = null;
 function ensureBootstrap(pyodide: PyodideInterface): Promise<void> {
   if (!bootstrapPromise) {
     pyodide.registerJsModule("_gramps_connect_bridge", bridge);
-    bootstrapPromise = pyodide.runPythonAsync(BOOTSTRAP_PY);
+    // ST_BOOTSTRAP_PY (stBootstrap.ts, the `st.*` widget API PoC) runs
+    // right after, in the same pyodide global namespace -- it calls
+    // BOOTSTRAP_PY's own html() builtin, so it can't run before html()
+    // itself is defined.
+    bootstrapPromise = (async () => {
+      await pyodide.runPythonAsync(BOOTSTRAP_PY);
+      await pyodide.runPythonAsync(ST_BOOTSTRAP_PY);
+    })();
   }
   return bootstrapPromise;
 }
@@ -1127,6 +1141,16 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
       await pyodide.runPythonAsync("import micropip");
     }
     await pyodide.runPythonAsync("_reset_table()");
+    // Selects/creates this Gramplet's own st.session_state instance (see
+    // stBootstrap.ts) and, if this run was triggered by clicking/changing a
+    // previously rendered widget, tells it which key/value -- both
+    // JSON-encoded, then JS-string-encoded again, so they land as valid
+    // embedded Python string literals (or the bare literal `None` for
+    // widgetEvent) -- consistent with every other JS/Python crossing in
+    // this file being a plain string (see bridge's own doc comment above).
+    const grampletIdArg = JSON.stringify(request.grampletId);
+    const widgetEventArg = request.widgetEvent ? JSON.stringify(JSON.stringify(request.widgetEvent)) : "None";
+    await pyodide.runPythonAsync(`_st_begin_run(${grampletIdArg}, ${widgetEventArg})`);
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
     // _finalize_blocks() flushes any pending print buffer and/or table
     // (see pyodideWorker's BOOTSTRAP_PY) and hands back every block the
