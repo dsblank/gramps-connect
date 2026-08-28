@@ -83,6 +83,14 @@ INCLUDE_FILES = [
     "gen/utils/grampslocale.py",
     "gen/utils/grampstranslation.py",
     "gen/utils/win32locale.py",
+    # gen/utils/grampslocale.py does `if sys.platform == "darwin": from
+    # .maclocale import mac_setup_localization` -- missed by the empirical
+    # derivation (run on Linux, never exercises that branch) until the
+    # macOS legs of .github/workflows/build-standalone.yml's own build
+    # actually hit it: ModuleNotFoundError: No module named
+    # 'gramps.gen.utils.maclocale'. Pure stdlib (os/subprocess/locale/
+    # logging, confirmed against the real file), same as win32locale.py.
+    "gen/utils/maclocale.py",
     # gen/utils/resourcepath.py deliberately isn't copied from the real
     # checkout -- RESOURCEPATH_STUB_PY below is written in its place.
 ]
