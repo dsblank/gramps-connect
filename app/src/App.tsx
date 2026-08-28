@@ -1,4 +1,10 @@
-import { useEffect, useSyncExternalStore } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { AppShell, Box, Group, Image, Stack, Title } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -68,6 +74,52 @@ const STACKED_QUERY = "(max-width: 48em)";
 const HEADER_HEIGHT = 56;
 const HEADER_HEIGHT_STACKED = 96;
 const FOOTER_HEIGHT = 36;
+const NAVBAR_WIDTH = 68;
+
+/** Persisted drag widths for the Main/Aside divider, one per view.key
+ * (App.tsx's own analog of columnWidths.ts, which is likewise per-view). A
+ * key missing from the map means "no drag yet on this view, follow the
+ * default 50% split" -- same as before this was resizable at all. Keyed
+ * because Person's detail pane wants a lot more room than, say, Repository's
+ * -- a single shared width would fight between views instead of remembering
+ * what each one actually needs. Only a completed drag ever writes an entry;
+ * the 50% default is never itself persisted, so an update that changes it
+ * keeps applying to any view nobody's dragged yet. */
+const ASIDE_WIDTHS_KEY = "gramps-connect_aside_widths";
+const MIN_ASIDE_WIDTH = 320;
+/** However wide the aside gets dragged, Main (past the navbar rail) keeps at
+ * least this much room -- the table stops being usable well before its
+ * columns actually run out of space to shrink into. */
+const MIN_MAIN_WIDTH = 360;
+
+function readStoredAsideWidths(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(ASIDE_WIDTHS_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const widths: Record<string, number> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "number" && Number.isFinite(value) && value > 0) widths[key] = value;
+    }
+    return widths;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredAsideWidths(widths: Record<string, number>) {
+  try {
+    localStorage.setItem(ASIDE_WIDTHS_KEY, JSON.stringify(widths));
+  } catch {
+    // Storage unavailable (private browsing etc.) -- the widths still work
+    // for this session, they just won't survive a reload.
+  }
+}
+
+function maxAsideWidth(): number {
+  return Math.max(window.innerWidth - NAVBAR_WIDTH - MIN_MAIN_WIDTH, MIN_ASIDE_WIDTH);
+}
 
 /** Which store the footer's load progress follows while a visual page is
  * open. A visual has no store of its own (see hash.ts's VISUAL_KEYS), but
@@ -131,6 +183,73 @@ function AuthenticatedApp() {
   // record's whole detail fetch just to unmount it a tick later.
   const stacked = useMediaQuery(STACKED_QUERY, false, { getInitialValueInEffect: false });
 
+  // Drag-to-resize for the Main/Aside divider, one width per view.key (see
+  // ASIDE_WIDTHS_KEY's doc comment). A view missing from the map means
+  // "nobody's dragged it here" -- AppShell's own `width: "50%"` below keeps
+  // doing the job it always did for that view. Only a completed drag ever
+  // calls writeStoredAsideWidths; live px values while dragging stay in
+  // state only. asideRef reads the aside's own current rendered width at
+  // drag-start instead of trusting the stored value is exactly what's on
+  // screen, so the very first drag on a view (still on "50%") starts from
+  // the truth rather than needing a separate px fallback.
+  const [asideWidths, setAsideWidths] = useState<Record<string, number>>(readStoredAsideWidths);
+  const [asideResizing, setAsideResizing] = useState(false);
+  const asideRef = useRef<HTMLElement>(null);
+  const asideDragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const asideWidth = view ? asideWidths[view.key] ?? null : null;
+
+  const handleAsideResizeStart = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const asideEl = asideRef.current;
+    if (!asideEl || !view) return;
+    e.preventDefault();
+    asideDragRef.current = { startX: e.clientX, startWidth: asideEl.getBoundingClientRect().width };
+    setAsideResizing(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const handleAsideResizeMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = asideDragRef.current;
+    if (!drag || !view) return;
+    // The handle sits on the aside's left edge, so dragging it right (a
+    // positive delta) shrinks the aside and grows Main, not the other way
+    // round.
+    const next = drag.startWidth - (e.clientX - drag.startX);
+    const clamped = Math.min(Math.max(next, MIN_ASIDE_WIDTH), maxAsideWidth());
+    setAsideWidths((widths) => ({ ...widths, [view.key]: clamped }));
+  };
+  const handleAsideResizeEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!asideDragRef.current) return;
+    asideDragRef.current = null;
+    setAsideResizing(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setAsideWidths((widths) => {
+      writeStoredAsideWidths(widths);
+      return widths;
+    });
+  };
+
+  // A dragged-wide aside can end up wider than the window allows after a
+  // later resize (or a reload into a narrower one) -- reclamp every stored
+  // view's width against the same floor the drag itself respects, rather
+  // than letting Main get squeezed under MIN_MAIN_WIDTH. No-ops for widths
+  // already under the limit, and does nothing at all for views nobody's
+  // dragged (they were never in the map to begin with).
+  useEffect(() => {
+    const clampToWindow = () => {
+      setAsideWidths((widths) => {
+        const max = maxAsideWidth();
+        const next: Record<string, number> = {};
+        let changed = false;
+        for (const [key, width] of Object.entries(widths)) {
+          next[key] = Math.min(width, max);
+          if (next[key] !== width) changed = true;
+        }
+        return changed ? next : widths;
+      });
+    };
+    window.addEventListener("resize", clampToWindow);
+    return () => window.removeEventListener("resize", clampToWindow);
+  }, []);
+
   // A visual page fills the window exactly: both plots measure themselves
   // against their frame (the timeline off a ResizeObserver, the map off
   // maplibre's), so it needs a real bounded height rather than one that
@@ -184,14 +303,14 @@ function AuthenticatedApp() {
         // aside painted over the whole of Main. Narrow is handled by
         // `stacked` below instead -- the icon rail just stays a rail, and
         // the aside is dropped rather than overlaid.
-        navbar={{ width: 68, breakpoint: 0 }}
+        navbar={{ width: NAVBAR_WIDTH, breakpoint: 0 }}
         // No aside on a visual page either: a map of every place at once
         // isn't another way of looking at one selected record, so there's
         // nothing for the detail panes to show beside it, and the plot wants
         // the width. Clicking a marker or a dot navigates to that record in
         // Places or Events, where they take over again. Same for Home: no
         // selected record, nothing for a detail pane to show.
-        aside={stacked || visualKey || isHome ? undefined : { width: "50%", breakpoint: 0 }}
+        aside={stacked || visualKey || isHome ? undefined : { width: asideWidth ?? "50%", breakpoint: 0 }}
         // Stacked: no docked footer either. A permanently pinned 36px strip
         // is a poor trade for vertical space that's already scarce, and it's
         // what pane 3 was ending up jammed against -- the same StatusBar
@@ -323,8 +442,50 @@ function AuthenticatedApp() {
         </AppShell.Main>
 
         {!stacked && view && (
-          <AppShell.Aside>
-            <AsideSplit key={`detail-${view.key}`} view={view} draftStack={draftStack} />
+          // ref (not a style override) is how this reads the aside's own
+          // rendered width at drag-start -- AppShellAside's default `mode`
+          // sets `position: fixed` from an un-!important-ed CSS class, so a
+          // `position: relative` *inline* here would win the cascade and
+          // knock the aside loose from the viewport. The inner Box below is
+          // the positioning context for the handle instead, leaving Aside's
+          // own positioning untouched.
+          <AppShell.Aside ref={asideRef}>
+            <Box style={{ position: "relative", height: "100%" }}>
+              {/* Straddles the aside's own left border (Mantine's default
+                  withBorder line) rather than sitting flush against it, so
+                  the grab target is wider than the 1px line a mouse would
+                  otherwise have to land on exactly. Pointer capture (not a
+                  window-level mousemove listener) keeps the drag tracking
+                  even once the cursor leaves this 8px strip -- normal for a
+                  fast horizontal drag. */}
+              <Box
+                onPointerDown={handleAsideResizeStart}
+                onPointerMove={handleAsideResizeMove}
+                onPointerUp={handleAsideResizeEnd}
+                onDoubleClick={() => {
+                  // Only this view's own entry -- other views' remembered
+                  // widths are untouched.
+                  setAsideWidths((widths) => {
+                    if (!(view.key in widths)) return widths;
+                    const next = { ...widths };
+                    delete next[view.key];
+                    writeStoredAsideWidths(next);
+                    return next;
+                  });
+                }}
+                style={{
+                  position: "absolute",
+                  insetBlock: 0,
+                  left: -4,
+                  width: 8,
+                  cursor: "col-resize",
+                  zIndex: 1,
+                  touchAction: "none",
+                  background: asideResizing ? "var(--mantine-color-blue-4)" : "transparent",
+                }}
+              />
+              <AsideSplit key={`detail-${view.key}`} view={view} draftStack={draftStack} />
+            </Box>
           </AppShell.Aside>
         )}
 
