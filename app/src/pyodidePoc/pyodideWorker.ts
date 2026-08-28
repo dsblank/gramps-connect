@@ -116,6 +116,26 @@ const bridge = {
     if (!res.ok) throw new Error(`get_object(): ${res.status} ${await res.text()}`);
     return res.text();
   },
+  // get_number_of_<type>()'s bridge half -- limit=1 (only one row's worth
+  // of deserialize/privacy-sanitize work, same as filter()'s own per-page
+  // cost) plus count=true, whose match total comes back in the
+  // X-Total-Count response header rather than in the body (object_query.py
+  // ~line 869) -- nothing about the matches themselves needs to cross the
+  // network for this, just their count.
+  async count(objectType: string, argsJson: string): Promise<string> {
+    const { where } = JSON.parse(argsJson) as { where: string | null };
+    const endpoint = OBJECT_QUERY_ENDPOINTS[objectType];
+    if (!endpoint) throw new Error(`count(): unknown object type ${JSON.stringify(objectType)}`);
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
+      body: JSON.stringify({ select: ["handle"], where_expr: where ?? undefined, limit: 1, count: true }),
+    });
+    if (!res.ok) throw new Error(`count(): ${res.status} ${await res.text()}`);
+    const total = res.headers.get("X-Total-Count");
+    if (total === null) throw new Error("count(): missing X-Total-Count response header");
+    return total;
+  },
 };
 
 // filter()/get_object(): the Python-facing half of the bridge above.
@@ -156,6 +176,18 @@ async def filter(object_type, where=None, what=None, order=None, limit=50):
     from gramps.gen.lib.json_utils import DataDict
 
     return [DataDict(item) for item in _json.loads(items_json)]
+
+
+async def count(object_type, where=None):
+    """Cheap: a single /query/ request with count=true and limit=1 -- the
+    match total comes back in the X-Total-Count response header, so
+    nothing about the matches themselves (beyond the one row needed to
+    prove any exist) crosses the network. 'where' is the same where_expr
+    string filter() takes."""
+    import json as _json
+    args_json = _json.dumps({"where": where})
+    total = await _bridge.count(object_type, args_json)
+    return int(total)
 
 
 def _set_type_from_string(type_obj, string_value):
@@ -329,13 +361,22 @@ class Db:
     (gramps/gen/db/generic.py): \`get_<type>_from_handle(handle)\` wraps
     get_object() (a real gramps.gen.lib object, installing the minimal
     wheel on first use), \`get_raw_<type>_data(handle)\` wraps
-    get_raw_object() (a DataDict) -- for each of person/family/event/
-    place/repository/source/citation/media/note/tag. Nothing more than
-    that: no local cache, no relationship traversal (that's
-    SimpleAccess-territory on Gramps desktop, and not cheap even there --
-    every access is still a real lookup, just against an already-loaded
-    local database this worker doesn't have). A single instance (\`db\`,
-    below) is what a Gramplet actually uses."""
+    get_raw_object() (a DataDict), \`iter_<type>_handles()\` wraps filter()
+    (just the matching handles), \`iter_<plural>()\` wraps the module-level
+    plural (e.g. people()/families()), \`get_<type>_from_gramps_id(id)\`
+    wraps filter()+get_object() (Tag has no gramps_id field in
+    gramps.gen.lib, so it alone skips this one), and
+    \`get_number_of_<plural>()\` wraps count() -- for each of person/family/
+    event/place/repository/source/citation/media/note/tag. Unlike DbReadBase's
+    real iter_* methods, these take the same where/order/limit as
+    filter() and are capped at limit (default 50) rather than always
+    walking every row in the tree -- there's no local cache here, every
+    call is a real network round trip, so an uncapped iterator would be
+    an unbounded number of requests. No relationship traversal either
+    (that's SimpleAccess-territory on Gramps desktop, and not cheap even
+    there -- every access is still a real lookup, just against an
+    already-loaded local database this worker doesn't have). A single
+    instance (\`db\`, below) is what a Gramplet actually uses."""
 
 
 def _bind_db_handle_method(object_type):
@@ -354,6 +395,70 @@ def _bind_db_raw_method(object_type):
     setattr(Db, _get_raw_data.__name__, _get_raw_data)
 
 
+def _bind_db_iter_handles_method(object_type):
+    async def _iter_handles(self, where=None, order=None, limit=50):
+        results = await filter(object_type, where=where, order=order, limit=limit)
+        return [result["handle"] for result in results]
+
+    _iter_handles.__name__ = f"iter_{object_type}_handles"
+    setattr(Db, _iter_handles.__name__, _iter_handles)
+
+
+# object_type -> (plural method-name suffix, the module-level plural
+# function it aliases) -- can't just read the plural name off the
+# function itself (people.__name__ etc. are all "_list_function", the
+# one closure _make_object_list_function returns every time) and the
+# plural isn't a mechanical "{object_type}s" either (person -> people,
+# media stays media). DbReadBase's own names (iter_people, not
+# iter_persons) are the reference for the irregular ones.
+_ITER_PLURALS = {
+    "person": ("people", people),
+    "family": ("families", families),
+    "event": ("events", events),
+    "place": ("places", places),
+    "repository": ("repositories", repositories),
+    "source": ("sources", sources),
+    "citation": ("citations", citations),
+    "media": ("media", media),
+    "note": ("notes", notes),
+    "tag": ("tags", tags),
+}
+
+
+def _bind_db_iter_objects_method(object_type):
+    plural_name, plural_fn = _ITER_PLURALS[object_type]
+
+    async def _iter_objects(self, where=None, order=None, limit=50):
+        return await plural_fn(where=where, order=order, limit=limit)
+
+    _iter_objects.__name__ = f"iter_{plural_name}"
+    setattr(Db, _iter_objects.__name__, _iter_objects)
+
+
+def _bind_db_gramps_id_method(object_type):
+    async def _get_from_gramps_id(self, gramps_id):
+        # repr() rather than hand-rolled quoting -- a correctly-escaped
+        # Python string literal for whatever gramps_id contains, in the
+        # same where_expr grammar filter()'s own 'where' string speaks.
+        matches = await filter(object_type, where=f"gramps_id == {gramps_id!r}", limit=1)
+        if not matches:
+            return None
+        return await get_object(object_type, matches[0]["handle"])
+
+    _get_from_gramps_id.__name__ = f"get_{object_type}_from_gramps_id"
+    setattr(Db, _get_from_gramps_id.__name__, _get_from_gramps_id)
+
+
+def _bind_db_count_method(object_type):
+    plural_name, _ = _ITER_PLURALS[object_type]
+
+    async def _get_number_of(self):
+        return await count(object_type)
+
+    _get_number_of.__name__ = f"get_number_of_{plural_name}"
+    setattr(Db, _get_number_of.__name__, _get_number_of)
+
+
 for _object_type in (
     "person",
     "family",
@@ -368,6 +473,11 @@ for _object_type in (
 ):
     _bind_db_handle_method(_object_type)
     _bind_db_raw_method(_object_type)
+    _bind_db_iter_handles_method(_object_type)
+    _bind_db_iter_objects_method(_object_type)
+    if _object_type != "tag":  # Tag has no gramps_id field in gramps.gen.lib
+        _bind_db_gramps_id_method(_object_type)
+    _bind_db_count_method(_object_type)
 del _object_type
 
 db = Db()
