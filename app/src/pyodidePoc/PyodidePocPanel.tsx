@@ -77,6 +77,12 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // Person was edited, not a Gramplet). Part of the run-effect's own deps.
   const [runNonce, setRunNonce] = useState(0);
   const workerRef = useRef<Worker | null>(null);
+  // One cached result per Gramplet id, so switching back to an
+  // already-run tab reuses it instead of re-executing -- see the
+  // run-effect below for how `code`/`runNonce` decide a cache hit vs. miss.
+  const resultCacheRef = useRef<
+    Map<string, { code: string; runNonce: number; status: RunStatus; response: PyodideWorkerResponse | null }>
+  >(new Map());
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -213,11 +219,16 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   }
 
   // Runs the selected tab's gramplet -- on mount (the initially-active
-  // tab), again every time the active tab changes (the "runs when that
-  // tab is selected" behavior asked for), again whenever `gramplets`
-  // itself changes (e.g. a live-sync reload picked up an edited Gramplet),
-  // and again whenever `runNonce` is bumped (the live-sync subscription
-  // above, for a tree change to something other than a Gramplet itself).
+  // tab), again whenever `gramplets` itself changes (e.g. a live-sync
+  // reload picked up an edited Gramplet), and again whenever `runNonce` is
+  // bumped (the live-sync subscription above, for a tree change to
+  // something other than a Gramplet itself). Switching *back* to a tab
+  // that already ran under the current code/runNonce reuses its cached
+  // result instead of re-running -- a Gramplet's code is typically a
+  // one-shot query, not something that needs re-executing just because
+  // the user looked away and back. `resultCacheRef` is keyed by Gramplet
+  // id and records the `code`/`runNonce` it ran under, so a cache entry
+  // goes stale (and the next select re-runs it) the moment either changes.
   // `cancelled` guards against a fast tab switch: getToken() is a real
   // async call (may silently refresh), so a stale response landing after
   // the user has already moved to another tab shouldn't overwrite that
@@ -225,6 +236,15 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   useEffect(() => {
     const gramplet = gramplets.find((g) => g.id === activeId);
     if (!gramplet) return;
+
+    const cacheKey = gramplet.id;
+    const cached = resultCacheRef.current.get(cacheKey);
+    if (cached && cached.code === gramplet.code && cached.runNonce === runNonce) {
+      setRunStatus(cached.status);
+      setResponse(cached.response);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       setRunStatus("loading");
@@ -234,8 +254,14 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         token = await getToken();
       } catch (err) {
         if (!cancelled) {
+          const errorResponse: PyodideWorkerResponse = {
+            type: "error",
+            text: err instanceof Error ? err.message : String(err),
+            printed: "",
+          };
           setRunStatus("error");
-          setResponse({ type: "error", text: err instanceof Error ? err.message : String(err), printed: "" });
+          setResponse(errorResponse);
+          resultCacheRef.current.set(cacheKey, { code: gramplet.code, runNonce, status: "error", response: errorResponse });
         }
         return;
       }
@@ -243,8 +269,10 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       const worker = getWorker();
       worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
         if (cancelled) return;
-        setRunStatus(event.data.type === "error" ? "error" : "done");
+        const status: RunStatus = event.data.type === "error" ? "error" : "done";
+        setRunStatus(status);
         setResponse(event.data);
+        resultCacheRef.current.set(cacheKey, { code: gramplet.code, runNonce, status, response: event.data });
       };
       worker.postMessage({ type: "run-gramplet", code: gramplet.code, token });
     })();
