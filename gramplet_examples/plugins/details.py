@@ -42,20 +42,20 @@ else:
         row("Mother", mother if mother else "Unknown")
 
     # Primary-role birth/baptism/death/burial only -- the same four events
-    # Gramps Desktop's Person Details gramplet shows.
-    def primary_event(event_type):
-        for event_ref in person.event_ref_list:
-            if event_ref.role == EventRoleType.PRIMARY:
-                event = db.get_event_from_handle(event_ref.ref)
-                if event.type == event_type:
-                    return event
-        return None
-
+    # Gramps Desktop's Person Details gramplet shows. Resolved inline in a
+    # top-level loop rather than a helper function -- a plain `def` can't
+    # contain the `await` the auto-await preprocessor inserts for
+    # db.get_event_from_handle() (see children.py's own comment on the
+    # same issue).
     life_events = []
     for event_type in (EventType.BIRTH, EventType.BAPTISM, EventType.DEATH, EventType.BURIAL):
-        event = primary_event(event_type)
-        if event:
-            life_events.append(event)
+        for event_ref in person.event_ref_list:
+            if event_ref.role != EventRoleType.PRIMARY:
+                continue
+            event = db.get_event_from_handle(event_ref.ref)
+            if event.type == event_type:
+                life_events.append(event)
+                break
     if life_events:
         html("<h4>Life Events</h4>")
         columns("Event", "Date", "Place")
