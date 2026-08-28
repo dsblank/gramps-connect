@@ -86,6 +86,30 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install gramps + gramps-web-api (editable, from source)
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e gramps --no-deps
+          pip install -e gramps-web-api --no-deps
+
+      # Must run before "Build app/ frontend" below: `npm install`'s
+      # postinstall (app/scripts/copy-wasm.mjs) only registers
+      # gramps-gen-lib/gi/orjson in public/pyodide/pyodide-lock.json when it
+      # finds wheels already sitting in dist/{gramps-wheel,stub-wheels}/ --
+      # otherwise it silently skips them (its own "best-effort" comment),
+      # and every Gramplet calling get_object()/get_raw_object()/
+      # db.get_*_from_handle() then fails at runtime with "No known package
+      # with name 'gramps-gen-lib'" (pyodide.loadPackage() has no CDN
+      # fallback for a package that was never in Pyodide's catalog to begin
+      # with). gramps must already be pip -e installed (previous step) --
+      # build-gramps-wheel.py does `import gramps` directly.
+      - name: Build Pyodide wheels for Gramplets (gi/orjson stubs + gramps)
+        shell: bash
+        run: |
+          python gramps-connect/scripts/build-stub-wheels.py --out gramps-connect/dist/stub-wheels
+          python gramps-connect/scripts/build-gramps-wheel.py --out gramps-connect/dist/gramps-wheel --stub-wheels-dir gramps-connect/dist/stub-wheels
+
       - name: Build app/ frontend
         working-directory: gramps-connect
         env:
@@ -103,13 +127,6 @@ jobs:
         run: |
           rm -rf gramps-connect/standalone/frontend
           cp -r gramps-connect/app/dist gramps-connect/standalone/frontend
-
-      - name: Install gramps + gramps-web-api (editable, from source)
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e gramps --no-deps
-          pip install -e gramps-web-api --no-deps
 
       # gramps' own po/*.po catalogs (Person, Birth, Family, ...) only get
       # compiled to .mo as a side effect of `setup.py build`, which the
@@ -228,6 +245,27 @@ jobs:
 
           echo "/opt/pyenv/versions/3.12.8/bin" >> "$GITHUB_PATH"
 
+      - name: Install gramps + gramps-web-api (editable, from source)
+        shell: bash
+        run: |
+          python3 -m venv /tmp/venv
+          echo "VIRTUAL_ENV=/tmp/venv" >> "$GITHUB_ENV"
+          echo "/tmp/venv/bin" >> "$GITHUB_PATH"
+          /tmp/venv/bin/python -m pip install --upgrade pip
+          /tmp/venv/bin/pip install -e gramps --no-deps
+          /tmp/venv/bin/pip install -e gramps-web-api --no-deps
+
+      # See the matching step in the Windows/macOS job above -- must run
+      # before "Build app/ frontend" so its dist/{gramps-wheel,stub-wheels}/
+      # output exists by the time `npm install`'s postinstall
+      # (copy-wasm.mjs) looks for it. /tmp/venv/bin is already on PATH from
+      # the previous step, so plain `python` resolves to it.
+      - name: Build Pyodide wheels for Gramplets (gi/orjson stubs + gramps)
+        shell: bash
+        run: |
+          python gramps-connect/scripts/build-stub-wheels.py --out gramps-connect/dist/stub-wheels
+          python gramps-connect/scripts/build-gramps-wheel.py --out gramps-connect/dist/gramps-wheel --stub-wheels-dir gramps-connect/dist/stub-wheels
+
       - name: Build app/ frontend
         working-directory: gramps-connect
         env:
@@ -241,16 +279,6 @@ jobs:
         run: |
           rm -rf gramps-connect/standalone/frontend
           cp -r gramps-connect/app/dist gramps-connect/standalone/frontend
-
-      - name: Install gramps + gramps-web-api (editable, from source)
-        shell: bash
-        run: |
-          python3 -m venv /tmp/venv
-          echo "VIRTUAL_ENV=/tmp/venv" >> "$GITHUB_ENV"
-          echo "/tmp/venv/bin" >> "$GITHUB_PATH"
-          /tmp/venv/bin/python -m pip install --upgrade pip
-          /tmp/venv/bin/pip install -e gramps --no-deps
-          /tmp/venv/bin/pip install -e gramps-web-api --no-deps
 
       # See the matching step in the Windows/macOS job above -- editable
       # installs never compile gramps' po/*.po catalogs, so

@@ -37,6 +37,33 @@
 # gramps-web-api features this deployment doesn't enable, so their Python
 # packages and system dependencies alike are left out.
 
+# --- Stage 0: build Pyodide wheels for Gramplets ------------------------
+#
+# app/scripts/copy-wasm.mjs (run below as `npm ci`'s postinstall) only
+# registers gramps-gen-lib/gi/orjson in the built app's
+# public/pyodide/pyodide-lock.json when it finds wheels already sitting in
+# dist/{gramps-wheel,stub-wheels}/ -- otherwise it silently skips them (see
+# its own "best-effort" comment), and every Gramplet calling
+# get_object()/get_raw_object()/db.get_*_from_handle() then fails at
+# runtime with "No known package with name 'gramps-gen-lib'". This stage
+# builds those wheels (matching .github/workflows/build-standalone.yml's
+# equivalent step) so Stage 1 below can copy them in before `npm ci` runs.
+# Only needs a bare `import gramps` to succeed (see build-gramps-wheel.py's
+# own docstring), so a plain `--no-deps` editable install is enough --
+# gramps-web-api/PyGObject/etc. are not needed here.
+FROM python:3.13-slim AS gramps-wheels
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch maintenance/gramps60 \
+      https://github.com/gramps-project/gramps /src/gramps && \
+    pip install --no-cache-dir -e /src/gramps --no-deps
+
+COPY scripts/build-stub-wheels.py scripts/build-gramps-wheel.py /tmp/
+RUN python /tmp/build-stub-wheels.py --out /dist/stub-wheels && \
+    python /tmp/build-gramps-wheel.py --out /dist/gramps-wheel --stub-wheels-dir /dist/stub-wheels
+
 # --- Stage 1: build the frontend ---------------------------------------
 FROM node:20-slim AS frontend-build
 
@@ -45,6 +72,7 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY app ./app
+COPY --from=gramps-wheels /dist ./dist
 
 # Same-origin as deploy/Dockerfile: see the note there.
 ENV VITE_API_BASE=""

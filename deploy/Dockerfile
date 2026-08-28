@@ -8,6 +8,27 @@
 # see deploy/Dockerfile.slim for why. Kept around for anyone who does
 # want those features.
 
+# --- Stage 0: build Pyodide wheels for Gramplets ------------------------
+#
+# See deploy/Dockerfile.slim's matching stage for the full rationale:
+# app/scripts/copy-wasm.mjs (run below as `npm ci`'s postinstall) silently
+# skips registering gramps-gen-lib/gi/orjson in the built app's
+# pyodide-lock.json unless it finds wheels already sitting in
+# dist/{gramps-wheel,stub-wheels}/, so this stage builds those wheels
+# before Stage 1 copies them in.
+FROM python:3.13-slim AS gramps-wheels
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch maintenance/gramps60 \
+      https://github.com/gramps-project/gramps /src/gramps && \
+    pip install --no-cache-dir -e /src/gramps --no-deps
+
+COPY scripts/build-stub-wheels.py scripts/build-gramps-wheel.py /tmp/
+RUN python /tmp/build-stub-wheels.py --out /dist/stub-wheels && \
+    python /tmp/build-gramps-wheel.py --out /dist/gramps-wheel --stub-wheels-dir /dist/stub-wheels
+
 # --- Stage 1: build the frontend ---------------------------------------
 FROM node:20-slim AS frontend-build
 
@@ -16,6 +37,7 @@ WORKDIR /src
 COPY package.json package-lock.json ./
 COPY packages ./packages
 COPY app ./app
+COPY --from=gramps-wheels /dist ./dist
 
 # Frontend and API are served from the same origin in this image (see
 # STATIC_PATH below), so VITE_API_BASE must stay empty -- app/src/config.ts
