@@ -102,7 +102,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
               + 'chart = pygal.Pie()\n'
               + 'chart.add("Female", 12)\n'
               + 'chart.add("Male", 15)\n'
-              + 'html(chart.render(is_unicode=True))'}
+              + 'html(chart.render())'}
           </Code>
         </Section>
 

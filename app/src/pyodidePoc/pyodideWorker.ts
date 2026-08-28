@@ -533,6 +533,12 @@ def html(markup):
     # Pyodide. Wins over a table the same run also built (see onmessage's
     # priority order), same as row() winning over a plain result.
     global _gramplet_html
+    # pygal (and other chart libs) default render() to bytes, not str --
+    # str(b"...") would give the literal "b'...'" repr instead of the
+    # markup, so decode bytes here rather than requiring every Gramplet to
+    # remember render(is_unicode=True).
+    if isinstance(markup, (bytes, bytearray)):
+        markup = markup.decode("utf-8")
     _gramplet_html = str(markup)
 
 # No install_packages()-style builtin needed for pygal (or anything else
