@@ -7,9 +7,10 @@ server, or database setup.
 On first run: creates an isolated GRAMPSHOME under DATA_DIR, an admin user,
 and a single empty tree -- ready to import a Gramps XML (.gramps) or
 GEDCOM (.ged) file into via the app's own Family Trees -> Import... screen.
-On later runs, reuses what's already there. Not idempotent against a
-manually-deleted-but-not-fully-deleted DATA_DIR -- delete the whole
-directory to start over.
+On later runs, reuses what's already there. ensure_setup() is idempotent
+and runs on every launch (not just a detected "first run"), so a run that
+crashes partway through setup self-heals on the next launch instead of
+getting stuck -- see its own docstring.
 """
 
 from __future__ import annotations
@@ -83,14 +84,29 @@ def build_config() -> dict:
     }
 
 
-def wait_for_server() -> None:
+def wait_for_server(server_thread: Thread, timeout: float = 30.0) -> None:
     """Block until the Flask server's socket is accepting connections, so
-    the webview doesn't navigate to it before it's ready."""
-    while True:
+    the webview doesn't navigate to it before it's ready.
+
+    Bounded by `timeout` and checks server_thread is still alive: an
+    unbounded loop here would hang forever with no window and no visible
+    error if app.run() dies on bind (e.g. a stale instance still holding
+    the port) -- Python's default thread excepthook only prints to
+    stderr, invisible on macOS where console=False means no console is
+    attached at all.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not server_thread.is_alive():
+            raise RuntimeError(
+                "Server thread exited before it started listening -- see "
+                "the traceback above (or the terminal, if run from one)."
+            )
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             if sock.connect_ex((HOST, PORT)) == 0:
                 return
         time.sleep(0.05)
+    raise RuntimeError(f"Server did not start within {timeout}s on {HOST}:{PORT}")
 
 
 def install_avif_transcoder(app) -> None:
@@ -119,8 +135,9 @@ def install_avif_transcoder(app) -> None:
         response.direct_passthrough = False
         with Image.open(io.BytesIO(response.get_data())) as img:
             if img.mode in ("RGBA", "LA", "P"):
+                rgba = img.convert("RGBA")
                 background = Image.new("RGB", img.size, (255, 255, 255))
-                background.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
+                background.paste(rgba, mask=rgba.split()[-1])
                 img = background
             else:
                 img = img.convert("RGB")
@@ -129,42 +146,53 @@ def install_avif_transcoder(app) -> None:
         response.set_data(buffer.getvalue())
         response.headers["Content-Type"] = "image/jpeg"
         if "ETag" in response.headers:
-            response.headers["ETag"] = response.headers["ETag"].rstrip('"') + '-jpeg"'
+            etag = response.headers["ETag"].strip('"')
+            response.headers["ETag"] = f'"{etag}-jpeg"'
         return response
 
 
-def first_run_setup(app) -> None:
+def ensure_setup(app) -> None:
+    """Idempotently ensure the admin user and tree exist.
+
+    Called on *every* launch, not gated behind a "first run" flag: a run
+    that crashes partway through this exact function (disk full, or a
+    startup bug like the since-fixed locale.textdomain crash hitting
+    before this even got a chance to run) can leave users.sqlite created
+    but no admin user yet, or an admin user but no tree yet. Gating this
+    behind a boolean computed from one file's existence made every later
+    launch wrongly conclude setup had already finished and skip the rest
+    forever, with no way to recover short of deleting the whole data
+    directory by hand. Each step here is safe to repeat instead:
+    user_db.create_all() is a no-op once the tables exist; add_user()
+    raises ValueError("User already exists") if it does, caught below;
+    WebDbManager's create_if_missing just opens an existing tree by that
+    name rather than recreating it.
+    """
     from gramps_webapi.auth import add_user, user_db
     from gramps_webapi.auth.const import ROLE_OWNER
     from gramps_webapi.dbmanager import WebDbManager
 
     with app.app_context():
         user_db.create_all()
-        add_user(
-            ADMIN_USER,
-            ADMIN_PASSWORD,
-            fullname="Admin",
-            role=ROLE_OWNER,
-            tree=None,
-        )
+        try:
+            add_user(
+                ADMIN_USER,
+                ADMIN_PASSWORD,
+                fullname="Admin",
+                role=ROLE_OWNER,
+                tree=None,
+            )
+        except ValueError as exc:
+            if "already exists" not in str(exc):
+                raise
         db_manager = WebDbManager(name=TREE_NAME, create_if_missing=True)
         dbstate = db_manager.get_db(readonly=False)
         dbstate.db.close()
 
 
 def main() -> None:
-    # Keyed on users.sqlite specifically (what first_run_setup() actually
-    # produces), not on data_path() existing at all -- a run that crashes
-    # after ensure_gramps_dirs()/build_config() create their subdirectories
-    # but before first_run_setup() gets a chance to run (as an earlier,
-    # since-fixed build did) leaves data_path() behind without ever
-    # creating users.sqlite. Checking the parent directory made every later
-    # launch wrongly conclude setup had already happened and skip it
-    # permanently, silently, with no way to recover short of deleting the
-    # whole directory by hand -- surfacing instead as a 500 at login time
-    # ("no such table: users"), far from the actual cause. This check
-    # self-heals from that: as long as users.sqlite is still missing,
-    # first_run stays True and setup retries.
+    # Used only to word the console message below -- ensure_setup() itself
+    # always runs and is safe to repeat, see its own docstring.
     first_run = not os.path.isfile(data_path("users.sqlite"))
     ensure_gramps_dirs()
     config = build_config()
@@ -174,9 +202,11 @@ def main() -> None:
     app = create_app(config=config, config_from_env=False)
     install_avif_transcoder(app)
 
-    if first_run:
-        print(f"First run -- setting up tree in {data_path()} ...")
-        first_run_setup(app)
+    print(
+        f"{'First run -- setting up' if first_run else 'Checking'} "
+        f"tree in {data_path()} ..."
+    )
+    ensure_setup(app)
 
     # Flask's dev server blocks, so it runs on a background thread; the
     # webview needs the main thread for its native event loop (required on
@@ -204,7 +234,7 @@ def main() -> None:
         daemon=True,
     )
     server_thread.start()
-    wait_for_server()
+    wait_for_server(server_thread)
     print(f"Gramps Connect Desktop running at http://{HOST}:{PORT}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
 
