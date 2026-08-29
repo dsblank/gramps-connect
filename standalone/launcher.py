@@ -72,6 +72,24 @@ def build_config() -> dict:
     # tester who manually deletes just this subdirectory doesn't get a
     # 500 on every media/thumbnail request instead of a self-healing dir.
     os.makedirs(data_path("media"), exist_ok=True)
+    # gramps-web-api's own defaults for all five of these are Path.cwd() /
+    # "<name>_cache" (or "report_cache"/"export_cache") -- fine for a
+    # normal server deployment with a fixed working directory, but this app
+    # can be launched from anywhere (a tester double-clicking it, or a
+    # shell in whatever directory they happened to be in), so the defaults
+    # littered wherever that happened to be instead of staying inside
+    # DATA_DIR alongside everything else this app owns. No pre-creation
+    # needed here: cachelib's FileSystemCache and gramps-web-api's own
+    # report/export endpoints already os.makedirs(..., exist_ok=True)
+    # themselves.
+    def cache_config(name: str, threshold: int, timeout: int) -> dict:
+        return {
+            "CACHE_TYPE": "FileSystemCache",
+            "CACHE_DIR": data_path(name),
+            "CACHE_THRESHOLD": threshold,
+            "CACHE_DEFAULT_TIMEOUT": timeout,
+        }
+
     return {
         "TREE": TREE_NAME,
         "SECRET_KEY": "gramps-connect-desktop-not-a-real-secret",
@@ -79,6 +97,11 @@ def build_config() -> dict:
         "STATIC_PATH": resource_path("frontend"),
         "MEDIA_BASE_DIR": data_path("media"),
         "SEARCH_INDEX_DB_URI": f"sqlite:///{data_path('search.sqlite')}",
+        "REQUEST_CACHE_CONFIG": cache_config("request_cache", 1000, 0),
+        "THUMBNAIL_CACHE_CONFIG": cache_config("thumbnail_cache", 1000, 0),
+        "PERSISTENT_CACHE_CONFIG": cache_config("persistent_cache", 0, 0),
+        "REPORT_DIR": data_path("report_cache"),
+        "EXPORT_DIR": data_path("export_cache"),
         "DISABLE_TELEMETRY": True,
         "CORS_ORIGINS": "*",
     }
