@@ -6,9 +6,16 @@
 // off, and a slow, server-driven sweep that rescues jobs whose dispatching
 // tab is gone. Neither loop persists anything to localStorage -- TaskTree
 // (server-side) is already the durable record.
-import { getToken } from "../auth/auth";
+import { getCurrentUsername, getToken } from "../auth/auth";
 import { getTaskStatus, listOwnTasks } from "./jobsApi";
-import { promoteJob, describeGenericJob, type JobKind, type PromoteResult } from "./jobsPromote";
+import {
+  promoteJob,
+  downloadArchiveLocally,
+  describeGenericJob,
+  MEDIA_ARCHIVE_URL_RE,
+  type JobKind,
+  type PromoteResult,
+} from "./jobsPromote";
 
 const DISPATCH_POLL_MS = 2500;
 const SWEEP_INTERVAL_MS = 3 * 60 * 1000;
@@ -35,6 +42,10 @@ function resultUrl(resultObject: unknown): string | null {
 
 export interface JobsPollCallbacks {
   onPromoted: (result: PromoteResult, kind: JobKind) => void;
+  // A media archive never reaches onPromoted -- see downloadArchiveLocally's
+  // doc comment on why it goes straight to the user's disk instead of back
+  // into the tree as Media.
+  onDownloaded: (desc: string, kind: JobKind) => void;
   onFailed: (kind: JobKind, message: string) => void;
 }
 
@@ -77,6 +88,11 @@ export function trackJob(taskId: string, kind: JobKind, callbacks: JobsPollCallb
         return;
       }
       const desc = optionsSummary ?? (await describeGenericJob(token, kind, url));
+      if (kind === "export" && MEDIA_ARCHIVE_URL_RE.test(url)) {
+        // See downloadArchiveLocally's doc comment -- never promoted.
+        if (await downloadArchiveLocally(token, url, desc)) callbacks.onDownloaded(desc, kind);
+        return;
+      }
       const result = await promoteJob(token, kind, url, desc);
       // A null result means the file was already claimed -- e.g. the
       // catch-up sweep won the race -- which already toasted (or will).
@@ -89,10 +105,20 @@ export function trackJob(taskId: string, kind: JobKind, callbacks: JobsPollCallb
   poll();
 }
 
-async function sweepOnce(callbacks: JobsPollCallbacks): Promise<void> {
+/** Exported for testing only -- startCatchupSweep() below is the real
+ * entry point. */
+export async function sweepOnce(callbacks: JobsPollCallbacks): Promise<void> {
   const token = await getToken();
   const tasks = await listOwnTasks(token);
+  const username = getCurrentUsername();
   for (const task of tasks) {
+    // listOwnTasks() is only actually scoped to the caller by the server
+    // for a caller *without* PERM_VIEW_OTHER_USER (Owner and above hold
+    // it) -- see its own doc comment. Filtered again here so an Owner's
+    // sweep doesn't claim (delete-on-read, see below) reports dispatched
+    // by other users on the tree, which the server-side scoping alone
+    // wouldn't have caught for that role.
+    if (task.user_name !== username) continue;
     const kind = TASK_NAME_TO_KIND[task.name];
     if (!kind || task.state !== "SUCCESS") continue;
     const status = await getTaskStatus(token, task.task_id);
@@ -100,13 +126,17 @@ async function sweepOnce(callbacks: JobsPollCallbacks): Promise<void> {
     if (!url) continue;
     const desc = await describeGenericJob(token, kind, url);
     // Idempotent via the processed-file endpoint's delete-on-read: an
-    // already-promoted job (by this tab's own trackJob(), or a previous
-    // sweep tick, or another tab entirely) 404s here and promoteJob()
-    // returns null -- no dedup bookkeeping needed to avoid double-
-    // promoting or racing another sweep. A FAILURE state is deliberately
-    // never toasted from here: the dispatching tab (or an earlier sweep)
-    // already saw it fail, and a *different* session's sweep re-surfacing
-    // a stranger's old failure serves no one.
+    // already-claimed job (by this tab's own trackJob(), or a previous
+    // sweep tick, or another tab entirely) 404s here and promoteJob()/
+    // downloadArchiveLocally() returns null/false -- no dedup bookkeeping
+    // needed to avoid double-claiming or racing another sweep. A FAILURE
+    // state is deliberately never toasted from here: the dispatching tab
+    // (or an earlier sweep) already saw it fail, and a *different*
+    // session's sweep re-surfacing a stranger's old failure serves no one.
+    if (kind === "export" && MEDIA_ARCHIVE_URL_RE.test(url)) {
+      if (await downloadArchiveLocally(token, url, desc)) callbacks.onDownloaded(desc, kind);
+      continue;
+    }
     const result = await promoteJob(token, kind, url, desc);
     if (result) callbacks.onPromoted(result, kind);
   }
