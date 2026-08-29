@@ -1,6 +1,6 @@
 {
   "name": "@gramps-connect/app",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "description": "Production React client -- local-first cache + live sync (see PLAN.md).",

@@ -153,7 +153,19 @@ def first_run_setup(app) -> None:
 
 
 def main() -> None:
-    first_run = not os.path.isdir(data_path())
+    # Keyed on users.sqlite specifically (what first_run_setup() actually
+    # produces), not on data_path() existing at all -- a run that crashes
+    # after ensure_gramps_dirs()/build_config() create their subdirectories
+    # but before first_run_setup() gets a chance to run (as an earlier,
+    # since-fixed build did) leaves data_path() behind without ever
+    # creating users.sqlite. Checking the parent directory made every later
+    # launch wrongly conclude setup had already happened and skip it
+    # permanently, silently, with no way to recover short of deleting the
+    # whole directory by hand -- surfacing instead as a 500 at login time
+    # ("no such table: users"), far from the actual cause. This check
+    # self-heals from that: as long as users.sqlite is still missing,
+    # first_run stays True and setup retries.
+    first_run = not os.path.isfile(data_path("users.sqlite"))
     ensure_gramps_dirs()
     config = build_config()
 
