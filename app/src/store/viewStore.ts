@@ -13,7 +13,7 @@ import type { Database, SqlJsStatic } from "sql.js";
 import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage } from "./api";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
-import { fetchServerState, isCacheStale, writeCacheMeta } from "./cacheMeta";
+import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } from "./cacheMeta";
 import { createTableSql, insertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
 import type { OrderBy, ViewConfig } from "./views";
 import type { TreeChangeNotification } from "./historyPoll";
@@ -467,9 +467,22 @@ export class ViewStore {
         // Opening cleanly only proves the shape is right, not that the rows
         // still are: the server may have moved on (or be a different server
         // entirely) since this file was written. See cacheMeta.ts.
-        if (await isCacheStale(db, this.view)) {
+        const staleness = await isCacheStale(db, this.view);
+        if (staleness.stale) {
           db.close();
           throw new Error("stale cache");
+        }
+        // Nothing touched this view's own table, but the tree-wide cursor
+        // moved on regardless -- re-stamp so the next reload's fast path
+        // (a plain cursor comparison) settles it without walking the same
+        // already-cleared transaction range again. Not on the critical
+        // path: the cache is already known good, so this can happen after
+        // the view is visible.
+        if (staleness.advanceCursorTo !== undefined) {
+          updateCachedCursor(db, staleness.advanceCursorTo);
+          saveToOpfs(this.view.opfsFilename, db.export()).catch((err) => {
+            console.error(`[${this.view.label}] cursor-advance persist failed`, err);
+          });
         }
         this.db = db;
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
@@ -801,6 +814,35 @@ export class ViewStore {
     }
     this.reconcileSelection();
     this.emit();
+  }
+
+  private persistLiveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Debounced OPFS write-back after applyLiveChange() has patched this
+   * view's cache -- without this, a tab that's been open and perfectly
+   * live-synced all session still has its OPFS file stamped with whatever
+   * cursor its last cold load captured, so isCacheStale() sees the tree
+   * cursor has moved on every later reload and pays a refetch regardless of
+   * how current the cache actually is (see cacheMeta.ts's tableTouchedSince
+   * doc comment). `cursor` is the live-sync poll's own position
+   * (historyPoll.ts's afterId) -- not fetchServerState()'s, which is
+   * memoized once per page load and would go stale the moment any real time
+   * passes in a long-running tab. Skipped for a filtered view: same "only
+   * the unfiltered dataset persists" rule runQuery()'s persist branch
+   * follows, since a filtered result isn't "the cache". Debounced (short,
+   * fixed delay) so a burst of same-tick patches writes OPFS once, not once
+   * per row. */
+  persistLiveState(cursor: number): void {
+    if (!this.db || this.whereExpr !== null) return;
+    if (this.persistLiveTimer) clearTimeout(this.persistLiveTimer);
+    this.persistLiveTimer = setTimeout(() => {
+      this.persistLiveTimer = null;
+      if (!this.db || this.whereExpr !== null) return;
+      updateCachedCursor(this.db, cursor);
+      saveToOpfs(this.view.opfsFilename, this.db.export()).catch((err) => {
+        console.error(`[${this.view.label}] live-sync persist failed`, err);
+      });
+    }, 1000);
   }
 
   /** Moves `handle`'s row to local index `targetIndex`, preserving every

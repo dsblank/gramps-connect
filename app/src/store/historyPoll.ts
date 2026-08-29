@@ -100,7 +100,11 @@ export function transactionsToNotifications(transactions: HistoryTransaction[]):
  * is an exact integer compare, no precision loss. See gramps-web-api's
  * TransactionsHistoryQueryArgs.after_id docstring. */
 export function pollHistory(
-  onNotifications: (notifications: TreeChangeNotification[]) => void,
+  // `cursor` is this tick's new afterId -- everything up through it has now
+  // been reported to the caller, so it's what a view that fully processes
+  // this batch can safely stamp its cache with (see
+  // ViewStore.persistLiveState).
+  onNotifications: (notifications: TreeChangeNotification[], cursor: number) => void,
   onStatus?: (status: "connected" | "disconnected") => void
 ): () => void {
   let stopped = false;
@@ -135,8 +139,8 @@ export function pollHistory(
       onStatus?.("connected");
 
       if (transactions.length > 0) {
-        onNotifications(transactionsToNotifications(transactions));
         afterId = Math.max(...transactions.map((t) => t.id));
+        onNotifications(transactionsToNotifications(transactions), afterId);
       }
     } catch (err) {
       console.error("history poll failed", err);

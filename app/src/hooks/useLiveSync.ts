@@ -35,7 +35,7 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
   onRemoteNoteChangeRef.current = onRemoteNoteChange;
 
   useEffect(() => {
-    function onNotifications(notifications: TreeChangeNotification[]) {
+    function onNotifications(notifications: TreeChangeNotification[], cursor: number) {
       // Grouped by table so a burst that's large *for one table* (e.g. a
       // bulk import of People) can be told apart from an ordinary handful
       // of unrelated edits spread across several tables in the same tick.
@@ -79,11 +79,15 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
             store.requeryDebounced();
             continue;
           }
-          for (const notification of tableNotifications) {
-            store.applyLiveChange(notification).catch((err) => {
-              console.error("live sync: failed to apply change", err);
-            });
-          }
+          // Persisted once this table's whole batch has landed, not per
+          // notification -- see ViewStore.persistLiveState's doc comment.
+          Promise.all(
+            tableNotifications.map((notification) =>
+              store.applyLiveChange(notification).catch((err) => {
+                console.error("live sync: failed to apply change", err);
+              })
+            )
+          ).then(() => store.persistLiveState(cursor));
         }
       }
     }

@@ -9,7 +9,15 @@ vi.mock("../../auth/auth", () => ({
 }));
 
 import { getCurrentUsername } from "../../auth/auth";
-import { fetchServerState, isCacheStale, resetServerState, schemaSignature, writeCacheMeta } from "../cacheMeta";
+import {
+  fetchServerState,
+  isCacheStale,
+  resetServerState,
+  schemaSignature,
+  STALE_CHECK_PAGESIZE,
+  updateCachedCursor,
+  writeCacheMeta,
+} from "../cacheMeta";
 
 let sqlPromise: Promise<SqlJsStatic> | null = null;
 function getSql(): Promise<SqlJsStatic> {
@@ -25,10 +33,25 @@ interface FakeServer {
    * PERM_VIEW_PRIVATE. */
   cursor?: number | null;
   metadataFails?: boolean;
+  /** What tableTouchedSince()'s after_id walk finds -- object classes of
+   * changes committed since the cache's cursor. Defaults to none (some
+   * *other* tree activity moved the cursor, unrelated to whatever view a
+   * test is checking). */
+  changedClasses?: string[];
 }
 
-/** Stands in for the two endpoints fetchServerState() reads. */
-function mockServer({ dbName = "Fixture Tree", dbId = "sqlite", counts = { tags: 2 }, cursor = 7, metadataFails = false }: FakeServer = {}) {
+/** Stands in for the two endpoints fetchServerState() reads, plus the
+ * after_id walk tableTouchedSince() does when those two cursors disagree --
+ * distinguished by `sort`: `-id` is the newest-id probe (fetchCursor()),
+ * plain `id` is the walk. */
+function mockServer({
+  dbName = "Fixture Tree",
+  dbId = "sqlite",
+  counts = { tags: 2 },
+  cursor = 7,
+  metadataFails = false,
+  changedClasses = [],
+}: FakeServer = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -41,7 +64,13 @@ function mockServer({ dbName = "Fixture Tree", dbId = "sqlite", counts = { tags:
       }
       if (url.includes("/api/transactions/history/")) {
         if (cursor === null) return { ok: false, status: 403 } as unknown as Response;
-        return { ok: true, json: async () => (cursor === 0 ? [] : [{ id: cursor }]) } as unknown as Response;
+        if (url.includes("sort=-id")) {
+          return { ok: true, json: async () => (cursor === 0 ? [] : [{ id: cursor }]) } as unknown as Response;
+        }
+        return {
+          ok: true,
+          json: async () => changedClasses.map((obj_class) => ({ changes: [{ obj_class }] })),
+        } as unknown as Response;
       }
       throw new Error(`unexpected fetch: ${url}`);
     })
@@ -69,7 +98,7 @@ describe("isCacheStale", () => {
     const db = await cachedDb();
 
     resetServerState(); // next page load refetches, same answers
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(false);
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false });
   });
 
   it("rejects a cache with no meta table at all (written before this existed)", async () => {
@@ -78,7 +107,7 @@ describe("isCacheStale", () => {
     const db = new SQL.Database();
     db.run(`CREATE TABLE ${TAG_VIEW.key} (handle TEXT PRIMARY KEY);`);
 
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(true);
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
   });
 
   it("rejects a cache from a different database on the same URL", async () => {
@@ -88,7 +117,7 @@ describe("isCacheStale", () => {
     // The dev case: same backend restarted on another fixture.
     resetServerState();
     mockServer({ dbName: "Other Tree" });
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(true);
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
   });
 
   it("rejects a cache built for a different user's permissions", async () => {
@@ -96,7 +125,7 @@ describe("isCacheStale", () => {
     const db = await cachedDb();
 
     vi.mocked(getCurrentUsername).mockReturnValue("bob");
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(true);
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
   });
 
   it("rejects a cache whose view config has since changed", async () => {
@@ -108,16 +137,34 @@ describe("isCacheStale", () => {
       columns: TAG_VIEW.columns.map((c) => (c.key === "name" ? { ...c, select: "renamed" } : c)),
     };
     resetServerState();
-    expect(await isCacheStale(db, edited)).toBe(true);
+    expect(await isCacheStale(db, edited)).toEqual({ stale: true });
   });
 
-  it("rejects a cache once another transaction has been committed", async () => {
+  it("rejects a cache once a transaction touching its own table has been committed", async () => {
     mockServer({ cursor: 7 });
     const db = await cachedDb();
 
     resetServerState();
-    mockServer({ cursor: 8 });
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(true);
+    mockServer({ cursor: 8, changedClasses: ["Tag"] });
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
+  });
+
+  it("keeps a cache current (and advances its cursor) when only an unrelated table changed", async () => {
+    mockServer({ cursor: 7 });
+    const db = await cachedDb();
+
+    resetServerState();
+    mockServer({ cursor: 8, changedClasses: ["Person"] });
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false, advanceCursorTo: 8 });
+  });
+
+  it("treats an unreadable walk (a full page, more possibly beyond it) as stale", async () => {
+    mockServer({ cursor: 7 });
+    const db = await cachedDb();
+
+    resetServerState();
+    mockServer({ cursor: 8, changedClasses: Array(STALE_CHECK_PAGESIZE).fill("Person") });
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
   });
 
   it("falls back to row counts when the history endpoint is forbidden", async () => {
@@ -126,11 +173,11 @@ describe("isCacheStale", () => {
 
     resetServerState();
     mockServer({ cursor: null, counts: { tags: 2 } });
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(false);
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false });
 
     resetServerState();
     mockServer({ cursor: null, counts: { tags: 3 } });
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(true);
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
   });
 
   it("refetches server state after an in-session login as another user", async () => {
@@ -152,7 +199,33 @@ describe("isCacheStale", () => {
     // then failing to refetch.
     resetServerState();
     mockServer({ metadataFails: true });
-    expect(await isCacheStale(db, TAG_VIEW)).toBe(false);
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false });
+  });
+});
+
+describe("updateCachedCursor", () => {
+  beforeEach(() => {
+    resetServerState();
+    vi.mocked(getCurrentUsername).mockReturnValue("alice");
+  });
+
+  it("rewrites the stamped cursor in place, so a later check against it settles on the fast path", async () => {
+    mockServer({ cursor: 7 });
+    const db = await cachedDb();
+
+    updateCachedCursor(db, 8);
+
+    resetServerState();
+    mockServer({ cursor: 8, changedClasses: ["Person"] }); // would be walked (and found unrelated) if not advanced already
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false });
+  });
+
+  it("is a no-op on a cache with no _cache_meta table yet", async () => {
+    const SQL = await getSql();
+    const db = new SQL.Database();
+    db.run(`CREATE TABLE ${TAG_VIEW.key} (handle TEXT PRIMARY KEY);`);
+
+    expect(() => updateCachedCursor(db, 8)).not.toThrow();
   });
 });
 
