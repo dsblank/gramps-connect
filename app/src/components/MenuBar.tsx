@@ -14,7 +14,7 @@ import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
 import { runMediaExport } from "../store/mediaExportApi";
-import { exportLabel, promoteJob } from "../store/jobsPromote";
+import { exportLabel, downloadArchiveLocally } from "../store/jobsPromote";
 import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 
@@ -182,9 +182,11 @@ function goTo(viewKey: string) {
  * this dispatches straight from the menu instead of opening a dialog first.
  * Otherwise the same fire-and-forget pipeline as ExportDialog's
  * handleExport: the POST returns fast either way (a task id to poll, or --
- * no Celery broker -- the finished archive already sitting there), and the
- * result lands in Output as an "export"-tagged Media object, announced by
- * toast. */
+ * no Celery broker -- the finished archive already sitting there). The
+ * result is never promoted into the tree as Media, unlike every other job
+ * kind -- see jobsPromote.ts's downloadArchiveLocally doc comment on why a
+ * copy of the tree's whole media collection has no business being stored
+ * *in* the tree a second time -- it goes straight to the user's disk. */
 function handleExportMedia() {
   const desc = exportLabel("Media");
   notifyJobStarted("export", "Media");
@@ -196,8 +198,7 @@ function handleExportMedia() {
       trackJob(result.taskId, "export", jobsPollCallbacks, desc);
       return;
     }
-    const promoted = await promoteJob(token, "export", result.url, desc);
-    if (promoted) jobsPollCallbacks.onPromoted(promoted, "export");
+    if (await downloadArchiveLocally(token, result.url, desc)) jobsPollCallbacks.onDownloaded(desc, "export");
   })().catch((err: any) => {
     jobsPollCallbacks.onFailed("export", err.message ?? String(err));
   });

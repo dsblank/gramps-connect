@@ -4,6 +4,7 @@
 // Celery SUCCESS.
 import { API_BASE } from "../config";
 import { downloadProcessedFile, uploadMedia, getOrCreateTagHandle, tagAndDescribeMedia } from "./jobsApi";
+import { clickDownloadLink } from "./downloadFile";
 
 export type JobKind = "report" | "export";
 
@@ -17,8 +18,11 @@ const EXPORT_URL_RE = /^\/api\/exporters\/([^/]+)\/file\/processed\//;
 // Media archives aren't listed by exporters.py -- export_media (tasks.py)
 // hands back its own `/api/media/archive/<uuid>.zip`, with no plugin id to
 // look up a name for. There's only ever the one kind of media export, so
-// the label is a constant rather than something fetched.
-const MEDIA_ARCHIVE_URL_RE = /^\/api\/media\/archive\//;
+// the label is a constant rather than something fetched. Exported: also
+// what jobsPoll.ts checks to route a media archive to
+// downloadArchiveLocally() below instead of promoteJob() -- see its own
+// doc comment on why that one's never promoted.
+export const MEDIA_ARCHIVE_URL_RE = /^\/api\/media\/archive\//;
 
 // Gramps plugin display names carry a GTK mnemonic marker (an underscore
 // before the accelerator letter, e.g. "GE_DCOM", "_Web Family Tree") --
@@ -203,4 +207,30 @@ export async function promoteJob(token: string, kind: JobKind, url: string, desc
   const tagHandle = await getOrCreateTagHandle(token, kind);
   await tagAndDescribeMedia(token, handle, desc, tagHandle, downloadFileName(desc, url));
   return { handle, desc };
+}
+
+/** A media-archive export's alternative to promoteJob(): the file goes
+ * straight to the user's disk instead of back into the tree as a new Media
+ * object. Re-uploading a zip of the tree's *entire existing* media
+ * collection as a fresh Media object is nothing but a self-inflicted quota
+ * hit -- no new information, one full copy of everything the tree already
+ * has, permanently, with no cleanup and no opt-out (discussion #4, F4).
+ *
+ * Still goes through downloadProcessedFile(), so it keeps the same
+ * exactly-once guarantee promoteJob() has (delete-on-read server-side):
+ * whichever tab/sweep tick gets here first is the one that both delivers
+ * the file to its user *and* consumes it. Returns false, the same "already
+ * claimed" outcome promoteJob() signals with null, if that's already
+ * happened. */
+export async function downloadArchiveLocally(token: string, url: string, desc: string): Promise<boolean> {
+  const file = await downloadProcessedFile(token, url);
+  if (!file) return false;
+  const objectUrl = URL.createObjectURL(file.blob);
+  try {
+    clickDownloadLink(objectUrl, downloadFileName(desc, url));
+  } finally {
+    // Safari needs the URL to outlive the click; a task turn is enough.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }
+  return true;
 }

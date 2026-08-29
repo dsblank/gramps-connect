@@ -41,6 +41,16 @@ export const jobsPollCallbacks: JobsPollCallbacks = {
     });
     notifyBrowser(title, result.desc);
   },
+  onDownloaded: (desc, kind) => {
+    // Media archives never reach onPromoted -- see
+    // jobsPromote.ts's downloadArchiveLocally doc comment -- so there's no
+    // Output-view row to link to here, just an acknowledgement that the
+    // browser's own save prompt already fired.
+    const title = kind === "report" ? "Report ready" : "Export ready";
+    const message = `${desc} — saved to your downloads.`;
+    notifications.show({ color: "green", title, message });
+    notifyBrowser(title, message);
+  },
   onFailed: (kind, message) => {
     const title = kind === "report" ? "Report failed" : "Export failed";
     notifications.show({ color: "red", title, message });

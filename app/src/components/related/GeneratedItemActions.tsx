@@ -3,19 +3,10 @@ import { Alert, Button, Group } from "@mantine/core";
 import { API_BASE } from "../../config";
 import { getToken } from "../../auth/auth";
 import { deleteMedia, FILE_NAME_ATTRIBUTE } from "../../store/jobsApi";
+import { clickDownloadLink } from "../../store/downloadFile";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { zipHandles } from "./sections/shared";
 import { t } from "../../i18n/i18n";
-
-function clickDownloadLink(href: string, fileName?: string) {
-  const a = document.createElement("a");
-  a.href = href;
-  a.rel = "noopener";
-  if (fileName) a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
 
 /** Download + "Delete the export?" flow for an Output row (plan
  * §5) -- gramps-connect has no generic per-object download affordance
