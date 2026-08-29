@@ -262,11 +262,34 @@ jobs:
           xattr -w com.apple.quarantine "0181;00000000;Safari;" dist/gramps-connect-desktop.app
           spctl -a -vvv --type execute dist/gramps-connect-desktop.app
 
+      # actions/upload-artifact archives a directory tree with its own
+      # tooling, not a byte-for-byte passthrough -- handing it the signed
+      # .app directly mangles exactly the Unix metadata code signing
+      # depends on (the release job's chmod +x workaround below for the
+      # main executable, and its `zip -y` to avoid symlinks getting
+      # flattened into plain-copy regular files, are both scars from
+      # this). A nested Mach-O whose permissions/symlink structure get
+      # altered on that round trip fails codesign's embedded-signature
+      # check at dlopen time on the user's machine ("code signature
+      # invalid") even though it was valid when signed -- and CI's own
+      # verify/spctl checks above run *before* this round trip, so they
+      # never catch it. `ditto -c -k --keepParent` (Apple's own tool for
+      # this, already used above for the notarization submission zip)
+      # preserves permissions/symlinks/resource forks exactly, so zip the
+      # already-signed-and-stapled bundle *before* it ever goes through
+      # upload-artifact, and ship that zip as the opaque artifact -- the
+      # release job below must not re-extract or re-zip it with generic
+      # tools either, for the same reason.
+      - name: Zip the signed, notarized .app for upload
+        if: runner.os == 'macOS'
+        working-directory: gramps-connect/standalone
+        run: ditto -c -k --keepParent dist/gramps-connect-desktop.app dist/gramps-connect-desktop.app.zip
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: gramps-connect-desktop-${{ matrix.label }}
-          path: ${{ runner.os == 'macOS' && 'gramps-connect/standalone/dist/gramps-connect-desktop.app' || 'gramps-connect/standalone/dist/gramps-connect-desktop' }}
+          path: ${{ runner.os == 'macOS' && 'gramps-connect/standalone/dist/gramps-connect-desktop.app.zip' || 'gramps-connect/standalone/dist/gramps-connect-desktop' }}
           if-no-files-found: error
 
   # Packaged as .deb/.rpm rather than a raw portable binary (unlike the
@@ -457,32 +480,22 @@ jobs:
           (cd artifacts && zip -q -r "gramps-connect-desktop-windows.zip" gramps-connect-desktop)
           rm -rf artifacts/gramps-connect-desktop
 
-          # upload-artifact stores a directory's *contents*, not the
-          # directory itself, so the downloaded macOS artifacts land here as
-          # a bare Contents/ tree missing the ".app" suffix Finder needs to
-          # recognize + double-click it as an app bundle -- restore that by
-          # naming the destination directory back to gramps-connect-desktop.app
-          # before zipping. -y (--symlinks) preserves symlinks as-is rather
-          # than dereferencing them into copies, which would invalidate the
-          # bundle's code signature (macOS .app bundles routinely contain
-          # versioned-dylib symlinks).
-          #
-          # chmod +x on the main executable is not optional: upload-artifact
-          # does not reliably round-trip the Unix executable bit through its
-          # upload/download, so the binary Info.plist's CFBundleExecutable
-          # points at can silently lose +x -- Finder then refuses to launch
-          # the .app at all with a bare, generic "can't be opened" (no
-          # Gatekeeper wording, no Open Anyway option, since this isn't a
-          # signing/quarantine problem). This is the same root cause a user
-          # hit on the pre-.app raw-folder release, which needed a manual
-          # `chmod +x` on the bare binary to run from Terminal. Setting the
-          # mode bit doesn't touch file *content*, so it doesn't invalidate
-          # the code signature applied earlier in the build job.
+          # The macOS legs upload dist/gramps-connect-desktop.app.zip itself
+          # as the artifact (see the build job's "Zip the signed, notarized
+          # .app for upload" step) specifically so it never has to pass
+          # through a directory-tree re-archive again here -- re-extracting
+          # and re-zipping with generic tools (plain `zip`, or even `zip -y`)
+          # was exactly what mangled the Unix permissions/symlink structure
+          # nested Mach-O code signing depends on in the first place (a past
+          # `chmod +x` workaround lived here for the main executable losing
+          # its bit the same way; a whole nested framework binary failing
+          # its embedded signature check -- "code signature invalid" at
+          # dlopen time -- was the harder-to-see version of the same bug).
+          # So: just take the uploaded zip as an opaque blob and rename it
+          # into place, byte-for-byte.
           for label in macos-arm64 macos-intel; do
-            mv "artifacts/gramps-connect-desktop-$label" artifacts/gramps-connect-desktop.app
-            chmod +x artifacts/gramps-connect-desktop.app/Contents/MacOS/gramps-connect-desktop
-            (cd artifacts && zip -q -r -y "gramps-connect-desktop-$label.zip" gramps-connect-desktop.app)
-            rm -rf artifacts/gramps-connect-desktop.app
+            mv "artifacts/gramps-connect-desktop-$label/gramps-connect-desktop.app.zip" "artifacts/gramps-connect-desktop-$label.zip"
+            rm -rf "artifacts/gramps-connect-desktop-$label"
           done
           ls artifacts/gramps-connect-desktop-linux
 
