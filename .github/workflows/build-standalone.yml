@@ -166,6 +166,10 @@ jobs:
           # gi-stub comment), so launcher.py falls back to a browser tab at
           # runtime there instead.
           pip install pywebview
+          # Backs runtime_hooks/rthook_icu_shim.py -- pure-Python Unicode
+          # collation so name/place sorting doesn't fall back to raw
+          # codepoint order under this build's bare C.UTF-8 locale.
+          pip install pyuca
 
       - name: Build with PyInstaller
         working-directory: gramps-connect/standalone
@@ -333,6 +337,9 @@ jobs:
           cat requirements.txt
           pip install -r requirements.txt psycopg2-binary
           pip install pywebview
+          # Backs runtime_hooks/rthook_icu_shim.py -- see the other matrix
+          # leg's "Install remaining Python dependencies" step for why.
+          pip install pyuca
 
       - name: Build with PyInstaller
         working-directory: gramps-connect/standalone

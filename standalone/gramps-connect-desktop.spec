@@ -16,6 +16,7 @@ import sys
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 import gramps
+import pyuca
 
 GRAMPS_PKG_DIR = os.path.dirname(gramps.__file__)
 GRAMPS_ROOT = os.path.dirname(GRAMPS_PKG_DIR)
@@ -35,6 +36,19 @@ datas = [
     # (bundled from build/ output that a bare checkout doesn't have);
     # acceptable for a beta build.
     (os.path.join(GRAMPS_ROOT, "data"), "gramps-resources/gramps"),
+    # pyuca.Collator() loads this by a path relative to its own __file__
+    # (see runtime_hooks/rthook_icu_shim.py) -- not auto-collected by
+    # PyInstaller's default analysis since it's a data file, not an
+    # import. Bundling just the one file pyuca.Collator.UCA_VERSION
+    # actually defaults to, not collect_data_files("pyuca")'s full set of
+    # ~5 UCA-version tables (~8MB) that nothing here ever loads.
+    (
+        os.path.join(
+            os.path.dirname(pyuca.__file__),
+            f"allkeys-{pyuca.Collator.UCA_VERSION}.txt",
+        ),
+        "pyuca",
+    ),
 ]
 
 # Compiled Gramps desktop-vocabulary translations (Person, Birth, Family,
@@ -105,6 +119,13 @@ hiddenimports = collect_submodules("gramps") + collect_submodules("celery") + [
     "unidecode",
     "PIL",
     "requests",
+    # Backs runtime_hooks/rthook_icu_shim.py's fake `icu` module. Listed
+    # explicitly rather than relying on modulegraph following that hook
+    # script's own `import pyuca` -- runtime hook scripts aren't part of
+    # the normal Analysis entry-point graph PyInstaller walks from
+    # launcher.py, so nothing else here would otherwise tell it to bundle
+    # pyuca's source at all.
+    "pyuca",
     # Small, no heavy transitive deps -- but structurally can't be cut like
     # the other optional features: resources/ydna.py imports it at true
     # module top-level, and api/__init__.py unconditionally imports that
@@ -277,6 +298,7 @@ a = Analysis(
     runtime_hooks=[
         os.path.join(HERE, "runtime_hooks", "rthook_gi_stub.py"),
         os.path.join(HERE, "runtime_hooks", "rthook_locale_shim.py"),
+        os.path.join(HERE, "runtime_hooks", "rthook_icu_shim.py"),
     ],
     excludes=excludes,
     noarchive=False,
