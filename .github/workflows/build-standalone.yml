@@ -408,8 +408,21 @@ jobs:
           # than dereferencing them into copies, which would invalidate the
           # bundle's code signature (macOS .app bundles routinely contain
           # versioned-dylib symlinks).
+          #
+          # chmod +x on the main executable is not optional: upload-artifact
+          # does not reliably round-trip the Unix executable bit through its
+          # upload/download, so the binary Info.plist's CFBundleExecutable
+          # points at can silently lose +x -- Finder then refuses to launch
+          # the .app at all with a bare, generic "can't be opened" (no
+          # Gatekeeper wording, no Open Anyway option, since this isn't a
+          # signing/quarantine problem). This is the same root cause a user
+          # hit on the pre-.app raw-folder release, which needed a manual
+          # `chmod +x` on the bare binary to run from Terminal. Setting the
+          # mode bit doesn't touch file *content*, so it doesn't invalidate
+          # the code signature applied earlier in the build job.
           for label in macos-arm64 macos-intel; do
             mv "artifacts/gramps-connect-desktop-$label" artifacts/gramps-connect-desktop.app
+            chmod +x artifacts/gramps-connect-desktop.app/Contents/MacOS/gramps-connect-desktop
             (cd artifacts && zip -q -r -y "gramps-connect-desktop-$label.zip" gramps-connect-desktop.app)
             rm -rf artifacts/gramps-connect-desktop.app
           done
