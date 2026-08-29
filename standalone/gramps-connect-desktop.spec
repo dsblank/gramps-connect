@@ -274,7 +274,10 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
-    runtime_hooks=[os.path.join(HERE, "runtime_hooks", "rthook_gi_stub.py")],
+    runtime_hooks=[
+        os.path.join(HERE, "runtime_hooks", "rthook_gi_stub.py"),
+        os.path.join(HERE, "runtime_hooks", "rthook_locale_shim.py"),
+    ],
     excludes=excludes,
     noarchive=False,
     optimize=0,
