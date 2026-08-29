@@ -89,7 +89,8 @@ COPY --from=frontend-build /src/app/dist /app/static
 COPY deploy/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD gunicorn -w ${GUNICORN_NUM_WORKERS:-4} -b 0.0.0.0:5000 \
-      gramps_webapi.wsgi:app \
-      --timeout ${GUNICORN_TIMEOUT:-120} \
-      --limit-request-line 8190
+# JSON-array form (not shell-form) so Docker doesn't itself wrap this in an
+# extra `/bin/sh -c`; the inner `exec` still lets gunicorn replace that shell
+# as PID 1 so it receives signals directly, while `sh -c` is kept only to
+# expand the GUNICORN_* env-var defaults, which JSON-array CMD can't do.
+CMD ["sh", "-c", "exec gunicorn -w ${GUNICORN_NUM_WORKERS:-4} -b 0.0.0.0:5000 gramps_webapi.wsgi:app --timeout ${GUNICORN_TIMEOUT:-120} --limit-request-line 8190"]
