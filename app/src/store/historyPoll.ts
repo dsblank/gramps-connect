@@ -51,6 +51,15 @@ const REFERENCE_OBJ_CLASS = "7";
 
 const POLL_INTERVAL_MS = 5000;
 
+// Bounds each poll tick's own response. `page`/`pagesize` default to "return
+// everything after the cursor" server-side (gramps-web-api's documented
+// contract, not a bug there) -- fine for an occasional catch-up fetch, wrong
+// for a request repeated every 5s forever: a large backlog (a bulk import
+// landing between ticks) would otherwise come back as one unbounded
+// response. Capped here, a backlog that size just drains over several
+// ticks instead.
+const POLL_PAGESIZE = 500;
+
 /** Pure: collapses a batch of /api/transactions/history/ transactions into
  * at most one notification per (obj_class, handle) -- the net effect
  * across the whole batch, so e.g. two updates to the same person within
@@ -91,7 +100,7 @@ export function transactionsToNotifications(transactions: HistoryTransaction[]):
  * is an exact integer compare, no precision loss. See gramps-web-api's
  * TransactionsHistoryQueryArgs.after_id docstring. */
 export function pollHistory(
-  onNotification: (notification: TreeChangeNotification) => void,
+  onNotifications: (notifications: TreeChangeNotification[]) => void,
   onStatus?: (status: "connected" | "disconnected") => void
 ): () => void {
   let stopped = false;
@@ -117,17 +126,16 @@ export function pollHistory(
         afterId = latest[0]?.id ?? 0;
         bootstrapped = true;
       }
-      const res = await fetch(`${API_BASE}/api/transactions/history/?after_id=${afterId}&sort=id`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE}/api/transactions/history/?after_id=${afterId}&sort=id&page=1&pagesize=${POLL_PAGESIZE}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       if (!res.ok) throw new Error(`history poll failed: ${res.status}`);
       const transactions: HistoryTransaction[] = await res.json();
       onStatus?.("connected");
 
       if (transactions.length > 0) {
-        for (const notification of transactionsToNotifications(transactions)) {
-          onNotification(notification);
-        }
+        onNotifications(transactionsToNotifications(transactions));
         afterId = Math.max(...transactions.map((t) => t.id));
       }
     } catch (err) {
