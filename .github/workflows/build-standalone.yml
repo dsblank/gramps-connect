@@ -175,41 +175,92 @@ jobs:
         working-directory: gramps-connect/standalone
         run: pyinstaller gramps-connect-desktop.spec --noconfirm
 
-      # Ad-hoc (no Apple Developer account, no notarization) but recursive
-      # -- every nested Mach-O (the main exe, embedded Python, each bundled
-      # .so) ends up with *a* signature instead of none at all. This is what
-      # actually stops the cascading per-file "malware" warnings users hit
-      # on unsigned onedir builds; it does NOT eliminate the one expected
-      # "unidentified developer" Gatekeeper prompt for the .app itself,
-      # since ad-hoc signing isn't notarization -- see the README.
-      - name: Ad-hoc code-sign the macOS .app bundle
+      # Real Developer ID signing + notarization (Apple Developer Program
+      # membership as of 2026-08-29; secrets APPLE_CERTIFICATE_P12/
+      # APPLE_CERTIFICATE_PASSWORD/APPLE_TEAM_ID/APPLE_API_KEY_P8/
+      # APPLE_API_KEY_ID/APPLE_API_ISSUER_ID). This replaces this build's
+      # earlier ad-hoc signing: ad-hoc signing (every nested Mach-O getting
+      # *a* signature) stopped the cascading per-file "malware" warnings on
+      # unsigned onedir builds, but `spctl -a --type execute` unconditionally
+      # rejects any non-notarized app regardless of signing -- notarization
+      # is the only way to clear the "Apple could not verify this app is
+      # free of malware" Gatekeeper dialog on first launch, see README.
+      - name: Import Developer ID certificate into a temporary keychain
+        if: runner.os == 'macOS'
+        working-directory: gramps-connect/standalone
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A \
+            -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      # --options runtime (hardened runtime) is mandatory for notarization.
+      # --deep is technically deprecated by Apple in favor of signing
+      # inside-out by hand, but still works and keeps this step a single
+      # command; entitlements.plist's library-validation carve-out is what
+      # keeps the hardened runtime from killing the process at launch over
+      # our bundled, non-Team-ID-signed CPython/.so files -- see that file.
+      - name: Code-sign the macOS .app bundle with Developer ID
         if: runner.os == 'macOS'
         working-directory: gramps-connect/standalone
         run: |
-          codesign --force --deep --sign - --timestamp=none dist/gramps-connect-desktop.app
+          IDENTITY_HASH=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/Developer ID Application/{print $2; exit}')
+          if [ -z "$IDENTITY_HASH" ]; then
+            echo "No Developer ID Application identity found in the imported keychain" >&2
+            exit 1
+          fi
+          codesign --force --deep --options runtime --timestamp \
+            --entitlements entitlements.plist \
+            --sign "$IDENTITY_HASH" \
+            --keychain "$KEYCHAIN_PATH" \
+            dist/gramps-connect-desktop.app
           codesign --verify --deep --strict --verbose=2 dist/gramps-connect-desktop.app
 
-      # NOTE: `spctl -a --type execute` against a quarantined, non-notarized
-      # app ALWAYS returns "rejected" on modern macOS, ad-hoc-signed or not
-      # -- that specific Gatekeeper policy requires a notarized Developer ID
-      # (the option this build deliberately skips, see README). An earlier
-      # version of this step ran that check as a hard gate and it failed
-      # every build for that expected, already-documented reason, not
-      # because the actual fix (every nested binary now carrying a
-      # signature, so none of them get flagged individually) regressed.
-      # `codesign --verify --deep --strict` above is the real check for
-      # that: it walks every nested code object against the outer seal and
-      # fails if any of them lack a valid signature. This step is left as a
-      # non-fatal diagnostic (`|| true`) purely so the expected rejection
-      # reason is visible in the log for a human to sanity-check, not as a
-      # pass/fail gate.
-      - name: "Diagnostic: Gatekeeper assessment of a simulated quarantined download"
+      # notarytool zips the bundle itself for submission; that zip is
+      # thrown away afterwards, it's not the artifact we ship (the release
+      # job below re-zips the stapled .app separately). --wait blocks until
+      # Apple's notary service finishes (usually 1-5 min, occasionally
+      # longer) and fails the step on rejection, with the log URL printed.
+      - name: Notarize the macOS .app bundle
+        if: runner.os == 'macOS'
+        working-directory: gramps-connect/standalone
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          echo "$APPLE_API_KEY_P8" > "$API_KEY_PATH"
+          ditto -c -k --keepParent dist/gramps-connect-desktop.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple dist/gramps-connect-desktop.app
+          rm -f "$API_KEY_PATH" "$RUNNER_TEMP/notarize.zip"
+
+      # Now a real pass/fail gate (not `|| true` as it was under ad-hoc
+      # signing, see git history) -- a stapled, notarized app is expected to
+      # pass Gatekeeper's assessment of a freshly-quarantined download.
+      - name: "Verify Gatekeeper accepts a simulated quarantined download"
         if: runner.os == 'macOS'
         working-directory: gramps-connect/standalone
         run: |
           find dist/gramps-connect-desktop.app -type f -exec xattr -w com.apple.quarantine "0181;00000000;Safari;" {} \;
           xattr -w com.apple.quarantine "0181;00000000;Safari;" dist/gramps-connect-desktop.app
-          spctl -a -vvv --type execute dist/gramps-connect-desktop.app || true
+          spctl -a -vvv --type execute dist/gramps-connect-desktop.app
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7

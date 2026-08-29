@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Notarization requires the hardened runtime (codesign's "options
+    runtime" flag), but CPython's own interpreter and the many bundled
+    compiled extensions (numpy, PIL, cryptography, lxml, etc.) are not
+    signed with our Team ID and rely on dynamic code generation, so the
+    runtime's default restrictions kill the process at launch (SIGKILL,
+    no useful error) without these carve-outs. This is a standard
+    requirement for notarizing PyInstaller/py2app bundles, not something
+    specific to this app. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+</dict>
+</plist>

@@ -133,13 +133,9 @@ For M1/M2/M3/M4 Macs.
    [latest release](https://github.com/dsblank/gramps-connect/releases/latest)
    and unzip it (double-click, or right-click → Open, depending on your
    Mac's settings) to get `gramps-connect-desktop.app`.
-2. Double-click `gramps-connect-desktop.app`. This build is ad-hoc signed
-   but not notarized, so macOS will still show **one** Gatekeeper prompt
-   ("cannot be opened because Apple cannot check it for malicious
-   software") — right-click the app → **Open** → **Open Anyway** to get past
-   it; you only need to do this once. You should *not* see the whole series
-   of separate warnings for Python and individual `.so` files that older
-   releases of this build caused — if you do, see Troubleshooting.
+2. Double-click `gramps-connect-desktop.app`. This build is signed with a
+   Developer ID and notarized by Apple, so it should open normally with no
+   Gatekeeper warning at all. If you see one anyway, see Troubleshooting.
 3. A window opens automatically, running the app. Log in as `admin` /
    `admin`.
 
@@ -184,16 +180,13 @@ above, but download `gramps-connect-desktop-macos-intel.zip` instead.
 - **Windows SmartScreen ("Windows protected your PC")** — expected, since
   this build isn't code-signed. Click **More info** → **Run anyway**.
 - **macOS Gatekeeper ("cannot be opened because Apple cannot check it for
-  malicious software")** — expected for the `.app` itself, since this build
-  is ad-hoc signed but not notarized. Right-click → **Open** → **Open
-  Anyway**, once. If you instead see a whole *series* of separate "malware"
-  warnings — one for the app, then Python, then several individual `.so`
-  files — that means the fix below didn't take for some reason; work around
-  it by clearing the quarantine flag from the whole `.app` at once before
-  opening it: `xattr -cr gramps-connect-desktop.app` (run from Terminal, in
-  the folder you unzipped it into) and please report it, since it means the
-  build's ad-hoc signing didn't survive being downloaded/unzipped as
-  expected.
+  malicious software")** — this build is signed with a Developer ID and
+  notarized by Apple, so this shouldn't happen. If it does, first try
+  clearing the quarantine flag from the whole `.app` at once:
+  `xattr -cr gramps-connect-desktop.app` (run from Terminal, in the folder
+  you unzipped it into). Please also report it — it likely means the
+  notarization ticket didn't survive being downloaded/unzipped as expected,
+  or the build wasn't notarized correctly.
 - **apt/dnf warns the `.deb`/`.rpm` isn't signed, or skips an OpenPGP
   check** — expected. These packages are built by this repo's own CI, not
   published to a signed distro repository, so installing them from a local
