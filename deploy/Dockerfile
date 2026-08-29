@@ -1,21 +1,47 @@
 # syntax=docker/dockerfile:1
 #
-# Full-featured deploy image, including the AI/CV stack (torch,
-# sentence-transformers, opencv, tesseract) for gramps-web-api's
-# semantic-search/chat and OCR features. deploy/docker-compose.yml and
-# .github/workflows/build-docker.yml build deploy/Dockerfile.slim by
-# default instead, since this deployment doesn't enable any of that --
-# see deploy/Dockerfile.slim for why. Kept around for anyone who does
-# want those features.
+# Deploy image (deploy/docker-compose.yml and .github/workflows/build-docker.yml
+# both build/push this). Layers gramps-connect's frontend onto the official,
+# upstream-published gramps-web-api release image (dmstraub/gramps-webapi,
+# pushed by .github/workflows/image.yml in gramps-project/gramps-web-api on
+# every GitHub release) instead of building gramps-web-api from source --
+# mirrors exactly what gramps-project/gramps-web's own Dockerfile does:
+# https://github.com/gramps-project/gramps-web/blob/main/Dockerfile
+# (`FROM dmstraub/gramps-webapi:latest` + `COPY dist /app/static`).
+#
+# This replaces the previous from-scratch Dockerfile/Dockerfile.slim pair,
+# which built gramps + gramps-web-api from source to control image size and
+# work around an editable install's untranslated .mo catalogs. Neither
+# problem needs solving here:
+#   - SharedPostgreSQL/PostgreSQL/FilterRules/JSON addons and multi-tree
+#     support are already present -- gramps-web-base's own Dockerfile.base
+#     (the image dmstraub/gramps-webapi builds on) installs those addons.
+#   - Translations are already compiled -- gramps-web-api's own Dockerfile
+#     installs `gramps[all]` as a normal PyPI wheel (not an editable
+#     from-source install), and building a wheel runs build_trans() as a
+#     side effect.
+#
+# Trade-off accepted deliberately: dmstraub/gramps-webapi:latest is built on
+# ghcr.io/gramps-project/gramps-web-base (~4.3GB: torch, sentence-transformers,
+# opencv, 45 tesseract language packs -- see the removed Dockerfile.slim's
+# own comments for the full rationale for avoiding that) and installs the
+# `[ai,sentry]` extras unconditionally. There's no official slim variant to
+# pull instead, so tracking the upstream image trades image size for not
+# hand-maintaining a from-source build of gramps-web-api's own dependencies.
 
 # --- Stage 0: build Pyodide wheels for Gramplets ------------------------
 #
-# See deploy/Dockerfile.slim's matching stage for the full rationale:
-# app/scripts/copy-wasm.mjs (run below as `npm ci`'s postinstall) silently
-# skips registering gramps-gen-lib/gi/orjson in the built app's
-# pyodide-lock.json unless it finds wheels already sitting in
-# dist/{gramps-wheel,stub-wheels}/, so this stage builds those wheels
-# before Stage 1 copies them in.
+# app/scripts/copy-wasm.mjs (run below as `npm ci`'s postinstall) only
+# registers gramps-gen-lib/gi/orjson in the built app's
+# public/pyodide/pyodide-lock.json when it finds wheels already sitting in
+# dist/{gramps-wheel,stub-wheels}/ -- otherwise it silently skips them (see
+# its own "best-effort" comment), and every Gramplet calling
+# get_object()/get_raw_object()/db.get_*_from_handle() then fails at
+# runtime with "No known package with name 'gramps-gen-lib'". This stage
+# builds those wheels so Stage 1 below can copy them in before `npm ci`
+# runs. Only needs a bare `import gramps` to succeed, so a plain `--no-deps`
+# editable install is enough -- gramps-web-api/PyGObject/etc. are not
+# needed here.
 FROM python:3.13-slim AS gramps-wheels
 
 RUN apt-get update && apt-get install -y --no-install-recommends git && \
@@ -39,119 +65,27 @@ COPY packages ./packages
 COPY app ./app
 COPY --from=gramps-wheels /dist ./dist
 
-# Frontend and API are served from the same origin in this image (see
-# STATIC_PATH below), so VITE_API_BASE must stay empty -- app/src/config.ts
-# already falls back to "" when unset, but we set it explicitly to document
-# the intent, matching .github/workflows/build-standalone.yml.
+# Frontend and API are served from the same origin in this image (see the
+# static-file COPY below), so VITE_API_BASE must stay empty -- app/src/
+# config.ts already falls back to "" when unset, but we set it explicitly
+# to document the intent.
 ENV VITE_API_BASE=""
 
 RUN npm ci
 RUN npm run build -w app
 
-# --- Stage 2: backend + baked-in frontend --------------------------------
-#
-# gramps-web-base only installs system packages and Gramps addons (incl.
-# SharedPostgreSQL) from Dockerfile.base -- it never installs the
-# gramps_webapi Python package itself (see .github/workflows/base-image.yml
-# in the gramps-web-api repo), so we install gramps and gramps-web-api from
-# source below.
-FROM ghcr.io/gramps-project/gramps-web-base:latest AS backend
-
-WORKDIR /app
-
-# gramps-web-base's Dockerfile.base doesn't install git.
-RUN apt-get update && apt-get install -y --no-install-recommends git && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN git clone --depth 1 --branch maintenance/gramps60 \
-      https://github.com/gramps-project/gramps /app/gramps-src && \
-    pip install --no-cache-dir -e /app/gramps-src --no-deps
-
-# gramps' po/*.po catalogs (Person, Birth, Family, ...) only get compiled to
-# .mo as a side effect of `setup.py build`, which the editable install above
-# never runs -- confirmed empirically, an editable install produces zero
-# .mo files anywhere. Without this, gramps_webapi's /api/translations/
-# <lang>/ endpoint (what app/src/i18n/i18n.ts's desktopStrings corpus is
-# translated through) silently falls back to English regardless of the
-# language picked. deploy/Dockerfile.slim doesn't need this: its
-# non-editable `pip install /src/gramps` builds a wheel, which does run
-# build_trans() via the normal build command.
-COPY scripts/compile-gramps-translations.py /tmp/compile-gramps-translations.py
-RUN pip install --no-cache-dir polib && \
-    python /tmp/compile-gramps-translations.py /app/gramps-src && \
-    rm /tmp/compile-gramps-translations.py
-
-# The ten /api/<type>/query/ endpoints this project's client is built on
-# (https://github.com/gramps-project/gramps-web-api/pull/913) are merged
-# upstream now, so this tracks gramps-project master rather than the
-# dsblank/gramps-web-api feat/object-query-endpoints branch it used to.
-RUN git clone --depth 1 --branch master \
-      https://github.com/gramps-project/gramps-web-api /app/gramps-web-api-src && \
-    pip install --no-cache-dir -e /app/gramps-web-api-src --no-deps
-
-# PyGObject: gramps/gen/const.py unconditionally does
-# `from gi.repository import GLib` (just to compute XDG dirs -- no real GTK
-# UI is ever touched on gramps-web-api's request path), so it's needed at
-# import time even though it's not gramps-web-api's a core functional dep.
-# The standalone PyInstaller build avoids this with a stub module
-# (runtime_hooks/rthook_gi_stub.py) since bundling real PyGObject there is
-# painful; here the base image already has the GTK typelibs/build deps
-# (gir1.2-gtk-3.0, libgirepository1.0-dev, libcairo2-dev, pkg-config)
-# specifically so PyGObject can be pip-installed on top, so we do that
-# instead of reimplementing the stub trick.
-RUN pip install --no-cache-dir "PYGObject<=3.50.0"
-
-# Every non-gramps dependency of gramps-web-api's own pyproject.toml
-# [project.dependencies], copied from
-# .github/workflows/build-standalone.yml's already-debugged list. Skips
-# pyinstaller/pyinstaller-hooks-contrib (not relevant to a container).
-# psycopg2-binary isn't listed explicitly but arrives transitively via
-# sifts's own dependencies.
-RUN pip install --no-cache-dir \
-      orjson Click Flask "Flask-Caching>=2.0.0" Flask-Compress Flask-Cors \
-      "Flask-JWT-Extended!=4.4.0,!=4.4.1" "Flask-Limiter>=2.9.0" Flask-SQLAlchemy \
-      "marshmallow>=3.13.0" waitress webargs "SQLAlchemy>=2.0.0" \
-      "Pillow>=9.1.0,<12.0.0" "bleach[css]>=5.0.0" jsonschema \
-      alembic "celery[redis]" Unidecode \
-      "gramps-object-query-language>=0.3.1" "gramps-ql>=0.4.0" "object-ql>=0.1.3" \
-      "sifts>=1.1.0" requests "yclade>=0.5.0" "Authlib>=1.6.4" gramps-gedcom7 \
-      flask-smorest "typing-extensions>=4.13.0"
-
-# Persistent data directories -- mount a volume covering /app/db, /app/media,
-# /app/indexdir, /app/users, /app/secret (see deploy/docker-compose.yml).
-RUN mkdir -p \
-      /app/db /app/media /app/indexdir /app/users /app/secret \
-      /app/thumbnail_cache \
-      /app/cache/reports /app/cache/export \
-      /app/cache/request_cache /app/cache/persistent_cache
+# --- Stage 2: layer the frontend onto the official backend image --------
+FROM dmstraub/gramps-webapi:latest
 
 COPY --from=frontend-build /src/app/dist /app/static
 
-ENV GRAMPSWEB_USER_DB_URI=sqlite:////app/users/users.sqlite \
-    GRAMPSWEB_MEDIA_BASE_DIR=/app/media \
-    GRAMPSWEB_SEARCH_INDEX_DB_URI=sqlite:////app/indexdir/search_index.db \
-    GRAMPSWEB_STATIC_PATH=/app/static \
-    GRAMPSWEB_THUMBNAIL_CACHE_CONFIG__CACHE_DIR=/app/thumbnail_cache \
-    GRAMPSWEB_REQUEST_CACHE_CONFIG__CACHE_DIR=/app/cache/request_cache \
-    GRAMPSWEB_PERSISTENT_CACHE_CONFIG__CACHE_DIR=/app/cache/persistent_cache \
-    GRAMPSWEB_REPORT_DIR=/app/cache/reports \
-    GRAMPSWEB_EXPORT_DIR=/app/cache/export \
-    GRAMPS_DATABASE_PATH=/app/db
-
-# Dockerfile.base installs Gramps addons (incl. SharedPostgreSQL) into
-# /root/gramps/gramps60/plugins -- GRAMPSHOME must point there for Gramps'
-# plugin scanner to find them (matches upstream gramps-web-api's own
-# Dockerfile, which sets GRAMPSHOME=/root for the same reason). Not on a
-# volume: addons are baked into the image, nothing here needs to persist.
-ENV GRAMPSHOME=/root
-
-# Deliberately not set here: GRAMPSWEB_SECRET_KEY, GRAMPSWEB_TREE,
-# GRAMPSWEB_POSTGRES_*, GRAMPSWEB_ADMIN_USER/PASSWORD. Those are real
-# secrets/config, supplied at `docker compose` runtime via deploy/.env --
-# never baked into the image.
-
-EXPOSE 5000
-
+# deploy/docker-entrypoint.sh is gramps-web-api's own docker-entrypoint.sh
+# (baked into the base image) plus: waiting for Postgres to actually accept
+# connections (not just for its container to start), skipping migrate/seed
+# on the worker service to avoid a concurrent-alembic race, and seeding the
+# site admin from GRAMPSWEB_ADMIN_USER/PASSWORD. It runs its migrate step
+# from /app/src, matching where the base image's own Dockerfile (`COPY . /app/src`)
+# puts the gramps-web-api checkout that alembic.ini lives at the root of.
 COPY deploy/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]

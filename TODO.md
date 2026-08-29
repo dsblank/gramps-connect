@@ -19,12 +19,12 @@ to `main` with nothing catching it.
 - No ESLint/Prettier config exists anywhere in the repo — either add one
   (and lint in CI) or explicitly decide linting is out of scope; don't
   silently skip it.
-- Decide whether `deploy/Dockerfile`/`Dockerfile.slim` should also build in
-  CI (would have caught several bugs found the first time `deploy/` was
-  built, e.g. a missing `git` package) — likely worth it, but it's a slow
-  job (multi-GB base image, from-source `gramps`/`gramps-web-api` installs),
-  so probably wants its own trigger scope (e.g. only on changes under
-  `deploy/` or `app/`) rather than running on every push.
+- Decide whether `deploy/Dockerfile` should also build in CI (would have
+  caught several bugs found the first time `deploy/` was built) — likely
+  worth it; the build itself is fast now (layers `app/`'s frontend onto the
+  official `dmstraub/gramps-webapi` image, no from-source installs), but
+  pulling that multi-GB upstream base image on every push may still be
+  worth scoping to changes under `deploy/` or `app/` rather than every push.
 
 ## Architecture / product
 

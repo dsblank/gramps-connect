@@ -142,8 +142,8 @@ jobs:
           python gramps-connect/scripts/compile-gramps-translations.py gramps
 
       # Read straight out of gramps-web-api's own pyproject.toml rather than
-      # hand-copied, using the same filter deploy/Dockerfile.slim already
-      # uses -- a hand-copied list here had already drifted (it pinned
+      # hand-copied, using deploy/webapi-requirements.py's own filter --
+      # a hand-copied list here had already drifted (it pinned
       # gramps-object-query-language>=0.3.1 where upstream now says
       # >=0.3.4,<0.4) and would silently miss anything added upstream.
       # gramps[all]/PyGObject are skipped by the script (supplied via the

@@ -1,13 +1,15 @@
-"""Print gramps-web-api's own dependencies, minus the ones this image
+"""Print gramps-web-api's own dependencies, minus the ones this build
 supplies itself or deliberately does without.
 
-deploy/Dockerfile installs gramps-web-api with --no-deps and then hand-lists
-its dependencies, a copy that has already drifted from the original (it pins
-gramps-object-query-language>=0.3.1 where upstream now says >=0.3.4,<0.4)
-and that would silently miss anything added upstream. deploy/Dockerfile.slim
-generates the list from the checked-out source instead, using this script --
-kept as a file rather than inlined in the Dockerfile so it runs under the
-classic builder too, and so it can be run and tested on its own:
+Used by .github/workflows/build-standalone.yml, which installs gramps and
+gramps-web-api from source with --no-deps (a hand-copied dependency list
+would drift from the original, e.g. it once pinned
+gramps-object-query-language>=0.3.1 where upstream now says >=0.3.4,<0.4,
+and would silently miss anything added upstream). deploy/Dockerfile no
+longer needs this -- it now layers gramps-connect's frontend onto the
+official dmstraub/gramps-webapi image, which already has its own
+dependencies installed. Kept as a file rather than inlined in the workflow
+so it can be run and tested on its own:
 
     python deploy/webapi-requirements.py ../gramps-web-api/pyproject.toml
 """
@@ -30,9 +32,9 @@ SKIP = {
     # merely smaller.
     #
     # pdf2image is deliberately NOT in this set: it drives the PDF-to-image
-    # thumbnailing in gramps_webapi/api/image.py, which is wanted here. Its
-    # poppler-utils system dependency is installed alongside it in
-    # deploy/Dockerfile.slim.
+    # thumbnailing in gramps_webapi/api/image.py. Its poppler-utils system
+    # dependency is a separate, known gap in the standalone build (not a
+    # pip package, so not something this script would install anyway).
     "ffmpeg-python",
     "boto3",
     "pytesseract",

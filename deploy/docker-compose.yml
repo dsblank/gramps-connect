@@ -1,13 +1,15 @@
 x-app-image: &app-image
   # Prebuilt by .github/workflows/build-docker.yml (workflow_dispatch) and
-  # pushed to GHCR -- `docker compose pull` grabs that instead of running
-  # the slow from-source build (git clones + PyGObject compile) locally.
-  # `build:` is still here as a fallback for local iteration
-  # (`docker compose build` tags the result with this same name).
+  # pushed to GHCR -- `docker compose pull` grabs that instead of building
+  # locally. `build:` is still here as a fallback for local iteration
+  # (`docker compose build` tags the result with this same name). The build
+  # itself is just an `npm run build -w app` layered onto the official
+  # dmstraub/gramps-webapi image now (see deploy/Dockerfile), so it's fast
+  # either way -- no from-source gramps/gramps-web-api clone anymore.
   image: ghcr.io/dsblank/gramps-connect:latest
   build:
     context: ..
-    dockerfile: deploy/Dockerfile.slim
+    dockerfile: deploy/Dockerfile
 
 x-app-env: &app-env
   # Multi-tree mode, required for the SharedPostgreSQL backend.
@@ -33,9 +35,23 @@ x-app-env: &app-env
   GRAMPSWEB_RATELIMIT_STORAGE_URI: redis://redis:6379/2
   GRAMPSWEB_BASE_URL: ${PUBLIC_URL}
   GRAMPSWEB_DISABLE_TELEMETRY: "True"
+  # This backend is now the same unmodified image gramps-web itself runs
+  # on (see deploy/Dockerfile), so a separately-hosted gramps-web frontend
+  # (a different origin than this deployment's own PUBLIC_URL) can point
+  # at /api/ here too -- but Flask-Cors rejects it by default until its
+  # origin is allowed here. Empty by default (same-origin gramps-connect
+  # keeps working either way); set to that origin, or "*", in deploy/.env
+  # to opt in.
+  GRAMPSWEB_CORS_ORIGINS: ${GRAMPSWEB_CORS_ORIGINS:-}
 
 x-app-volumes: &app-volumes
-  - app-db:/app/db
+  # /root/.gramps/grampsdb (not /app/db) is where the official
+  # dmstraub/gramps-webapi image sets GRAMPS_DATABASE_PATH -- see its own
+  # Dockerfile and gramps-web-docs' docker-compose-base example. Each tree
+  # gets a metadata directory here even under the SharedPostgreSQL backend
+  # (the actual row data lives in postgres; this still holds per-tree
+  # name.txt/database.txt).
+  - app-db:/root/.gramps/grampsdb
   - app-media:/app/media
   - app-indexdir:/app/indexdir
   - app-users:/app/users
@@ -44,6 +60,9 @@ x-app-volumes: &app-volumes
   # container's request handler, then a Celery task on the worker container
   # reads it back -- must be shared, or the worker gets "No such file".
   - app-cache:/app/cache
+  # Shared for the same reason as app-cache above -- matches the gramps_tmp
+  # volume in gramps-web-docs' own reference docker-compose.yml.
+  - app-tmp:/tmp
 
 services:
   app:
@@ -116,6 +135,7 @@ volumes:
   app-users:
   app-secret:
   app-cache:
+  app-tmp:
   postgres-data:
   # caddy-data holds the generated local CA / certs -- persisting it means
   # restarts don't regenerate the CA and re-trigger a browser trust prompt.

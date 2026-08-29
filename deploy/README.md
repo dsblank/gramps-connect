@@ -6,14 +6,61 @@ running gramps-connect on a real server. Real (non-hardcoded) config and
 secrets throughout. **Not covered here**, and tracked as separate
 follow-up work: CI build/test gating.
 
-Frontend and backend share one container/origin (`gramps_webapi` serves the
-built SPA via `STATIC_PATH` and handles `/api/*` in the same process), so
-there's no CORS configuration and no second frontend image.
+The backend is the official, unmodified `dmstraub/gramps-webapi` image
+(the one `gramps-project/gramps-web-api`'s own CI publishes on every
+release, and the same one `gramps-project/gramps-web` itself builds on --
+see `deploy/Dockerfile`), not a from-source build we maintain. That keeps
+this deployment a plain, standard gramps-web-api instance any compatible
+client can talk to -- not just gramps-connect's own frontend. A
+separately-hosted gramps-web (or other) frontend can point at this
+backend's `/api/` too; set `GRAMPSWEB_CORS_ORIGINS` in `deploy/.env` to
+allow its origin (see `.env.example`).
+
+Frontend and backend share one container/origin by default (`gramps_webapi`
+serves the built SPA via `STATIC_PATH` and handles `/api/*` in the same
+process), so gramps-connect itself needs no CORS configuration -- that's
+only relevant for a *different*, separately-hosted frontend calling in.
 
 Services: `caddy` (TLS termination, the only published entrypoint), `app`
 (gunicorn, serves the frontend + `/api/*`), `worker` (Celery, runs
 import/media/search-reindex jobs), `postgres` (tree data via
 SharedPostgreSQL), `redis` (Celery broker).
+
+## Running gramps-web alongside gramps-connect
+
+Not wired up here (no `grampsweb` service in `docker-compose.yml` yet), but
+worth knowing: since the backend is a plain, unmodified gramps-web-api
+instance, `gramps-project/gramps-web` (the other official frontend) can run
+against this same backend too -- same data, same trees/users, just a
+different UI on a different port.
+
+`gramps-web` publishes `ghcr.io/gramps-project/grampsjs:latest` for exactly
+this: nginx serving its static build only, no backend baked in
+(`Dockerfile.nginx` in that repo). Its nginx config
+(`default.conf.template`) reverse-proxies `/api` to an `API_HOST` env var
+at container startup, so from the browser's perspective it's same-origin --
+no `GRAMPSWEB_CORS_ORIGINS` needed for this path specifically (that's for a
+gramps-web instance hosted somewhere else entirely, calling in cross-origin
+instead of through this proxy).
+
+To add it, a `docker-compose.yml` service along these lines:
+
+```yaml
+grampsweb:
+  image: ghcr.io/gramps-project/grampsjs:latest
+  environment:
+    API_HOST: http://app:5000
+    # Docker's embedded DNS resolver -- default.conf.template's `resolver`
+    # directive requires this to be set explicitly.
+    NAME_SERVER: 127.0.0.11
+  depends_on:
+    - app
+  restart: unless-stopped
+```
+
+published on its own port (either directly, e.g. `ports: ["8081:80"]`, or
+fronted by Caddy with a second `:8443 { reverse_proxy grampsweb:80 }`-style
+block in `deploy/Caddyfile` for TLS to match the `app` service).
 
 ## Docker commands
 
@@ -189,9 +236,10 @@ deploy/docker-compose.yml up -d` to pick up both changes.
 ## Notes
 
 - Data persists in named Docker volumes (`app-db`, `app-media`,
-  `app-indexdir`, `app-users`, `app-secret`, `app-cache`, `postgres-data`,
-  `caddy-data`, `caddy-config`). `docker compose down` (without `-v`) keeps
-  them; `docker compose down -v` deletes everything (including the
+  `app-indexdir`, `app-users`, `app-secret`, `app-cache`, `app-tmp`,
+  `postgres-data`, `caddy-data`, `caddy-config`). `docker compose down`
+  (without `-v`) keeps them; `docker compose down -v` deletes everything
+  (including the
   generated CA — that's a new browser trust warning next boot, not just
   data loss).
 - `redis` (Celery broker/result backend) is required for background tasks
@@ -211,16 +259,18 @@ deploy/docker-compose.yml up -d` to pick up both changes.
   see the Dockerfile) is a plausible source of subtle fork-safety bugs, and
   a single worker instance doesn't need the concurrency `--pool=solo`
   gives up. Revisit if worker throughput becomes a bottleneck.
-- The backend is built from `gramps-project/gramps-web-api@master` and
-  `gramps-project/gramps@maintenance/gramps60` from source, not from a
-  pre-built image — `gramps-web-base` (the image this one builds on)
-  installs system packages and Gramps addons but never the `gramps_webapi`
-  Python package itself. See `deploy/Dockerfile` for details.
-- Building from source (a `git clone` plus a PyGObject compile) is slow
-  enough that it's better done once on GitHub's runners than on every
-  deploy host: `.github/workflows/build-docker.yml` (manual trigger —
-  `gh workflow run build-docker.yml`, or the Actions tab) builds
-  `deploy/Dockerfile.slim` and pushes `ghcr.io/<owner>/gramps-connect:latest`.
+- The backend is `dmstraub/gramps-webapi:latest` (see `deploy/Dockerfile`'s
+  own comments) — the official image `gramps-project/gramps-web-api`'s CI
+  publishes on every release. SharedPostgreSQL/PostgreSQL/FilterRules/JSON
+  addons, multi-tree support, and compiled translations all come from that
+  image already; the only thing this repo's build adds is `app/`'s
+  frontend, layered on top as static files. Trade-off: that upstream image
+  is built on `gramps-web-base` (~4.3GB — torch, sentence-transformers,
+  opencv, 45 tesseract language packs) with the AI extras installed
+  unconditionally, since there's no official slim variant to pull instead.
+- `.github/workflows/build-docker.yml` (manual trigger — `gh workflow run
+  build-docker.yml`, or the Actions tab) builds `deploy/Dockerfile` and
+  pushes `ghcr.io/<owner>/gramps-connect:latest`.
   `docker compose -f deploy/docker-compose.yml --env-file deploy/.env pull`
   grabs that instead of building locally; `up -d --build` (as in the Docker
   commands above) remains there for local iteration on the Dockerfile

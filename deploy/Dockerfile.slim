@@ -1,27 +1,40 @@
 # syntax=docker/dockerfile:1
 #
-# Default deploy image (deploy/docker-compose.yml and
-# .github/workflows/build-docker.yml both build/push this one). See
-# deploy/Dockerfile for the full variant with the AI/CV stack instead.
+# NOT built by deploy/docker-compose.yml or .github/workflows/build-docker.yml
+# -- deploy/Dockerfile (which layers gramps-connect's frontend onto the
+# official, upstream-published dmstraub/gramps-webapi image) is what those
+# use by default now. Kept here, unwired, as a reference for anyone who'd
+# rather trade "not tracking a hand-built image" for a much smaller one --
+# this image runs ~671MB vs. ~4.5GB for deploy/Dockerfile's, because it
+# builds gramps + gramps-web-api from source instead of inheriting
+# ghcr.io/gramps-project/gramps-web-base (see below for what that costs).
+# To use it: `docker build -f deploy/Dockerfile.slim -t <tag> .` from the
+# repo root, then point deploy/docker-compose.yml's `x-app-image.image` at
+# that tag (or override `dockerfile:` in its `build:` block). Also change
+# the `app-db` volume's mount point back to `/app/db` there -- this image
+# sets GRAMPS_DATABASE_PATH=/app/db (below), not deploy/Dockerfile's
+# /root/.gramps/grampsdb.
 #
-# The difference is entirely the base. deploy/Dockerfile builds on
-# ghcr.io/gramps-project/gramps-web-base, which is ~4.3GB before our first
-# instruction: torch, sentence-transformers and a downloaded embedding
-# model (~2.0GB) for the semantic-search/chat features, opencv (~0.3GB),
-# 45 tesseract language packs, ffmpeg, poppler and GTK2/mesa dev headers.
-# This deployment enables none of that -- there is no vector/embedding/chat
-# configuration in deploy/.env or deploy/docker-compose.yml, and the client
-# never calls those endpoints. Inherited layers can't be slimmed after the
-# fact (deleting a file in a later layer only adds a whiteout), so the only
-# way to drop the weight is to not inherit it: build on python:3.13-slim
-# and add back, by hand, the parts this project actually reaches.
+# The size difference is entirely the base. gramps-web-base is ~4.3GB
+# before its first instruction: torch, sentence-transformers and a
+# downloaded embedding model (~2.0GB) for the semantic-search/chat
+# features, opencv (~0.3GB), 45 tesseract language packs, ffmpeg, poppler
+# and GTK2/mesa dev headers. This deployment enables none of that -- there
+# is no vector/embedding/chat configuration in deploy/.env or
+# deploy/docker-compose.yml, and the client never calls those endpoints.
+# Inherited layers can't be slimmed after the fact (deleting a file in a
+# later layer only adds a whiteout), so the only way to drop the weight is
+# to not inherit it: build on python:3.13-slim and add back, by hand, the
+# parts this project actually reaches.
 #
 # What is deliberately kept, and why:
 #   graphviz        -- the Relationship Graph / Hourglass / Family Lines
 #                      reports shell out to `dot`, and app/src/store/
 #                      reportsApi.ts exposes every registered report.
 #   GLib typelib    -- gramps/gen/const.py imports GLib at module load
-#                      just to compute XDG dirs (see deploy/Dockerfile).
+#                      just to compute XDG dirs -- no real GTK UI is ever
+#                      touched on gramps-web-api's request path, but the
+#                      import happens regardless.
 #   Pango/cairo     -- gramps' cairodoc docgen backs the PDF/PS/SVG report
 #                      output formats.
 #   Gramps addons   -- SharedPostgreSQL is the database backend; JSON,
@@ -127,10 +140,9 @@ RUN pip install --no-cache-dir "PYGObject<=3.50.0"
 # needs the matching libicu shared library.
 RUN pip install --no-cache-dir PyICU
 
-# Installed non-editable, unlike deploy/Dockerfile: an editable install
-# would leave the final image depending on the git checkout staying around
-# (~130MB of source and .git), whereas this copies just the package and its
-# data files into /venv.
+# Installed non-editable: an editable install would leave the final image
+# depending on the git checkout staying around (~130MB of source and .git),
+# whereas this copies just the package and its data files into /venv.
 RUN git clone --depth 1 --branch maintenance/gramps60 \
       https://github.com/gramps-project/gramps /src/gramps && \
     pip install --no-cache-dir /src/gramps --no-deps
@@ -141,12 +153,11 @@ RUN git clone --depth 1 --branch master \
 
 # --no-deps above would leave gramps-web-api's dependencies uninstalled, so
 # they are installed here -- but read out of its own pyproject.toml rather
-# than copied into this file. deploy/Dockerfile keeps a hand-copied list,
-# which has already drifted: it pins gramps-object-query-language>=0.3.1
-# where upstream now says >=0.3.4,<0.4, and a dependency added upstream
-# tomorrow would simply be missing. Generating the list means the pins are
-# whatever the checked-out commit says, and new dependencies arrive on
-# their own.
+# than hand-copied into this file, since a hand-copied list drifts (an
+# earlier version of this file pinned gramps-object-query-language>=0.3.1
+# where upstream now says >=0.3.4,<0.4) and would silently miss anything
+# added upstream. Generating the list means the pins are whatever the
+# checked-out commit says, and new dependencies arrive on their own.
 #
 # Four names are filtered out, each for a specific reason:
 #   gramps[all]   -- would pull the released gramps from PyPI over the
@@ -205,15 +216,16 @@ ENV PATH=/venv/bin:$PATH
 COPY --from=builder /venv /venv
 COPY --from=addons /root/gramps /root/gramps
 
-# deploy/docker-entrypoint.sh runs `cd /app/gramps-web-api-src && python3 -m
-# gramps_webapi user migrate`, because alembic.ini (script_location =
-# alembic_users) sits at gramps-web-api's source root and alembic resolves
-# it relative to the working directory. deploy/Dockerfile satisfies that
-# with its editable install's checkout; here the install is non-editable, so
+# deploy/docker-entrypoint.sh runs `cd /app/src && python3 -m gramps_webapi
+# user migrate`, because alembic.ini (script_location = alembic_users) sits
+# at gramps-web-api's source root and alembic resolves it relative to the
+# working directory -- /app/src matches where the official gramps-web-api
+# image's own Dockerfile puts its (editable) checkout, which this shared
+# entrypoint script also targets. The install above is non-editable, so
 # these two -- the only part of that 130MB checkout anything reads at
-# runtime -- are copied in on their own.
-COPY --from=builder /src/gramps-web-api/alembic.ini /app/gramps-web-api-src/alembic.ini
-COPY --from=builder /src/gramps-web-api/alembic_users /app/gramps-web-api-src/alembic_users
+# runtime -- are copied in on their own instead of the whole checkout.
+COPY --from=builder /src/gramps-web-api/alembic.ini /app/src/alembic.ini
+COPY --from=builder /src/gramps-web-api/alembic_users /app/src/alembic_users
 
 # Persistent data directories -- mount a volume covering /app/db, /app/media,
 # /app/indexdir, /app/users, /app/secret (see deploy/docker-compose.yml).
@@ -236,7 +248,8 @@ ENV GRAMPSWEB_USER_DB_URI=sqlite:////app/users/users.sqlite \
     GRAMPSWEB_EXPORT_DIR=/app/cache/export \
     GRAMPS_DATABASE_PATH=/app/db
 
-# Where stage 2's addons landed (matches deploy/Dockerfile and upstream).
+# Where stage 2's addons landed (matches upstream's own Dockerfile.base,
+# and where they land in the official gramps-web-api image too).
 ENV GRAMPSHOME=/root
 
 # python:3.13-slim ships no locale archive, so glibc has only C/POSIX.

@@ -37,9 +37,9 @@ fi
 if [ -z "$SKIP_MIGRATE_AND_SEED" ]; then
     # Upgrade the user database schema, if required. alembic.ini
     # (script_location = alembic_users) lives at the gramps-web-api source
-    # root, so alembic must be run from there -- matching gramps-web-api's
-    # own docker-entrypoint.sh.
-    (cd /app/gramps-web-api-src && python3 -m gramps_webapi user migrate)
+    # root, which the base image's own Dockerfile (`COPY . /app/src`) puts
+    # at /app/src -- matching gramps-web-api's own docker-entrypoint.sh.
+    (cd /app/src && python3 -m gramps_webapi user migrate)
 
     # Seed the site admin user on first boot. Idempotent: a rerun on
     # container restart hits "User already exists" and is treated as
