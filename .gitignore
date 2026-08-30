@@ -31,6 +31,19 @@ dev-fixtures/layer3-sync/api-fixture/export_cache/
 dev-fixtures/layer3-sync/api-fixture/report_cache/
 dev-fixtures/layer3-sync/api-fixture/server.log
 
+# dev-fixtures/scale-100k: generated/fetched, not source. Unlike the other
+# two fixtures, gramps-home/ and data/ here are deliberately kept around
+# (not regenerated per session) -- a 101,518-person tree takes ~5 minutes
+# to rebuild even via the fast import path, so it's a standing fixture for
+# repeat load/performance experiments (discussion #4), not a per-run one.
+dev-fixtures/scale-100k/api-fixture/gramps-home/
+dev-fixtures/scale-100k/api-fixture/data/
+dev-fixtures/scale-100k/api-fixture/indexdir/
+dev-fixtures/scale-100k/api-fixture/persistent_cache/
+dev-fixtures/scale-100k/api-fixture/request_cache/
+dev-fixtures/scale-100k/api-fixture/thumbnail_cache/
+dev-fixtures/scale-100k/api-fixture/server.log
+
 # app: sql.js WASM binaries and maplibre-gl's worker + its shared.mjs
 # sibling, all copied in by scripts/copy-wasm.mjs, not source. Only the
 # copies, not the directory: public/ also holds the favicon set, which is
