@@ -8,18 +8,23 @@ import type { ObjectDetail } from "../../store/objectDetail";
 import { zipHandles } from "./sections/shared";
 import { t } from "../../i18n/i18n";
 
-/** Download + "Delete the export?" flow for an Output row (plan
+/** Download + "Delete this report/export?" flow for an Output row (plan
  * §5) -- gramps-connect has no generic per-object download affordance
  * elsewhere (a Media object's file is only ever shown as a thumbnail, see
  * MediaThumbnail.tsx), so this is scoped to RelatedPanel's `view.key ===
- * "generated"` branch rather than added to every type. Rows tagged
- * "report" are never prompted for deletion -- only "export". */
+ * "generated"` branch rather than added to every type. Report rows get the
+ * same delete-confirmation flow export rows already had -- a conscious
+ * decision (discussion #4, F4), not an oversight left over from before
+ * this offered delete at all: both are equally regenerable from the tree
+ * on demand, and leaving report rows with no cleanup path at all was the
+ * asymmetry, not the risk of an accidental delete. */
 export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
   const [error, setError] = useState<string | null>(null);
   const [deleted, setDeleted] = useState(false);
 
   const tags = zipHandles<{ name?: string }>(detail.tag_list, detail.extended?.tags);
   const isExport = tags.some((t) => t.target?.name === "export");
+  const kind = isExport ? "export" : "report";
 
   // Absent on anything generated before file names were recorded (and on
   // ordinary media, which this component never renders for) -- those keep
@@ -29,7 +34,7 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
   const fileName = attributes.find((attr) => attr.type === FILE_NAME_ATTRIBUTE)?.value;
 
   if (deleted) {
-    return <Alert color="gray">{t("Export deleted.")}</Alert>;
+    return <Alert color="gray">{t(isExport ? "Export deleted." : "Report deleted.")}</Alert>;
   }
 
   async function handleDownload() {
@@ -67,7 +72,7 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
         setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
       }
 
-      if (isExport && window.confirm(`Delete the export "${fileName ?? detail.handle}"? There is no undo.`)) {
+      if (window.confirm(`Delete this ${kind} "${fileName ?? detail.handle}"? There is no undo.`)) {
         await deleteMedia(token, detail.handle);
         setDeleted(true);
       }
