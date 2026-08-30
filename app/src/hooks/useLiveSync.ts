@@ -62,7 +62,7 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
           // that filter -- so it gets a full (debounced) requery instead.
           // See ViewStore.requeryDebounced's doc comment.
           if (store.view.baseFilter) {
-            store.requeryDebounced();
+            store.requeryDebounced(cursor);
             continue;
           }
           // Same reasoning, for a view's ad hoc user-typed filter (see
@@ -76,7 +76,7 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
           // into the one bulk requery requeryDebounced() already does for
           // the cases above, instead of patching row by row.
           if (tableNotifications.length > REQUERY_THRESHOLD) {
-            store.requeryDebounced();
+            store.requeryDebounced(cursor);
             continue;
           }
           // Persisted once this table's whole batch has landed, not per

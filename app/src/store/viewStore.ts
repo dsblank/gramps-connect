@@ -720,14 +720,34 @@ export class ViewStore {
    * re-derived" treatment applyLiveChange() gives a selected row) -- a
    * baseFilter view is exactly the case where an unrelated live change is
    * expected to arrive *while* a row is open (Messages: someone else
-   * adding a note shouldn't silently close the one you're reading). */
-  requeryDebounced(): void {
+   * adding a note shouldn't silently close the one you're reading).
+   *
+   * `cursor`, when given, is stamped via persistLiveState() the same way a
+   * granular applyLiveChange() patch already is (discussion #4, F2's known
+   * gap): without this, a baseFilter view's live-synced cache was never
+   * written back to OPFS at all, so every cold reload paid a full refetch
+   * regardless of how current the tab actually was. Only useLiveSync.ts's
+   * own live-sync-triggered calls have one to give -- every other caller
+   * here (after this tab's own delete/compose/drop-media/etc. write) has
+   * no live-sync cursor to stamp and just omits it, which simply skips the
+   * persist (no regression: none of those call sites persisted before
+   * this either). If this call is dropped by the
+   * `if (this.requeryTimer) return` guard below (a burst of triggers
+   * within the debounce window), so is its `cursor` -- safe to lose: it
+   * just means whatever cursor the run that *does* fire was called with
+   * gets used, which is never wrong, only possibly a little behind
+   * (self-corrects the next isCacheStale() walk, same tolerance the rest
+   * of this cache design already leans on). */
+  requeryDebounced(cursor?: number): void {
     if (this.requeryTimer) return; // already scheduled
     this.requeryTimer = setTimeout(() => {
       this.requeryTimer = null;
       this.suppressSelectionClear = true;
       this.runQuery(this.whereExpr, false, { preserveDisplayUntilCaughtUp: true })
-        .then(() => this.reconcileSelection())
+        .then(() => {
+          this.reconcileSelection();
+          if (cursor !== undefined) this.persistLiveState(cursor);
+        })
         .catch((err) => {
           console.error(`[${this.view.label}] live-sync requery failed`, err);
         })
