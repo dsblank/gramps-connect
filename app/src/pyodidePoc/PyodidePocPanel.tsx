@@ -17,7 +17,7 @@ import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
 import { getViewStore } from "../store/registry";
 import { subscribeTreeChange } from "../store/treeChangeBus";
-import { fetchGramplets, saveGrampletManifest } from "./grampletMedia";
+import { canAuthorGramplets, effectiveAddedViews, fetchGramplets, writeLocalAddedViews } from "./grampletMedia";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import type { Gramplet, PyodideWorkerResponse } from "./types";
@@ -65,6 +65,12 @@ function readStoredCollapsed(viewKey: string): boolean {
 }
 
 export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
+  // Gates "Create new Gramplet" and each tab's own edit-pencil below --
+  // see grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION doc comment for why
+  // this is a higher bar than plain Media edit rights. Read once per
+  // render, same as every other hasPermissions() call site in this app
+  // (the JWT it reads doesn't change mid-render).
+  const canAuthor = canAuthorGramplets();
   const [gramplets, setGramplets] = useState<Gramplet[]>([]);
   const [listStatus, setListStatus] = useState<ListStatus>("loading");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -284,16 +290,16 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     });
   }, [viewKey, activeId, gramplets]);
 
-  // Which of the fetched Gramplets show as a tab on *this* view
-  // (`addedViews`, toggled via the (+)/(-) glyphs below) vs. which are
-  // eligible but not added yet (`views` says this type is allowed, but
-  // it's not in `addedViews`) -- the "+ Add Gramplet" menu's own options.
-  // Both fall back to OBJECT_TYPES ("every type") only for TS's sake --
-  // fetchGramplets() already normalizes every real Gramplet to have both
-  // arrays set, see grampletMedia.ts.
-  const tabGramplets = gramplets.filter((g) => (g.addedViews ?? OBJECT_TYPES).includes(viewKey));
+  // Which of the fetched Gramplets show as a tab on *this* view in *this
+  // browser* (effectiveAddedViews() -- this viewer's own localStorage
+  // choice, see grampletMedia.ts) vs. which are eligible but not added yet
+  // (`views` says this type is allowed, but it's not in the effective
+  // addedViews) -- the "+ Add Gramplet" menu's own options. `views` falls
+  // back to OBJECT_TYPES only for TS's sake -- fetchGramplets() already
+  // normalizes every real Gramplet to have it set, see grampletMedia.ts.
+  const tabGramplets = gramplets.filter((g) => effectiveAddedViews(g).includes(viewKey));
   const availableGramplets = gramplets.filter(
-    (g) => (g.views ?? OBJECT_TYPES).includes(viewKey) && !(g.addedViews ?? OBJECT_TYPES).includes(viewKey)
+    (g) => (g.views ?? OBJECT_TYPES).includes(viewKey) && !effectiveAddedViews(g).includes(viewKey)
   );
 
   // Keeps the active tab valid across a view switch (Person -> Family
@@ -324,40 +330,47 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [resultExpanded]);
 
-  async function removeFromView(gramplet: Gramplet) {
-    if (!gramplet.handle) return;
-    const updated = { ...gramplet, addedViews: (gramplet.addedViews ?? OBJECT_TYPES).filter((v) => v !== viewKey) };
-    try {
-      await saveGrampletManifest(gramplet.handle, updated);
-      setGramplets((prev) => prev.map((g) => (g.id === gramplet.id ? updated : g)));
-    } catch (err) {
-      console.error("[gramplets] failed to remove from view", err);
-    }
+  // Local-only now (F9) -- no permission needed, no tree write, and no
+  // `gramplet.handle` guard either (this browser's own tab layout isn't
+  // tied to the Media object's existence the way saving its manifest was).
+  // setGramplets() with a new array (same contents) is just to force a
+  // re-render -- tabGramplets/availableGramplets above read
+  // effectiveAddedViews() fresh on every render, they just have no other
+  // way to know a plain localStorage write happened.
+  function removeFromView(gramplet: Gramplet) {
+    writeLocalAddedViews(gramplet.id, effectiveAddedViews(gramplet).filter((v) => v !== viewKey));
+    setGramplets((prev) => [...prev]);
   }
 
-  async function addToView(gramplet: Gramplet) {
-    if (!gramplet.handle) return;
-    const updated = { ...gramplet, addedViews: [...(gramplet.addedViews ?? OBJECT_TYPES), viewKey] };
-    try {
-      await saveGrampletManifest(gramplet.handle, updated);
-      setGramplets((prev) => prev.map((g) => (g.id === gramplet.id ? updated : g)));
-      setActiveId(gramplet.id);
-    } catch (err) {
-      console.error("[gramplets] failed to add to view", err);
-    }
+  function addToView(gramplet: Gramplet) {
+    writeLocalAddedViews(gramplet.id, [...effectiveAddedViews(gramplet), viewKey]);
+    setGramplets((prev) => [...prev]);
+    setActiveId(gramplet.id);
   }
 
   // Shared by "Create new Gramplet" (in the same menu as "+ Add
-  // Gramplet") and each tab's own edit-pencil: either way, a refetch
-  // picks up the save, and selecting it as the active tab makes the
-  // result immediately visible -- "Create new Gramplet" already saved
-  // with `views`/`addedViews` scoped to this view (see
-  // GrampletEditDialog's own defaultViewKey handling), so it's already a
-  // tab here by the time this runs; editing an existing tab just re-runs
-  // whatever changed.
+  // Gramplet") and each tab's own edit-pencil: either way, a refetch picks
+  // up the save, and selecting it as the active tab makes the result
+  // immediately visible. Doesn't touch this view's own tab layout --
+  // handleNewGrampletSaved below does that for the "new" case, and editing
+  // an existing tab shouldn't move it in or out of anyone's view at all.
   async function handleGrampletDialogSaved(gramplet: Gramplet) {
     await loadGramplets();
     setActiveId(gramplet.id);
+  }
+
+  // "Create new Gramplet"'s own onSaved -- unlike an edit, a brand new
+  // Gramplet should show up as a tab right back where it was created
+  // (matching what `newGramplet(defaultViewKey)`'s in-memory addedViews
+  // used to do server-side, before F9 made addedViews local-only and
+  // stopped writing it to the tree at all -- see grampletMedia.ts's
+  // uploadGramplet()). `gramplet.addedViews` here is that same in-memory
+  // value GrampletEditDialog's handleSave() computed and handed back, just
+  // never persisted -- seeding *this browser's* localStorage with it is
+  // this view's replacement for what used to be a shared tree write.
+  async function handleNewGrampletSaved(gramplet: Gramplet) {
+    if (gramplet.addedViews?.length) writeLocalAddedViews(gramplet.id, gramplet.addedViews);
+    await handleGrampletDialogSaved(gramplet);
   }
 
   // Runs the selected tab's gramplet -- on mount (the initially-active
@@ -640,16 +653,18 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                                 CircleGlyphButton's default <button> would
                                 otherwise nest inside it, invalid HTML (see
                                 its own doc comment on this prop). */}
-                            <CircleGlyphButton
-                              component="span"
-                              glyph="✏️"
-                              label={`Edit ${gramplet.label}`}
-                              size={14}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingHandle(gramplet.handle ?? null);
-                              }}
-                            />
+                            {canAuthor && (
+                              <CircleGlyphButton
+                                component="span"
+                                glyph="✏️"
+                                label={`Edit ${gramplet.label}`}
+                                size={14}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingHandle(gramplet.handle ?? null);
+                                }}
+                              />
+                            )}
                             <CircleGlyphButton
                               component="span"
                               glyph="−"
@@ -672,7 +687,9 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                       <CircleGlyphButton glyph="+" label="Add a Gramplet" onClick={() => {}} />
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Item onClick={() => setCreatingNew(true)}>Create new Gramplet</Menu.Item>
+                      {canAuthor && (
+                        <Menu.Item onClick={() => setCreatingNew(true)}>Create new Gramplet</Menu.Item>
+                      )}
                       {availableGramplets.length > 0 && (
                         <>
                           <Menu.Divider />
@@ -740,7 +757,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
           <GrampletEditDialog
             target={{ kind: "new", defaultViewKey: viewKey }}
             onClose={() => setCreatingNew(false)}
-            onSaved={handleGrampletDialogSaved}
+            onSaved={handleNewGrampletSaved}
           />
         </Suspense>
       )}

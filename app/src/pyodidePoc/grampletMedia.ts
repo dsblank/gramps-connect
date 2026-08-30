@@ -7,13 +7,22 @@
 // mechanism GENERATED_VIEW already uses for reports/exports
 // (`exists(tags, name == '...')`), no backend change needed.
 //
-// This makes a Gramplet a real tree object: it syncs to every client,
-// travels with a Gramps XML export, and (today, no extra work) is
-// editable/deletable by anyone who can edit Media -- see the project
-// memory's "known, accepted risk" note before building any permission
-// scoping on top of this.
+// This makes a Gramplet a real tree object: it syncs to every client and
+// travels with a Gramps XML export. Authoring (creating one, or editing an
+// existing one's code) is gated on GRAMPLET_AUTHOR_PERMISSION below, above
+// ordinary Media edit rights -- see its own doc comment for why (discussion
+// #4, F9: an ordinary Editor being able to silently change what code runs
+// in another user's browser, under that user's own token, was flagged as a
+// real trust problem, not just a load one). That gate is enforced
+// client-side only (every caller in this app funnels through it, and
+// GrampletEditDialog.tsx checks it again itself as a second line of
+// defense) -- gramps-web-api has no dedicated Gramplet permission of its
+// own, so the underlying Media object is still technically writable by
+// anyone with plain EditObject via the raw API. Closing that for good
+// needs a real backend permission, which is out of scope for a
+// client-only fix.
 import { API_BASE } from "../config";
-import { getToken } from "../auth/auth";
+import { getToken, hasPermissions } from "../auth/auth";
 import { fetchPage, parseErrorMessage } from "../store/api";
 import { MEDIA_VIEW } from "../store/views";
 import { uploadMedia, updateMediaFile, setMediaDesc, getOrCreateTagHandle, tagAndDescribeMedia } from "../store/jobsApi";
@@ -22,6 +31,75 @@ import type { Gramplet } from "./types";
 
 export const GRAMPLET_TAG_NAME = "Gramplet";
 const GRAMPLET_MIME = "application/json";
+
+/** The permission every Gramplet-authoring entry point in this app gates
+ * on (PyodidePocPanel.tsx's "Create new Gramplet" and per-tab edit-pencil,
+ * MediaGrampletEditButton.tsx, MenuBar.tsx's "Add Gramplet…",
+ * GrampletEditDialog.tsx itself) -- deliberately Owner-tier, not the plain
+ * `EditObject` any Editor already has for every other Media object.
+ * gramps-web-api has no permission of its own for "may author Gramplet
+ * code" (it's an ordinary Media object server-side), so this reuses
+ * `EditTree`: the closest existing Owner-tier permission in meaning, since
+ * a Gramplet's code runs in *every viewer's* browser once they add it to
+ * their own view, not just the author's -- the same "affects the tree for
+ * everyone, not just your own edit" character `EditTree` already gates
+ * elsewhere. */
+export const GRAMPLET_AUTHOR_PERMISSION = "EditTree";
+
+export function canAuthorGramplets(): boolean {
+  return hasPermissions(GRAMPLET_AUTHOR_PERMISSION);
+}
+
+// Per-user, per-browser "which of my views does this Gramplet show a tab
+// on" -- discussion #4, F9's other half: this used to be `addedViews` on
+// the shared manifest itself (toggled via PyodidePocPanel.tsx's (+)/(-)
+// glyphs, written back with the same saveGrampletManifest() PUT authoring
+// uses), so one person's "add to my People view" pushed a tab into every
+// other viewer's People view too, with no choice of their own in it. Now
+// local-only, same localStorage-per-key pattern PyodidePocPanel.tsx's own
+// panel `height`/`collapsed` already use -- never written back to the
+// tree, and (unlike those two) not something authoring needs to touch, so
+// removing a Gramplet from your own view needs no permission at all.
+const ADDED_VIEWS_STORAGE_PREFIX = "gramps-connect:grampletAddedViews:";
+
+function addedViewsStorageKey(grampletId: string): string {
+  return `${ADDED_VIEWS_STORAGE_PREFIX}${grampletId}`;
+}
+
+/** This browser's own choice of which views show `grampletId` as a tab, or
+ * null if never set here -- callers fall back to the Gramplet's own
+ * (legacy, pre-F9) manifest `addedViews` in that case, see
+ * effectiveAddedViews() below. */
+function readLocalAddedViews(grampletId: string): string[] | null {
+  try {
+    const raw = localStorage.getItem(addedViewsStorageKey(grampletId));
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((v) => typeof v === "string") ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeLocalAddedViews(grampletId: string, viewKeys: string[]): void {
+  try {
+    localStorage.setItem(addedViewsStorageKey(grampletId), JSON.stringify(viewKeys));
+  } catch {
+    // Storage full/unavailable -- the (+)/(-) toggle just won't stick
+    // across a reload, not worth surfacing as an error over.
+  }
+}
+
+/** Which views `gramplet` actually shows a tab on, in *this* browser --
+ * this browser's own localStorage choice if it's ever touched the (+)/(-)
+ * toggle for this Gramplet, else the value its manifest was saved with
+ * (only ever non-empty for a Gramplet saved before F9 shipped -- see
+ * normalizeGramplet() below, which is why an untouched *new* Gramplet
+ * correctly starts out added to no view at all rather than every view). */
+export function effectiveAddedViews(gramplet: Gramplet): string[] {
+  const local = gramplet.id ? readLocalAddedViews(gramplet.id) : null;
+  return local ?? gramplet.addedViews ?? [];
+}
 
 function isGramplet(value: unknown): value is Gramplet {
   if (!value || typeof value !== "object") return false;
@@ -37,17 +115,27 @@ function isGramplet(value: unknown): value is Gramplet {
   );
 }
 
-/** Fills in `views`/`addedViews` when a manifest doesn't have them (the 3
- * seed examples, uploaded before either field existed) -- "every object
- * type" is exactly the behavior those Gramplets already had (shown as a
- * tab on every list), so this keeps that rather than having them silently
- * vanish everywhere the moment this feature landed. Also attaches `handle`
- * (the Media object's own, not part of the stored JSON -- see types.ts). */
+/** Fills in `views` when a manifest doesn't have it (the 3 seed examples,
+ * uploaded before the field existed) -- "every object type" is exactly the
+ * behavior those Gramplets already had (selectable everywhere), so this
+ * keeps that rather than having them silently become unselectable the
+ * moment this feature landed. `addedViews` gets no such fallback: a
+ * missing value there means either the same pre-`addedViews` seed examples
+ * (which showed as a tab everywhere before this app tracked *where*
+ * separately from *can run where*, so `[]` -- not added to anything until
+ * a viewer explicitly adds it via effectiveAddedViews()'s own localStorage
+ * layer -- is a deliberate, one-time behavior change, not a bug) or,
+ * post-F9, *every* Gramplet going forward, since authoring no longer
+ * writes this field to the tree at all (see saveGrampletManifest()/
+ * uploadGramplet() below) -- see effectiveAddedViews() for the per-viewer
+ * value this manifest-level one now only ever seeds as a legacy default.
+ * Also attaches `handle` (the Media object's own, not part of the stored
+ * JSON -- see types.ts). */
 function normalizeGramplet(gramplet: Gramplet, handle: string): Gramplet {
   return {
     ...gramplet,
     views: gramplet.views ?? OBJECT_TYPES,
-    addedViews: gramplet.addedViews ?? OBJECT_TYPES,
+    addedViews: gramplet.addedViews ?? [],
     handle,
   };
 }
@@ -103,15 +191,16 @@ export async function fetchGrampletManifest(handle: string): Promise<Gramplet> {
 }
 
 /** Replaces an existing Gramplet's content in place (PUT, same handle) and
- * keeps `desc` mirroring its `label` -- shared by GrampletEditDialog.tsx's
- * Save and PyodidePocPanel.tsx's (+)/(-) addedViews toggles, so both go
- * through one path rather than two copies of the same
- * updateMediaFile()+setMediaDesc() pair. Strips `handle` before writing --
- * it's runtime-only metadata (see types.ts), never part of the stored
- * JSON itself. */
+ * keeps `desc` mirroring its `label` -- called by GrampletEditDialog.tsx's
+ * Save. Strips `handle` before writing -- it's runtime-only metadata (see
+ * types.ts), never part of the stored JSON itself -- and `addedViews`:
+ * post-F9 that's a per-viewer localStorage preference
+ * (effectiveAddedViews()), never written back to the shared manifest, so
+ * an author saving a code edit can't accidentally push their own
+ * PyodidePocPanel tab layout onto every other viewer's. */
 export async function saveGrampletManifest(handle: string, gramplet: Gramplet): Promise<void> {
   const token = await getToken();
-  const { handle: _handle, ...manifest } = gramplet;
+  const { handle: _handle, addedViews: _addedViews, ...manifest } = gramplet;
   const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: GRAMPLET_MIME });
   await updateMediaFile(token, handle, blob, GRAMPLET_MIME);
   await setMediaDesc(token, handle, gramplet.label);
@@ -120,10 +209,17 @@ export async function saveGrampletManifest(handle: string, gramplet: Gramplet): 
 /** Uploads `gramplet` as a new "Gramplet"-tagged Media object: POST the
  * manifest as plain application/json (uploadMedia), get-or-create the
  * Gramplet tag, then set desc/tag_list (tagAndDescribeMedia) -- the same
- * three-step promotion jobsPromote.ts already does for reports/exports. */
+ * three-step promotion jobsPromote.ts already does for reports/exports.
+ * Strips `addedViews` for the same reason saveGrampletManifest() does --
+ * see its own doc comment. The creating tab's own "show up here
+ * immediately" behavior (PyodidePocPanel.tsx's "Create new Gramplet")
+ * instead seeds *that browser's* localStorage preference after this
+ * resolves, from the in-memory value newGramplet() set on the
+ * not-yet-uploaded object -- see GrampletEditDialog.tsx's handleSave(). */
 export async function uploadGramplet(gramplet: Gramplet): Promise<string> {
   const token = await getToken();
-  const blob = new Blob([JSON.stringify(gramplet, null, 2)], { type: GRAMPLET_MIME });
+  const { addedViews: _addedViews, ...manifest } = gramplet;
+  const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: GRAMPLET_MIME });
   const handle = await uploadMedia(token, blob, GRAMPLET_MIME);
   const tagHandle = await getOrCreateTagHandle(token, GRAMPLET_TAG_NAME);
   await tagAndDescribeMedia(token, handle, gramplet.label, tagHandle);

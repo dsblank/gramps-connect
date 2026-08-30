@@ -1,8 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { Box, Button, Loader } from "@mantine/core";
-import { hasPermissions } from "../../auth/auth";
 import type { ObjectDetail } from "../../store/objectDetail";
-import { GRAMPLET_TAG_NAME } from "../../pyodidePoc/grampletMedia";
+import { canAuthorGramplets, GRAMPLET_TAG_NAME } from "../../pyodidePoc/grampletMedia";
 import { t } from "../../i18n/i18n";
 
 // pyodidePoc/ pulls in prismjs/react-simple-code-editor -- lazy so a
@@ -24,7 +23,7 @@ export function MediaGrampletEditButton({ detail, onSaved }: { detail: ObjectDet
   const [opened, setOpened] = useState(false);
   const tags = (detail.extended?.tags as { name?: string }[] | undefined) ?? [];
   const isGramplet = detail.mime === "application/json" && tags.some((tag) => tag.name === GRAMPLET_TAG_NAME);
-  if (!isGramplet || !hasPermissions("EditObject")) return null;
+  if (!isGramplet || !canAuthorGramplets()) return null;
 
   const label = t("Edit this Gramplet");
 

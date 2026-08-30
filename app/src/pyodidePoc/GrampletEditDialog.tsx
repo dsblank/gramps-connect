@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { InfoButton } from "../components/InfoButton";
-import { fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
+import { canAuthorGramplets, fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
 import { GrampletHelpDialog } from "./GrampletHelpDialog";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
@@ -237,17 +237,24 @@ export function GrampletEditDialog({
     otherNames.some((other) => other.handle !== selfHandle && other.label.trim().toLowerCase() === trimmedLabel.toLowerCase());
 
   async function handleSave() {
-    if (!gramplet || isDuplicateName) return;
+    // Second line of defense, not the primary one -- every real entry
+    // point that can reach this dialog (PyodidePocPanel.tsx's "Create new
+    // Gramplet"/edit-pencil, MediaGrampletEditButton.tsx, MenuBar.tsx's
+    // "Add Gramplet…") already gates on this same permission before ever
+    // opening it. See grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION doc
+    // comment for why authoring needs a higher bar than the underlying
+    // Media PUT/POST itself requires.
+    if (!gramplet || isDuplicateName || !canAuthorGramplets()) return;
     setSaving(true);
     setError("");
     try {
       // Narrowing `views` (e.g. from "All" down to one type) shouldn't
       // leave this added to a list it's no longer allowed on --
-      // PyodidePocPanel.tsx's own tab filter only checks `addedViews`,
-      // not `views`, so that inconsistency would otherwise silently
-      // persist rather than showing up anywhere.
+      // PyodidePocPanel.tsx's own tab filter only checks the *effective*
+      // addedViews (grampletMedia.ts), not `views`, so that inconsistency
+      // would otherwise silently persist rather than showing up anywhere.
       const views = gramplet.views ?? OBJECT_TYPES;
-      const toSave = { ...gramplet, views, addedViews: (gramplet.addedViews ?? OBJECT_TYPES).filter((v) => views.includes(v)) };
+      const toSave = { ...gramplet, views, addedViews: (gramplet.addedViews ?? []).filter((v) => views.includes(v)) };
       if (target.kind === "new") {
         await uploadGramplet(toSave);
       } else {
@@ -336,7 +343,7 @@ export function GrampletEditDialog({
             <Button variant="default" onClick={onClose}>
               {t("Cancel")}
             </Button>
-            <Button onClick={handleSave} loading={saving} disabled={isDuplicateName}>
+            <Button onClick={handleSave} loading={saving} disabled={isDuplicateName || !canAuthorGramplets()}>
               {t("Save")}
             </Button>
           </Group>

@@ -17,6 +17,7 @@ import { runMediaExport } from "../store/mediaExportApi";
 import { exportLabel, downloadArchiveLocally } from "../store/jobsPromote";
 import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
+import { GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
 
 // maplibre-gl and terra-draw are the heaviest thing this app can pull in
 // (see MapItemEditorDialog.tsx's own doc comment) -- lazy so a session that
@@ -27,7 +28,10 @@ const MapItemEditorDialog = lazy(() =>
 
 // pyodidePoc/ pulls in prismjs/react-simple-code-editor -- lazy for the
 // same reason MapItemEditorDialog above is: a session that never opens
-// "Add Gramplet…" never fetches either.
+// "Add Gramplet…" never fetches either. GRAMPLET_AUTHOR_PERMISSION below
+// is a plain string constant from the same directory's grampletMedia.ts,
+// not GrampletEditDialog.tsx itself, so importing it plainly doesn't pull
+// prismjs/react-simple-code-editor in regardless.
 const GrampletEditDialog = lazy(() =>
   import("../pyodidePoc/GrampletEditDialog").then((m) => ({ default: m.GrampletEditDialog })));
 
@@ -329,12 +333,15 @@ export function MenuBar({ draftStack }: MenuBarProps) {
             },
             {
               // Also not a draft type -- opens GrampletEditDialog.tsx
-              // directly, same as Add Map Item just above. Needs
-              // EditObject too, same reasoning as Family above: creating a
-              // Gramplet is upload-then-tag (grampletMedia.ts's
-              // uploadGramplet), and tagging is a generic object PUT.
+              // directly, same as Add Map Item just above. Gated well
+              // above the AddObject/EditObject an ordinary Media upload
+              // needs -- see grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION
+              // doc comment (discussion #4, F9): Gramplet code runs in
+              // every viewer's browser who adds it to their own view, not
+              // just the author's, so authoring one needs a higher bar
+              // than editing an ordinary Media object does.
               label: "Add Gramplet…",
-              perm: [PERM_ADD_OBJ, PERM_EDIT_OBJ],
+              perm: GRAMPLET_AUTHOR_PERMISSION,
               onClick: () => setGrampletOpened(true),
             },
           ]}
