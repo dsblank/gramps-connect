@@ -67,6 +67,15 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; detail: ObjectDetail };
 
+// Discussion #4, F7: `handle` changes on every row DataTable's arrow-key
+// handler moves the selection to, one keydown per row at OS key-repeat
+// rate -- holding the key down used to fire one fetchObjectExtended()
+// (the heaviest object endpoint this app calls) per row passed over, with
+// only the last one's result ever used. Debouncing the fetch itself (not
+// the "show a spinner" transition below, which still happens immediately)
+// collapses a fast run of changes into the one the user actually lands on.
+const SELECTION_FETCH_DEBOUNCE_MS = 200;
+
 const SEX_SYMBOL: Record<string, string> = { M: "♂", F: "♀", X: "⚧", U: "" };
 
 /** This *record's own* private flag -- distinct from RefBadges' private
@@ -340,20 +349,27 @@ export function RelatedPanel({
     const key = `${view.key}:${handle}`;
     const isNewRecord = loadedForRef.current !== key;
     if (isNewRecord) setState({ status: "loading" });
-    (async () => {
-      try {
-        const token = await getToken();
-        const detail = await fetchObjectExtended(token, view, handle);
-        if (!cancelled) {
-          loadedForRef.current = key;
-          setState({ status: "ready", detail });
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          const token = await getToken();
+          const detail = await fetchObjectExtended(token, view, handle, controller.signal);
+          if (!cancelled) {
+            loadedForRef.current = key;
+            setState({ status: "ready", detail });
+          }
+        } catch (err: any) {
+          // AbortError means a later effect run superseded this one -- that
+          // run's own catch (or success) already owns `state`, not this one.
+          if (!cancelled && err.name !== "AbortError") setState({ status: "error", message: err.message ?? String(err) });
         }
-      } catch (err: any) {
-        if (!cancelled) setState({ status: "error", message: err.message ?? String(err) });
-      }
-    })();
+      })();
+    }, SELECTION_FETCH_DEBOUNCE_MS);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, [view, handle, revision, refetchNonce]);
 

@@ -56,11 +56,24 @@ export function endpointBaseFor(view: ViewConfig): string {
   return view.endpoint.replace(/query\/$/, "");
 }
 
-/** GET /api/<endpoint-base>/<handle>?extend=all&profile=all&backlinks=1 */
-export async function fetchObjectExtended(token: string, view: ViewConfig, handle: string): Promise<ObjectDetail> {
+/** GET /api/<endpoint-base>/<handle>?extend=all&profile=all&backlinks=1 --
+ * the heaviest object-fetch endpoint this app calls, so a caller driven by
+ * something that can change rapidly (RelatedPanel.tsx's own selection, via
+ * arrow-key repeat) should pass `signal` and actually abort a request it no
+ * longer needs, not just ignore its eventual response client-side -- fewer
+ * requests genuinely in flight at once, and a closed connection at least
+ * gives the server a chance to notice and stop, rather than a guaranteed
+ * client-side-only saving. */
+export async function fetchObjectExtended(
+  token: string,
+  view: ViewConfig,
+  handle: string,
+  signal?: AbortSignal
+): Promise<ObjectDetail> {
   const url = `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
+    signal,
   });
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res));
