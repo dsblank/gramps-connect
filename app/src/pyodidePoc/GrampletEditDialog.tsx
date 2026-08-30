@@ -23,6 +23,7 @@ import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Switch, Text, 
 import { getToken } from "../auth/auth";
 import { InfoButton } from "../components/InfoButton";
 import { canAuthorGramplets, fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
+import { getHomePersonHandle } from "../store/homePersonPreference";
 import { GrampletHelpDialog } from "./GrampletHelpDialog";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
@@ -232,6 +233,11 @@ export function GrampletEditDialog({
         // description above).
         selectedType: null,
         selectedHandle: null,
+        // ...but the Home person isn't view context at all (a per-browser
+        // preference, see homePersonPreference.ts), so get_home_person()
+        // works the same here as it does on a real view -- a Gramplet
+        // built around it is testable from this preview.
+        homePersonHandle: getHomePersonHandle(),
         ...(widgetEvent ? { widgetEvent } : {}),
       });
     } catch (err) {
@@ -328,7 +334,7 @@ export function GrampletEditDialog({
           <Switch
             label={t("Re-run automatically when the selected record changes")}
             description={t(
-              "Only meaningful with a specific View above (not \"All\") -- reads the record currently open on that list as selected_type/selected_handle. Leave off for a tree-wide summary that doesn't care what's selected; this preview here never has a selection either way."
+              "Only meaningful with a specific View above (not \"All\") -- reads the record currently open on that list, as get_selected(). Leave off for a tree-wide summary that doesn't care what's selected; this preview here never has a selection either way."
             )}
             checked={gramplet.listensToSelection ?? false}
             onChange={(e) => setGramplet({ ...gramplet, listensToSelection: e.currentTarget.checked })}

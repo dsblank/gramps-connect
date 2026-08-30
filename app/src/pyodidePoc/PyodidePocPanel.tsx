@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { ActionIcon, Alert, Box, Group, Loader, Menu, Tabs, Text, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
+import { getHomePersonHandle } from "../store/homePersonPreference";
 import { getViewStore } from "../store/registry";
 import { subscribeTreeChange } from "../store/treeChangeBus";
 import { canAuthorGramplets, effectiveAddedViews, fetchGramplets, writeLocalAddedViews } from "./grampletMedia";
@@ -470,6 +471,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         grampletId: gramplet.id,
         selectedType,
         selectedHandle,
+        homePersonHandle: getHomePersonHandle(),
       });
     })();
     return () => {
@@ -529,6 +531,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       grampletId: gramplet.id,
       selectedType,
       selectedHandle,
+      homePersonHandle: getHomePersonHandle(),
       widgetEvent: { key, value },
     });
   }

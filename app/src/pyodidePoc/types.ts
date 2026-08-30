@@ -178,14 +178,23 @@ export interface RunGrampletRequest {
    * standalone Gramplet editor's own preview run, see
    * GrampletEditDialog.tsx). Required (not optional) so every call site
    * has to decide explicitly rather than leaving it undefined by
-   * accident. Seeded into the Python namespace as `selected_type`/
-   * `selected_handle` (see pyodideWorker.ts's BOOTSTRAP_PY) on every run
-   * -- whether or not the Gramplet actually asked to be *re-run* when
-   * selection changes (Gramplet.listensToSelection): a non-listening
-   * Gramplet still sees whatever was selected at the time it ran for
-   * some other reason. */
+   * accident. Read by the Gramplet's own `get_selected()` (see
+   * pyodideWorker.ts's BOOTSTRAP_PY) on every run -- whether or not the
+   * Gramplet actually asked to be *re-run* when selection changes
+   * (Gramplet.listensToSelection): a non-listening Gramplet still sees
+   * whatever was selected at the time it ran for some other reason. */
   selectedType: string | null;
   selectedHandle: string | null;
+  /** The handle of the user's Home person, read from
+   * store/homePersonPreference.ts -- a per-browser, tree-scoped
+   * localStorage preference (the same convention gramps-web itself uses),
+   * NOT Gramps' own db.default_person, and null when this browser has
+   * never set one. Passed through here because a Worker has no
+   * localStorage of its own to read it from; surfaced to a Gramplet as
+   * `get_home_person()`. Unlike selectedType/selectedHandle this has no
+   * view context to it, so the standalone editor's own preview run
+   * carries it too. */
+  homePersonHandle: string | null;
 }
 
 export type PyodideWorkerRequest = RunGrampletRequest;

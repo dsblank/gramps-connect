@@ -65,6 +65,12 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                   "Every other record that refers to this one, grouped by object type, e.g. {'family': [...], 'citation': [...]} -- values are handles, not resolved objects. A single real network round trip, backed by the tree's own reverse-reference index server-side, not a scan over every object of every type. Same for the other 9 types, e.g. db.get_family_backlinks(handle)."
                 )}
               />
+              <SymbolRow
+                symbol="db.get_relationship(person1, person2)"
+                meaning={t(
+                  "How person2 is related to person1, as the same human-readable string Gramps desktop's status bar shows (\"great grandson\", \"first cousin twice removed\") -- None if they aren't related. Computed server-side by the real Gramps relationship calculator. Not cheap (it walks both people's ancestors), so use it for the one or two pairs you display, never in a loop."
+                )}
+              />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">
@@ -83,13 +89,19 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Code>
         </Section>
 
-        <Section title={t("The selected record")}>
+        <Section title={t("The selected record and the Home person")}>
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>
               <SymbolRow
-                symbol="selected"
+                symbol="get_selected()"
                 meaning={t(
-                  "Whichever record is currently open on this list's own detail pane, already fetched as a real Gramps object -- None if nothing is selected."
+                  "Whichever record is currently open on this list's own detail pane, fetched as a real Gramps object -- None if nothing is selected."
+                )}
+              />
+              <SymbolRow
+                symbol="get_home_person()"
+                meaning={t(
+                  "The Person set as the Home person on the Home page, as a real Gramps object -- None if this browser has never set one."
                 )}
               />
             </Table.Tbody>
@@ -100,17 +112,26 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
             )}
           </Text>
           <Code block>
-            {'if selected is not None:\n'
+            {'person = get_selected()\n'
+              + 'if person is not None:\n'
               + '    columns("Selected")\n'
-              + '    row(selected)  # renders as a clickable link, not str(selected)\n'
+              + '    row(person)  # renders as a clickable link, not str(person)\n'
               + "else:\n"
               + '    print("Nothing selected.")'}
           </Code>
           <Text size="sm" c="dimmed">
             {t(
-              "A Gramplet attached to \"All\" views (rather than one specific type) can be handed any kind of record -- import the class you're checking for (from gramps.gen.lib import Person, Family) and use isinstance(selected, Person) to tell them apart; type(selected).__name__ (e.g. \"Person\") is there too, if all you need is a label to display rather than a branch."
+              "A Gramplet attached to \"All\" views (rather than one specific type) can be handed any kind of record -- import the class you're checking for (from gramps.gen.lib import Person, Family) and use isinstance(get_selected(), Person) to tell them apart; type(get_selected()).__name__ (e.g. \"Person\") is there too, if all you need is a label to display rather than a branch."
             )}
           </Text>
+          <Text size="sm" c="dimmed">
+            {t(
+              "The two together are what Gramps desktop's status bar shows -- the selected person's relationship to your Home person:"
+            )}
+          </Text>
+          <Code block>
+            {'print(db.get_relationship(get_home_person(), get_selected()) or "Not related")'}
+          </Code>
         </Section>
 
         <Section title={t("Building a result")}>

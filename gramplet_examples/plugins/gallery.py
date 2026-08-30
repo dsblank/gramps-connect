@@ -5,10 +5,11 @@
 # 4. Turn on Re-run automatically
 # 5. Place the following as Code:
 
-if selected is None:
+person = get_selected()
+
+if person is None:
     html("<i>A person is not selected</i>")
 else:
-    person = selected
     name = person.primary_name
     full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
     html(f"<h3>Media for {full_name}</h3>")

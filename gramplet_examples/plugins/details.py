@@ -5,10 +5,11 @@
 # 4. Turn on Re-run automatically
 # 5. Place the following as Code:
 
-if selected is None:
+person = get_selected()
+
+if person is None:
     html("<i>A person is not selected</i>")
 else:
-    person = selected
     from gramps.gen.lib import EventRoleType, EventType, Person
 
     name = person.primary_name

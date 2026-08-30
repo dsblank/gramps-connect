@@ -250,6 +250,27 @@ const bridge = {
     const data = (await res.json()) as { backlinks?: Record<string, string[]> };
     return JSON.stringify(data.backlinks ?? {});
   },
+  // db.get_relationship()'s bridge half -- gramps-web-api's own
+  // /relations/<handle1>/<handle2> (gramps_webapi/api/resources/
+  // relations.py), which runs the real gramps.gen.relationship
+  // calculator server-side. Deliberately a server call rather than
+  // anything computed here: gen/relationship.py imports gen.plug, which
+  // scripts/build-gramps-wheel.py's minimal gen.lib-only wheel doesn't
+  // ship, and RelationshipCalculator walks the tree through *synchronous*
+  // db.get_person_from_handle()/get_family_from_handle() calls -- every
+  // `Db` method in this worker is `async def`, so it would only ever hand
+  // the calculator coroutines. `depth` is the endpoint's own query arg
+  // (max generations to search for a common ancestor); `locale` is left
+  // unset, same as every other call in this file, so the server picks its
+  // own default.
+  async relationship(handle1: string, handle2: string, depth: number): Promise<string> {
+    const path = `/api/relations/${encodeURIComponent(handle1)}/${encodeURIComponent(handle2)}`;
+    const res = await fetch(`${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`, {
+      headers: { Authorization: `Bearer ${currentToken}` },
+    });
+    if (!res.ok) throw new Error(`get_relationship(): ${res.status} ${await res.text()}`);
+    return res.text();
+  },
   // get_number_of_<type>()'s bridge half -- limit=1 (only one row's worth
   // of deserialize/privacy-sanitize work, same as filter()'s own per-page
   // cost) plus count=true, whose match total comes back in the
@@ -544,6 +565,52 @@ class Db:
     index), not a SimpleAccess convenience built on top of one. A single
     instance (\`db\`, below) is what a Gramplet actually uses."""
 
+    async def get_relationship(self, person1, person2, depth=15):
+        """The most direct relationship between two people, as the same
+        human-readable string Gramps desktop's own status bar shows (e.g.
+        "great grandson", "first cousin twice removed", "wife") -- None
+        when the two aren't related within \`depth\` generations, when
+        they're the same person, or when either argument is None (so a
+        Gramplet can hand this get_home_person()/get_selected() straight
+        through without guarding each first).
+
+        Direction matters, exactly as it does in Gramps desktop: the result
+        describes person2 *in terms of* person1, so
+        db.get_relationship(get_home_person(), get_selected()) is the status
+        bar's own "Relationship to home person" (see gui/displaystate.py's
+        display_relationship(), which calls the calculator the same way
+        round). Either argument may be a Person object or a bare handle.
+
+        One real network round trip -- gramps-web-api's own
+        /relations/<h1>/<h2>, which runs the genuine
+        gramps.gen.relationship calculator server-side against the whole
+        tree (see this file's bridge.relationship() for why that can't
+        happen in here). Not cheap for the server (it walks ancestors of
+        both people), so call it for the one or two pairs a Gramplet
+        actually displays, never inside a loop over filter() results --
+        same rule as get_object().
+
+        The endpoint also returns the two generation distances to the common
+        ancestor; those are dropped here in favour of the one string a
+        Gramplet actually displays, the same way get_backlinks() keeps only
+        the field it exists for."""
+        import json as _json
+        if person1 is None or person2 is None:
+            return None
+        handle1 = person1 if isinstance(person1, str) else person1.handle
+        handle2 = person2 if isinstance(person2, str) else person2.handle
+        data = _json.loads(await _bridge.relationship(handle1, handle2, depth))
+        # An empty relationship_string is the endpoint's own "no
+        # relationship found" (confirmed live against gramps-web-api: two
+        # unrelated people, and a person compared with themselves, both
+        # come back ""), returned as None so it can't render as a blank
+        # cell. NOT keyed off distance_common_origin == -1, which looks
+        # like the same signal and isn't: a spouse has no common ancestor
+        # at all, so "wife"/"husband" comes back with -1/-1 distances and
+        # a perfectly good string.
+        return data["relationship_string"] or None
+
+
 
 def _bind_db_handle_method(object_type):
     async def _get_from_handle(self, handle):
@@ -658,31 +725,85 @@ del _object_type
 db = Db()
 
 
-# selected -- the record currently shown in the detail pane of the view
-# this Gramplet is running on (the same one the app's own Related Panel
-# shows -- see ViewStore's own selectedHandle), already resolved to a
-# real Gramps object (Person, Family, ...): the closest equivalent here
-# to Gramps Desktop's own "active person" a sidebar gramplet can react
-# to. None when nothing is selected (an empty list, for instance) or when
-# there's no view context at all (a run from the standalone Gramplet
-# editor's own preview). A Gramplet author never has to know which of the
-# 10 types they got, call the right db.get_<type>_from_handle() itself,
-# or write await to do it -- deliberately not exposed as a separate
-# type+handle pair the way earlier revisions of this did, precisely to
-# avoid that dispatch/await boilerplate; type(selected).__name__ (e.g.
-# "Person") is there if a Gramplet genuinely needs to branch on it.
-# Reassigned fresh by _set_selected() before every run (see runOne() in
-# this file) -- a real network fetch each time there IS a selection (same
-# cost as calling db.get_<type>_from_handle() by hand, just automatic),
-# and a plain global, not per-Gramplet persisted state the way
-# stBootstrap.ts's st.session_state is, since this always reflects
-# whatever the *current* request said, never a previous run's value.
-selected = None
+# The run context -- what the app told this particular run about the view
+# it's running under (see RunGrampletRequest in types.ts): which record is
+# selected, and which person the user has set as their Home person. Held
+# as plain handles, set synchronously by _set_run_context() before every
+# run (see runOne() in this file), and only turned into real Gramps
+# objects by get_selected()/get_home_person() below -- a Gramplet that
+# never asks for them pays nothing, where the earlier \`selected\` *global*
+# this replaces cost an unconditional network round trip on every run
+# whether or not the code touched it.
+_selected_type = None
+_selected_handle = None
+_home_person_handle = None
+
+# Per-run memo for the two functions below, so calling get_selected()
+# twice in one Gramplet is one fetch, not two -- keyed by nothing (there's
+# at most one of each per run), cleared by _set_run_context() so a
+# previous run's object can never leak into the next one's.
+_UNFETCHED = object()
+_selected_object = _UNFETCHED
+_home_person_object = _UNFETCHED
 
 
-async def _set_selected(new_type, new_handle):
-    global selected
-    selected = await get_object(new_type, new_handle) if new_handle is not None else None
+def _set_run_context(new_selected_type, new_selected_handle, new_home_person_handle):
+    global _selected_type, _selected_handle, _home_person_handle
+    global _selected_object, _home_person_object
+    _selected_type = new_selected_type
+    _selected_handle = new_selected_handle
+    _home_person_handle = new_home_person_handle
+    _selected_object = _UNFETCHED
+    _home_person_object = _UNFETCHED
+
+
+async def get_selected():
+    """The record currently shown in the detail pane of the view this
+    Gramplet is running on (the same one the app's own Related Panel
+    shows -- see ViewStore's own selectedHandle), fetched as a real Gramps
+    object (Person, Family, ...): the closest equivalent here to Gramps
+    Desktop's own "active person" a sidebar gramplet can react to. None
+    when nothing is selected (an empty list, for instance) or when there's
+    no view context at all (a run from the standalone Gramplet editor's
+    own preview).
+
+    A Gramplet author never has to know which of the 10 types they got or
+    call the right db.get_<type>_from_handle() itself -- deliberately not
+    exposed as a separate type+handle pair, precisely to avoid that
+    dispatch boilerplate; type(get_selected()).__name__ (e.g. "Person") is
+    there if a Gramplet genuinely needs to branch on it. No \`await\`
+    needed either (autoAwait.ts inserts it), same as every other builtin
+    here.
+
+    One real network round trip the first time it's called in a run (the
+    same cost as calling db.get_<type>_from_handle() by hand, just
+    automatic), then memoized for the rest of that run."""
+    global _selected_object
+    if _selected_object is _UNFETCHED:
+        _selected_object = (
+            await get_object(_selected_type, _selected_handle) if _selected_handle is not None else None
+        )
+    return _selected_object
+
+
+async def get_home_person():
+    """The Person the user has picked as their Home person, as a real
+    gramps.gen.lib.Person -- None if they haven't set one. The app-side
+    preference behind it (store/homePersonPreference.ts) is a per-browser,
+    tree-scoped localStorage value, the same convention gramps-web itself
+    uses, NOT Gramps' own db.default_person -- so this can differ from
+    what Gramps desktop would call the home person for the same tree, and
+    is None on a browser that has simply never set one, even when the
+    tree does have a default_person.
+
+    Same shape as get_selected() above: one round trip on first call in a
+    run, memoized after that, no \`await\` needed."""
+    global _home_person_object
+    if _home_person_object is _UNFETCHED:
+        _home_person_object = (
+            await get_object("person", _home_person_handle) if _home_person_handle is not None else None
+        )
+    return _home_person_object
 
 
 # columns()/row(): named and shaped after Gramps desktop's own GrampyScript
@@ -1224,20 +1345,26 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     const grampletIdArg = JSON.stringify(request.grampletId);
     const widgetEventArg = request.widgetEvent ? JSON.stringify(JSON.stringify(request.widgetEvent)) : "None";
     await pyodide.runPythonAsync(`_st_begin_run(${grampletIdArg}, ${widgetEventArg})`);
-    // selected (see this file's own definition of it, just above
-    // columns()/row()) -- same JSON-then-JS-string encoding as
-    // grampletIdArg/widgetEventArg above, so `None` lands as the bare
-    // Python literal rather than the string `"None"`. Checked against
-    // `undefined` too, not just `null` -- JSON.stringify(undefined)
-    // returns the actual JS value `undefined` (not a string), which the
-    // template literal below would otherwise splice in as the bare,
-    // unquoted word `undefined` -- a Python NameError, not a Python `None`.
-    // `await` (unlike _st_begin_run above, a plain def) -- _set_selected
-    // is `async def` now, since it does a real get_object() fetch when
-    // there's a selection, not just a synchronous variable assignment.
+    // The run context get_selected()/get_home_person() read (see this
+    // file's own _set_run_context(), just above columns()/row()) -- same
+    // JSON-then-JS-string encoding as grampletIdArg/widgetEventArg above,
+    // so `None` lands as the bare Python literal rather than the string
+    // `"None"`. Checked against `undefined` too, not just `null` --
+    // JSON.stringify(undefined) returns the actual JS value `undefined`
+    // (not a string), which the template literal below would otherwise
+    // splice in as the bare, unquoted word `undefined` -- a Python
+    // NameError, not a Python `None`.
+    // Plain (no `await`, unlike the `_set_selected` this replaces): it
+    // only stores handles now, and the get_object() fetch that used to
+    // happen here unconditionally is deferred into get_selected()/
+    // get_home_person() themselves, so a Gramplet that doesn't ask for
+    // either costs no round trip at all.
     const selectedTypeArg = request.selectedType != null ? JSON.stringify(request.selectedType) : "None";
     const selectedHandleArg = request.selectedHandle != null ? JSON.stringify(request.selectedHandle) : "None";
-    await pyodide.runPythonAsync(`await _set_selected(${selectedTypeArg}, ${selectedHandleArg})`);
+    const homePersonHandleArg = request.homePersonHandle != null ? JSON.stringify(request.homePersonHandle) : "None";
+    await pyodide.runPythonAsync(
+      `_set_run_context(${selectedTypeArg}, ${selectedHandleArg}, ${homePersonHandleArg})`
+    );
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
     // _finalize_blocks() flushes any pending print buffer and/or table
     // (see pyodideWorker's BOOTSTRAP_PY) and hands back every block the
