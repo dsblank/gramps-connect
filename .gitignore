@@ -13,12 +13,14 @@ dev-fixtures/layer2-local-cache/api-fixture/indexdir/
 dev-fixtures/layer2-local-cache/api-fixture/persistent_cache/
 dev-fixtures/layer2-local-cache/api-fixture/request_cache/
 dev-fixtures/layer2-local-cache/api-fixture/thumbnail_cache/
+dev-fixtures/layer2-local-cache/api-fixture/server.log
 dev-fixtures/layer2-local-cache/api-fixture-example/gramps-home/
 dev-fixtures/layer2-local-cache/api-fixture-example/data/
 dev-fixtures/layer2-local-cache/api-fixture-example/indexdir/
 dev-fixtures/layer2-local-cache/api-fixture-example/persistent_cache/
 dev-fixtures/layer2-local-cache/api-fixture-example/request_cache/
 dev-fixtures/layer2-local-cache/api-fixture-example/thumbnail_cache/
+dev-fixtures/layer2-local-cache/api-fixture-example/server.log
 
 # dev-fixtures/layer3-sync: generated/fetched, not source
 dev-fixtures/layer3-sync/api-fixture/gramps-home/

@@ -16,7 +16,7 @@ export GRAMPS_RESOURCES="$HOME/gramps/gramps/build/share"
 rm -rf gramps-home data
 mkdir -p gramps-home data
 
-python3 -m gramps_webapi --config ./config.cfg user add testuser testpass \
+python3 -m gramps_webapi --config ./config.cfg user add gramps gramps \
   --role 4 --tree layer2-spike --fullname "Layer 2 Spike"
 
 TREE_ID=$(python3 -m gramps_webapi --config ./config.cfg tree list \
@@ -26,7 +26,7 @@ echo "tree id: $TREE_ID"
 python3 -c "
 import sqlite3
 conn = sqlite3.connect('data/users.sqlite')
-conn.execute(\"UPDATE users SET tree = ? WHERE name = 'testuser'\", ('$TREE_ID',))
+conn.execute(\"UPDATE users SET tree = ? WHERE name = 'gramps'\", ('$TREE_ID',))
 conn.commit()
 "
 
@@ -44,7 +44,7 @@ sleep 2
 
 TOKEN=$(curl -s -X POST http://localhost:5001/api/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username": "testuser", "password": "testpass"}' \
+  -d '{"username": "gramps", "password": "gramps"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 echo "importing dataset..."
@@ -55,7 +55,7 @@ curl -s -X POST http://localhost:5001/api/importers/gramps/file \
 
 echo
 echo "API server running as PID $SERVER_PID on :5001 (kill it when done: kill $SERVER_PID)"
-echo "logs in as testuser/testpass and fetches live from this server via"
+echo "logs in as gramps/gramps and fetches live from this server via"
 echo "POST /api/people/query/ -- no fixture dump needed."
 echo
 echo "to point app/ at this instance instead of dev-fixtures/layer3-sync's"

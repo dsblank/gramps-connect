@@ -47,7 +47,7 @@ git -C "$HOME/gramps/gramps-web-api" worktree add "$COMBINED_WT" -b "scale-100k-
 git -C "$COMBINED_WT" merge --no-edit perf/reindex-throttle-and-backlink-preload
 
 echo "adding user (tree name only -- gets a real tree ID once the server starts)..."
-python3 -m gramps_webapi --config ./config.cfg user add benchuser benchpass \
+python3 -m gramps_webapi --config ./config.cfg user add gramps gramps \
   --role 4 --tree bench-100k --fullname "Scale Bench User"
 
 echo "starting server on :5098 (fast-import branches)..."
@@ -63,13 +63,13 @@ echo "tree id: $TREE_ID"
 python3 -c "
 import sqlite3
 conn = sqlite3.connect('data/users.sqlite')
-conn.execute(\"UPDATE users SET tree = ? WHERE name = 'benchuser'\", ('$TREE_ID',))
+conn.execute(\"UPDATE users SET tree = ? WHERE name = 'gramps'\", ('$TREE_ID',))
 conn.commit()
 "
 
 TOKEN=$(curl -sf -X POST http://localhost:5098/api/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username": "benchuser", "password": "benchpass"}' \
+  -d '{"username": "gramps", "password": "gramps"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 echo "importing $GEN_100K (this is the ~4-5 minute step)..."

@@ -281,12 +281,47 @@ cp app/.env.example app/.env.local   # points at a running gramps-web-api instan
 npm run dev -w app          # starts the Vite dev server
 ```
 
-`app/` needs a real `gramps-web-api` backend to talk to — the quickest
-way to get one locally is `dev-fixtures/layer3-sync/api-fixture/setup.sh`,
-which stands up a Postgres-backed instance with example data;
-`app/.env.example`'s defaults already point at it. **Read the script
-before running it** — it is not idempotent against an already-populated
-tree.
+`app/` needs a real `gramps-web-api` backend to talk to. The lightest one
+is `dev-fixtures/layer2-local-cache/api-fixture-example/setup.sh` — a
+plain-SQLite instance on `:5002` loaded with Gramps' own `example.gramps`
+(set `VITE_API_BASE=http://localhost:5002` in `app/.env.local`); live sync
+works against it, since that is just a poll against
+`/api/transactions/history/`. `dev-fixtures/layer3-sync/api-fixture/setup.sh`
+is the Postgres-backed one `app/.env.example` points at by default, and the
+only fixture for genuinely concurrent multi-writer edits — it additionally
+needs a running Postgres and the `SharedPostgreSQL` addon. Every fixture
+logs in as `gramps`/`gramps`. **Read a script before running it** — none of
+them are idempotent against an already-populated tree.
+
+Every fixture runs `gramps-web-api` from a source checkout in the *same*
+Python environment as the fixture script, so that environment needs:
+
+```sh
+pip install -e ~/gramps/gramps --no-deps          # gramps itself
+pip install -e ~/gramps/gramps-web-api --no-deps  # + its deps, see below
+python3 deploy/webapi-requirements.py ~/gramps/gramps-web-api/pyproject.toml \
+  | pip install -r /dev/stdin
+```
+
+`gramps-web-api`'s `const.py` does `gi.require_version("Gtk", "3.0")` at
+import time, so real PyGObject *and* the GTK3 typelibs have to be present
+(`apt install python3-gi gir1.2-gtk-3.0`, or
+`conda install -c conda-forge pygobject gtk3`); `PyICU` is optional but
+silences a localization warning and fixes name sorting. Note that the
+`/api/<type>/query/` endpoints `app/` is built on landed in
+`gramps-project/gramps-web-api` master — an older fork or branch 404s on
+every one of them.
+
+Gramplets run Python in the browser under Pyodide, against locally-built
+wheels that `npm install`'s postinstall step *skips* (with a log line) when
+they aren't there yet — leaving gramplets failing at run time with
+`No known package with name 'gramps-gen-lib'`. Build them once:
+
+```sh
+python3 scripts/build-stub-wheels.py    # gi + orjson stand-ins for Pyodide
+python3 scripts/build-gramps-wheel.py   # gramps.gen.lib as a Pyodide wheel
+node app/scripts/copy-wasm.mjs          # registers them in public/pyodide/
+```
 
 ### Deploying
 

@@ -24,7 +24,7 @@ rm -rf gramps-home data
 mkdir -p gramps-home data
 
 echo "adding user (tree name only -- gets a real tree ID once the server starts)..."
-python3 -m gramps_webapi --config ./config.cfg user add exampleuser examplepass \
+python3 -m gramps_webapi --config ./config.cfg user add gramps gramps \
   --role 4 --tree example-db --fullname "Example DB"
 
 echo "starting server on :5002 (auto-creates the 'example-db' tree since it's this config's single TREE)..."
@@ -41,13 +41,13 @@ echo "tree id: $TREE_ID"
 python3 -c "
 import sqlite3
 conn = sqlite3.connect('data/users.sqlite')
-conn.execute(\"UPDATE users SET tree = ? WHERE name = 'exampleuser'\", ('$TREE_ID',))
+conn.execute(\"UPDATE users SET tree = ? WHERE name = 'gramps'\", ('$TREE_ID',))
 conn.commit()
 "
 
 TOKEN=$(curl -s -X POST http://localhost:5002/api/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username": "exampleuser", "password": "examplepass"}' \
+  -d '{"username": "gramps", "password": "gramps"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 echo "importing example.gramps..."
@@ -61,4 +61,4 @@ echo "server running as PID $SERVER_PID on :5002 (kill it when done: kill $SERVE
 echo "to point app/ at this instance (example.gramps' varied real dates,"
 echo "vs. ../api-fixture's 100k-person synthetic scale dataset): set"
 echo "VITE_API_BASE=http://localhost:5002 in app/.env.local, then"
-echo "'npm run dev -w app' as usual, logging in as exampleuser/examplepass."
+echo "'npm run dev -w app' as usual, logging in as gramps/gramps."
