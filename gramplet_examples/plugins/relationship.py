@@ -20,11 +20,6 @@ if person is None:
     html("<i>A person is not selected</i>")
 else:
     home_person = get_home_person()
-
-    name = person.primary_name
-    full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
-    html(f"<h3>{full_name}</h3>")
-
     if home_person is None:
         # Nobody has set one yet: it's a per-browser preference (the Home
         # page's own Home person card), not something stored in the tree,
@@ -34,6 +29,8 @@ else:
     elif home_person.handle == person.handle:
         html("<i>This is your Home person</i>")
     else:
+        name = person.primary_name
+        full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
         home_name = home_person.primary_name
         home_full_name = (
             f"{home_name.first_name} {' '.join(s.surname for s in home_name.surname_list)}".strip()
@@ -56,6 +53,6 @@ else:
         row(home_person, relationship or "Not related")
 
         if relationship:
-            print(f"{full_name} is {home_full_name}'s {relationship}.")
+            html(f"{full_name} is {home_full_name}'s {relationship}.")
         else:
-            print(f"No relationship found between {full_name} and {home_full_name}.")
+            html(f"No relationship found between {full_name} and {home_full_name}.")

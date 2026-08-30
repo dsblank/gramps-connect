@@ -71,6 +71,12 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                   "How person2 is related to person1, as the same human-readable string Gramps desktop's status bar shows (\"great grandson\", \"first cousin twice removed\") -- None if they aren't related. Computed server-side by the real Gramps relationship calculator. Not cheap (it walks both people's ancestors), so use it for the one or two pairs you display, never in a loop."
                 )}
               />
+              <SymbolRow
+                symbol="db.get_relationships(person1, person2)"
+                meaning={t(
+                  "Every distinct way the two are related, not just the most direct one -- a list of {'relationship_string': ..., 'common_ancestors': [handle, ...]}, empty when they aren't related. For cousins who married, descent down two lines, and the like; on ordinary data it's the single answer db.get_relationship() already gives."
+                )}
+              />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">

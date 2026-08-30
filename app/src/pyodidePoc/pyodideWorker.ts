@@ -271,6 +271,22 @@ const bridge = {
     if (!res.ok) throw new Error(`get_relationship(): ${res.status} ${await res.text()}`);
     return res.text();
   },
+  // db.get_relationships()'s bridge half -- the same endpoint's `/all`
+  // variant (RelationsResource, vs. relationship()'s RelationResource
+  // above), which returns every distinct path rather than only the most
+  // relevant one, each with the common ancestors it goes through.
+  // Same `depth` query arg and nothing else: the endpoint takes only
+  // depth/locale, and an unrecognized query arg is a hard 422 (confirmed
+  // live with `?limit=1`), so there is deliberately no count/limit to
+  // pass through here.
+  async relationships(handle1: string, handle2: string, depth: number): Promise<string> {
+    const path = `/api/relations/${encodeURIComponent(handle1)}/${encodeURIComponent(handle2)}/all`;
+    const res = await fetch(`${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`, {
+      headers: { Authorization: `Bearer ${currentToken}` },
+    });
+    if (!res.ok) throw new Error(`get_relationships(): ${res.status} ${await res.text()}`);
+    return res.text();
+  },
   // get_number_of_<type>()'s bridge half -- limit=1 (only one row's worth
   // of deserialize/privacy-sanitize work, same as filter()'s own per-page
   // cost) plus count=true, whose match total comes back in the
@@ -609,6 +625,46 @@ class Db:
         # at all, so "wife"/"husband" comes back with -1/-1 distances and
         # a perfectly good string.
         return data["relationship_string"] or None
+
+    async def get_relationships(self, person1, person2, depth=15):
+        """Every distinct way two people are related, where
+        get_relationship() above gives only the single most relevant one
+        -- a list of {"relationship_string": ..., "common_ancestors":
+        [handle, ...]} dicts, in the order the calculator found them, and
+        an empty list when they aren't related at all.
+
+        Worth reaching for when a pair can be related more than one way at
+        once: cousins who married, someone descended from one ancestor
+        down two different lines, half-sibling tangles. On ordinary data
+        this is a one-element list saying what get_relationship() already
+        said, so prefer the singular unless you specifically want to show
+        every path -- this is the more expensive of the two (it doesn't
+        stop at the first answer).
+
+        Same direction and same argument handling as get_relationship():
+        each string describes person2 in terms of person1, and either
+        argument may be a Person object or a bare handle.
+        \`common_ancestors\` are handles, not resolved objects -- pass the
+        ones you actually display through db.get_person_from_handle(),
+        the same way get_backlinks() leaves its handles to the caller.
+
+        There's no way to ask for just the first N: the endpoint takes
+        \`depth\` and nothing else, and an unrecognized query argument is a
+        422 rather than being ignored (confirmed live). Slice the list
+        yourself if you only want to show a few."""
+        import json as _json
+        if person1 is None or person2 is None:
+            return []
+        handle1 = person1 if isinstance(person1, str) else person1.handle
+        handle2 = person2 if isinstance(person2, str) else person2.handle
+        items = _json.loads(await _bridge.relationships(handle1, handle2, depth))
+        # "No relationship" comes back as [{}] -- a one-element list of an
+        # empty dict, not an empty list (relations.py: \`if result == []:
+        # result = [{}]\`), confirmed live for both an unrelated pair and a
+        # person compared with themselves. Dropping entries with no
+        # relationship_string normalizes that to a plain empty list, so
+        # \`if not db.get_relationships(...)\` means what it looks like.
+        return [item for item in items if item.get("relationship_string")]
 
 
 
