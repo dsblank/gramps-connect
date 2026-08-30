@@ -693,9 +693,25 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                       {availableGramplets.length > 0 && (
                         <>
                           <Menu.Divider />
+                          {/* Name first (that's what the tab will say),
+                              with the author's own description under it --
+                              picking one to add is the one place there's
+                              room to explain what it does, unlike the tab
+                              itself. Nothing shows for a Gramplet with no
+                              description (saved before the field existed,
+                              or simply left blank). */}
                           {availableGramplets.map((gramplet) => (
-                            <Menu.Item key={gramplet.id} onClick={() => addToView(gramplet)}>
-                              {gramplet.label}
+                            <Menu.Item
+                              key={gramplet.id}
+                              onClick={() => addToView(gramplet)}
+                              style={{ maxWidth: 320 }}
+                            >
+                              <Text size="sm">{gramplet.label}</Text>
+                              {gramplet.description && (
+                                <Text size="xs" c="dimmed" style={{ whiteSpace: "normal" }}>
+                                  {gramplet.description}
+                                </Text>
+                              )}
                             </Menu.Item>
                           ))}
                         </>

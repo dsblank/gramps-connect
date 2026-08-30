@@ -1,8 +1,9 @@
 # To use this, in the Gramplet Editor:
-# 1. Enter a title, like "Backlinks"
-# 2. Select View: Person
-# 3. Turn on Re-run automatically
-# 4. Place the following as Code:
+# 1. Enter a Name -- this is the tab label -- like "Backlinks"
+# 2. Enter a Description, like "Every other record in the tree that refers to the selected person"
+# 3. Select View: Person
+# 4. Turn on Re-run automatically
+# 5. Place the following as Code:
 
 if selected is None:
     html("<i>A person is not selected</i>")

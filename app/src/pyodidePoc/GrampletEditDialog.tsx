@@ -1,5 +1,5 @@
 // Creates or edits a "Gramplet"-tagged Media object's own JSON manifest
-// (name/views/code) -- "Add Gramplet…" (MenuBar's Add menu) and an existing
+// (name/description/views/code) -- "Add Gramplet…" (MenuBar's Add menu) and an existing
 // Gramplet's "Edit Gramplet" (MediaGrampletEditButton.tsx, the header
 // action slot RelatedPanel.tsx already gives MediaKmlEditButton.tsx for
 // the other Media type this app can meaningfully edit) both open this,
@@ -12,11 +12,14 @@
 // (which lists currently show this as a tab) isn't edited here either --
 // that's PyodidePocPanel.tsx's own per-list (+)/(-) glyphs, not a
 // whole-object-edit concern. Name is enforced unique across every other
-// Gramplet on the tree (case-insensitive) -- the "+ Add Gramplet" menu
-// identifies its options by name alone, so a duplicate would be
-// indistinguishable there.
+// Gramplet on the tree (case-insensitive) -- it's both the tab label and
+// the heading each option shows under in the "+ Add Gramplet" menu, so a
+// duplicate would be hard to tell apart there. `description` is the
+// unconstrained half of that pair: free text, not unique, never shown on
+// the tab, purely what that same menu puts under the name to say what
+// this Gramplet actually does.
 import { useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { InfoButton } from "../components/InfoButton";
 import { canAuthorGramplets, fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
@@ -89,7 +92,14 @@ for person in people(order=[{"column": "change", "direction": "desc"}], limit=10
 function newGramplet(defaultViewKey?: string): Gramplet {
   const views = defaultViewKey ? [defaultViewKey] : OBJECT_TYPES;
   const addedViews = defaultViewKey ? [defaultViewKey] : [];
-  return { id: crypto.randomUUID(), label: "New Gramplet", code: NEW_GRAMPLET_CODE, views, addedViews };
+  return {
+    id: crypto.randomUUID(),
+    label: "New Gramplet",
+    description: "",
+    code: NEW_GRAMPLET_CODE,
+    views,
+    addedViews,
+  };
 }
 
 export function GrampletEditDialog({
@@ -254,7 +264,18 @@ export function GrampletEditDialog({
       // addedViews (grampletMedia.ts), not `views`, so that inconsistency
       // would otherwise silently persist rather than showing up anywhere.
       const views = gramplet.views ?? OBJECT_TYPES;
-      const toSave = { ...gramplet, views, addedViews: (gramplet.addedViews ?? []).filter((v) => views.includes(v)) };
+      // A blank/whitespace-only description is dropped from the manifest
+      // rather than saved as "" -- the "+ Add Gramplet" menu's own
+      // "no description" case (name alone, no second line) is then the
+      // single `description === undefined` one, same as a Gramplet saved
+      // before this field existed.
+      const description = gramplet.description?.trim();
+      const toSave = {
+        ...gramplet,
+        ...(description ? { description } : { description: undefined }),
+        views,
+        addedViews: (gramplet.addedViews ?? []).filter((v) => views.includes(v)),
+      };
       if (target.kind === "new") {
         await uploadGramplet(toSave);
       } else {
@@ -280,6 +301,16 @@ export function GrampletEditDialog({
             value={gramplet.label}
             onChange={(e) => setGramplet({ ...gramplet, label: e.currentTarget.value })}
             error={isDuplicateName ? t("Another Gramplet already has this name") : undefined}
+          />
+          <Textarea
+            label={t("Description")}
+            description={t(
+              "Shown under the name in a list's \"+ Add Gramplet\" menu, to say what this Gramplet does -- the tab itself only ever shows the name."
+            )}
+            value={gramplet.description ?? ""}
+            onChange={(e) => setGramplet({ ...gramplet, description: e.currentTarget.value })}
+            autosize
+            minRows={2}
           />
           <Select
             label={t("View")}

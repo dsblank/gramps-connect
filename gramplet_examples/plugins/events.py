@@ -1,8 +1,9 @@
 # To use this, in the Gramplet Editor:
-# 1. Enter a title, like "Events"
-# 2. Select View: Person
-# 3. Turn on Re-run automatically
-# 4. Place the following as Code:
+# 1. Enter a Name -- this is the tab label -- like "Events"
+# 2. Enter a Description, like "Every event the selected person takes part in, with role, date and place"
+# 3. Select View: Person
+# 4. Turn on Re-run automatically
+# 5. Place the following as Code:
 
 if selected is None:
     html("<i>A person is not selected</i>")

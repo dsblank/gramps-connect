@@ -84,7 +84,21 @@
  * is prototyping a web/Python equivalent of. */
 export interface Gramplet {
   id: string;
+  /** Short name, shown as the Gramplet's own tab label in
+   * PyodidePocPanel.tsx (and mirrored into the underlying Media object's
+   * `desc`, so it's what identifies it in the Media list too). Enforced
+   * unique across the tree by GrampletEditDialog.tsx. Kept short on
+   * purpose -- a tab has very little room; what the Gramplet actually
+   * *does* belongs in `description` below. */
   label: string;
+  /** A sentence saying what this Gramplet shows -- what the "+ Add
+   * Gramplet" menu (PyodidePocPanel.tsx) shows under each name, so
+   * someone picking one to add has more to go on than a two-word tab
+   * label. Optional (undefined for anything saved before this field
+   * existed, and for an author who just doesn't write one) -- the menu
+   * simply shows the name alone in that case. Never used as the tab
+   * label itself. */
+  description?: string;
   /** Python source run in the worker via runPythonAsync (so it can
    * `await filter(...)`/`await get_object(...)`) -- see this file's
    * top comment. */

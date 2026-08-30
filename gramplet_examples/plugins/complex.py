@@ -1,7 +1,8 @@
 # To use this, in the Gramps Connect Gramplet Editor:
-# 1. Enter a title, like "Born in..."
-# 2. Select View: Person
-# 3. Place the following as Code:
+# 1. Enter a Name -- this is the tab label -- like "Born in..."
+# 2. Enter a Description, like "Find everyone born in a given place, with a burial column you name yourself"
+# 3. Select View: Person
+# 4. Place the following as Code:
 #
 # Like plugins/filter.py, this is a tree-wide search, not reactive to the
 # selected person, so "Re-run automatically" isn't needed. Nothing runs

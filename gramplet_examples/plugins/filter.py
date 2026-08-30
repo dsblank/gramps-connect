@@ -1,7 +1,8 @@
 # To use this, in the Gramplet Editor:
-# 1. Enter a title, like "Filter"
-# 2. Select View: Person
-# 3. Place the following as Code:
+# 1. Enter a Name -- this is the tab label -- like "Filter"
+# 2. Enter a Description, like "Search the whole tree for people by name, gender and death date"
+# 3. Select View: Person
+# 4. Place the following as Code:
 #
 # Unlike the other plugins in this folder, this one does not react to the
 # selected person -- it is a tree-wide search, driven by its own widgets

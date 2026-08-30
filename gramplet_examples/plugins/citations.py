@@ -1,8 +1,9 @@
 # To use this, in the Gramplet Editor:
-# 1. Enter a title, like "Citations"
-# 2. Select View: Person
-# 3. Turn on Re-run automatically
-# 4. Place the following as Code:
+# 1. Enter a Name -- this is the tab label -- like "Citations"
+# 2. Enter a Description, like "The citations attached to the selected person, with source, page and confidence"
+# 3. Select View: Person
+# 4. Turn on Re-run automatically
+# 5. Place the following as Code:
 
 if selected is None:
     html("<i>A person is not selected</i>")

@@ -107,6 +107,7 @@ function isGramplet(value: unknown): value is Gramplet {
   return (
     typeof g.id === "string" &&
     typeof g.label === "string" &&
+    (g.description === undefined || typeof g.description === "string") &&
     typeof g.code === "string" &&
     (g.views === undefined || (Array.isArray(g.views) && g.views.every((v) => typeof v === "string"))) &&
     (g.addedViews === undefined ||
