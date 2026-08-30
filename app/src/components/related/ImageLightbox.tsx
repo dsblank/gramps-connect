@@ -2,18 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import { ActionIcon, Box, Loader, Modal } from "@mantine/core";
 import { getToken } from "../../auth/auth";
-import { API_BASE } from "../../config";
+import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
 const DOUBLE_CLICK_SCALE = 2.5;
 
 /** The raw stored file, not a thumbnail -- same /file endpoint
- * MapItemEditorDialog.tsx uses for map overlays, which already established
- * that it accepts the same `jwt` query-param auth as /thumbnail/<size>
- * (an <img src> can't carry an Authorization header). */
-function fileUrl(handle: string, token: string): string {
-  return `${API_BASE}/api/media/${encodeURIComponent(handle)}/file?jwt=${encodeURIComponent(token)}`;
+ * MapItemEditorDialog.tsx uses for map overlays. One image at a time (this
+ * is the only thing on screen while it's open), so it's worth the
+ * fetch-then-blob-URL indirection fetchAuthedBlobUrl() does to keep the
+ * access token out of the URL entirely (discussion #4) -- unlike
+ * MediaThumbnail.tsx/treeData.ts's personThumbnailUrl, which render many
+ * images at once and stay on the simpler `?jwt=` query-param approach. */
+function filePath(handle: string): string {
+  return `/api/media/${encodeURIComponent(handle)}/file`;
 }
 
 function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
@@ -35,7 +38,7 @@ export function ImageLightbox({ opened, onClose, handle }: {
   onClose: () => void;
   handle: string;
 }) {
-  const [token, setToken] = useState<string | null>(null);
+  const [src, setSrc] = useState<string | null>(null);
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const frameRef = useRef<HTMLDivElement>(null);
   // Pointers currently down, keyed by pointerId -- 1 means panning (once
@@ -45,16 +48,33 @@ export function ImageLightbox({ opened, onClose, handle }: {
   const panStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const pinchStart = useRef<{ dist: number; scale: number; cx: number; cy: number } | null>(null);
 
+  // Fetches fresh (not cached across opens) and revokes its own blob URL on
+  // close/handle-change/unmount -- the object URL is only ever meant to
+  // live as long as this one <img> shows it.
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
-    getToken().then((t) => {
-      if (!cancelled) setToken(t);
-    });
+    let objectUrl: string | null = null;
+    (async () => {
+      try {
+        const token = await getToken();
+        const url = await fetchAuthedBlobUrl(filePath(handle), token);
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url;
+        setSrc(url);
+      } catch (err) {
+        console.error("[lightbox] failed to load image", err);
+      }
+    })();
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setSrc(null);
     };
-  }, [opened]);
+  }, [opened, handle]);
 
   // Reset pan/zoom whenever a (re)opened lightbox targets a given image, so
   // reopening -- or promoting to a different photo while it's open -- never
@@ -160,11 +180,11 @@ export function ImageLightbox({ opened, onClose, handle }: {
           touchAction: "none", cursor: transform.scale > 1 ? "grab" : "default",
         }}
       >
-        {!token ? (
+        {!src ? (
           <Loader color="white" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
         ) : (
           <img
-            src={fileUrl(handle, token)}
+            src={src}
             alt=""
             draggable={false}
             style={{

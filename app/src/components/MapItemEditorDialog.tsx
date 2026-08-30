@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getToken } from "../auth/auth";
-import { API_BASE } from "../config";
+import { fetchAuthedBlobUrl } from "../store/authedFetch";
 import { formatHash } from "../hash";
 import {
   fetchAllKmlFeatures, fetchAllKmlImageOverlays, invalidateKmlFeatures, rotatedOverlayCorners, rotatePoint,
@@ -103,6 +103,12 @@ interface OverlayMount {
   resizeMarker: maplibregl.Marker;
   rotateMarker: maplibregl.Marker;
   startMove: (e: maplibregl.MapMouseEvent) => void;
+  /** The blob: URL fetchAuthedBlobUrl() built for this overlay's `image`
+   * source (discussion #4: keeps the access token out of the URL) --
+   * revoked in unmountOverlay() and the map-teardown effect's own cleanup,
+   * not before: maplibre's `image` source keeps reading from it for as
+   * long as the layer exists. */
+  objectUrl: string;
 }
 
 /** See the style.load handler's own doc comment on why every image
@@ -668,6 +674,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         mount.deleteMarker.remove();
         mount.resizeMarker.remove();
         mount.rotateMarker.remove();
+        URL.revokeObjectURL(mount.objectUrl);
       }
       overlayMountsRef.current.clear();
       map.remove();
@@ -695,8 +702,8 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     const box = {
       north: overlay.north, south: overlay.south, east: overlay.east, west: overlay.west, rotation: overlay.rotation,
     };
-    const url = `${API_BASE}/api/media/${encodeURIComponent(overlay.handle)}/file?jwt=${encodeURIComponent(token)}`;
-    map.addSource(sourceId, { type: "image", url, coordinates: rotatedOverlayCorners(box) });
+    const objectUrl = await fetchAuthedBlobUrl(`/api/media/${encodeURIComponent(overlay.handle)}/file`, token);
+    map.addSource(sourceId, { type: "image", url: objectUrl, coordinates: rotatedOverlayCorners(box) });
     // beforeId keeps this under terra-draw's own shape layers -- see
     // OVERLAY_ANCHOR_LAYER's own doc comment.
     map.addLayer({ id: sourceId, type: "raster", source: sourceId }, OVERLAY_ANCHOR_LAYER);
@@ -828,7 +835,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     };
 
     repositionHandles();
-    overlayMountsRef.current.set(overlay.id, { sourceId, box, deleteMarker, resizeMarker, rotateMarker, startMove });
+    overlayMountsRef.current.set(overlay.id, { sourceId, box, deleteMarker, resizeMarker, rotateMarker, startMove, objectUrl });
   }
 
   function unmountOverlay(id: string) {
@@ -840,6 +847,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     mount.rotateMarker.remove();
     if (map.getLayer(mount.sourceId)) map.removeLayer(mount.sourceId);
     if (map.getSource(mount.sourceId)) map.removeSource(mount.sourceId);
+    URL.revokeObjectURL(mount.objectUrl);
     overlayMountsRef.current.delete(id);
   }
 
@@ -882,8 +890,13 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     if (!map) return;
     try {
       const token = await getToken();
-      const url = `${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file?jwt=${encodeURIComponent(token)}`;
-      const image = await loadImageElement(url);
+      // Only used to measure the image's own pixel dimensions below --
+      // mountOverlay() (called further down) fetches this same file again
+      // for its persistent `image` source, so this one's blob URL is
+      // revoked right after reading naturalWidth/naturalHeight rather than
+      // kept around.
+      const objectUrl = await fetchAuthedBlobUrl(`/api/media/${encodeURIComponent(item.handle)}/file`, token);
+      const image = await loadImageElement(objectUrl).finally(() => URL.revokeObjectURL(objectUrl));
       const aspect = image.naturalWidth / image.naturalHeight;
       const centerScreen = map.project(map.getCenter());
       const halfWidthPx = 130;

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { ActionIcon, Box, Loader, Modal, Text } from "@mantine/core";
 import { getToken } from "../../auth/auth";
-import { API_BASE } from "../../config";
+import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 
 export interface CompareImage {
   handle: string;
@@ -14,8 +14,11 @@ export interface CompareImage {
 // much bigger size than its 40/240px inline uses.
 const IMAGE_SIZE = 1600;
 
-function imageUrl(handle: string, token: string): string {
-  return `${API_BASE}/api/media/${encodeURIComponent(handle)}/thumbnail/${IMAGE_SIZE}?jwt=${encodeURIComponent(token)}`;
+// Exactly two images at once, never more -- worth fetchAuthedBlobUrl()'s
+// blob-URL indirection to keep the access token out of the URL (discussion
+// #4), unlike MediaThumbnail.tsx's own many-at-once inline thumbnails.
+function imagePath(handle: string): string {
+  return `/api/media/${encodeURIComponent(handle)}/thumbnail/${IMAGE_SIZE}`;
 }
 
 /** Before/after slider between two Media images (RelatedPanel's Comparisons
@@ -37,20 +40,38 @@ export function CompareModal({ opened, onClose, a, b }: {
 }) {
   const [swapped, setSwapped] = useState(false);
   const [pos, setPos] = useState(50);
-  const [token, setToken] = useState<string | null>(null);
+  // Keyed by handle, not "top"/"bottom" -- swapping flips which handle is
+  // which without needing to refetch either image.
+  const [srcs, setSrcs] = useState<Record<string, string>>({});
   const draggingRef = useRef(false);
   const frameRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
-    getToken().then((t) => {
-      if (!cancelled) setToken(t);
-    });
+    const objectUrls: string[] = [];
+    (async () => {
+      try {
+        const token = await getToken();
+        const entries = await Promise.all(
+          [a.handle, b.handle].map(async (handle) => [handle, await fetchAuthedBlobUrl(imagePath(handle), token)] as const)
+        );
+        if (cancelled) {
+          entries.forEach(([, url]) => URL.revokeObjectURL(url));
+          return;
+        }
+        entries.forEach(([, url]) => objectUrls.push(url));
+        setSrcs(Object.fromEntries(entries));
+      } catch (err) {
+        console.error("[compare] failed to load images", err);
+      }
+    })();
     return () => {
       cancelled = true;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      setSrcs({});
     };
-  }, [opened]);
+  }, [opened, a.handle, b.handle]);
 
   const top = swapped ? a : b;
   const bottom = swapped ? b : a;
@@ -86,18 +107,18 @@ export function CompareModal({ opened, onClose, a, b }: {
       styles={{ body: { height: "100vh", padding: 0, background: "#000" }, content: { background: "#000" } }}
     >
       <Box ref={frameRef} style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
-        {!token ? (
+        {!srcs[bottom.handle] || !srcs[top.handle] ? (
           <Loader color="white" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
         ) : (
           <>
             <img
-              src={imageUrl(bottom.handle, token)}
+              src={srcs[bottom.handle]}
               alt=""
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
             />
             <div style={{ position: "absolute", inset: 0, clipPath: `inset(0 0 0 ${pos}%)` }}>
               <img
-                src={imageUrl(top.handle, token)}
+                src={srcs[top.handle]}
                 alt=""
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
               />

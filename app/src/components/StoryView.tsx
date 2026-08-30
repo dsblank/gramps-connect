@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Box, Group, Image, Loader, Modal, Paper, Stack, Text, useComputedColorScheme } from "@mantine/core";
 import { getToken } from "../auth/auth";
-import { API_BASE } from "../config";
+import { fetchAuthedBlobUrl } from "../store/authedFetch";
 import { MapModeControl } from "./visuals/MapModeControl";
 import type { MapMode } from "./visuals/mapStyles";
 import { StoryMapBackground } from "./story/StoryMapBackground";
@@ -81,20 +81,35 @@ function useHydratedStory(spec: StorySpec | null) {
   return hydrated;
 }
 
-/** Full-bleed authed photo -- same jwt-query-param trick as
- * MediaThumbnail.tsx (an <img> can't carry an Authorization header), just
- * sized for a slide rather than a fixed inline square. */
+/** Full-bleed authed photo -- one slide's worth on screen at a time, so
+ * (discussion #4) worth fetchAuthedBlobUrl()'s blob-URL indirection to
+ * keep the access token out of the URL, unlike MediaThumbnail.tsx's own
+ * many-at-once inline thumbnails. */
 function SlidePhoto({ handle, mime }: { handle: string; mime?: string }) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     setSrc(null);
     if (!mime?.startsWith("image/")) return;
     let cancelled = false;
-    getToken().then((token) => {
-      if (!cancelled) setSrc(`${API_BASE}/api/media/${encodeURIComponent(handle)}/thumbnail/1200?jwt=${encodeURIComponent(token)}`);
-    }).catch(() => {});
+    let objectUrl: string | null = null;
+    (async () => {
+      try {
+        const token = await getToken();
+        const url = await fetchAuthedBlobUrl(`/api/media/${encodeURIComponent(handle)}/thumbnail/1200`, token);
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url;
+        setSrc(url);
+      } catch {
+        // Slide just renders without a photo -- same silent-failure
+        // posture the original .catch(() => {}) here already had.
+      }
+    })();
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [handle, mime]);
   if (!src) return null;

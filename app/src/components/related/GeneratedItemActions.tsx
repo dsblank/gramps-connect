@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Alert, Button, Group } from "@mantine/core";
-import { API_BASE } from "../../config";
 import { getToken } from "../../auth/auth";
 import { deleteMedia, FILE_NAME_ATTRIBUTE } from "../../store/jobsApi";
 import { clickDownloadLink } from "../../store/downloadFile";
+import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { zipHandles } from "./sections/shared";
 import { t } from "../../i18n/i18n";
@@ -36,39 +36,35 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
     setError(null);
     try {
       const token = await getToken();
-      // Two ways to hand the file over, and which one applies comes down
-      // to whether we have a better name than the server's.
-      //
-      // Without one: a plain, programmatically-clicked <a> with the jwt
-      // query param -- same pattern MediaThumbnail.tsx uses for its <img
-      // src>, since neither element can set an Authorization header --
-      // letting the browser download it natively (its own progress UI,
-      // save-as prompt, ...) under the name the response asks for.
-      //
-      // With one: the `download` attribute is the only way to override
-      // that name, and browsers honour it on same-origin URLs alone --
-      // which the API isn't, in any deployment where it's a separate host
-      // (see config.ts). So the file is fetched into a blob first, whose
-      // object URL *is* same-origin, at the cost of holding it in memory
-      // and losing the native progress UI. Exports of a large tree are the
+      // The `download` attribute (the only way to give a downloaded file a
+      // name other than the server's own) only works on same-origin URLs,
+      // which the API isn't in any deployment where it's a separate host
+      // (see config.ts) -- so the file is always fetched into a blob first,
+      // whose object URL *is* same-origin. Discussion #4's "tokens in
+      // image URLs" note: this also means the access token never needs to
+      // ride in the URL at all (the previous no-recorded-name branch used
+      // to build one with `?jwt=`), same fetchAuthedBlobUrl() every other
+      // single-item (not list/gallery) call site uses. `path` is the raw
+      // Media object's own stored filename (checksum-derived) -- the same
+      // name a recorded-name-less download already fell back to before,
+      // just read directly instead of leaving it for the server's
+      // Content-Disposition to imply. Exports of a large tree are the
       // biggest thing through here, and tens of MB is well within what a
       // blob handles.
-      if (!fileName) {
-        const url = `${API_BASE}/api/media/${encodeURIComponent(detail.handle)}/file?download=true&jwt=${encodeURIComponent(token)}`;
-        clickDownloadLink(url);
-      } else {
-        const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(detail.handle)}/file`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`could not fetch the file: ${res.status}`);
-        const objectUrl = URL.createObjectURL(await res.blob());
-        try {
-          clickDownloadLink(objectUrl, fileName);
-        } finally {
-          // Safari needs the URL to outlive the click; a task turn is
-          // enough, and the blob is freed either way.
-          setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-        }
+      const objectUrl = await fetchAuthedBlobUrl(`/api/media/${encodeURIComponent(detail.handle)}/file`, token);
+      try {
+        // clickDownloadLink() only sets the `download` attribute when given
+        // a name -- without one at all, a blob: URL's own <a> would
+        // *navigate* to it instead of downloading, since there's no
+        // Content-Disposition on a locally-built blob to fall back on the
+        // way the old `?download=true` URL relied on. `detail.handle` as
+        // the last resort matches the delete-confirmation text's own
+        // fallback just below.
+        clickDownloadLink(objectUrl, fileName ?? (detail.path as string | undefined) ?? detail.handle);
+      } finally {
+        // Safari needs the URL to outlive the click; a task turn is
+        // enough, and the blob is freed either way.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
       }
 
       if (isExport && window.confirm(`Delete the export "${fileName ?? detail.handle}"? There is no undo.`)) {

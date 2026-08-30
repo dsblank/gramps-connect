@@ -7,7 +7,7 @@ import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
 import { fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds, rotatedOverlayCorners } from "../../store/kmlMedia";
 import { getToken } from "../../auth/auth";
-import { API_BASE } from "../../config";
+import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { readVisualColors } from "./cssVar";
 import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -545,22 +545,33 @@ export function MapCanvas({
     if (!map || !ready) return;
     let cancelled = false;
     const addedIds: string[] = [];
+    // A handful of overlays at once, never an unbounded gallery -- worth
+    // fetchAuthedBlobUrl()'s blob-URL indirection to keep the access
+    // token out of the URL (discussion #4), unlike MediaThumbnail.tsx's
+    // own many-at-once inline thumbnails. Each blob URL is revoked in this
+    // effect's own cleanup below, once maplibre no longer needs it.
+    const objectUrls: string[] = [];
     (async () => {
       const overlays = kmlKey === "" ? [] : await fetchAllKmlImageOverlays(kmlKey.split(","));
       if (cancelled || overlays.length === 0) return;
       const token = await getToken();
       if (cancelled) return;
-      overlays.forEach((overlay, i) => {
+      for (const [i, overlay] of overlays.entries()) {
         const id = `${KML_SOURCE}-image-${i}`;
-        if (map.getSource(id)) return;
-        const url = `${API_BASE}/api/media/${encodeURIComponent(overlay.imageHandle)}/file?jwt=${encodeURIComponent(token)}`;
+        if (map.getSource(id)) continue;
+        const url = await fetchAuthedBlobUrl(`/api/media/${encodeURIComponent(overlay.imageHandle)}/file`, token);
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrls.push(url);
         map.addSource(id, { type: "image", url, coordinates: rotatedOverlayCorners(overlay) });
         // Inserted below the KML shape layers (same "underneath the place
         // markers" reasoning as those) so a place pin sitting on top of an
         // old-map overlay stays clickable.
         map.addLayer({ id, type: "raster", source: id }, KML_FILL_LAYER);
         addedIds.push(id);
-      });
+      }
     })();
     return () => {
       cancelled = true;
@@ -568,6 +579,7 @@ export function MapCanvas({
         if (map.getLayer(id)) map.removeLayer(id);
         if (map.getSource(id)) map.removeSource(id);
       }
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [kmlKey, ready]);
 
