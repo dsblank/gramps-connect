@@ -10,16 +10,24 @@ describe("buildSimpleSearchExpr", () => {
 
   it("ORs a like() clause per field", () => {
     const build = buildSimpleSearchExpr(["gramps_id", "title"]);
-    expect(build("Chicago")).toBe("like(gramps_id, '%Chicago%') or like(title, '%Chicago%')");
+    expect(build("Chicago")).toBe("like(gramps_id, 'Chicago%') or like(title, 'Chicago%')");
   });
 
   it("supports a relationship-hop field path", () => {
     const build = buildSimpleSearchExpr(["father.surname"]);
-    expect(build("Smith")).toBe("like(father.surname, '%Smith%')");
+    expect(build("Smith")).toBe("like(father.surname, 'Smith%')");
   });
 
   it("strips quotes and backslashes rather than escaping them", () => {
     const build = buildSimpleSearchExpr(["name"]);
-    expect(build("O'Brien\\")).toBe("like(name, '%OBrien%')");
+    expect(build("O'Brien\\")).toBe("like(name, 'OBrien%')");
+  });
+
+  // F8 (discussion #4): prefix-only, no leading wildcard -- a query
+  // matching a field's *end* rather than its start is a real, accepted
+  // recall tradeoff for the index-backed scan this enables.
+  it("is prefix-only, not a contains-match", () => {
+    const build = buildSimpleSearchExpr(["title"]);
+    expect(build("hicago")).toBe("like(title, 'hicago%')");
   });
 });
