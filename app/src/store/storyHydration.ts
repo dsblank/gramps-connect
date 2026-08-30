@@ -41,9 +41,9 @@ interface DraftSlide extends Omit<HydratedSlide, "mediaMime"> {
   pendingPlaceHandle?: string;
 }
 
-/** A point's display fields -- `text` comes straight from the stored spec
- * (storyBuilder.ts seeds it from the event's description, but any edit
- * made afterward sticks), while place/date/photo are derived the same way
+/** A point's display fields -- `title`/`text` come straight from the stored
+ * spec (storyBuilder.ts seeds both via storyText.ts, but any edit made
+ * afterward sticks), while place/date/photo are derived the same way
  * storyBuilder.ts used to assemble them at generation time -- read from
  * the current cache instead of a snapshot frozen into the Note. `mediaRef`
  * falls back to the opening card's own photo, matching every point getting
@@ -61,7 +61,12 @@ function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<
   const pending = !place && placeHandle
     ? visualData.pendingKmlPlaces.find((p) => p.handle === placeHandle) : undefined;
   const placeTitle = place?.title ?? pending?.title;
-  const title = point.eventRef ? (record?.type ?? "") : specTitle;
+  // A generated point carries its own seeded heading (storyText.ts's
+  // momentTitle), which is what makes a family story's slides read "Birth
+  // of Josef Meyer" rather than five cards all headed "Birth". Falling back
+  // to the bare event type keeps every story generated before that field
+  // existed rendering exactly as it did.
+  const title = point.title || (point.eventRef ? (record?.type ?? "") : specTitle);
   return {
     title,
     text: point.text || (placeTitle ? `${title} at ${placeTitle}` : title),

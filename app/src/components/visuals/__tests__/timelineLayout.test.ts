@@ -7,6 +7,7 @@ import type { TimelineEvent } from "../../../store/visualData";
 function event(year: number, type = "Birth", handle = `h${year}`): TimelineEvent {
   return {
     handle, grampsId: `E${year}`, type, description: "", placeTitle: "", dateText: String(year), year,
+    datePreposition: "in",
   };
 }
 

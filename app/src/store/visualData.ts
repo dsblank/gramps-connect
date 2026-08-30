@@ -14,7 +14,8 @@
 // prefix of the tree cached, which is why loadVisualData() waits on
 // ensureLoaded() and callers watch loadedCount/totalCount to say so.
 import {
-  DateFormat, formatDate, getStartDate, gregorianSdn, gregorianYmd, type GrampsDate,
+  DateFormat, formatDate, getStartDate, gregorianSdn, gregorianYmd, Modifier, Quality,
+  type GrampsDate,
 } from "@gramps-connect/gramps-date";
 import { getViewStore } from "./registry";
 import { formatEventType, parseHandleList } from "./views";
@@ -78,6 +79,16 @@ export interface EventRecord {
    * separate when zoomed right in, without dragging JS Date (and its
    * year-1..99 and BC handling) into it. */
   year: number | null;
+  /** The preposition `dateText` wants when it's dropped into a sentence
+   * ("was born <here> 3 Mar 1854") -- "on" for an exact full date, "in"
+   * for an exact year or month+year, and "" for everything else, since a
+   * modified or qualified date already formats as its own phrase
+   * ("about 1854", "between 1920 and 1930", "estimated 1854") that reads
+   * correctly with nothing in front of it. Decided here, where the
+   * structured GrampsDate is already parsed, rather than by picking the
+   * display string back apart in storyText.ts. Empty when there's no date
+   * at all, same as `dateText`. */
+  datePreposition: "" | "on" | "in";
 }
 
 /** An EventRecord datable enough to plot -- the timeline's x axis needs a
@@ -156,6 +167,19 @@ export function dateToYear(date: GrampsDate): number | null {
   const yearStart = gregorianSdn(gregorianYear, 1, 1);
   const nextYearStart = gregorianSdn(gregorianYear + 1, 1, 1);
   return gregorianYear + (sdn - yearStart) / (nextYearStart - yearStart);
+}
+
+/** See EventRecord.datePreposition. A range/span/text-only date, or any
+ * "before"/"after"/"about" modifier, or an estimated/calculated quality,
+ * all format as a self-contained phrase -- only a plain, exact date takes a
+ * preposition, and which one depends on whether it names a day. Exported
+ * for its own tests, same as dateToYear above. */
+export function datePrepositionFor(date: GrampsDate | null): "" | "on" | "in" {
+  if (!date) return "";
+  if (date.modifier !== Modifier.NONE || date.quality !== Quality.NONE) return "";
+  const [day, , year] = getStartDate(date);
+  if (!year) return "";
+  return day ? "on" : "in";
 }
 
 /** Same formatting the Events table's own Date column uses, so a dot's
@@ -239,6 +263,7 @@ export function readVisualData(): VisualData {
       placeTitle: placeTitle ?? "",
       dateText: formatStoredDate(dateJson),
       year,
+      datePreposition: datePrepositionFor(date),
     };
     eventsByHandle.set(handle, record);
     if (year !== null) events.push(record as TimelineEvent);

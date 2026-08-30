@@ -1,8 +1,11 @@
 // Structured replacement for ObjectEditDialog.tsx's old raw-JSON textarea
 // ("json" field kind) -- a story is just a title plus a list of slides, so
-// this exposes exactly that: one card per point with Event/Media pickers
-// and a lightly-stylable text field, plus add/remove/reorder controls and
-// a Preview button that opens the real StoryView on the in-progress spec.
+// this exposes exactly that: one card per point with Event/Media pickers,
+// its own heading, and a lightly-stylable text field, plus add/remove/
+// reorder controls and a Preview button that opens the real StoryView on
+// the in-progress spec. Title and text are the two fields a generated
+// story seeds and then hands over (storyText.ts) -- everything else on a
+// slide stays a reference that's re-resolved at presentation time.
 import { useEffect, useState } from "react";
 import { Button, Card, Group, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../../auth/auth";
@@ -103,6 +106,12 @@ function StorySlideCard({ point, index, total, labels, onLabel, onUpdate, onRemo
           buildExpr={MEDIA_VIEW.simpleSearch?.buildExpr}
           placeholder={MEDIA_VIEW.simpleSearch?.placeholder}
           renderLabel={(item) => pickerResultLabel("media", item)}
+        />
+        <TextInput
+          label={t("Title")}
+          placeholder={t("Defaults to the event's own type")}
+          value={point.title ?? ""}
+          onChange={(e) => onUpdate({ title: e.currentTarget.value || undefined })}
         />
         <StoryTextField
           label={t("Text")}

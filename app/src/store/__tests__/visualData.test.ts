@@ -20,7 +20,7 @@ vi.mock("../registry", () => ({
 
 import { fetchPage } from "../api";
 import { ViewStore } from "../viewStore";
-import { dateToYear, readVisualData } from "../visualData";
+import { datePrepositionFor, dateToYear, readVisualData } from "../visualData";
 
 function date(partial: Partial<GrampsDate> & { dateval: GrampsDate["dateval"] }): GrampsDate {
   return {
@@ -97,6 +97,30 @@ describe("dateToYear", () => {
 
   it("falls back to the whole year when the wire date carried no sortval", () => {
     expect(dateToYear(date({ dateval: [15, 6, 1900, false] }))).toBeCloseTo(1900 + 5 / 12, 6);
+  });
+});
+
+describe("datePrepositionFor", () => {
+  it("uses 'on' only when the date names a day", () => {
+    expect(datePrepositionFor(date({ dateval: [3, 3, 1854, false] }))).toBe("on");
+  });
+
+  it("uses 'in' for a year or a month and year", () => {
+    expect(datePrepositionFor(date({ dateval: [0, 0, 1854, false] }))).toBe("in");
+    expect(datePrepositionFor(date({ dateval: [0, 3, 1854, false] }))).toBe("in");
+  });
+
+  it("gives a modified or qualified date nothing to lead it", () => {
+    // "about 3 Mar 1854" and "estimated 1854" already read as phrases --
+    // storyText.ts drops them into a sentence unprefixed.
+    expect(datePrepositionFor(date({ dateval: [3, 3, 1854, false], modifier: Modifier.ABOUT }))).toBe("");
+    expect(datePrepositionFor(date({ dateval: [0, 0, 1854, false], quality: Quality.ESTIMATED }))).toBe("");
+    expect(datePrepositionFor(date({ dateval: [0, 0, 1920, false], modifier: Modifier.RANGE }))).toBe("");
+  });
+
+  it("is empty when there is no date at all", () => {
+    expect(datePrepositionFor(null)).toBe("");
+    expect(datePrepositionFor(date({ dateval: [0, 0, 0, false] }))).toBe("");
   });
 });
 
@@ -217,7 +241,7 @@ describe("eventsByHandle", () => {
     // plotted on the timeline's axis.
     const { eventsByHandle, events } = readVisualData();
     expect(events.some((e) => e.handle === "e2")).toBe(false);
-    expect(eventsByHandle.get("e2")).toMatchObject({ type: "Death", year: null });
+    expect(eventsByHandle.get("e2")).toMatchObject({ type: "Death", year: null, datePreposition: "" });
   });
 
   it("shares its objects with `events` rather than storing dated ones twice", () => {
@@ -229,5 +253,10 @@ describe("eventsByHandle", () => {
     // Not in placeOfEvent (nowhere to put it) but still a real event.
     const { eventsByHandle } = readVisualData();
     expect(eventsByHandle.get("e3")?.type).toBe("Census");
+  });
+
+  it("carries the preposition its formatted date wants in a sentence", () => {
+    // e1's date is year-only, so storyText.ts writes "... in 1900".
+    expect(readVisualData().eventsByHandle.get("e1")).toMatchObject({ dateText: "1900", datePreposition: "in" });
   });
 });

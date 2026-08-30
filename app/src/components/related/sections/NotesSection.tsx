@@ -3,7 +3,7 @@ import { Alert, Text, UnstyledButton } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { getTagHandleCached, MESSAGE_TYPE, TODO_DONE_TAG } from "../../../store/notesApi";
 import { detachRefListEntry } from "../../../store/refListApi";
-import { generatePersonStory, STORY_TYPE } from "../../../store/storyApi";
+import { generateStory, STORY_SOURCE_VIEWS, STORY_TYPE } from "../../../store/storyApi";
 import type { StorySpec } from "../../../store/storyBuilder";
 import { NOTE_VIEW } from "../../../store/views";
 import { StoryView } from "../../StoryView";
@@ -60,26 +60,29 @@ function useDoneTagHandle(): string | null {
 
 /** "+ Add a story" -- the Stories section's own generate-and-attach
  * trigger, replacing the old header-icon StoryButton.tsx (now deleted).
- * Person-only (storyBuilder.ts's buildPersonStory only knows how to read a
- * Person's own events), same permission gate the header icon used to have.
- * Preserves that button's own behavior of opening the presentation
- * immediately once the note's written, rather than requiring a second
- * click into the new row. */
+ * Offered on the types storyApi.ts has a seeding rule for
+ * (STORY_SOURCE_VIEWS: a person's own events, or a family's events merged
+ * with its members' births and deaths), with the same permission gate the
+ * header icon used to have. Preserves that button's own behavior of
+ * opening the presentation immediately once the note's written, rather
+ * than requiring a second click into the new row. */
 function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["view"]; detail: SectionProps["detail"]; onAttached: () => void }) {
   const [spec, setSpec] = useState<StorySpec | null>(null);
   const [opened, setOpened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (view.key !== "person" || !hasPermissions("AddObject", "EditObject")) return null;
+  if (!STORY_SOURCE_VIEWS.has(view.key) || !hasPermissions("AddObject", "EditObject")) return null;
 
   async function handleClick() {
     setBusy(true);
     setError(null);
     try {
+      // Only the person rule uses this -- a family story names itself from
+      // its own resolved father/mother (storyBuilder.ts's buildFamilyStory).
       const personName = summaryLine("person", detail) || "this person";
       const token = await getToken();
-      const built = await generatePersonStory(token, view, detail, personName);
+      const built = await generateStory(token, view, detail, personName);
       onAttached();
       setSpec(built);
       setOpened(true);
@@ -126,10 +129,10 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   const noteRows = rows.filter(({ target }) => !isMessage(target) && !isStory(target));
   const messageRows = rows.filter(({ target }) => isMessage(target));
   const storyRows = rows.filter(({ target }) => isStory(target));
-  // "+ Add a story" only offered on a person's own panel -- same reasoning
-  // AddStoryControl's own internal gate has, kept here too so the Stories
-  // SectionShell itself doesn't render empty for every other type.
-  const canAddStory = view.key === "person" && hasPermissions("AddObject", "EditObject");
+  // "+ Add a story" only offered where there's a seeding rule -- same
+  // reasoning AddStoryControl's own internal gate has, kept here too so the
+  // Stories SectionShell itself doesn't render empty for every other type.
+  const canAddStory = STORY_SOURCE_VIEWS.has(view.key) && hasPermissions("AddObject", "EditObject");
   // Every editable type's own edit dialog also has a Notes field
   // (PersonEditDialog.tsx/FamilyEditDialog.tsx/ObjectEditDialog.tsx's
   // "refList" field kind) -- this live attach/detach is a quicker path to
