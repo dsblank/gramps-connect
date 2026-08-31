@@ -358,6 +358,11 @@ export function MenuBar({ draftStack }: MenuBarProps) {
             { label: "Map", onClick: () => goTo("map") },
             { label: "Timeline", onClick: () => goTo("timeline") },
             { label: "Graphs", onClick: () => goTo("tree") },
+            // Not a plot like the three above -- a query box over the
+            // server's own full-text index (SearchView.tsx), across every
+            // object type at once, not the per-view local-cache search
+            // boxes each table's own FilterBar already has.
+            { label: "Search all", onClick: () => goTo("search"), separatorBefore: true },
           ]}
         />
         <AppMenu

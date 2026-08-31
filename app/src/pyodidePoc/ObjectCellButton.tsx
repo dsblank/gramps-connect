@@ -52,6 +52,9 @@ export function ObjectCellButton({ cell }: { cell: ObjectCell }) {
     map: t("Show on Map"),
     timeline: t("Put on Timeline"),
     tree: t("See as Tree"),
+    // VISUAL_APPLICABLE above never lists "search" -- this entry exists
+    // only to keep the Record exhaustive, same as VisualButtons.tsx's LABELS.
+    search: t("Search all"),
   };
 
   return (

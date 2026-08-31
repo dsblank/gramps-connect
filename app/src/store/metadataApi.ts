@@ -34,10 +34,12 @@ export interface Metadata {
  *
  * Not identical to that panel, though. Our own line replaces "Gramps Web
  * Frontend", and the lines describing things this client never touches are
- * dropped rather than copied for symmetry: Sifts (server-side search --
- * this client searches its own local copy), OCR and chat (nothing here
- * reaches either), multi-tree (on its way to being the assumption here
- * rather than a mode worth reporting), and Gramps QL, the `?gql=` filter
+ * dropped rather than copied for symmetry: Sifts's own version/config
+ * fields here (View > Search all does now call GET /api/search/, see
+ * searchApi.ts, but doesn't read anything off this metadata response to do
+ * it), OCR and chat (nothing here reaches either), multi-tree (on its way
+ * to being the assumption here rather than a mode worth reporting), and
+ * Gramps QL, the `?gql=` filter
  * language, which nothing here sends -- every list in this app queries
  * through `where_expr`, i.e. gramps-object-query-language, which is the
  * one below it and a different package entirely. What's left is what could
