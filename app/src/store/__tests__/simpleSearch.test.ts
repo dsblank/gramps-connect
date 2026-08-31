@@ -10,24 +10,28 @@ describe("buildSimpleSearchExpr", () => {
 
   it("ORs a like() clause per field", () => {
     const build = buildSimpleSearchExpr(["gramps_id", "title"]);
-    expect(build("Chicago")).toBe("like(gramps_id, 'Chicago%') or like(title, 'Chicago%')");
+    expect(build("Chicago")).toBe("like(gramps_id, '%Chicago%') or like(title, '%Chicago%')");
   });
 
   it("supports a relationship-hop field path", () => {
     const build = buildSimpleSearchExpr(["father.surname"]);
-    expect(build("Smith")).toBe("like(father.surname, 'Smith%')");
+    expect(build("Smith")).toBe("like(father.surname, '%Smith%')");
   });
 
   it("strips quotes and backslashes rather than escaping them", () => {
     const build = buildSimpleSearchExpr(["name"]);
-    expect(build("O'Brien\\")).toBe("like(name, 'OBrien%')");
+    expect(build("O'Brien\\")).toBe("like(name, '%OBrien%')");
   });
 
-  // F8 (discussion #4): prefix-only, no leading wildcard -- a query
-  // matching a field's *end* rather than its start is a real, accepted
-  // recall tradeoff for the index-backed scan this enables.
-  it("is prefix-only, not a contains-match", () => {
+  // F8 (discussion #4) made this prefix-only for an index-backed scan;
+  // reverted (gramps-web-api session 2026-08-31) once benchmarking against
+  // the 100k-row bench fixtures showed prefix vs. infix cost was within
+  // noise on every field these builders actually target -- see
+  // simpleSearch.ts's own doc comment for the numbers. A contains-match
+  // finding a field's *middle*, not just its start, was the whole point of
+  // reverting, so this now asserts the opposite of the old rule.
+  it("is a contains-match, not prefix-only", () => {
     const build = buildSimpleSearchExpr(["title"]);
-    expect(build("hicago")).toBe("like(title, 'hicago%')");
+    expect(build("hicag")).toBe("like(title, '%hicag%')");
   });
 });

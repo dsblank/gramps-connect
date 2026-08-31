@@ -9,10 +9,13 @@ const SEARCH_FIELDS = ["given_name", "surname", "gramps_id"];
  * surname. Quote/backslash characters are stripped rather than escaped,
  * since a where_expr is a parsed expression, not a value to sanitize into.
  *
- * Prefix-only per word (trailing wildcard, no leading one) -- see
- * simpleSearch.ts's own doc comment for why (discussion #4, F8): index-
- * backed scan instead of a full one, at the cost of "ith" no longer
- * finding "Smith". */
+ * Leading+trailing wildcard per word -- see simpleSearch.ts's own doc
+ * comment for why the prefix-only rule (discussion #4, F8) was reverted:
+ * given_name/surname/gramps_id are all flat, secondary-indexed columns on
+ * person, and a benchmark against them showed prefix vs. infix cost was
+ * within noise either way (`count: true` already forces full predicate
+ * evaluation regardless of pattern), so prefix-only was pure recall loss
+ * ("ith" no longer finding "Smith") for no measured speed benefit. */
 export function buildPersonSearchExpr(query: string): string | null {
   const trimmed = query.replace(/,/g, " ").trim();
   if (trimmed.length < 2) return null;
@@ -24,6 +27,6 @@ export function buildPersonSearchExpr(query: string): string | null {
   if (words.length === 0) return null;
 
   return words
-    .map((word) => `(${SEARCH_FIELDS.map((field) => `like(${field}, '${word}%')`).join(" or ")})`)
+    .map((word) => `(${SEARCH_FIELDS.map((field) => `like(${field}, '%${word}%')`).join(" or ")})`)
     .join(" and ");
 }

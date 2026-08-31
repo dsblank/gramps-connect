@@ -12,18 +12,18 @@ const RESULT_LIMIT = 20;
 
 interface RecordPickerProps {
   view: ViewConfig;
-  /** The flat column to search, prefix-matched (`like(<field>, '<term>%')`)
-   * by default -- e.g. "title" for Place/Source. A caller with its own
+  /** The flat column to search, matched (`like(<field>, '%<term>%')`) by
+   * default -- e.g. "title" for Place/Source. A caller with its own
    * multi-field search logic (Family's Person picker's comma-order/
    * multi-word given+surname parsing) overrides this via `buildExpr`
    * instead, rather than this component needing to know about it. */
   searchField: string;
   placeholder: string;
   onPick: (item: QueryItem) => void;
-  /** Overrides the plain `like(searchField, '<term>%')` above -- passed by
+  /** Overrides the plain `like(searchField, '%<term>%')` above -- passed by
    * AttachControl.tsx as `view.simpleSearch.buildExpr`, the exact same
    * multi-field OR search FilterBar's own plain-text search mode uses for
-   * that type, rather than a single flat prefix match. */
+   * that type, rather than a single flat match. */
   buildExpr?: (term: string) => string | null;
   /** Overrides `item[searchField]` as each result's label -- passed by
    * AttachControl.tsx's own pickerResultLabel(), built from the same
@@ -69,13 +69,13 @@ export function RecordPicker({
   useEffect(() => {
     const term = query.trim().replace(/['\\]/g, "");
     // A caller-supplied buildExpr is asked even for an empty term (unlike
-    // the plain-prefix-match fallback below, which only ever runs once
+    // the plain flat-field fallback below, which only ever runs once
     // something's typed) -- ComparisonsSection's image-only picker needs its
     // mime filter applied to the default browse-all list too, not just once
     // the user starts typing. Every existing buildExpr (buildSimpleSearchExpr)
     // already returns null for a too-short term on its own, so this is a
     // no-op for every other caller.
-    const whereExpr = buildExpr ? buildExpr(term) : term.length === 0 ? null : `like(${searchField}, '${term}%')`;
+    const whereExpr = buildExpr ? buildExpr(term) : term.length === 0 ? null : `like(${searchField}, '%${term}%')`;
     let cancelled = false;
     setLoading(true);
     // A fresh search invalidates whatever was highlighted from the
