@@ -10,12 +10,14 @@ const SEARCH_FIELDS = ["given_name", "surname", "gramps_id"];
  * since a where_expr is a parsed expression, not a value to sanitize into.
  *
  * Leading+trailing wildcard per word -- see simpleSearch.ts's own doc
- * comment for why the prefix-only rule (discussion #4, F8) was reverted:
- * given_name/surname/gramps_id are all flat, secondary-indexed columns on
- * person, and a benchmark against them showed prefix vs. infix cost was
- * within noise either way (`count: true` already forces full predicate
- * evaluation regardless of pattern), so prefix-only was pure recall loss
- * ("ith" no longer finding "Smith") for no measured speed benefit. */
+ * comment for the full story of why the prefix-only rule (discussion #4,
+ * F8) was reverted: given_name/surname/gramps_id are flat, secondary-
+ * indexed columns on person, but neither backend actually uses that index
+ * for a `like()` here (SQLite's case-insensitive-by-default LIKE can't seek
+ * a binary-collated index; Postgres's index is composite and this data's
+ * skew makes a sequential scan cheaper anyway) -- so prefix vs. infix cost
+ * was within noise either way, and prefix-only was pure recall loss ("ith"
+ * no longer finding "Smith") for no measured speed benefit. */
 export function buildPersonSearchExpr(query: string): string | null {
   const trimmed = query.replace(/,/g, " ").trim();
   if (trimmed.length < 2) return null;

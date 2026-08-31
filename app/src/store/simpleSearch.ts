@@ -9,21 +9,40 @@
  * Leading+trailing wildcard (reverted from the prefix-only rule discussion
  * #4/F8 introduced): benchmarked against the 100k-row bench fixtures
  * (gramps-web-api session 2026-08-31) and a leading wildcard turned out not
- * to be the actual cost driver. Every one of these field paths already
- * routes through `count: true`, which forces the server to evaluate the
- * `like()` predicate over every candidate row regardless of pattern shape
- * to produce an exact total -- so a prefix scan's usual "stop once you have
- * an index-ordered range" saving never applied here in the first place.
- * Measured prefix vs. infix cost on the same field was within noise (e.g.
- * person.surname: 47ms vs. 47ms on SQLite, 64ms vs. 66ms on Postgres, for
- * 101,518 rows). What actually moved the needle 6-15x was whether the field
- * is a flat, secondary-indexed column (person.surname, place.title,
- * source.title, ...) versus a JSON-embedded or relationship-crossing one
- * (family.father.surname: 116-275ms on 46,315 rows; Note/Message/Story's
- * text.string has no flat-column alternative at all -- Gramps' note table
- * carries no plain text column, only json_data). So the field lists below
- * already do the load-bearing work; this prefix-only rule was pure recall
- * loss ("mith" no longer finding "Smith") for no measured benefit.
+ * to be the actual cost driver. Measured prefix vs. infix cost on the same
+ * field was within noise (e.g. person.surname: 47ms vs. 47ms on SQLite,
+ * 64ms vs. 66ms on Postgres, for 101,518 rows) -- NOT because `count: true`
+ * defeats the index (that was the first theory here and it's wrong: forcing
+ * SQLite's `case_sensitive_like` pragma on, so the index becomes usable,
+ * keeps the windowed count fast too, ~1ms), but because the secondary index
+ * isn't actually being used for either pattern in the first place, for two
+ * different reasons per backend, both confirmed with EXPLAIN:
+ *   - SQLite: `LIKE` is case-insensitive by default, but the index sorts by
+ *     the default binary (case-sensitive) collation, so the planner can't
+ *     turn `col LIKE 'Sm%'` into an index range seek without risking missed
+ *     rows -- it falls back to `SCAN person`, a full table scan, for both
+ *     patterns. (Flipping `case_sensitive_like` on does switch the plan to
+ *     `SEARCH ... USING INDEX person_surname (surname>? AND surname<?)` and
+ *     cuts cost ~40x -- confirming the index itself is fine, just unusable
+ *     under case-insensitive semantics.)
+ *   - PostgreSQL: the index is composite, `(treeid, surname)`, not `surname`
+ *     alone, and this bench fixture's data is dominated by one tree (94% of
+ *     rows) -- the planner correctly prefers `Seq Scan` over an index scan
+ *     that would still touch nearly the whole table either way.
+ * So a "flat, secondary-indexed column" being fast here (person.surname,
+ * place.title, source.title, ...) versus a JSON-embedded or
+ * relationship-crossing one being slow (family.father.surname: 116-275ms on
+ * 46,315 rows; Note/Message/Story's text.string has no flat-column
+ * alternative at all -- Gramps' note table carries no plain text column,
+ * only json_data) has nothing to do with index seeks either -- it's that
+ * comparing a plain TEXT column during a full scan is cheap, while
+ * extracting a nested value from JSON (or crossing a relationship) per row
+ * isn't. "Indexed" was a red herring; "flat column" was the real variable.
+ * (A genuinely index-seek-backed prefix search is possible -- case-sensitive
+ * matching or a NOCASE index would get there -- just not what's happening
+ * today, and it'd trade back the "ith" no longer finding "Smith" recall
+ * loss this revert undid.) The field lists below already do the
+ * load-bearing work; the prefix-only rule bought nothing measurable.
  *
  * Person is the one view that doesn't use this: a name search wants its
  * given/surname split into two fields rather than OR-ed as one match, so
