@@ -29,6 +29,14 @@ export function FilterBar({ view }: FilterBarProps) {
   // simpler than the query language, which stays an opt-in escape hatch
   // (see ViewConfig.simpleSearch).
   const [useGoql, setUseGoqlState] = useState(() => getSearchState(view.key).useGoql);
+  // Whether `input` currently matches what's actually applied to the view --
+  // drives the box's "unapplied" highlight, below. Set explicitly at each
+  // point that changes either side of that comparison, rather than derived
+  // by re-deriving whereExpr from input on every render: simpleSearch's
+  // buildExpr is one-way (plain text -> a where_expr), so there's no
+  // general way to tell whether the *current* input would still produce the
+  // where_expr already applied.
+  const [dirty, setDirtyState] = useState(() => getSearchState(view.key).dirty);
 
   // Both setters also write through to searchState.ts, so the *next*
   // FilterBar mounted for this view.key (after a switch away and back)
@@ -41,6 +49,10 @@ export function FilterBar({ view }: FilterBarProps) {
   function setUseGoql(value: boolean) {
     setUseGoqlState(value);
     setSearchState(view.key, { useGoql: value });
+  }
+  function setDirty(value: boolean) {
+    setDirtyState(value);
+    setSearchState(view.key, { dirty: value });
   }
   // Undefined for a view with no help written for it yet -- the button is
   // simply absent there, rather than opening an empty dialog. Shown in both
@@ -64,21 +76,65 @@ export function FilterBar({ view }: FilterBarProps) {
   // *external* clear, so treating mount itself as one would wipe the very
   // input this component just restored.
   const skipNextWhereExprClear = useRef(true);
+  // Set (only when a real null-transition is about to happen -- see the
+  // GOQL checkbox handler below) just before this component's own apply(null)
+  // drops a now-stale *applied* filter as a side effect of some other
+  // action, so the effect below doesn't mistake that for the external
+  // clear it exists to detect and wipe the box the user didn't ask to
+  // clear.
+  const clearingAppliedFilterOnly = useRef(false);
+
+  // Known gap: a browser's own autofill (or a password-manager extension)
+  // can set the box's DOM value through a path that dispatches no event
+  // onChange (or any other DOM listener) ever sees, so a selection made
+  // that way doesn't mark the box dirty -- confirmed still broken after
+  // trying both a raw input/change DOM listener and the usual
+  // :-webkit-autofill/animationstart CSS trick, neither of which caught
+  // it. Left as-is rather than continuing to guess at more workarounds
+  // blind, with no browser available here to verify one actually works.
+  function handleTextChange(value: string) {
+    setInput(value);
+    // An empty box matches "no filter" whenever that's already what's
+    // applied -- otherwise it's still one Enter/clear-click away from
+    // clearing the *applied* filter (same distinction CloseButton's own
+    // click makes explicitly).
+    setDirty(value !== "" || snapshot.whereExpr !== null);
+  }
+
   useEffect(() => {
     if (skipNextWhereExprClear.current) {
       skipNextWhereExprClear.current = false;
       return;
     }
-    if (snapshot.whereExpr === null) setInput("");
+    if (snapshot.whereExpr !== null) return;
+    if (clearingAppliedFilterOnly.current) {
+      clearingAppliedFilterOnly.current = false;
+      return;
+    }
+    setInput("");
+    setDirty(false);
   }, [snapshot.whereExpr]);
 
-  async function apply(whereExpr: string | null) {
+  // Returns whether the apply actually went through, so callers can decide
+  // whether `input` now matches what's applied (submit()) -- an error means
+  // it doesn't, so the highlight should stay on.
+  async function apply(whereExpr: string | null): Promise<boolean> {
     setError(null);
     setApplying(true);
     try {
-      await getViewStore(view.key).runQuery(whereExpr, false);
+      const store = getViewStore(view.key);
+      // Going back to "no filter" keeps whatever's currently selected in
+      // view rather than jumping to the new result set's default row --
+      // see ViewStore.clearFilter's doc comment.
+      if (whereExpr === null) {
+        await store.clearFilter();
+      } else {
+        await store.runQuery(whereExpr, false);
+      }
+      return true;
     } catch (err: any) {
       setError(err.message ?? String(err));
+      return false;
     } finally {
       setApplying(false);
     }
@@ -88,11 +144,10 @@ export function FilterBar({ view }: FilterBarProps) {
   // too-short input clears the filter, same as an empty box); GOQL mode
   // sends the box's contents straight through as a where_expr.
   function submit() {
-    if (view.simpleSearch && !useGoql) {
-      apply(view.simpleSearch.buildExpr(input));
-    } else {
-      apply(input.trim() || null);
-    }
+    const whereExpr = view.simpleSearch && !useGoql ? view.simpleSearch.buildExpr(input) : input.trim() || null;
+    apply(whereExpr).then((ok) => {
+      if (ok) setDirty(false);
+    });
   }
 
   // Set on a view whose dataset is meant to stay fully fixed, with no
@@ -115,7 +170,15 @@ export function FilterBar({ view }: FilterBarProps) {
           value={input}
           placeholder={view.simpleSearch && !useGoql ? view.simpleSearch.placeholder : view.wherePlaceholder}
           disabled={applying}
-          onChange={(e) => setInput(e.currentTarget.value)}
+          // A very light blue background while `input` matches what's
+          // actually applied -- plain (no background) whenever it's dirty,
+          // e.g. typed-but-not-submitted, or an applied filter dropped out
+          // from under the box by the useGoql toggle (see its handler
+          // below). --mantine-color-blue-light is the same theme-aware
+          // tint RefPickerField.tsx uses for its "new" badge, so this stays
+          // subtle (and still legible) in dark mode too.
+          styles={{ input: { backgroundColor: dirty ? undefined : "var(--mantine-color-blue-light)" } }}
+          onChange={(e) => handleTextChange(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") submit();
           }}
@@ -126,6 +189,7 @@ export function FilterBar({ view }: FilterBarProps) {
                 disabled={applying}
                 onClick={() => {
                   setInput("");
+                  setDirty(false);
                   apply(null);
                 }}
               />
@@ -142,12 +206,25 @@ export function FilterBar({ view }: FilterBarProps) {
               onChange={(e) => {
                 const checked = e.currentTarget.checked;
                 setUseGoql(checked);
-                setInput("");
                 setError(null);
-                // Only requery if a filter is actually active -- otherwise
+                // The typed text stays in the box across the toggle -- it's
+                // just a starting point to edit/resubmit under the new
+                // mode's syntax, not something the toggle should throw
+                // away. But it always needs the "unapplied" highlight,
+                // unconditionally: whatever was applied (if anything) was
+                // built from the old mode's interpretation, which the new
+                // mode isn't guaranteed to reproduce even for an empty box
+                // (GOQL's own placeholder/wherePlaceholder differs from
+                // simpleSearch's), so the toggle itself is always a step
+                // back from "confirmed applied" until resubmitted.
+                setDirty(true);
+                // Only requery when a filter is actually active -- otherwise
                 // this is a no-op apply(null) on every toggle, which still
                 // round-trips the store and flashes the list.
-                if (snapshot.whereExpr !== null) apply(null);
+                if (snapshot.whereExpr !== null) {
+                  clearingAppliedFilterOnly.current = true;
+                  apply(null);
+                }
               }}
             />
           </Tooltip>
@@ -168,6 +245,7 @@ export function FilterBar({ view }: FilterBarProps) {
           // nothing here. Closing the dialog puts it in view.
           onUseExample={(expr) => {
             setInput(expr);
+            setDirty(true);
             setHelpOpen(false);
           }}
         />

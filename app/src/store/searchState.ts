@@ -7,9 +7,13 @@
 export interface SearchState {
   input: string;
   useGoql: boolean;
+  /** True while `input` doesn't match what's actually applied to the view
+   * (typed-but-not-submitted, or an applied filter invalidated by toggling
+   * useGoql) -- drives FilterBar's "unapplied" highlight. */
+  dirty: boolean;
 }
 
-const DEFAULT_STATE: SearchState = { input: "", useGoql: false };
+const DEFAULT_STATE: SearchState = { input: "", useGoql: false, dirty: false };
 
 const state = new Map<string, SearchState>();
 

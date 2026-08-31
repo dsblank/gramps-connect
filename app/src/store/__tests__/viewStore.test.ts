@@ -169,6 +169,78 @@ describe("ViewStore.runQuery preserveDisplayUntilCaughtUp (requeryDebounced)", (
   });
 });
 
+describe("ViewStore.clearFilter", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("keeps the current selection pointed at the same record once the filter is dropped", async () => {
+    const store = new ViewStore(TAG_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H2")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+    expect(store.getSnapshot().selectedHandle).toBe("H2"); // default selection under the filter
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H2"), tagRow("H3")], next_after: null },
+      totalCount: 3,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H2"));
+    mockRank(1); // H1 sorts before H2 in the unfiltered set
+
+    await store.clearFilter();
+
+    expect(store.getSnapshot().whereExpr).toBeNull();
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+    expect(store.getSnapshot().selectedIndex).toBe(1);
+    expect(store.getSnapshot().selectionIsDefault).toBe(false);
+  });
+
+  it("is a no-op when no filter is active", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    const before = store.getSnapshot();
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+
+    await store.clearFilter();
+
+    expect(store.getSnapshot()).toBe(before);
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the new dataset's default selection if the selected record no longer resolves", async () => {
+    const store = new ViewStore(TAG_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H2")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+
+    // navigateToHandle()'s internal runQuery(null, false), dropping the filter:
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H3")], next_after: null },
+      totalCount: 2,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(null); // H2 was deleted concurrently
+
+    // clearFilter()'s own fallback runQuery(null, false), once navigateToHandle gives up:
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H3")], next_after: null },
+      totalCount: 2,
+    });
+
+    await store.clearFilter();
+
+    expect(store.getSnapshot().whereExpr).toBeNull();
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+    expect(store.getSnapshot().selectionIsDefault).toBe(true);
+  });
+});
+
 describe("ViewStore.applyLiveChange", () => {
   beforeEach(() => {
     vi.mocked(fetchPage).mockReset();

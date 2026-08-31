@@ -261,6 +261,26 @@ export class ViewStore {
     return true;
   }
 
+  /** Clears the active filter while keeping the current selection pointed
+   * at the same record, if it still exists in the unfiltered results --
+   * used by FilterBar.tsx whenever a search collapses back to "no filter"
+   * (the clear button, Enter on an emptied/too-short box, or the
+   * plain-text/GOQL toggle), where landing back on an empty search box
+   * isn't a reason to also jump the detail pane to a different row.
+   * Delegates to navigateToHandle() for the actual re-selection -- it
+   * already does exactly this (drop whereExpr, then resolve the handle's
+   * authoritative position server-side) -- and falls back to the ordinary
+   * runQuery()-driven default selection when nothing was selected, or the
+   * selected record no longer resolves (e.g. deleted while the box was
+   * being cleared). */
+  async clearFilter(): Promise<void> {
+    if (this.whereExpr === null) return; // nothing active to clear
+    const handle = this.selectedHandle;
+    if (handle === null || !(await this.navigateToHandle(handle))) {
+      await this.runQuery(null, false);
+    }
+  }
+
   /** The exact 0-based row index `handle` occupies under the view's
    * current sort, straight from the server -- a single count-only query
    * for "rows that sort before this one" (X-Total-Count *is* that count).
