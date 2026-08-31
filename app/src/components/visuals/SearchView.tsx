@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Badge, Box, Button, CloseButton, Group, Image, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { API_BASE } from "../../config";
-import { formatHash } from "../../hash";
-import { fetchSearch, type SearchHit } from "../../store/searchApi";
+import { formatHash, parseHash } from "../../hash";
+import { fetchSearch, sortByRelevance, type SearchHit } from "../../store/searchApi";
+import { formatSearchUrlState, parseSearchUrlState } from "../../store/searchUrl";
 import { formatChange, VIEWS } from "../../store/views";
 import { summaryLine } from "../related/summary";
 import { MediaThumbnail } from "../related/MediaThumbnail";
@@ -71,6 +72,24 @@ function goToHit(hit: SearchHit) {
   window.location.hash = formatHash({ viewKey: hit.object_type, handle: hit.handle });
 }
 
+/** Writes `query`/`type` into the hash's own `?query` suffix (hash.ts's
+ * HashRoute.query, via searchUrl.ts's encoding) -- `replaceState`, not
+ * `pushState` or a plain `location.hash =` assignment: a submitted search
+ * is meant to be *this page's* current state (so a link copied right now
+ * points at it, and coming back here later restores it), not its own
+ * Back-able step or a real navigation event -- the hash router already
+ * gives every genuine page-to-page navigation its own history entry
+ * (goToHit below, and every other formatHash caller, still assigns
+ * `location.hash` directly), and `replaceState` deliberately doesn't fire
+ * `hashchange`, so this can never trigger useHistorySync's own
+ * hash-reapplying listener. A no-op write (the URL already says this) is
+ * skipped so an unrelated re-render never nudges history state for
+ * nothing. */
+function syncSearchHash(state: { query: string; type: string | null }) {
+  const next = formatHash({ viewKey: "search", query: formatSearchUrlState(state) });
+  if (window.location.hash !== next) window.history.replaceState(window.history.state, "", next);
+}
+
 type State =
   | { status: "idle" }
   | { status: "loading"; query: string }
@@ -102,14 +121,19 @@ export function SearchView() {
   // first one came back".
   const requestIdRef = useRef(0);
 
-  // `overrideType` lets a tab click search with its *new* selection
-  // immediately, rather than the just-committed setTypeFilter's stale
-  // closure value -- Enter/the Search button call this with no argument
-  // and fall back to whatever tab is already active.
-  async function runSearch(overrideType?: string | null) {
-    const trimmed = query.trim();
-    const type = overrideType !== undefined ? overrideType : typeFilter;
+  // `overrides` lets a caller search with a selection that hasn't (or, for
+  // the initial URL-restore below, never will) land in `query`/`typeFilter`
+  // state yet, rather than a just-committed setState's stale closure value
+  // -- Enter/the Search button call this with no argument and fall back to
+  // whatever's already in state.
+  async function runSearch(overrides?: { query?: string; type?: string | null }) {
+    const trimmed = (overrides?.query ?? query).trim();
+    const type = overrides?.type !== undefined ? overrides.type : typeFilter;
     const requestId = ++requestIdRef.current;
+    // Keeps the URL in sync with whatever was actually just submitted --
+    // including clearing it back down when the box is emptied and
+    // resubmitted -- regardless of whether the fetch below succeeds.
+    syncSearchHash({ query: trimmed, type });
     if (!trimmed) {
       setState({ status: "idle" });
       return;
@@ -119,7 +143,9 @@ export function SearchView() {
       const token = await getToken();
       const { hits, total } = await fetchSearch(token, trimmed, 1, RESULTS_LIMIT, type);
       if (requestIdRef.current !== requestId) return;
-      setState({ status: "ready", query: trimmed, hits, total });
+      // The server doesn't actually return these in relevance order -- see
+      // sortByRelevance's own doc comment in searchApi.ts.
+      setState({ status: "ready", query: trimmed, hits: sortByRelevance(hits), total });
     } catch (err: any) {
       if (requestIdRef.current !== requestId) return;
       setState({ status: "error", query: trimmed, message: err.message ?? String(err) });
@@ -133,8 +159,30 @@ export function SearchView() {
   // resubmitted.
   function selectType(type: string | null) {
     setTypeFilter(type);
-    if (query.trim()) runSearch(type);
+    if (query.trim()) runSearch({ type });
   }
+
+  // Restores a search from the hash's own `?query` suffix (a shared link,
+  // a reload, or coming back to #/search after visiting a result) once, on
+  // mount -- this component unmounts/remounts each time #/search stops/
+  // starts being the active route (App.tsx's `{visualKey === "search" && ...}`),
+  // so a fresh mount is exactly the right moment to re-read it. No cleanup
+  // needed to strip it back out on the way elsewhere: `goToHit` below (and
+  // every other formatHash caller) assigns a brand new hash with no query
+  // of its own, which replaces this one's `?q=...` suffix outright, the
+  // same way it already replaces the route itself -- see hash.ts's
+  // HashRoute.query doc comment for why that's true specifically because
+  // this lives *inside* the hash rather than the URL's own top-level
+  // `location.search`.
+  useEffect(() => {
+    const initial = parseSearchUrlState(parseHash().query);
+    if (initial.query) {
+      setQuery(initial.query);
+      setTypeFilter(initial.type);
+      runSearch({ query: initial.query, type: initial.type });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loading = state.status === "loading";
   const error = state.status === "error" ? state.message : null;
@@ -158,7 +206,7 @@ export function SearchView() {
       empty={empty}
       scope={<TypeTabs active={typeFilter} onSelect={selectType} />}
       toolbar={
-        <Group gap="xs" wrap="nowrap" style={{ width: "100%" }}>
+        <Group gap="xs" wrap="nowrap" style={{ width: "80%" }}>
           <TextInput
             size="sm"
             style={{ flex: 1 }}

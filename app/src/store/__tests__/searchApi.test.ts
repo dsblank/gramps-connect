@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchSearch } from "../searchApi";
+import { fetchSearch, sortByRelevance, type SearchHit } from "../searchApi";
+
+function hit(handle: string, score: number | null): SearchHit {
+  return { handle, object_type: "person", object: {}, score };
+}
 
 function mockFetch(hits: unknown[], total: number) {
   const fetchMock = vi.fn(
@@ -83,5 +87,29 @@ describe("fetchSearch", () => {
     await expect(fetchSearch("test-token", "smith", 1, 20)).rejects.toThrow(
       "search index not available"
     );
+  });
+});
+
+describe("sortByRelevance", () => {
+  it("sorts ascending -- SQLite bm25's convention, more negative is a better match", () => {
+    const hits = [hit("a", -6.48), hit("b", -6.91), hit("c", -6.62), hit("d", -5.76)];
+    expect(sortByRelevance(hits).map((h) => h.handle)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("doesn't mutate the array it's given", () => {
+    const hits = [hit("a", -1), hit("b", -2)];
+    const original = [...hits];
+    sortByRelevance(hits);
+    expect(hits).toEqual(original);
+  });
+
+  it("sorts a null score last, never as a better match than a real one", () => {
+    const hits = [hit("a", -1), hit("b", null), hit("c", -5)];
+    expect(sortByRelevance(hits).map((h) => h.handle)).toEqual(["c", "a", "b"]);
+  });
+
+  it("leaves ties in their original relative order", () => {
+    const hits = [hit("a", -3), hit("b", -3), hit("c", -3)];
+    expect(sortByRelevance(hits).map((h) => h.handle)).toEqual(["a", "b", "c"]);
   });
 });

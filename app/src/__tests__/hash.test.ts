@@ -3,21 +3,21 @@ import { formatHash, isHomeKey, isStorelessKey, isSubjectKey, isVisualKey, parse
 
 describe("parseHash", () => {
   it("reads a plain view route", () => {
-    expect(parseHash("#/place")).toEqual({ viewKey: "place", handle: null, subject: null });
+    expect(parseHash("#/place")).toEqual({ viewKey: "place", handle: null, subject: null, query: null });
   });
 
   it("reads a view route's selected handle", () => {
-    expect(parseHash("#/place/abc123")).toEqual({ viewKey: "place", handle: "abc123", subject: null });
+    expect(parseHash("#/place/abc123")).toEqual({ viewKey: "place", handle: "abc123", subject: null, query: null });
   });
 
   it("falls back to Home for a missing or unknown key", () => {
     for (const hash of ["", "#", "#/", "#/nonsense"]) {
-      expect(parseHash(hash)).toEqual({ viewKey: "home", handle: null, subject: null });
+      expect(parseHash(hash)).toEqual({ viewKey: "home", handle: null, subject: null, query: null });
     }
   });
 
   it("reads an unscoped visual route", () => {
-    expect(parseHash("#/map")).toEqual({ viewKey: "map", handle: null, subject: null });
+    expect(parseHash("#/map")).toEqual({ viewKey: "map", handle: null, subject: null, query: null });
   });
 
   it("reads a visual's subject", () => {
@@ -25,6 +25,7 @@ describe("parseHash", () => {
       viewKey: "map",
       handle: null,
       subject: { type: "person", handle: "abc123" },
+      query: null,
     });
   });
 
@@ -33,7 +34,7 @@ describe("parseHash", () => {
     // handle -- all of them stale/hand-edited URLs that should still land on
     // a working map.
     for (const hash of ["#/map/note:abc123", "#/map/abc123", "#/map/person:", "#/map/:abc123"]) {
-      expect(parseHash(hash)).toEqual({ viewKey: "map", handle: null, subject: null });
+      expect(parseHash(hash)).toEqual({ viewKey: "map", handle: null, subject: null, query: null });
     }
   });
 
@@ -44,18 +45,39 @@ describe("parseHash", () => {
   });
 
   it("reads the Home route", () => {
-    expect(parseHash("#/home")).toEqual({ viewKey: "home", handle: null, subject: null });
+    expect(parseHash("#/home")).toEqual({ viewKey: "home", handle: null, subject: null, query: null });
+  });
+
+  it("reads a trailing ?query off any route shape", () => {
+    expect(parseHash("#/place?q=smith")).toEqual({
+      viewKey: "place", handle: null, subject: null, query: "q=smith",
+    });
+    expect(parseHash("#/place/abc123?q=smith")).toEqual({
+      viewKey: "place", handle: "abc123", subject: null, query: "q=smith",
+    });
+    expect(parseHash("#/search?q=smith&type=person")).toEqual({
+      viewKey: "search", handle: null, subject: null, query: "q=smith&type=person",
+    });
+    expect(parseHash("#/map/person:abc123?q=smith")).toEqual({
+      viewKey: "map", handle: null, subject: { type: "person", handle: "abc123" }, query: "q=smith",
+    });
+  });
+
+  it("reads a bare trailing '?' as no query, same as none at all", () => {
+    expect(parseHash("#/search?").query).toBeNull();
   });
 });
 
 describe("formatHash", () => {
   it("round-trips every route shape through parseHash", () => {
     for (const route of [
-      { viewKey: "place", handle: null, subject: null },
-      { viewKey: "place", handle: "abc123", subject: null },
-      { viewKey: "map", handle: null, subject: null },
-      { viewKey: "timeline", handle: null, subject: { type: "person", handle: "abc123" } },
-      { viewKey: "home", handle: null, subject: null },
+      { viewKey: "place", handle: null, subject: null, query: null },
+      { viewKey: "place", handle: "abc123", subject: null, query: null },
+      { viewKey: "map", handle: null, subject: null, query: null },
+      { viewKey: "timeline", handle: null, subject: { type: "person", handle: "abc123" }, query: null },
+      { viewKey: "home", handle: null, subject: null, query: null },
+      { viewKey: "search", handle: null, subject: null, query: "q=smith&type=person" },
+      { viewKey: "place", handle: "abc123", subject: null, query: "q=smith" },
     ]) {
       expect(parseHash(formatHash(route))).toEqual(route);
     }
@@ -71,6 +93,12 @@ describe("formatHash", () => {
 
   it("drops the subject segment when there is no subject", () => {
     expect(formatHash({ viewKey: "map", handle: null, subject: null })).toBe("#/map");
+  });
+
+  it("appends the query suffix when given one, and omits it otherwise", () => {
+    expect(formatHash({ viewKey: "search", query: "q=smith" })).toBe("#/search?q=smith");
+    expect(formatHash({ viewKey: "search", query: null })).toBe("#/search");
+    expect(formatHash({ viewKey: "search" })).toBe("#/search");
   });
 });
 

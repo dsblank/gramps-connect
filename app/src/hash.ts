@@ -12,6 +12,20 @@ export interface HashRoute {
   handle: string | null;
   /** Only ever set on a visual route -- see VisualSubject. */
   subject: VisualSubject | null;
+  /** An arbitrary `key=value&...` suffix a route carries alongside itself
+   * -- e.g. SearchView's own submitted query text and type filter
+   * (searchUrl.ts). Parsed/formatted generically here, as part of the
+   * hash itself, rather than living in the browser's own top-level
+   * `location.search`: for a single-page app there's no server to ever
+   * see that, and -- concretely, this is why it lives here and not there
+   * -- a hash-only navigation (assigning `location.hash` to jump to a
+   * different route, as every `formatHash` caller does) leaves
+   * `location.search` completely untouched, so state kept there would
+   * silently ride along onto every other page until something remembered
+   * to clean it up by hand. Folded into the hash, a plain route change
+   * drops it automatically -- the new hash string simply doesn't have
+   * one, the same way it doesn't carry the old route's handle either. */
+  query: string | null;
 }
 
 /** The record a visual is scoped to, when it's showing one record's data
@@ -97,32 +111,37 @@ export function isStorelessKey(key: string): boolean {
 
 /** Parses "#/<viewKey>", "#/<viewKey>/<handle>", "#/home", or a visual's
  * "#/<visualKey>/<type>:<handle>" (also tolerates a missing leading slash,
- * or no hash at all). An unrecognized/missing view key falls back to Home
- * rather than erroring -- a fresh load, or a stale/hand-edited URL, should
- * still land somewhere sane, and by the same rule an unparseable subject
- * degrades to the unscoped whole-tree visual rather than to no page at all.
- * A visual still has no selection to restore, so it never carries a plain
- * `handle`; neither does Home. */
+ * or no hash at all), each optionally followed by "?<query>". An
+ * unrecognized/missing view key falls back to Home rather than erroring --
+ * a fresh load, or a stale/hand-edited URL, should still land somewhere
+ * sane, and by the same rule an unparseable subject degrades to the
+ * unscoped whole-tree visual rather than to no page at all. A visual still
+ * has no selection to restore, so it never carries a plain `handle`;
+ * neither does Home -- `query` is the one piece of state either can still
+ * carry (see HashRoute's own doc comment). */
 export function parseHash(hash: string = window.location.hash): HashRoute {
-  const parts = hash.slice(1).split("/").filter(Boolean);
+  const body = hash.slice(1);
+  const qIndex = body.indexOf("?");
+  const routeBody = qIndex === -1 ? body : body.slice(0, qIndex);
+  const query = qIndex === -1 ? null : body.slice(qIndex + 1) || null;
+  const parts = routeBody.split("/").filter(Boolean);
   const [viewKey, handle] = parts;
   if (viewKey && isVisualKey(viewKey)) {
-    return { viewKey, handle: null, subject: parseSubject(handle) };
+    return { viewKey, handle: null, subject: parseSubject(handle), query };
   }
   if (!viewKey || isHomeKey(viewKey)) {
-    return { viewKey: HOME_KEY, handle: null, subject: null };
+    return { viewKey: HOME_KEY, handle: null, subject: null, query };
   }
   if (!VIEWS.some((v) => v.key === viewKey)) {
-    return { viewKey: HOME_KEY, handle: null, subject: null };
+    return { viewKey: HOME_KEY, handle: null, subject: null, query };
   }
-  return { viewKey, handle: handle ?? null, subject: null };
+  return { viewKey, handle: handle ?? null, subject: null, query };
 }
 
 export function formatHash(route: Partial<HashRoute> & { viewKey: string }): string {
+  const suffix = route.query ? `?${route.query}` : "";
   if (isVisualKey(route.viewKey)) {
-    return route.subject
-      ? `#/${route.viewKey}/${formatSubject(route.subject)}`
-      : `#/${route.viewKey}`;
+    return (route.subject ? `#/${route.viewKey}/${formatSubject(route.subject)}` : `#/${route.viewKey}`) + suffix;
   }
-  return route.handle ? `#/${route.viewKey}/${route.handle}` : `#/${route.viewKey}`;
+  return (route.handle ? `#/${route.viewKey}/${route.handle}` : `#/${route.viewKey}`) + suffix;
 }
