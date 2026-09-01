@@ -229,10 +229,11 @@ export function GrampletEditDialog({
         runId,
         grampletId: gramplet.id,
         // No view context here -- this is the standalone preview, not
-        // attached to any one list's own selection (see the Switch's own
-        // description above).
+        // attached to any one list's own selection or filter (see the
+        // Switches' own descriptions above).
         selectedType: null,
         selectedHandle: null,
+        whereExpr: null,
         // ...but the Home person isn't view context at all (a per-browser
         // preference, see homePersonPreference.ts), so get_home_person()
         // works the same here as it does on a real view -- a Gramplet
@@ -338,6 +339,14 @@ export function GrampletEditDialog({
             )}
             checked={gramplet.listensToSelection ?? false}
             onChange={(e) => setGramplet({ ...gramplet, listensToSelection: e.currentTarget.checked })}
+          />
+          <Switch
+            label={t("Re-run automatically when the filter changes")}
+            description={t(
+              "Only meaningful with a specific View above (not \"All\") -- reads the filter currently applied on that list, as get_filter(). Leave off for a Gramplet that doesn't care what's filtered in; this preview here never has a filter either way."
+            )}
+            checked={gramplet.listensToFilter ?? false}
+            onChange={(e) => setGramplet({ ...gramplet, listensToFilter: e.currentTarget.checked })}
           />
           <Group gap="xs">
             <Text size="sm" fw={500}>

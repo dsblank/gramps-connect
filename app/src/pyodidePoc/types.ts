@@ -126,6 +126,17 @@ export interface Gramplet {
    * trigger here). See RunGrampletRequest's own selectedType/
    * selectedHandle for what a listening Gramplet's code actually reads. */
   listensToSelection?: boolean;
+  /** Whether this Gramplet should automatically re-run when the *filter*
+   * currently applied on whichever view it's a tab of changes (FilterBar's
+   * own `apply()`/`clearFilter()`, see ViewStore's `whereExpr`) -- off
+   * (undefined/false) by default, same reasoning as `listensToSelection`
+   * just above: most Gramplets don't care what's filtered in the list
+   * they happen to be a tab on. Edited via a toggle in GrampletEditDialog,
+   * right next to `listensToSelection`. Read by PyodidePocPanel.tsx (only
+   * for the active tab, same as `listensToSelection`). See
+   * RunGrampletRequest's own `whereExpr` for what a listening Gramplet's
+   * code actually reads (via `get_filter()`). */
+  listensToFilter?: boolean;
   /** The underlying "Gramplet"-tagged Media object's handle -- NOT part of
    * the stored JSON manifest itself (undefined for a brand new, not-yet-
    * uploaded Gramplet); attached by grampletMedia.ts's fetchGramplets()/
@@ -185,6 +196,17 @@ export interface RunGrampletRequest {
    * whatever was selected at the time it ran for some other reason. */
   selectedType: string | null;
   selectedHandle: string | null;
+  /** The where_expr string currently applied on the view this Gramplet is
+   * running under (ViewStore's own `whereExpr`, same value FilterBar.tsx
+   * reads/writes), or null when no filter is active or when there's no
+   * view context at all (the standalone editor's own preview run, same
+   * as selectedType/selectedHandle above). Read by the Gramplet's own
+   * `get_filter()` (see pyodideWorker.ts's BOOTSTRAP_PY) on every run --
+   * whether or not the Gramplet asked to be *re-run* when the filter
+   * changes (Gramplet.listensToFilter): a non-listening Gramplet still
+   * sees whatever filter was applied at the time it ran for some other
+   * reason, same as selectedType/selectedHandle. */
+  whereExpr: string | null;
   /** The handle of the user's Home person, read from
    * store/homePersonPreference.ts -- a per-browser, tree-scoped
    * localStorage preference (the same convention gramps-web itself uses),

@@ -783,16 +783,21 @@ db = Db()
 
 # The run context -- what the app told this particular run about the view
 # it's running under (see RunGrampletRequest in types.ts): which record is
-# selected, and which person the user has set as their Home person. Held
-# as plain handles, set synchronously by _set_run_context() before every
-# run (see runOne() in this file), and only turned into real Gramps
-# objects by get_selected()/get_home_person() below -- a Gramplet that
-# never asks for them pays nothing, where the earlier \`selected\` *global*
-# this replaces cost an unconditional network round trip on every run
-# whether or not the code touched it.
+# selected, which filter is applied, and which person the user has set as
+# their Home person. Held as plain handles/strings, set synchronously by
+# _set_run_context() before every run (see runOne() in this file), and
+# only turned into real Gramps objects by get_selected()/get_home_person()
+# below -- a Gramplet that never asks for them pays nothing, where the
+# earlier \`selected\` *global* this replaces cost an unconditional network
+# round trip on every run whether or not the code touched it. \`_where_expr\`
+# needs no such lazy fetch (get_filter() below just hands back the raw
+# string), but lives here alongside the other two since it's set by the
+# same call at the same time, for the same reason (RunGrampletRequest's own
+# whereExpr, see types.ts).
 _selected_type = None
 _selected_handle = None
 _home_person_handle = None
+_where_expr = None
 
 # Per-run memo for the two functions below, so calling get_selected()
 # twice in one Gramplet is one fetch, not two -- keyed by nothing (there's
@@ -803,12 +808,13 @@ _selected_object = _UNFETCHED
 _home_person_object = _UNFETCHED
 
 
-def _set_run_context(new_selected_type, new_selected_handle, new_home_person_handle):
-    global _selected_type, _selected_handle, _home_person_handle
+def _set_run_context(new_selected_type, new_selected_handle, new_home_person_handle, new_where_expr):
+    global _selected_type, _selected_handle, _home_person_handle, _where_expr
     global _selected_object, _home_person_object
     _selected_type = new_selected_type
     _selected_handle = new_selected_handle
     _home_person_handle = new_home_person_handle
+    _where_expr = new_where_expr
     _selected_object = _UNFETCHED
     _home_person_object = _UNFETCHED
 
@@ -860,6 +866,17 @@ async def get_home_person():
             await get_object("person", _home_person_handle) if _home_person_handle is not None else None
         )
     return _home_person_object
+
+
+def get_filter():
+    """The where_expr string currently applied on the view this Gramplet is
+    running on (FilterBar's own search box, see ViewStore's whereExpr) --
+    the same string filter()'s own \`where\` argument takes, or None when no
+    filter is active or there's no view context at all (the standalone
+    editor's own preview run). Unlike get_selected()/get_home_person() this
+    is a plain string already, not a handle needing a fetch -- no \`await\`
+    needed, and no round trip either way."""
+    return _where_expr
 
 
 # columns()/row(): named and shaped after Gramps desktop's own GrampyScript
@@ -1401,8 +1418,9 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     const grampletIdArg = JSON.stringify(request.grampletId);
     const widgetEventArg = request.widgetEvent ? JSON.stringify(JSON.stringify(request.widgetEvent)) : "None";
     await pyodide.runPythonAsync(`_st_begin_run(${grampletIdArg}, ${widgetEventArg})`);
-    // The run context get_selected()/get_home_person() read (see this
-    // file's own _set_run_context(), just above columns()/row()) -- same
+    // The run context get_selected()/get_home_person()/get_filter() read
+    // (see this file's own _set_run_context(), just above columns()/
+    // row()) -- same
     // JSON-then-JS-string encoding as grampletIdArg/widgetEventArg above,
     // so `None` lands as the bare Python literal rather than the string
     // `"None"`. Checked against `undefined` too, not just `null` --
@@ -1418,8 +1436,9 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     const selectedTypeArg = request.selectedType != null ? JSON.stringify(request.selectedType) : "None";
     const selectedHandleArg = request.selectedHandle != null ? JSON.stringify(request.selectedHandle) : "None";
     const homePersonHandleArg = request.homePersonHandle != null ? JSON.stringify(request.homePersonHandle) : "None";
+    const whereExprArg = request.whereExpr != null ? JSON.stringify(request.whereExpr) : "None";
     await pyodide.runPythonAsync(
-      `_set_run_context(${selectedTypeArg}, ${selectedHandleArg}, ${homePersonHandleArg})`
+      `_set_run_context(${selectedTypeArg}, ${selectedHandleArg}, ${homePersonHandleArg}, ${whereExprArg})`
     );
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
     // _finalize_blocks() flushes any pending print buffer and/or table

@@ -113,7 +113,14 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   const resultCacheRef = useRef<
     Map<
       string,
-      { code: string; runNonce: number; selectedHandle: string | null; status: RunStatus; response: PyodideWorkerResponse | null }
+      {
+        code: string;
+        runNonce: number;
+        selectedHandle: string | null;
+        whereExpr: string | null;
+        status: RunStatus;
+        response: PyodideWorkerResponse | null;
+      }
     >
   >(new Map());
   // One in-flight run per Gramplet id, queued or actively running (see
@@ -133,6 +140,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         code: string;
         runNonce: number;
         selectedHandle: string | null;
+        whereExpr: string | null;
         runId: string;
         status: RunStatus;
         response: PyodideWorkerResponse | null;
@@ -159,6 +167,10 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // subscribe() itself carries no payload, just "something changed",
   // see viewStore.ts.
   const lastSelectedHandleRef = useRef<string | null>(null);
+  // Same idea as lastSelectedHandleRef above, but for the filter-reactivity
+  // half of the effect below (Gramplet.listensToFilter, ViewStore's
+  // whereExpr).
+  const lastWhereExprRef = useRef<string | null>(null);
 
   function getWorker(): Worker {
     if (!workerRef.current) {
@@ -195,6 +207,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
             code: entry.code,
             runNonce: entry.runNonce,
             selectedHandle: entry.selectedHandle,
+            whereExpr: entry.whereExpr,
             status: entry.status,
             response: entry.response,
           });
@@ -266,28 +279,39 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Selection reactivity, opt-in per Gramplet (Gramplet.listensToSelection)
-  // -- unlike the tree-change effect above (deliberately broad: any change,
-  // any Gramplet), this only subscribes at all when the *active* tab's own
-  // Gramplet asked for it, so a plain tree-wide summary Gramplet (most of
-  // them) pays nothing extra just because some other row got clicked.
-  // ViewStore.subscribe() carries no payload (just "something in this
-  // view's snapshot changed" -- loadedCount, revision, whereExpr, ... as
-  // well as selectedHandle), so lastSelectedHandleRef is what tells a real
-  // selection change apart from one of those unrelated snapshot updates.
-  // Only the active tab reacts, same as the tree-change effect -- a
-  // backgrounded listening Gramplet just picks up the latest selection
-  // next time it's reactivated (its own activeId-driven run, below).
+  // Selection/filter reactivity, opt-in per Gramplet (Gramplet.
+  // listensToSelection / Gramplet.listensToFilter) -- unlike the
+  // tree-change effect above (deliberately broad: any change, any
+  // Gramplet), this only subscribes at all when the *active* tab's own
+  // Gramplet asked for at least one of the two, so a plain tree-wide
+  // summary Gramplet (most of them) pays nothing extra just because some
+  // other row got clicked or the filter box was edited. Both live on the
+  // same ViewStore snapshot, so one subscription covers both -- carries no
+  // payload (just "something in this view's snapshot changed" --
+  // loadedCount, revision, ... as well as selectedHandle/whereExpr), so
+  // lastSelectedHandleRef/lastWhereExprRef are what tell a real change in
+  // the field this Gramplet actually asked about apart from one of those
+  // unrelated snapshot updates (or a change in the *other* field, when
+  // only one of the two flags is set). Only the active tab reacts, same as
+  // the tree-change effect -- a backgrounded listening Gramplet just picks
+  // up the latest selection/filter next time it's reactivated (its own
+  // activeId-driven run, below).
   useEffect(() => {
     const gramplet = gramplets.find((g) => g.id === activeId);
-    if (!gramplet?.listensToSelection) return;
+    const listensToSelection = gramplet?.listensToSelection ?? false;
+    const listensToFilter = gramplet?.listensToFilter ?? false;
+    if (!listensToSelection && !listensToFilter) return;
     const store = getViewStore(viewKey);
-    lastSelectedHandleRef.current = store.getSnapshot().selectedHandle;
+    const snapshot = store.getSnapshot();
+    lastSelectedHandleRef.current = snapshot.selectedHandle;
+    lastWhereExprRef.current = snapshot.whereExpr;
     return store.subscribe(() => {
-      const handle = store.getSnapshot().selectedHandle;
-      if (handle === lastSelectedHandleRef.current) return;
-      lastSelectedHandleRef.current = handle;
-      setSelectionNonce((n) => n + 1);
+      const snap = store.getSnapshot();
+      const selectionChanged = listensToSelection && snap.selectedHandle !== lastSelectedHandleRef.current;
+      const filterChanged = listensToFilter && snap.whereExpr !== lastWhereExprRef.current;
+      lastSelectedHandleRef.current = snap.selectedHandle;
+      lastWhereExprRef.current = snap.whereExpr;
+      if (selectionChanged || filterChanged) setSelectionNonce((n) => n + 1);
     });
   }, [viewKey, activeId, gramplets]);
 
@@ -382,17 +406,19 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // changes (the same Gramplet id can be a tab on more than one view --
   // its selectedType/selectedHandle below differ per view even when
   // nothing else does), and again whenever `selectionNonce` is bumped
-  // (the selection-subscription effect above, only for a Gramplet with
-  // listensToSelection set). Three cases, checked in order:
+  // (the selection/filter-subscription effect above, only for a Gramplet
+  // with listensToSelection and/or listensToFilter set). Three cases,
+  // checked in order:
   //  1. resultCacheRef already has a *finished* result for this exact
-  //     code/runNonce (and, only if this Gramplet listens, selectedHandle
-  //     too) -- reuse it, no re-run. A Gramplet's code is typically a
-  //     one-shot query, not something that needs re-executing just
-  //     because the user looked away and back -- and a non-listening
-  //     Gramplet's cache stays valid across a selection change it never
-  //     asked to know about, same as it always has.
-  //  2. runningRef already has this exact code/runNonce/selectedHandle
-  //     *in flight* (queued or actively running, from an earlier
+  //     code/runNonce (and, only for whichever of selectedHandle/whereExpr
+  //     this Gramplet actually listens to) -- reuse it, no re-run. A
+  //     Gramplet's code is typically a one-shot query, not something that
+  //     needs re-executing just because the user looked away and back --
+  //     and a non-listening Gramplet's cache stays valid across a
+  //     selection/filter change it never asked to know about, same as it
+  //     always has.
+  //  2. runningRef already has this exact code/runNonce/selectedHandle/
+  //     whereExpr *in flight* (queued or actively running, from an earlier
   //     selection of this same tab that hasn't finished yet) -- reattach
   //     to it (show whatever it's at right now) rather than posting a
   //     second, redundant RunGrampletRequest that would restart it from
@@ -411,15 +437,19 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     if (!gramplet) return;
     const cacheKey = gramplet.id;
     const listensToSelection = gramplet.listensToSelection ?? false;
-    const selectedHandle = getViewStore(viewKey).getSnapshot().selectedHandle;
+    const listensToFilter = gramplet.listensToFilter ?? false;
+    const viewSnapshot = getViewStore(viewKey).getSnapshot();
+    const selectedHandle = viewSnapshot.selectedHandle;
     const selectedType = selectedHandle !== null ? viewKey : null;
+    const whereExpr = viewSnapshot.whereExpr;
 
     const cached = resultCacheRef.current.get(cacheKey);
     if (
       cached &&
       cached.code === gramplet.code &&
       cached.runNonce === runNonce &&
-      (!listensToSelection || cached.selectedHandle === selectedHandle)
+      (!listensToSelection || cached.selectedHandle === selectedHandle) &&
+      (!listensToFilter || cached.whereExpr === whereExpr)
     ) {
       setRunStatus(cached.status);
       setResponse(cached.response);
@@ -431,7 +461,8 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       inFlight &&
       inFlight.code === gramplet.code &&
       inFlight.runNonce === runNonce &&
-      (!listensToSelection || inFlight.selectedHandle === selectedHandle)
+      (!listensToSelection || inFlight.selectedHandle === selectedHandle) &&
+      (!listensToFilter || inFlight.whereExpr === whereExpr)
     ) {
       setRunStatus(inFlight.status);
       setResponse(inFlight.response);
@@ -456,13 +487,28 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
           };
           setRunStatus("error");
           setResponse(errorResponse);
-          resultCacheRef.current.set(cacheKey, { code: gramplet.code, runNonce, selectedHandle, status: "error", response: errorResponse });
+          resultCacheRef.current.set(cacheKey, {
+            code: gramplet.code,
+            runNonce,
+            selectedHandle,
+            whereExpr,
+            status: "error",
+            response: errorResponse,
+          });
         }
         return;
       }
       if (cancelled) return;
       runIdToGrampletRef.current.set(runId, cacheKey);
-      runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, selectedHandle, runId, status: "queued", response: null });
+      runningRef.current.set(cacheKey, {
+        code: gramplet.code,
+        runNonce,
+        selectedHandle,
+        whereExpr,
+        runId,
+        status: "queued",
+        response: null,
+      });
       getWorker().postMessage({
         type: "run-gramplet",
         code: gramplet.code,
@@ -471,6 +517,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         grampletId: gramplet.id,
         selectedType,
         selectedHandle,
+        whereExpr,
         homePersonHandle: getHomePersonHandle(),
       });
     })();
@@ -495,12 +542,14 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     const cacheKey = gramplet.id;
     const runId = crypto.randomUUID();
     // Read fresh, same as the run-effect above -- a widget click always
-    // carries whatever's currently selected, regardless of
-    // listensToSelection (that flag only governs whether a selection
-    // change *by itself* triggers a rerun, not what a rerun for some
-    // other reason sees).
-    const selectedHandle = getViewStore(viewKey).getSnapshot().selectedHandle;
+    // carries whatever's currently selected/filtered, regardless of
+    // listensToSelection/listensToFilter (those flags only govern whether
+    // a selection/filter change *by itself* triggers a rerun, not what a
+    // rerun for some other reason sees).
+    const viewSnapshot = getViewStore(viewKey).getSnapshot();
+    const selectedHandle = viewSnapshot.selectedHandle;
     const selectedType = selectedHandle !== null ? viewKey : null;
+    const whereExpr = viewSnapshot.whereExpr;
     setRunStatus("queued");
     // Deliberately not setResponse(null) here, unlike the effect above --
     // GrampletResultView.tsx keeps rendering the *previous* response's
@@ -522,7 +571,15 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       return;
     }
     runIdToGrampletRef.current.set(runId, cacheKey);
-    runningRef.current.set(cacheKey, { code: gramplet.code, runNonce, selectedHandle, runId, status: "queued", response: null });
+    runningRef.current.set(cacheKey, {
+      code: gramplet.code,
+      runNonce,
+      selectedHandle,
+      whereExpr,
+      runId,
+      status: "queued",
+      response: null,
+    });
     getWorker().postMessage({
       type: "run-gramplet",
       code: gramplet.code,
@@ -531,6 +588,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       grampletId: gramplet.id,
       selectedType,
       selectedHandle,
+      whereExpr,
       homePersonHandle: getHomePersonHandle(),
       widgetEvent: { key, value },
     });
