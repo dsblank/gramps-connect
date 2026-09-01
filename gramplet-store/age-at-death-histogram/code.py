@@ -1,19 +1,23 @@
 # =============================================================================
-# 06 - A histogram with matplotlib
+# Age-at-Death Histogram
 # =============================================================================
-# Age-at-death distribution, as a matplotlib histogram. matplotlib is
-# pre-bundled the same way pygal is (see 05_pygal_charts.py) -- a plain
-# import works offline, no %pip install needed.
+# Age-at-death distribution, as a plotly histogram. plotly is pre-bundled
+# the same way pygal/matplotlib are -- a plain
+# `from plotly.subplots import make_subplots` works offline, no
+# %pip install needed, and (unlike `import plotly.graph_objects as go` +
+# go.Histogram(...)) never needs the graph_objects import at all:
+# make_subplots() returns a real Figure, and Figure.add_histogram(...)
+# builds the trace for you.
 #
 # Demonstrates:
-#   - print(fig) -- a plain print() of a matplotlib figure (or a bare
-#     trailing `plt`) is recognized automatically and rendered as an
-#     image; you never need to save/encode it by hand
+#   - print(fig) -- a plain print() of a plotly Figure is recognized
+#     automatically and rendered as an interactive chart (hover tooltips,
+#     zoom/pan); you never need to call to_html()/embed it by hand
 #   - computing something (age at death) that isn't a field Gramps stores
 #     directly, from two dates that are
 # =============================================================================
 
-import matplotlib.pyplot as plt
+from plotly.subplots import make_subplots
 
 # birth.date.sortval/death.date.sortval cross one relationship each (see
 # GrampletHelpDialog's "where" section) -- sortval is the date's position
@@ -52,13 +56,14 @@ for r in rows:
     if 0 <= age_years <= 110:
         ages.append(age_years)
 
-fig, ax = plt.subplots()
-ax.hist(ages, bins=20)
-ax.set_xlabel("Age at death (years)")
-ax.set_ylabel("Number of people")
-ax.set_title(f"Age at death ({len(ages)} people with both dates recorded)")
+fig = make_subplots()
+fig.add_histogram(x=ages, nbinsx=20)
+fig.update_layout(
+    title=f"Age at death ({len(ages)} people with both dates recorded)",
+    xaxis_title="Age at death (years)",
+    yaxis_title="Number of people",
+)
 
-# That's it -- no savefig()/base64 encoding to write by hand. A bare
-# `print(fig)` (or ending the script with a trailing `plt`, the habit
-# JupyterLite/IPython users already have) is enough.
+# That's it -- no to_html()/embedding to write by hand. A bare print(fig)
+# is enough.
 print(fig)

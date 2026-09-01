@@ -1,5 +1,5 @@
-// Postinstall: a couple of dependencies ship runtime files that need to be
-// served as static assets at a stable path rather than bundled, so both are
+// Postinstall: several dependencies ship runtime files that need to be
+// served as static assets at a stable path rather than bundled, so each is
 // copied into public/ (gitignored -- generated, not source, same treatment
 // layer2-local-cache/client/public/ already got).
 //
@@ -16,6 +16,10 @@
 //   that import resolving to a same-named sibling that was never copied;
 //   copying both files verbatim, under their own unhashed names, keeps
 //   that relative import intact exactly as the package ships it.
+//
+//   plotly.js (PoC, see pyodideWorker.ts's _plotly_figure_from): the JS
+//   side of `print(a plotly Figure)`, at a stable /plotly.min.js path --
+//   see the `copies` entry below for the full reasoning.
 //
 //   pyodide (PoC, see pyodideWorker.ts): its asm/wasm/stdlib data files,
 //   which loadPyodide() fetches at runtime from `indexURL` rather than
@@ -93,6 +97,25 @@ const copies = [
     src: path.dirname(require.resolve("pyodide/pyodide.mjs")),
     files: ["pyodide.asm.mjs", "pyodide.asm.wasm", "pyodide-lock.json", "python_stdlib.zip"],
     destSubdir: "pyodide",
+  },
+  {
+    // plotly.js itself (PoC, see pyodideWorker.ts's _plotly_figure_from):
+    // the JS side of `print(a plotly Figure)`. plotly's Python package
+    // (registered under EXTRA_PACKAGES below) only builds the figure's
+    // JSON spec -- rendering it still needs plotly.js in the page, the
+    // same way a matplotlib figure needs nothing further (it's rasterized
+    // to a PNG data: URI Python-side) but pygal's SVG needs no JS at all.
+    // Bundled here rather than left to `include_plotlyjs="cdn"` for the
+    // same offline-Docker/standalone-build reason micropip's wheel and
+    // pygal's own wheel are fetched into public/pyodide/ above rather
+    // than left to Pyodide's own jsdelivr fallback. Single un-hashed file
+    // at a stable /plotly.min.js path (not fingerprinted by Vite's asset
+    // pipeline), same treatment as maplibre-gl-worker.mjs above --
+    // pyodideWorker.ts's _plotly_figure_from references this exact path
+    // literally, the same way MapItemEditorDialog.tsx does for
+    // maplibre-gl-worker.mjs.
+    src: path.dirname(require.resolve("plotly.js-dist-min/plotly.min.js")),
+    files: ["plotly.min.js"],
   },
 ];
 
@@ -248,6 +271,41 @@ const EXTRA_PACKAGES = [
     url: "https://files.pythonhosted.org/packages/3a/13/547360d81e6d88d58492968ffda9f9542854f11310ee556fef14260cc886/zipp-4.1.0-py3-none-any.whl",
     sha256: "25ad4e16390cd314347dd8f1de67a2ac538ae658ed4ab9db16029c07c188e97f",
     imports: ["zipp"],
+    depends: [],
+  },
+  // plotly -> narwhals + packaging, its only two *required* runtime deps
+  // per its own PyPI metadata -- confirmed live that a plain
+  // `import plotly.graph_objects as go` plus building/rendering a
+  // go.Figure needs nothing more than these two. Deliberately NOT
+  // including numpy/pandas here even though `import plotly.express`
+  // needs numpy just to import, and go.Figure/express both reach for
+  // pandas once real chart data (not a pre-built dataframe) flows
+  // through -- unlike matplotlib's own closure above (bundled in full
+  // because every one of those is required for *any* matplotlib use),
+  // numpy/pandas are only needed by the heavier plotly.express/numpy-
+  // array codepaths, so forcing them as a `depends` here would tax every
+  // plain go.Figure Gramplet (the common case) for weight only some
+  // Gramplets need. A Gramplet that does need express with plain
+  // lists (or numpy arrays) just adds its own `import pandas`/
+  // `import numpy` -- picked up by the existing loadPackagesFromImports
+  // scan below like any other import, no special-casing needed since
+  // both are already real Pyodide catalog packages (pandas depends only
+  // on numpy/python-dateutil/pytz, all already bundled via matplotlib's
+  // own closure above).
+  {
+    name: "plotly",
+    file_name: "plotly-7.0.0-py3-none-any.whl",
+    url: "https://files.pythonhosted.org/packages/e0/2f/6f492108d9955bac97979d9949c1b35eab30fc630b1f22bbdd2c7cacbab4/plotly-7.0.0-py3-none-any.whl",
+    sha256: "78cbf7bd06d1b05bb3b8ec1b709864695229b55151b6f7530fbf55517ead6fdd",
+    imports: ["plotly"],
+    depends: ["narwhals", "packaging"],
+  },
+  {
+    name: "narwhals",
+    file_name: "narwhals-2.25.0-py3-none-any.whl",
+    url: "https://files.pythonhosted.org/packages/eb/dc/55481808fd70ef1567cf13540ffd4702af3f74b112e35427564b03f79c2d/narwhals-2.25.0-py3-none-any.whl",
+    sha256: "1f0f403e8c7e4463cde9bfe78b12fdd809e3ae3dda6d9b2f802934fb9c7a6a8f",
+    imports: ["narwhals"],
     depends: [],
   },
 ];

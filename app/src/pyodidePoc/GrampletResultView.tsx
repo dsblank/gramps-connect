@@ -131,21 +131,100 @@ function HtmlOutput({
   // source to fetch at all -- only its own `src` triggers that. Mapping
   // xlink:href (or href) to src below is what makes that second, actually
   // interactive-behavior-carrying script load in the first place.
+  //
+  // Ordering matters here -- an *external* script (one with a src,
+  // plotly's own <script src="/plotly.min.js"> from pyodideWorker.ts's
+  // plotly print() hook, e.g.) executes asynchronously once inserted
+  // (fetch, then run), while a later inline script with no src of its own
+  // (plotly's own Plotly.newPlot(...) call) executes the instant it's
+  // inserted -- a plain loop races those two, and on a cold cache (before
+  // the browser has plotly.min.js cached) the inline script routinely
+  // wins, calling Plotly.newPlot() before window.Plotly even exists.
+  // pygal's own two scripts happen to dodge this by ordering luck (its
+  // inline script comes first, and nothing after its external one depends
+  // on it having run yet) -- plotly's ordering isn't luck-compatible, so
+  // this needs a real fix: explicitly await each external script's own
+  // load/error event before even creating the next script in the list,
+  // rather than relying on the browser's own async=false "in-order"
+  // scheduling to hold back a *separate*, already-inserted inline script
+  // implicitly -- confirmed, the hard way, across several earlier
+  // versions of this effect, that that scheduling nuance isn't something
+  // to build on with full confidence here (an async=false-only version of
+  // this passed in one test harness and still failed live in the browser
+  // -- not chasing that gap further; an explicit await has no such
+  // ambiguity to begin with).
+  //
+  // Deferred to a microtask (queueMicrotask), not run synchronously in
+  // the effect body -- needed for React StrictMode's dev-only
+  // double-invoke of this exact effect (confirmed enabled in main.tsx):
+  // an earlier version that started this same async work synchronously,
+  // with only a `cancelled` flag plus a per-node "already processed"
+  // marker to make a second invocation skip redoing finished work, still
+  // broke under it -- invocation 1's synchronous prefix (everything up to
+  // its own first `await`) ran far enough to mark the external script
+  // claimed and start awaiting it, then suspended there; invocation 2 saw
+  // that script already marked but the *next* (inline) script still
+  // untouched, and ran it immediately, well before invocation 1's fetch
+  // had any chance to finish (confirmed live: exactly this,
+  // ReferenceError: Plotly is not defined, deterministically). Deferring
+  // to a microtask sidesteps the whole class of bug instead of patching
+  // around it again: `cancelled` is checked *before* the loop ever starts
+  // touching the DOM, so a cancelled invocation (StrictMode's throwaway
+  // first one) does nothing at all rather than doing partial, order-
+  // sensitive work that a second invocation could then race -- the
+  // invocation that actually runs to completion always sees the DOM
+  // exactly as dangerouslySetInnerHTML left it, in one uncontested pass
+  // (verified against a jsdom harness: single chart, single chart under
+  // simulated StrictMode double-invoke, two charts in one result under
+  // both, and a failed external-script load under both -- all clean).
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    for (const old of Array.from(container.querySelectorAll("script"))) {
-      const script = document.createElement("script");
-      for (const attr of Array.from(old.attributes)) {
-        if (attr.name === "xlink:href" || attr.name === "href") {
-          script.src = attr.value;
-        } else {
-          script.setAttribute(attr.name, attr.value);
+    let cancelled = false;
+    queueMicrotask(async () => {
+      if (cancelled) return;
+      for (const old of Array.from(container.querySelectorAll("script"))) {
+        if (cancelled) return;
+        const script = document.createElement("script");
+        for (const attr of Array.from(old.attributes)) {
+          if (attr.name === "xlink:href" || attr.name === "href") {
+            script.src = attr.value;
+          } else {
+            script.setAttribute(attr.name, attr.value);
+          }
+        }
+        script.textContent = old.textContent;
+        // Checked on the finished element (its real `src` IDL property),
+        // not tracked while copying attributes above -- a plain HTML
+        // `src="..."` attribute (plotly's own
+        // <script src="/plotly.min.js">, and any ordinary external
+        // script) lands via the generic setAttribute branch above, not
+        // the xlink:href/href-to-.src mapping that branch exists for
+        // (pygal's SVG tooltip script specifically).
+        if (!script.src) {
+          old.replaceWith(script);
+          continue;
+        }
+        const loaded = new Promise<boolean>((resolve) => {
+          script.addEventListener("load", () => resolve(true), { once: true });
+          script.addEventListener("error", () => resolve(false), { once: true });
+        });
+        old.replaceWith(script);
+        if (!(await loaded)) {
+          // Any later script in this same result almost certainly
+          // depends on this one (that's why it's ordered first) --
+          // running it anyway would just trade this clear, diagnosable
+          // failure for a cryptic "X is not defined" ReferenceError
+          // instead. Whatever already ran successfully before this
+          // stays on screen; only what comes after is skipped.
+          console.error(`GrampletResultView: failed to load script "${script.src}"`);
+          return;
         }
       }
-      script.textContent = old.textContent;
-      old.replaceWith(script);
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [markup]);
 
   return (

@@ -1,6 +1,6 @@
 // Auto-inserts `await` before a bare call to any of the async builtins
 // (see types.ts) so a Gramplet author doesn't have to write it themselves
-// -- `filter`/`get_object`/`get_raw_object`, `get_selected`/
+// -- `filter`/`get_object`/`get_raw_object`/`count`, `get_selected`/
 // `get_home_person` (both fetch the record lazily, on first call in a
 // run), the 10 filter()+ get_raw_object() convenience functions
 // (`people`/`families`/`events`/`places`/`repositories`/`sources`/
@@ -72,7 +72,7 @@
 // variable would still collide if they used that exact name -- same
 // class of accepted limitation as the `filter` shadowing above.
 const CALL_SITE_RE =
-  /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*|(?<!\.)(?<!await\s{1,20})(?<!def\s{1,20})\b(filter|get_object|get_raw_object|get_selected|get_home_person|people|families|events|places|repositories|sources|citations|media|notes|tags)\b(?=\s*\()|(?<!await\s{1,20})\b(db\.\w+)(?=\s*\()/g;
+  /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*|(?<!\.)(?<!await\s{1,20})(?<!def\s{1,20})\b(filter|get_object|get_raw_object|count|get_selected|get_home_person|people|families|events|places|repositories|sources|citations|media|notes|tags)\b(?=\s*\()|(?<!await\s{1,20})\b(db\.\w+)(?=\s*\()/g;
 
 export function autoAwaitGrampletCode(code: string): string {
   return code.replace(

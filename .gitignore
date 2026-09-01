@@ -64,6 +64,13 @@ app/public/pyodide/
 # blanket `dist/` rule above) -- generated, not source.
 app/public/gramps-wheel/
 
+# app: plotly.js itself (PoC, see app/src/pyodidePoc/pyodideWorker.ts's
+# plotly print() hook), also copied in by scripts/copy-wasm.mjs -- named
+# explicitly rather than *.js, unlike the *.wasm/*.mjs rules above: .js is
+# common enough that a wildcard here could silently swallow a real,
+# hand-written source file dropped into public/ later.
+app/public/plotly.min.js
+
 # app: local dev overrides of .env.example -- machine-specific, not source
 app/.env.local
 

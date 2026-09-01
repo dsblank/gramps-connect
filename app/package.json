@@ -28,6 +28,7 @@
     "d3-transition": "^3.0.1",
     "d3-zoom": "^3.0.0",
     "maplibre-gl": "^6.3.0",
+    "plotly.js-dist-min": "^4.0.0",
     "prismjs": "^1.30.0",
     "pyodide": "^314.0.6",
     "react": "^18.3.1",

@@ -973,6 +973,21 @@ def _matplotlib_figure_from(obj):
         return obj
     return None
 
+def _plotly_figure_from(obj):
+    # Mirrors _matplotlib_figure_from above: never imports plotly itself,
+    # only recognizes a Figure once the Gramplet's own code already
+    # imported plotly.graph_objects (sys.modules lookup) -- a plain
+    # \`import plotly.express as px\` pulls that in as a dependency, so
+    # px.bar(...)'s return value (a real go.Figure under the hood) is
+    # recognized the same way a graph_objects.Figure built by hand is.
+    import sys
+    go_mod = sys.modules.get("plotly.graph_objects")
+    if go_mod is None:
+        return None
+    if isinstance(obj, go_mod.Figure):
+        return obj
+    return None
+
 def print(*args, sep=" ", end="\\n", **kwargs):
     # Redefined rather than left as the real builtin captured via pyodide's
     # own stdout option (see getPyodide() below) -- that captures every
@@ -997,6 +1012,108 @@ def print(*args, sep=" ", end="\\n", **kwargs):
             fig.savefig(buf, format="png", bbox_inches="tight")
             sys.modules["matplotlib.pyplot"].close(fig)
             html(f'<img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}">')
+            return
+        fig = _plotly_figure_from(args[0])
+        if fig is not None:
+            # plotly.io's own to_html() picks its JSON engine via
+            # plotly.io.json.config.default_engine, "auto" by default --
+            # "auto" means "orjson if it imports cleanly, else json", and
+            # our own gi/orjson stub wheel (scripts/build-stub-wheels.py,
+            # loaded for gramps.gen.lib's own minimal json_utils needs)
+            # does import cleanly, so plotly picks "orjson" and then
+            # promptly breaks on the real orjson-only API surface it
+            # actually needs (orjson.OPT_NON_STR_KEYS et al, which our
+            # stub was never meant to provide -- confirmed live:
+            # AttributeError: module 'orjson' has no attribute
+            # 'OPT_NON_STR_KEYS'). Forcing "json" here sidesteps orjson
+            # entirely for plotly's own encoding, using its pure-Python
+            # json.dumps()-based path instead -- cheap/idempotent to set
+            # on every call (like the stdlib imports below), and doesn't
+            # touch the shared orjson stub itself, which gramps.gen.lib
+            # still needs exactly as it was.
+            import plotly.io as pio
+            pio.json.config.default_engine = "json"
+            # full_html=False: a <div>+<script> fragment, not a whole
+            # <html> document -- html() drops this straight into the
+            # result the same way it does pygal's own SVG+<script>
+            # markup. include_plotlyjs points at the copy copy-wasm.mjs
+            # pre-bundles (see its own doc comment) rather than "cdn" --
+            # this project avoids runtime CDN dependencies everywhere else
+            # (offline Docker/standalone builds) and this is no
+            # exception. A repeated <script src="/plotly.min.js"> tag per
+            # chart (one per print() call) re-executes but doesn't
+            # re-fetch it -- the browser's own HTTP cache handles that,
+            # same as a page with two <img> tags for the same file.
+            #
+            # to_html() already defaults config.responsive=True (a plain
+            # window.resize listener, plotly.js's own doing) -- covers a
+            # browser-window resize, but not a pure container resize with
+            # no window resize event at all (a splitter drag, a sidebar
+            # toggling, GrampletResultView's own panel changing width).
+            # post_script (plotly's own hook for exactly this: extra JS
+            # chained onto the newPlot().then(...) once the graph div is
+            # actually ready, {plot_id} substituted with its real id --
+            # see plotly/io/_html.py) adds a ResizeObserver on that div
+            # itself: its rendered box already tracks its container's via
+            # ordinary CSS, so watching the div's own size catches an
+            # ancestor resize from any cause, window-resize included,
+            # without needing to know which ancestor actually changed.
+            # Plotly.Plots.resize() only redraws to fit the div's current
+            # box -- it doesn't itself change that box, so this can't
+            # re-trigger its own observer.
+            #
+            # gd.offsetParent === null (a cheap, standard "is this hidden
+            # via display:none, on the element or an ancestor" check) is
+            # a defensive guard, not the actual fix for the div starting
+            # out zero-height -- see default_height below for that. Kept
+            # anyway for the case this div (or an ancestor -- a Gramplet
+            # tab switched away from, e.g.) is later legitimately hidden
+            # while this observer is still attached: Plotly.Plots.resize()
+            # rejects instead of resolving when its target isn't currently
+            # displayed (confirmed live: Error: Resize must be passed a
+            # displayed plot div element, an unhandled rejection since
+            # nothing here was already catching one), so skip calling it
+            # at all while hidden -- becoming visible again later fires
+            # the observer once more with real dimensions, same as any
+            # other resize. .catch(() => {}) alongside is defense in
+            # depth against that same rejection in any other case this
+            # guard doesn't anticipate.
+            resize_js = (
+                "var gd = document.getElementById('{plot_id}');"
+                "if (gd && window.ResizeObserver) {"
+                "new ResizeObserver(function () {"
+                "if (gd.offsetParent !== null) { Plotly.Plots.resize(gd).catch(function () {}); }"
+                "}).observe(gd);"
+                "}"
+            )
+            html(
+                fig.to_html(
+                    full_html=False,
+                    include_plotlyjs="/plotly.min.js",
+                    # default_height="100%" (to_html()'s own default) is
+                    # fragile in a way default_width="100%" isn't:
+                    # percentage width reliably resolves against the
+                    # containing block during layout, but percentage
+                    # height only resolves if some ancestor up the chain
+                    # already has a *definite* height -- GrampletResultView
+                    # sits in a content-driven-height panel with no fixed
+                    # height anywhere in that chain, so height:100% here
+                    # collapses to 0. A zero-height chart isn't just
+                    # invisible on first draw (confirmed live: exactly
+                    # that, indistinguishable from "didn't render" to
+                    # anyone looking at it) -- it's also what was making
+                    # the ResizeObserver's very first firing land on a
+                    # not-yet-really-displayed div in the first place, one
+                    # real cause behind the resize rejection guarded
+                    # against above. A fixed pixel height sidesteps the
+                    # whole percentage-height-needs-a-sized-ancestor
+                    # problem outright, the same way an <img>'s own
+                    # intrinsic height never had this problem to begin
+                    # with.
+                    default_height="450px",
+                    post_script=resize_js,
+                )
+            )
             return
     _flush_table()
     _gramplet_print_buffer.append(sep.join(str(a) for a in args) + end)

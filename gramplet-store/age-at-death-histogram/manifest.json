@@ -1,8 +1,8 @@
 {
   "id": "age-at-death-histogram",
   "name": "Age-at-Death Histogram",
-  "description": "A matplotlib histogram of age at death across everyone in the tree with both a birth and death date recorded.",
-  "version": "1.0.0",
+  "description": "An interactive plotly histogram of age at death across everyone in the tree with both a birth and death date recorded.",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "chart"
 }
