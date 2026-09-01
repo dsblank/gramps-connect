@@ -152,6 +152,13 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // PyodideWorkerResponse belongs to -- the message itself only carries
   // the runId (see PyodideWorkerResponse in types.ts), not the Gramplet id.
   const runIdToGrampletRef = useRef<Map<string, string>>(new Map());
+  // Which Gramplet id `response` currently belongs to, so the run-effect
+  // below can tell "same Gramplet, rerunning because selection/filter/tree
+  // data changed" (keep showing it -- see runWidgetEvent's identical
+  // reasoning) apart from "just switched tabs to a different Gramplet"
+  // (the old response is for the wrong Gramplet now, so it must be
+  // cleared rather than briefly shown under the new tab).
+  const shownGrampletRef = useRef<string | null>(null);
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
   // Kept in sync every render (same pattern as collapsedRef above) so
@@ -453,6 +460,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     ) {
       setRunStatus(cached.status);
       setResponse(cached.response);
+      shownGrampletRef.current = cacheKey;
       return;
     }
 
@@ -466,14 +474,39 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     ) {
       setRunStatus(inFlight.status);
       setResponse(inFlight.response);
+      shownGrampletRef.current = cacheKey;
       return;
     }
+
+    // Same Gramplet as what's already on screen (a selection/filter change,
+    // or a live tree-change bump via runNonce) -- don't null out `response`,
+    // same reasoning as runWidgetEvent below: GrampletResultView keeps
+    // rendering the *previous* blocks through "queued"/"loading" so the
+    // panel updates in place instead of flickering out to placeholder text
+    // and back. A genuine tab switch (cacheKey differs from what's shown)
+    // still clears it -- the old response belongs to a different Gramplet.
+    const rerunningSameGramplet = shownGrampletRef.current === cacheKey;
+    shownGrampletRef.current = cacheKey;
+    // Seeds the runningRef entry below with whatever's already on screen
+    // (rather than always null) for the same reason `rerunningSameGramplet`
+    // exists at all: the "started" ack that arrives once the worker
+    // actually picks this run up only updates `entry.status` (to
+    // "loading"), not `entry.response` (see onmessage below) -- so
+    // whatever `entry.response` was seeded with here is exactly what
+    // setResponse(entry.response) pushes out at that point. Registering it
+    // as null (as this used to, unconditionally) meant that ack alone
+    // wiped the previous blocks back to placeholder text a moment after
+    // this effect had deliberately chosen not to -- the actual source of
+    // the "Running…" flicker, not the setResponse(null) above.
+    const priorResponse = rerunningSameGramplet ? response : null;
 
     let cancelled = false;
     const runId = crypto.randomUUID();
     (async () => {
       setRunStatus("queued");
-      setResponse(null);
+      if (!rerunningSameGramplet) {
+        setResponse(null);
+      }
       let token: string;
       try {
         token = await getToken();
@@ -507,7 +540,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         whereExpr,
         runId,
         status: "queued",
-        response: null,
+        response: priorResponse,
       });
       getWorker().postMessage({
         type: "run-gramplet",
@@ -578,7 +611,13 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       whereExpr,
       runId,
       status: "queued",
-      response: null,
+      // Same reasoning as the run-effect's own priorResponse above: seeded
+      // with what's already on screen (never null here -- a widget rerun
+      // always wants to keep it), so the "started" ack's own
+      // setResponse(entry.response) doesn't wipe it back to null in
+      // between this call's own (deliberately skipped) clear and the
+      // eventual terminal response.
+      response,
     });
     getWorker().postMessage({
       type: "run-gramplet",
