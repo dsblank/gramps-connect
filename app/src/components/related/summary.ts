@@ -27,7 +27,7 @@ export function displayDate(date: unknown): string {
  * (frel/mrel-bearing child refs need the raw Family alongside it), others
  * via `profile` (Person's own spouse/parent summaries, which `extend`
  * doesn't resolve past one level -- see FamiliesSection/ParentsSection). */
-function personName(obj: any): string {
+export function personName(obj: any): string {
   if (obj?.name_display) return obj.name_display;
   const name = obj?.primary_name;
   const surname = name?.surname_list?.[0]?.surname ?? "";
