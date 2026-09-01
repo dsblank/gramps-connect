@@ -75,7 +75,7 @@ export function HomeView() {
       {stage === "loading" && (
         <Group py="xl" justify="center">
           <Loader size="sm" />
-          <Text size="sm" c="dimmed">{t("Loading the tree's overview…")}</Text>
+          <Text c="dimmed">{t("Loading the tree's overview…")}</Text>
         </Group>
       )}
 
@@ -95,7 +95,7 @@ export function HomeView() {
 
             <Panel title={t("Messages")}>
               {messages.length === 0 ? (
-                <Text size="sm" c="dimmed">{t("No messages yet.")}</Text>
+                <Text c="dimmed">{t("No messages yet.")}</Text>
               ) : (
                 <Stack gap="sm">
                   {messages.map((m) => (
@@ -109,8 +109,8 @@ export function HomeView() {
                       <Group gap="xs" wrap="nowrap" align="flex-start">
                         <Image src={iconChat} alt="" w={20} h={20} mt={2} />
                         <Box style={{ flex: 1, minWidth: 0 }}>
-                          <Text size="sm" fw={600} truncate>{m.author || "Someone"}</Text>
-                          <Text size="sm" c="dimmed" truncate>{m.message}</Text>
+                          <Text fw={600} truncate>{m.author || "Someone"}</Text>
+                          <Text c="dimmed" truncate>{m.message}</Text>
                         </Box>
                         <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(m.changeUnix)}</Text>
                       </Group>
@@ -121,7 +121,6 @@ export function HomeView() {
               <Anchor
                 component="a"
                 href={formatHash({ viewKey: "messages" })}
-                size="sm"
                 mt="sm"
                 display="inline-block"
               >
@@ -131,7 +130,7 @@ export function HomeView() {
 
             <Panel title={t("Recently changed objects")}>
               {recent.length === 0 ? (
-                <Text size="sm" c="dimmed">{t("Nothing changed yet.")}</Text>
+                <Text c="dimmed">{t("Nothing changed yet.")}</Text>
               ) : (
                 <Stack gap="xs">
                   {recent.map((item) => {
@@ -146,7 +145,7 @@ export function HomeView() {
                       >
                         <Group gap="xs" wrap="nowrap">
                           {view && <Image src={view.icon} alt="" w={20} h={20} />}
-                          <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
+                          <Text truncate style={{ flex: 1, minWidth: 0 }}>
                             {item.label}
                           </Text>
                           <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(item.changeUnix)}</Text>
@@ -164,13 +163,13 @@ export function HomeView() {
               <Stack gap={6}>
                 {STAT_VIEWS.map((v) => (
                   <Group key={v.key} justify="space-between" wrap="nowrap">
-                    <Anchor component="a" href={formatHash({ viewKey: v.key })} size="sm" c="inherit" underline="never">
+                    <Anchor component="a" href={formatHash({ viewKey: v.key })} c="inherit" underline="never">
                       <Group gap="xs" wrap="nowrap">
                         <Image src={v.icon} alt="" w={20} h={20} />
-                        <Text size="sm">{t(v.label)}</Text>
+                        <Text>{t(v.label)}</Text>
                       </Group>
                     </Anchor>
-                    <Text size="sm" fw={600}>{(counts[v.key] ?? 0).toLocaleString()}</Text>
+                    <Text fw={600}>{(counts[v.key] ?? 0).toLocaleString()}</Text>
                   </Group>
                 ))}
               </Stack>
@@ -178,7 +177,7 @@ export function HomeView() {
 
             <Panel title={t("Stories")}>
               {stories.length === 0 ? (
-                <Text size="sm" c="dimmed">{t("No stories yet.")}</Text>
+                <Text c="dimmed">{t("No stories yet.")}</Text>
               ) : (
                 <Stack gap="sm">
                   {stories.map((s) => (
@@ -191,7 +190,7 @@ export function HomeView() {
                     >
                       <Group gap="xs" wrap="nowrap" align="flex-start">
                         <Image src={iconStory} alt="" w={20} h={20} mt={2} />
-                        <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>{s.title}</Text>
+                        <Text truncate style={{ flex: 1, minWidth: 0 }}>{s.title}</Text>
                         <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(s.changeUnix)}</Text>
                       </Group>
                     </Anchor>
@@ -201,7 +200,6 @@ export function HomeView() {
               <Anchor
                 component="a"
                 href={formatHash({ viewKey: "story" })}
-                size="sm"
                 mt="sm"
                 display="inline-block"
               >
@@ -259,7 +257,7 @@ function HomePersonContent({
       >
         <Group gap="sm" wrap="nowrap">
           <Image src={PERSON_VIEW.icon} alt="" w={28} h={28} />
-          <Text size="sm" fw={600} truncate>{personLabel(homePerson)}</Text>
+          <Text fw={600} truncate>{personLabel(homePerson)}</Text>
         </Group>
       </Anchor>
     );
