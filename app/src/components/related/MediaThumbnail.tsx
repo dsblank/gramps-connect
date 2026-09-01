@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Image } from "@mantine/core";
 import { getToken } from "../../auth/auth";
-import { API_BASE } from "../../config";
+import { mediaThumbnailUrl } from "../../store/mediaCrop";
 import { ImageLightbox } from "./ImageLightbox";
 
 /** MIME types gramps-web-api's thumbnailer actually handles (see
@@ -22,7 +22,7 @@ function isThumbnailable(mime: string | undefined): boolean {
  * icon) for a non-thumbnailable MIME type, a signed-out gap before the
  * token resolves, or a failed load (private/missing file, thumbnailer
  * dependency not installed server-side, ...). */
-export function MediaThumbnail({ handle, mime, size, radius = "sm", zoomable = false }: {
+export function MediaThumbnail({ handle, mime, size, radius = "sm", zoomable = false, rect }: {
   handle: string;
   mime?: string;
   size: number;
@@ -32,6 +32,12 @@ export function MediaThumbnail({ handle, mime, size, radius = "sm", zoomable = f
    * or a landscape/group photo doesn't survive being cropped to a
    * circle the way a portrait does. */
   radius?: string;
+  /** The referencing MediaRef's own crop region (RefMeta.rect), when it has
+   * one -- renders the gramps-web-api `/cropped/.../thumbnail/<size>` route
+   * instead of the plain one, same convention treeData.ts's
+   * personThumbnailUrl already uses for TreeView boxes. Ignored (falls back
+   * to the plain thumbnail) when absent, empty, or degenerate. */
+  rect?: number[] | null;
   /** Clicking the thumbnail itself opens ImageLightbox.tsx on the original
    * file. Deliberately doesn't stop the click from also reaching whatever
    * onClick the caller already put on an ancestor button (promote,
@@ -67,7 +73,7 @@ export function MediaThumbnail({ handle, mime, size, radius = "sm", zoomable = f
   return (
     <>
       <Image
-        src={`${API_BASE}/api/media/${encodeURIComponent(handle)}/thumbnail/${size}?jwt=${encodeURIComponent(token)}`}
+        src={mediaThumbnailUrl(handle, size, token, { rect })}
         alt=""
         w={size}
         h={size}

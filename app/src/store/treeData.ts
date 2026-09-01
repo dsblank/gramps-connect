@@ -10,6 +10,7 @@
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { getViewStore } from "./registry";
+import { mediaThumbnailUrl } from "./mediaCrop";
 import type { VisualSubject } from "../hash";
 
 /** Only the fields gramps-web's charts/util.js actually reads off a
@@ -270,32 +271,16 @@ export function mergeTreeData(base: TreePersonRaw[], incoming: TreePersonRaw[]):
   return Array.from(byHandle.values());
 }
 
-function clampPct(n: number): number {
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
-
 /** A person's box thumbnail: their `media_list`'s first entry, cropped to
  * its rect (gramps-web-api's percentage-based
  * `/cropped/<x1>/<y1>/<x2>/<y2>/thumbnail/<size>` route, integers 0-100 --
  * same convention gramps-web's own charts/util.js `getImageUrl`/
  * `normalizeRect` use) when the reference has one, else the plain
- * `/thumbnail/<size>` route. Null when the person has no media at all.
- * `jwt` as a query param is the only way to authenticate a plain URL an
- * SVG `<image>` can use -- same convention as MediaThumbnail.tsx's
- * `<img src>`. */
+ * `/thumbnail/<size>` route. Null when the person has no media at all. */
 export function personThumbnailUrl(token: string, person: TreePersonRaw, size: number): string | null {
   const ref = person.media_list?.[0];
   if (!ref?.ref) return null;
-  const base = `${API_BASE}/api/media/${encodeURIComponent(ref.ref)}`;
-  const jwt = encodeURIComponent(token);
-  const rect = ref.rect;
-  if (rect && rect.length === 4) {
-    const [x1, y1, x2, y2] = rect.map(clampPct);
-    if (x2 > x1 && y2 > y1) {
-      return `${base}/cropped/${x1}/${y1}/${x2}/${y2}/thumbnail/${size}?square=true&jwt=${jwt}`;
-    }
-  }
-  return `${base}/thumbnail/${size}?jwt=${jwt}`;
+  return mediaThumbnailUrl(ref.ref, size, token, { rect: ref.rect, square: true });
 }
 
 export interface TreeRoot {

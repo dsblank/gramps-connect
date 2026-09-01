@@ -64,7 +64,7 @@ function TypeIcon({ type }: { type: string }) {
  * always through the `onNavigate` callback RelatedPanel was given, so the
  * same row works whether it's mounted in the top pane (sets sub-selection)
  * or the bottom pane (promotes to a real view switch). */
-export function RefRow({ type, handle, obj, refMeta, onNavigate, label, extra, onEdit, onRemove }: {
+export function RefRow({ type, handle, obj, refMeta, onNavigate, label, thumbnail, extra, onEdit, onEditRegion, onRemove }: {
   type: string;
   handle: string;
   obj: unknown;
@@ -75,6 +75,10 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, extra, o
    * FamiliesSection showing just the *other* spouse's name rather than
    * both family members). */
   label?: string;
+  /** A small preview rendered before TypeIcon -- only MediaSection passes
+   * this (a MediaThumbnail, cropped to the ref's own rect when it has one);
+   * every other section has nothing worth previewing inline. */
+  thumbnail?: ReactNode;
   /** An extra action rendered inline right after the label, before
    * onEdit/onRemove -- e.g. ComparisonsSection's own "Compare" button, which
    * needs to sit next to the row's name rather than as a separate row below
@@ -88,6 +92,11 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, extra, o
    * (Children/Events/Participants/Associations/Repositories), already
    * permission-gated by the caller the same way onRemove is. */
   onEdit?: () => void;
+  /** Opens MediaRegionDialog.tsx to set this MediaRef's own crop rect --
+   * only MediaSection passes this (image refs, permission-gated the same
+   * way onRemove is). Distinct from onEdit since a media reference has no
+   * frel/mrel/role to edit, just this. */
+  onEditRegion?: () => void;
   /** Detaches this reference from the record being viewed (not a delete of
    * the target object itself) -- only set by sections with an
    * AttachControl (Notes/Citations), already permission-gated by the
@@ -100,6 +109,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, extra, o
   return (
     <Stack gap={2}>
       <Group gap={4} wrap="nowrap">
+        {thumbnail}
         <TypeIcon type={type} />
         {isCurrentPage(currentPage, type, handle) ? (
           // Already the record showing in the main table -- a link back to
@@ -121,6 +131,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, extra, o
         )}
         {extra}
         {onEdit && <CircleGlyphButton glyph="🔗" label={t("Edit relationship")} onClick={onEdit} size={16} />}
+        {onEditRegion && <CircleGlyphButton glyph="✂" label={t("Select region")} onClick={onEditRegion} size={16} />}
         {onRemove && <CircleGlyphButton glyph="−" label={t("Remove")} onClick={onRemove} size={16} />}
       </Group>
       <RefMetaRow refMeta={refMeta} />

@@ -116,10 +116,10 @@ function TagSwatch({ color }: { color: string | undefined }) {
  * among this object's own attached media, if any -- MediaSection already
  * lists every attached photo further down; this is just the first one of
  * them, pulled out for the profile-picture treatment. */
-function firstImageRef(detail: ObjectDetail): { handle: string; mime?: string } | null {
+function firstImageRef(detail: ObjectDetail): { handle: string; mime?: string; rect?: number[] } | null {
   const rows = zipRefs<{ mime?: string }>(detail.media_list, detail.extended?.media);
   const first = rows.find((r) => r.target?.mime?.startsWith("image/"));
-  return first ? { handle: first.ref.ref, mime: first.target?.mime } : null;
+  return first ? { handle: first.ref.ref, mime: first.target?.mime, rect: first.ref.rect } : null;
 }
 
 /** A Title that's also a real clickable element -- `component="button"`
@@ -267,7 +267,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     <Group align="center" gap="md" wrap="nowrap">
       {profilePic && (
         <UnstyledButton onClick={() => onNavigate("media", profilePic.handle)}>
-          <MediaThumbnail handle={profilePic.handle} mime={profilePic.mime} size={72} radius="md" zoomable />
+          <MediaThumbnail handle={profilePic.handle} mime={profilePic.mime} rect={profilePic.rect} size={72} radius="md" zoomable />
         </UnstyledButton>
       )}
       <div>
