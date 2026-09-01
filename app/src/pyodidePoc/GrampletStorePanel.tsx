@@ -1,7 +1,7 @@
 // Browse the Gramplet Store's catalog (gramplet-store/catalog.json, see
 // grampletStore.ts's own top comment) and install/update/remove Gramplets
-// from it. Opened from MenuBar.tsx's "Browse Gramplet Store…" (same Add
-// menu as "Add Gramplet…"), gated on the same GRAMPLET_AUTHOR_PERMISSION --
+// from it. Opened from MenuBar.tsx's Help menu ("Gramplet Store…"), gated
+// on the same GRAMPLET_AUTHOR_PERMISSION as the Add menu's "Add Gramplet…" --
 // see grampletMedia.ts's own doc comment for why authoring needs a higher
 // bar than ordinary Media edit rights. A single flat list rather than
 // Mantine's Accordion (not used anywhere else in this codebase) -- Card +
@@ -54,6 +54,12 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
   // (or acting on a different entry) isn't blocked by one in-flight call.
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
+  // "Install all" runs across the currently-filtered list rather than the
+  // whole catalog, so narrowing with the search box first scopes it -- a
+  // separate busy/error pair from the per-row ones above since it isn't
+  // tied to any single entry.
+  const [installingAll, setInstallingAll] = useState(false);
+  const [installAllError, setInstallAllError] = useState<string | null>(null);
 
   function load() {
     setStatus("loading");
@@ -125,6 +131,24 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
 
   const visible = catalog.filter((entry) => matches(entry, query.trim()));
   const canAuthor = canAuthorGramplets();
+  const pending = visible.filter((entry) => !findInstalledEntry(installed, entry.id));
+
+  async function handleInstallAll() {
+    if (!canAuthorGramplets() || pending.length === 0) return;
+    setInstallingAll(true);
+    setInstallAllError(null);
+    const failures: string[] = [];
+    for (const entry of pending) {
+      try {
+        const built = await installFromCatalog(entry);
+        setInstalled((prev) => [...prev, built]);
+      } catch (err) {
+        failures.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (failures.length > 0) setInstallAllError(failures.join("; "));
+    setInstallingAll(false);
+  }
 
   return (
     <Modal opened onClose={onClose} title={t("Gramplet Store")} size="90%">
@@ -143,12 +167,29 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
       )}
       {status === "ready" && (
         <Stack gap="sm">
-          <TextInput
-            placeholder={t("Search by name, description, category or author")}
-            value={query}
-            onChange={(e) => setQuery(e.currentTarget.value)}
-            autoFocus
-          />
+          <Group gap="sm" wrap="nowrap">
+            <TextInput
+              placeholder={t("Search by name, description, category or author")}
+              value={query}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              autoFocus
+              style={{ flex: 1 }}
+            />
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleInstallAll}
+              loading={installingAll}
+              disabled={!canAuthor || pending.length === 0}
+            >
+              {t("Install all")}
+            </Button>
+          </Group>
+          {installAllError && (
+            <Alert color="red" title={t("Some Gramplets failed to install")}>
+              {installAllError}
+            </Alert>
+          )}
           {visible.length === 0 && (
             <Text size="sm" c="dimmed">
               {t("No matches")}

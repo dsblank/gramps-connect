@@ -349,16 +349,6 @@ export function MenuBar({ draftStack }: MenuBarProps) {
               perm: GRAMPLET_AUTHOR_PERMISSION,
               onClick: () => setGrampletOpened(true),
             },
-            {
-              // Browse/install/update/remove from gramplet-store/catalog.json
-              // (see GrampletStorePanel.tsx's own top comment) -- same
-              // permission as "Add Gramplet…" just above, since installing
-              // or updating one is exactly that same authoring action, just
-              // sourced from the catalog instead of a blank editor.
-              label: "Browse Gramplet Store…",
-              perm: GRAMPLET_AUTHOR_PERMISSION,
-              onClick: () => setGrampletStoreOpened(true),
-            },
           ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already
@@ -385,19 +375,34 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           items={reportMenuItems(reports, setReportId)}
           onOpen={() => setReportsRequested(true)}
         />
-        {/* No permissions here: Overview and About are prose about the app
-            itself, the same for every reader, and someone with the fewest
-            privileges is the one most likely to be new and want them.
-            System Information reads /api/metadata/, which every logged-in
-            user may call (it's a ProtectedResource, not a permissioned
-            one) -- and reporting a bug is exactly what a reader with no
-            privileges still needs to be able to do. */}
+        {/* Overview, System Information and About need no permission:
+            Overview and About are prose about the app itself, the same for
+            every reader, and someone with the fewest privileges is the one
+            most likely to be new and want them. System Information reads
+            /api/metadata/, which every logged-in user may call (it's a
+            ProtectedResource, not a permissioned one) -- and reporting a bug
+            is exactly what a reader with no privileges still needs to be
+            able to do. Gramplet Store is the exception -- it's an authoring
+            action (installing/updating a Gramplet), gated the same as "Add
+            Gramplet…" over in the Add menu. */}
         <AppMenu
           label={t("Help")}
           items={[
             { label: "Overview", onClick: () => setOverviewOpened(true) },
             { label: "System Information", onClick: () => setSystemInfoOpened(true) },
             { label: "About", onClick: () => setAboutOpened(true), separatorBefore: true },
+            {
+              // Browse/install/update/remove from gramplet-store/catalog.json
+              // (see GrampletStorePanel.tsx's own top comment) -- same
+              // permission as "Add Gramplet…" in the Add menu, since
+              // installing or updating one is exactly that same authoring
+              // action, just sourced from the catalog instead of a blank
+              // editor.
+              label: "Gramplet Store…",
+              perm: GRAMPLET_AUTHOR_PERMISSION,
+              onClick: () => setGrampletStoreOpened(true),
+              separatorBefore: true,
+            },
           ]}
         />
       </Group>
