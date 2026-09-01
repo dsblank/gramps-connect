@@ -12,20 +12,21 @@ sort_field = st.selectbox("Sort by", ["Surname", "Given name", "Gramps ID"], ind
 
 # Never paste user-typed text straight into a "where" string with an
 # f-string -- see 04_interactive_search.py's own comment on repr().
-conditions = []
-if given_name:
-    pattern = f"%{given_name}%"
-    conditions.append(f"like(given_name, {pattern!r})")
-if surname:
-    pattern = f"%{surname}%"
-    conditions.append(f"like(surname, {pattern!r})")
+given_name_pattern = f"%{given_name}%"
+surname_pattern = f"%{surname}%"
+
+gender_clause = None
 if gender_choice == "Male":
-    conditions.append("gender == Person.MALE")
+    gender_clause = "gender == Person.MALE"
 elif gender_choice == "Female":
-    conditions.append("gender == Person.FEMALE")
-if no_death_date:
-    conditions.append("death.date.sortval is None")
-where = " and ".join(conditions) if conditions else None
+    gender_clause = "gender == Person.FEMALE"
+
+where = and_filters(
+    f"like(given_name, {given_name_pattern!r})" if given_name else None,
+    f"like(surname, {surname_pattern!r})" if surname else None,
+    gender_clause,
+    "death.date.sortval is None" if no_death_date else None,
+)
 
 order_column = {"Surname": "surname", "Given name": "given_name", "Gramps ID": "gramps_id"}[sort_field]
 

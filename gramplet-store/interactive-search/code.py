@@ -32,13 +32,14 @@ only_no_death_date = st.checkbox("Only show people with no recorded death date",
 # produces a correctly quoted-and-escaped Python string literal instead,
 # which is exactly what GOQL's own string syntax expects -- the same
 # pattern db.get_person_from_gramps_id() itself uses internally.
-conditions = []
-if surname:
-    pattern = f"%{surname}%"
-    conditions.append(f"like(surname, {pattern!r})")
-if only_no_death_date:
-    conditions.append("death.date.sortval is None")
-where = " and ".join(conditions) if conditions else None
+surname_pattern = f"%{surname}%"
+
+# and_filters(*clauses) ANDs together whichever clauses aren't None/empty --
+# no need to build up a "conditions" list and join it by hand.
+where = and_filters(
+    f"like(surname, {surname_pattern!r})" if surname else None,
+    "death.date.sortval is None" if only_no_death_date else None,
+)
 
 order_column = {"Surname": "surname", "Given name": "given_name", "Gramps ID": "gramps_id"}[sort_field]
 

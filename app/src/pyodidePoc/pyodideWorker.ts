@@ -879,6 +879,15 @@ def get_filter():
     return _where_expr
 
 
+def and_filters(*clauses):
+    """ANDs together where_expr clauses, skipping any that are None/empty --
+    e.g. and_filters(get_filter(), "gender == 1") builds on the view's
+    current filter without needing an \`if\` to avoid a leading/dangling
+    "and". Returns None (filter()'s own default) if every clause is
+    falsy, never an empty string."""
+    return " and ".join(c for c in clauses if c) or None
+
+
 # columns()/row(): named and shaped after Gramps desktop's own GrampyScript
 # addon (../addons-source/GrampyScript/) -- call columns(...) once (optional)
 # and row(...) per row to build a table instead of returning a plain

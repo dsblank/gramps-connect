@@ -29,17 +29,18 @@ gender_choice = st.selectbox("Gender", ["Any", "Female", "Male"], index=0)
 sort_field = st.selectbox("Sort by", ["Surname", "Given name"], index=0)
 living_only = st.checkbox("No recorded death date (possibly living)", value=False)
 
-conditions = []
-if surname:
-    pattern = f"%{surname}%"
-    conditions.append(f"like(surname, {pattern!r})")
+gender_clause = None
 if gender_choice == "Female":
-    conditions.append("gender == Person.FEMALE")
+    gender_clause = "gender == Person.FEMALE"
 elif gender_choice == "Male":
-    conditions.append("gender == Person.MALE")
-if living_only:
-    conditions.append("death.date.sortval is None")
-where = " and ".join(conditions) if conditions else None
+    gender_clause = "gender == Person.MALE"
+
+surname_pattern = f"%{surname}%"
+where = and_filters(
+    f"like(surname, {surname_pattern!r})" if surname else None,
+    gender_clause,
+    "death.date.sortval is None" if living_only else None,
+)
 
 order_column = {"Surname": "surname", "Given name": "given_name"}[sort_field]
 
