@@ -106,15 +106,6 @@ export function useHistorySync(): {
       // otherwise be formatted onto an ordinary view's hash, where
       // formatHash ignores it but nothing else would have cleared it.
       subject: visual ? visualSubject : null,
-      // This hook has no opinion on the query suffix (SearchView.tsx's own
-      // submitted-search state, hash.ts's HashRoute.query) -- it only ever
-      // preserves whatever the *current* hash already carries, so this
-      // effect recomputing `next` for an unrelated reason (a selection
-      // change elsewhere) can never silently drop it. SearchView is the
-      // only thing that ever sets or clears it, always via
-      // history.replaceState (never a hashchange), so it can never be
-      // stale here either.
-      query: parseHash().query,
     });
     if (window.location.hash !== next) {
       window.location.hash = next;
