@@ -36,7 +36,11 @@ elif gender_choice == "Male":
     gender_clause = "gender == Person.MALE"
 
 surname_pattern = f"%{surname}%"
+# get_filter() layers this search on top of whatever filter is currently
+# applied on the People view -- see 04_interactive_search.py's own comment
+# on this same pattern, and the manifest's listensToFilter below.
 where = and_filters(
+    get_filter(),
     f"like(surname, {surname_pattern!r})" if surname else None,
     gender_clause,
     "death.date.sortval is None" if living_only else None,

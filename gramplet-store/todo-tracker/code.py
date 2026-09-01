@@ -18,9 +18,15 @@
 
 todo_only = st.checkbox("Only notes mentioning TODO", value=True)
 
-where = "type.value == NoteType.RESEARCH"
-if todo_only:
-    where += " and 'TODO' in text.string"
+# and_filters(get_filter(), ...) layers this on top of whatever filter is
+# currently applied on the Notes view this Gramplet is a tab of, so this
+# tracker only lists research notes within that filter -- see the
+# manifest's listensToFilter.
+where = and_filters(
+    get_filter(),
+    "type.value == NoteType.RESEARCH",
+    "'TODO' in text.string" if todo_only else None,
+)
 
 matching_notes = notes(where, order=[{"column": "change", "direction": "desc"}], limit=100)
 

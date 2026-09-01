@@ -2,10 +2,11 @@
   "id": "hello-table",
   "name": "Hello Table",
   "description": "The smallest useful Gramplet: run a query against the tree and list the results as a table.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "example",
   "views": [
     "person"
-  ]
+  ],
+  "listensToFilter": true
 }

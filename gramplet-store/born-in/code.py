@@ -1,8 +1,10 @@
 #
 # Like plugins/filter.py, this is a tree-wide search, not reactive to the
-# selected person, so "Re-run automatically" isn't needed. Nothing runs
-# until both fields below are filled in, so it won't fire against a
-# placeholder value.
+# selected person, so "listensToSelection" isn't needed -- but it does
+# listen to the *filter* (see and_filters() below and the manifest's
+# listensToFilter), so narrowing the People view first also narrows this
+# search. Nothing runs until both fields below are filled in, so it won't
+# fire against a placeholder value.
 
 from gramps.gen.lib import EventType
 
@@ -15,9 +17,13 @@ if birth_place and burial_column_label:
     #
     # Never paste user-typed text straight into a "where" string with an
     # f-string -- see filter.py's own comment on repr().
+    #
+    # and_filters(get_filter(), ...) layers this on top of whatever filter
+    # is currently applied on the People view -- so "born in Chicago"
+    # searches only the currently filtered list, not always the whole tree.
 
     chicago_born = people(
-        f"birth.place.title == {birth_place!r}",
+        and_filters(get_filter(), f"birth.place.title == {birth_place!r}"),
         order=[{"column": "surname", "direction": "asc"}],
         limit=200,
     )

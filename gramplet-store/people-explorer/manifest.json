@@ -2,10 +2,11 @@
   "id": "people-explorer",
   "name": "People Explorer",
   "description": "A complete interactive search over People: surname, gender, sort order, a reset button and a run counter.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "example",
   "views": [
     "person"
-  ]
+  ],
+  "listensToFilter": true
 }

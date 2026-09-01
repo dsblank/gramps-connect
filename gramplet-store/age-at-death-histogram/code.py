@@ -30,9 +30,22 @@ from plotly.subplots import make_subplots
 # There's no db method that reaches a related field like birth.date back
 # into the result at all (see 07_relationship_queries.py), so filter()
 # is the only way to get this cheaply, not a shortcut around db.
+#
+# and_filters(get_filter(), ...) layers this Gramplet's own "has both
+# dates" requirement on top of whatever filter is currently applied on
+# the People view it's a tab of (FilterBar's search box) -- so filtering
+# the list down to one family branch narrows the histogram the same way,
+# instead of it always covering the whole tree regardless. Requires
+# `views: ["person"]` in the manifest (get_filter() only hands back a
+# where_expr matching the view's own object type) and
+# `listensToFilter: true` so the chart actually re-renders when the
+# filter changes, not just on the next unrelated re-run.
 rows = filter(
     "person",
-    where="birth.date.sortval is not None and death.date.sortval is not None",
+    where=and_filters(
+        get_filter(),
+        "birth.date.sortval is not None and death.date.sortval is not None",
+    ),
     what=["birth.date", "death.date"],
     limit=5000,
 )

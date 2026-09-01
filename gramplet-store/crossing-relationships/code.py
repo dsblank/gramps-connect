@@ -25,8 +25,16 @@
 # can be crossed the same way in a where= condition -- this works today
 # exactly because it only needs a condition to be true or false, not a
 # value handed back.
+#
+# and_filters(get_filter(), ...) layers this on top of whatever filter is
+# currently applied on the People view this Gramplet is a tab of, so the
+# two person queries below only look within the filtered list rather than
+# always the whole tree -- see the manifest's listensToFilter. The
+# families() query further down stays untouched: get_filter() here is a
+# Person where_expr (this Gramplet's views is ["person"]), which doesn't
+# apply to a Family query.
 born_and_died_same_place = people(
-    "birth.place.title == death.place.title and birth.place.title is not None",
+    and_filters(get_filter(), "birth.place.title == death.place.title and birth.place.title is not None"),
     order=[{"column": "surname", "direction": "asc"}],
     limit=50,
 )
@@ -57,7 +65,7 @@ for person in born_and_died_same_place:
 html("<hr>")
 print("People with at least one high-confidence citation but no notes:")
 well_sourced_undocumented = people(
-    "exists(citations, confidence >= Citation.CONF_HIGH) and not exists(notes)",
+    and_filters(get_filter(), "exists(citations, confidence >= Citation.CONF_HIGH) and not exists(notes)"),
     limit=25,
 )
 columns("Person")

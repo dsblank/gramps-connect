@@ -1,8 +1,10 @@
 #
 # Unlike the other plugins in this folder, this one does not react to the
-# selected person -- it is a tree-wide search, driven by its own widgets
-# (like Gramps Desktop's sidebar Person Filter), so "Re-run automatically
-# when the selected record changes" is not needed.
+# selected person -- it's a search driven by its own widgets (like Gramps
+# Desktop's sidebar Person Filter), so "Re-run automatically when the
+# selected record changes" is not needed. It does react to the *filter*
+# though (see get_filter() below), so it searches within whatever's
+# currently filtered on the People view rather than always the whole tree.
 
 given_name = st.text_input("Given name contains", value="")
 surname = st.text_input("Surname contains", value="")
@@ -21,7 +23,13 @@ if gender_choice == "Male":
 elif gender_choice == "Female":
     gender_clause = "gender == Person.FEMALE"
 
+# get_filter() layers this search on top of whatever filter is currently
+# applied on the People view this Gramplet is a tab of -- see the
+# manifest's listensToFilter, which re-runs this search when that filter
+# changes, same as it already does for the selected-record-independent
+# widgets above.
 where = and_filters(
+    get_filter(),
     f"like(given_name, {given_name_pattern!r})" if given_name else None,
     f"like(surname, {surname_pattern!r})" if surname else None,
     gender_clause,

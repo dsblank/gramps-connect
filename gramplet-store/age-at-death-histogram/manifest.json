@@ -1,8 +1,12 @@
 {
   "id": "age-at-death-histogram",
   "name": "Age-at-Death Histogram",
-  "description": "An interactive plotly histogram of age at death across everyone in the tree with both a birth and death date recorded.",
-  "version": "1.1.0",
+  "description": "An interactive plotly histogram of age at death across everyone in the tree (or the current filtered list) with both a birth and death date recorded.",
+  "version": "1.2.0",
   "author": "Gramps Connect",
-  "category": "chart"
+  "category": "chart",
+  "views": [
+    "person"
+  ],
+  "listensToFilter": true
 }

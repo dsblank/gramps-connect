@@ -24,7 +24,12 @@ from collections import Counter
 # above the 1000-per-request server cap) is paged through transparently.
 # There's no db method that can do this -- reaching past db here isn't
 # a shortcut, it's the only way to stay this cheap at this scale.
-rows = filter("person", what=["surname"], limit=5000)
+#
+# where=get_filter() layers this on top of whatever filter is currently
+# applied on whichever People-typed view this Gramplet is a tab of (see
+# the manifest's views/listensToFilter) -- so both charts below cover the
+# filtered list, not always the whole tree.
+rows = filter("person", where=get_filter(), what=["surname"], limit=5000)
 surname_counts = Counter(r.surname for r in rows if r.surname)
 top_surnames = surname_counts.most_common(10)
 
@@ -38,10 +43,16 @@ html(bar.render())
 
 # ---- Chart 2: gender split --------------------------------------------
 # count(..., where=...) -- no db equivalent for a conditional count, same
-# reasoning as 03_tree_statistics.py's own use of it.
-women = count("person", where="gender == Person.FEMALE")
-men = count("person", where="gender == Person.MALE")
-other = db.get_number_of_people() - women - men
+# reasoning as 03_tree_statistics.py's own use of it. and_filters(
+# get_filter(), ...) narrows each count to the current filter, same as
+# Chart 1 above -- and the "total" used for the "other" slice is counted
+# the same filtered way (rather than db.get_number_of_people(), which is
+# always the whole tree), so the three slices still add up correctly
+# whether or not a filter is applied.
+total = count("person", where=get_filter())
+women = count("person", where=and_filters(get_filter(), "gender == Person.FEMALE"))
+men = count("person", where=and_filters(get_filter(), "gender == Person.MALE"))
+other = total - women - men
 
 pie = pygal.Pie(title="Gender")
 pie.add("Female", women)

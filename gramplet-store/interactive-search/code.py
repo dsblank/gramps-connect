@@ -35,8 +35,14 @@ only_no_death_date = st.checkbox("Only show people with no recorded death date",
 surname_pattern = f"%{surname}%"
 
 # and_filters(*clauses) ANDs together whichever clauses aren't None/empty --
-# no need to build up a "conditions" list and join it by hand.
+# no need to build up a "conditions" list and join it by hand. get_filter()
+# is just another clause: it's whatever where_expr FilterBar's own search
+# box currently has applied on this People view, so this search also
+# respects it instead of always running over the whole tree -- see the
+# manifest's listensToFilter, which re-runs this Gramplet when that filter
+# changes, not just when a widget above is touched.
 where = and_filters(
+    get_filter(),
     f"like(surname, {surname_pattern!r})" if surname else None,
     "death.date.sortval is None" if only_no_death_date else None,
 )

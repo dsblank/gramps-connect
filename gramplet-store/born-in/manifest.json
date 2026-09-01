@@ -2,10 +2,11 @@
   "id": "born-in",
   "name": "Born In…",
   "description": "Find everyone born in a given place, with a burial column you name yourself.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "example",
   "views": [
     "person"
-  ]
+  ],
+  "listensToFilter": true
 }

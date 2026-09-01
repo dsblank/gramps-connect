@@ -28,7 +28,17 @@
 # e.g. birth.date, even though we're not asking to see that field back --
 # see 07_relationship_queries.py for how to pull related fields like this
 # one back into the table too).
-matches = people("gender == Person.MALE and birth.date.sortval >= Date('Jan 1, 1900')", limit=25)
+#
+# and_filters(get_filter(), ...) layers this Gramplet's own condition on
+# top of whatever filter is currently applied on the People view it's a
+# tab of (FilterBar's own search box) -- get_filter()'s own doc comment,
+# and the (i) help button, cover this further. The manifest's
+# listensToFilter re-runs this table when that filter changes, not just
+# when this tab is switched to.
+matches = people(
+    and_filters(get_filter(), "gender == Person.MALE and birth.date.sortval >= Date('Jan 1, 1900')"),
+    limit=25,
+)
 
 # row(*values) adds one row to the table. A whole Person/Event/Place/...
 # object -- not just a hand-picked field of it -- renders as a clickable

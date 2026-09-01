@@ -1,8 +1,12 @@
 {
   "id": "pygal-charts",
   "name": "Pygal Charts",
-  "description": "Top-10 surnames as a bar chart and a gender split as a pie chart, drawn with the offline pygal library.",
-  "version": "1.0.0",
+  "description": "Top-10 surnames as a bar chart and a gender split as a pie chart, drawn with the offline pygal library, within the current filter if one is applied.",
+  "version": "1.1.0",
   "author": "Gramps Connect",
-  "category": "chart"
+  "category": "chart",
+  "views": [
+    "person"
+  ],
+  "listensToFilter": true
 }
