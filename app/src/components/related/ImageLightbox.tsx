@@ -410,6 +410,12 @@ export function ImageLightbox({ opened, onClose, handle }: {
 
         <ActionIcon
           variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label="Close"
+          // Stops the pointerdown here, same as the region boxes above --
+          // otherwise it bubbles to the frame's onPointerDown, which
+          // setPointerCapture()s itself for this pointerId, and a captured
+          // pointer's click event gets retargeted to the capturing element
+          // instead of firing on this button.
+          onPointerDown={(e) => e.stopPropagation()}
           style={{ position: "absolute", top: 16, right: 16, zIndex: 3 }}
         >
           ✕
