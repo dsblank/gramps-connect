@@ -1,0 +1,11 @@
+{
+  "id": "person-lookup",
+  "name": "Person Lookup",
+  "description": "Look up one person by their Gramps ID and list every event they're part of.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "example",
+  "views": [
+    "person"
+  ]
+}

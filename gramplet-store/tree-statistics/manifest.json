@@ -1,0 +1,8 @@
+{
+  "id": "tree-statistics",
+  "name": "Tree Statistics",
+  "description": "A quick summary of how big this tree is: counts of people, families, events and more, plus a gender/missing-birth-date breakdown.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "utility"
+}

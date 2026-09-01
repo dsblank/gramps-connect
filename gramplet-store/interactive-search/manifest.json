@@ -1,0 +1,11 @@
+{
+  "id": "interactive-search",
+  "name": "Interactive Search",
+  "description": "A live search box over People: type a surname, pick a sort field, filter to no recorded death date -- updates as you type.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "example",
+  "views": [
+    "person"
+  ]
+}

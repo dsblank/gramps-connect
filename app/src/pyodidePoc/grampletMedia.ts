@@ -112,7 +112,10 @@ function isGramplet(value: unknown): value is Gramplet {
     (g.views === undefined || (Array.isArray(g.views) && g.views.every((v) => typeof v === "string"))) &&
     (g.addedViews === undefined ||
       (Array.isArray(g.addedViews) && g.addedViews.every((v) => typeof v === "string"))) &&
-    (g.listensToSelection === undefined || typeof g.listensToSelection === "boolean")
+    (g.listensToSelection === undefined || typeof g.listensToSelection === "boolean") &&
+    (g.sourceId === undefined || typeof g.sourceId === "string") &&
+    (g.sourceVersion === undefined || typeof g.sourceVersion === "string") &&
+    (g.sourceCodeHash === undefined || typeof g.sourceCodeHash === "string")
   );
 }
 

@@ -1,0 +1,12 @@
+{
+  "id": "person-details",
+  "name": "Person Details",
+  "description": "A summary of the selected person: IDs, gender, alternate names, parents, life events and key attributes.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "detail",
+  "views": [
+    "person"
+  ],
+  "listensToSelection": true
+}

@@ -1,0 +1,11 @@
+{
+  "id": "crossing-relationships",
+  "name": "Crossing Relationships",
+  "description": "People born and died in the same place, well-sourced people with no notes, and families with more than 4 children.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "example",
+  "views": [
+    "person"
+  ]
+}

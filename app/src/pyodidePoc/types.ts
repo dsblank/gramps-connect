@@ -137,6 +137,32 @@ export interface Gramplet {
    * RunGrampletRequest's own `whereExpr` for what a listening Gramplet's
    * code actually reads (via `get_filter()`). */
   listensToFilter?: boolean;
+  /** The catalog entry's own `id` (CatalogEntry.id below) this Gramplet was
+   * installed from, if it was installed from the Gramplet Store rather
+   * than hand-authored via "Create new Gramplet" -- undefined for the
+   * latter. Written once by grampletStore.ts's installFromCatalog() and
+   * never touched again by ordinary code-edit saves
+   * (saveGrampletManifest() passes whatever `sourceId` the caller's
+   * in-memory Gramplet already has straight through), so it stays
+   * accurate even after a viewer customizes the installed copy's code.
+   * Unlike `handle`, this IS part of the stored manifest -- it travels
+   * with the tree/XML export, same as the rest of the Gramplet. */
+  sourceId?: string;
+  /** The catalog entry's `version` string at the moment this Gramplet was
+   * last installed or updated from it -- compared against the *current*
+   * catalog entry's own `version` (grampletStore.ts's `hasCatalogUpdate()`)
+   * to decide whether to show "Update available". Meaningless without
+   * `sourceId`; always set together with it. */
+  sourceVersion?: string;
+  /** A cheap, non-cryptographic checksum (grampletStore.ts's `hashCode()`)
+   * of `code` as it stood immediately after the last install/update from
+   * the catalog -- compared against a fresh hash of the *current* `code`
+   * (grampletStore.ts's `wasEditedSinceInstall()`) to tell whether a
+   * viewer has hand-edited an installed Gramplet since, so Update can warn
+   * before silently overwriting their changes rather than assuming an
+   * installed copy is always still pristine. Meaningless without
+   * `sourceId`. */
+  sourceCodeHash?: string;
   /** The underlying "Gramplet"-tagged Media object's handle -- NOT part of
    * the stored JSON manifest itself (undefined for a brand new, not-yet-
    * uploaded Gramplet); attached by grampletMedia.ts's fetchGramplets()/
@@ -144,6 +170,50 @@ export interface Gramplet {
    * addedViews toggles) knows which Media object to PUT back to.
    * saveGrampletManifest() strips it back out before writing. */
   handle?: string;
+}
+
+/** One entry in the Gramplet Store's catalog (gramplet-store/catalog.json,
+ * built by app/scripts/build-gramplet-catalog.mjs from gramplet-store/
+ * <id>/manifest.json + code.py -- see that directory's own README for the
+ * source format) -- fetched by grampletStore.ts's fetchCatalog() over
+ * plain, unauthenticated fetch() (public static content, unlike every
+ * other request this app makes). Shaped closely after `Gramplet` above
+ * (`installFromCatalog()` builds one directly from an entry: `name` ->
+ * `label`, `code`/`description`/`views`/`listensToSelection`/
+ * `listensToFilter` carried straight through) but a distinct type -- a
+ * catalog entry is never itself a tree object, and carries a few fields
+ * (`version`, `author`, `category`, `iconUrl`) a Gramplet manifest has no
+ * use for. */
+export interface CatalogEntry {
+  /** Stable across versions -- becomes an installed Gramplet's own
+   * `sourceId`. Must match the catalog's own gramplet-store/<id>/ folder
+   * name (enforced at build time by build-gramplet-catalog.mjs). */
+  id: string;
+  /** Becomes an installed Gramplet's `label`. */
+  name: string;
+  description: string;
+  /** Plain semver, e.g. "1.0.0" -- compared against an installed
+   * Gramplet's own `sourceVersion` to decide whether an update is
+   * available (grampletStore.ts's `hasCatalogUpdate()`). */
+  version: string;
+  author: string;
+  /** A short grouping tag ("example", "detail", "utility", "chart", ...)
+   * -- free text, not a closed enum; the Store UI groups/filters by
+   * whatever values actually show up in the catalog. */
+  category: string;
+  /** Same shape and meaning as `Gramplet.views` -- omitted means "every
+   * object type". */
+  views?: string[];
+  listensToSelection?: boolean;
+  listensToFilter?: boolean;
+  /** Relative to the catalog's own base URL (e.g. "icons/hello-table.png"),
+   * not an absolute URL -- resolved against `fetchCatalog()`'s own
+   * `catalogUrl` by whichever component renders it. Undefined when the
+   * entry has no icon. */
+  iconUrl?: string;
+  /** The Gramplet's Python source -- becomes an installed Gramplet's own
+   * `code` verbatim. */
+  code: string;
 }
 
 export interface RunGrampletRequest {

@@ -1,0 +1,9 @@
+{
+  "id": "selected-record",
+  "name": "Selected Record Detail",
+  "description": "Extra detail about whichever record is currently selected -- works across every object type (Person, Family, and everything else).",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "utility",
+  "listensToSelection": true
+}

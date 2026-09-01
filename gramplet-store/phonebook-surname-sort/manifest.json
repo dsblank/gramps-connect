@@ -1,0 +1,8 @@
+{
+  "id": "phonebook-surname-sort",
+  "name": "Phonebook Surname Sort",
+  "description": "Sorts surnames the way a phone book does, ignoring accents (Muller/Müller land together), via a %pip-installed package.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "example"
+}

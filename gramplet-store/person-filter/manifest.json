@@ -1,0 +1,11 @@
+{
+  "id": "person-filter",
+  "name": "Person Filter",
+  "description": "Search the whole tree for people by name, gender and death date.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "example",
+  "views": [
+    "person"
+  ]
+}

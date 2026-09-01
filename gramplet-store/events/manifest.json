@@ -1,0 +1,12 @@
+{
+  "id": "events",
+  "name": "Events",
+  "description": "Every event the selected person takes part in, with role, date and place.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "detail",
+  "views": [
+    "person"
+  ],
+  "listensToSelection": true
+}

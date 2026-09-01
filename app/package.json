@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:gramplet-catalog": "node scripts/build-gramplet-catalog.mjs"
   },
   "dependencies": {
     "@gramps-connect/gramps-date": "*",

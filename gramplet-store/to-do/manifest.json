@@ -1,0 +1,12 @@
+{
+  "id": "to-do",
+  "name": "To Do",
+  "description": "The To Do notes attached to the selected person.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "detail",
+  "views": [
+    "person"
+  ],
+  "listensToSelection": true
+}

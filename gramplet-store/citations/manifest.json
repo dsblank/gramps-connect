@@ -1,0 +1,12 @@
+{
+  "id": "citations",
+  "name": "Citations",
+  "description": "The citations attached to the selected person, with source, page and confidence.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "detail",
+  "views": [
+    "person"
+  ],
+  "listensToSelection": true
+}

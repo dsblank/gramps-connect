@@ -1,0 +1,12 @@
+{
+  "id": "all-relationships",
+  "name": "All Relationships to Home Person",
+  "description": "Every way the selected person is related to your Home person, with the common ancestor(s) each path goes through.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "detail",
+  "views": [
+    "person"
+  ],
+  "listensToSelection": true
+}
