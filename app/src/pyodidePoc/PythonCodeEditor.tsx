@@ -19,10 +19,18 @@ export function PythonCodeEditor({
   value,
   onChange,
   minHeight = 200,
+  readOnly = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   minHeight?: number;
+  /** For a code *preview* (GrampletStorePanel.tsx's per-entry detail, shown
+   * before install/update) rather than an editable field -- still
+   * highlighted the same as an editable one, just not typeable into.
+   * `onChange` is still required even here (react-simple-code-editor's own
+   * `onValueChange` prop isn't optional), simplest as a no-op from the
+   * caller rather than this component special-casing it away. */
+  readOnly?: boolean;
 }) {
   return (
     <div className={classes.wrapper} style={{ minHeight }}>
@@ -33,6 +41,7 @@ export function PythonCodeEditor({
         tabSize={4}
         insertSpaces
         padding={10}
+        readOnly={readOnly}
         textareaClassName={classes.textarea}
         preClassName={classes.pre}
         style={{

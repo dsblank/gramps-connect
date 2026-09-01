@@ -35,6 +35,10 @@ const MapItemEditorDialog = lazy(() =>
 const GrampletEditDialog = lazy(() =>
   import("../pyodidePoc/GrampletEditDialog").then((m) => ({ default: m.GrampletEditDialog })));
 
+// Same lazy-load reasoning as GrampletEditDialog just above.
+const GrampletStorePanel = lazy(() =>
+  import("../pyodidePoc/GrampletStorePanel").then((m) => ({ default: m.GrampletStorePanel })));
+
 // Matches gramps-web-api's PERMISSIONS map (auth/const.py) -- both granted
 // at ROLE_OWNER and above.
 const PERM_IMPORT_FILE = "ImportFile";
@@ -234,6 +238,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
   const [aboutOpened, setAboutOpened] = useState(false);
   const [mapItemOpened, setMapItemOpened] = useState(false);
   const [grampletOpened, setGrampletOpened] = useState(false);
+  const [grampletStoreOpened, setGrampletStoreOpened] = useState(false);
 
   // App.tsx mounts a second MenuBar when the header switches layouts, so
   // the fetch is deduplicated in loadReports() and only its result is
@@ -344,6 +349,16 @@ export function MenuBar({ draftStack }: MenuBarProps) {
               perm: GRAMPLET_AUTHOR_PERMISSION,
               onClick: () => setGrampletOpened(true),
             },
+            {
+              // Browse/install/update/remove from gramplet-store/catalog.json
+              // (see GrampletStorePanel.tsx's own top comment) -- same
+              // permission as "Add Gramplet…" just above, since installing
+              // or updating one is exactly that same authoring action, just
+              // sourced from the catalog instead of a blank editor.
+              label: "Browse Gramplet Store…",
+              perm: GRAMPLET_AUTHOR_PERMISSION,
+              onClick: () => setGrampletStoreOpened(true),
+            },
           ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already
@@ -423,6 +438,17 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           }
         >
           <GrampletEditDialog target={{ kind: "new" }} onClose={() => setGrampletOpened(false)} />
+        </Suspense>
+      )}
+      {grampletStoreOpened && (
+        <Suspense
+          fallback={
+            <Box style={{ position: "fixed", inset: 0, zIndex: 300 }}>
+              <Loader size="sm" style={{ position: "absolute", top: "50%", left: "50%" }} />
+            </Box>
+          }
+        >
+          <GrampletStorePanel onClose={() => setGrampletStoreOpened(false)} />
         </Suspense>
       )}
     </>
