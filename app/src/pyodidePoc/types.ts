@@ -58,11 +58,12 @@
 // recursively, for nested dicts/lists too -- on top of plain `[]`
 // access, which still works exactly as it always has.
 //
-// Two more (synchronous) builtins -- `columns(*names)`/`row(*values)`,
-// named and shaped after Gramps desktop's own GrampyScript addon -- let a
-// Gramplet build a table instead of a plain string: call `columns(...)`
-// once (optional -- if skipped, columns are auto-named "Column 1", "Column
-// 2", ...) and `row(...)` per row, and the result renders as a real GUI
+// Two more (synchronous) builtins -- `set_column_titles(*names)`/
+// `row(*values)`, named and shaped after Gramps desktop's own GrampyScript
+// addon -- let a Gramplet build a table instead of a plain string: call
+// `set_column_titles(...)` once (optional -- if skipped, columns are
+// auto-named "Column 1", "Column 2", ...) and `row(...)` per row, and the
+// result renders as a real GUI
 // table (GrampletResultView.tsx) instead of a Code block, if any rows were
 // ever appended -- see pyodideWorker.ts's `_build_table()`. A `row()`
 // argument can be a primary object itself (whatever `get_object()`/
@@ -308,7 +309,7 @@ export interface ObjectCell {
 export type TableCell = string | ObjectCell;
 
 /** One piece of a `blocks` response (see PyodideWorkerResponse below) --
- * either a table built by columns()/row() calls, or raw markup from a single
+ * either a table built by set_column_titles()/row() calls, or raw markup from a single
  * html(markup) call, a run of consecutive print() calls (escaped and
  * `<pre>`-wrapped -- see pyodideWorker.ts's `print()`/`_flush_print()`), or
  * the code's own trailing expression value (same treatment, appended by
@@ -360,7 +361,7 @@ export type PyodideWorkerResponse =
    * between posting a RunGrampletRequest and this arriving, during which
    * the caller shows a "queued" status rather than "running". */
   | { type: "started"; runId: string }
-  /** From columns()/row()/html()/print() calls, and/or the code's own
+  /** From set_column_titles()/row()/html()/print() calls, and/or the code's own
    * trailing expression value -- see GrampletBlock above. Empty only when
    * the run produced none of the above. */
   | { type: "blocks"; blocks: GrampletBlock[]; runId: string }

@@ -66,7 +66,7 @@ elif isinstance(record, Person):
 
     # Same handle-indirection technique as 02_person_lookup.py: event_ref_
     # list holds handles, not the events themselves.
-    columns("Role", "Type", "Date", "Place")
+    set_column_titles("Role", "Type", "Date", "Place")
     for event_ref in person.event_ref_list:
         event = db.get_event_from_handle(event_ref.ref)
         place = db.get_place_from_handle(event.place) if event.place else None
@@ -77,13 +77,13 @@ elif isinstance(record, Family):
     father = db.get_person_from_handle(family.father_handle) if family.father_handle else None
     mother = db.get_person_from_handle(family.mother_handle) if family.mother_handle else None
 
-    columns("Role", "Person")
+    set_column_titles("Role", "Person")
     row("Father", father)
     row("Mother", mother)
 
     html("<hr>")
     print(f"{len(family.child_ref_list)} child(ren):")
-    columns("Child")
+    set_column_titles("Child")
     for child_ref in family.child_ref_list:
         row(db.get_person_from_handle(child_ref.ref))
 
@@ -91,5 +91,5 @@ else:
     # Every other type (Event, Place, Source, ...) -- row() renders
     # `record` itself as the same clickable link a full
     # people()/families()/etc. result would.
-    columns(type(record).__name__)
+    set_column_titles(type(record).__name__)
     row(record)

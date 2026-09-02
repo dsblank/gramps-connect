@@ -16,7 +16,7 @@ else:
             todo_notes.append(note)
 
     if todo_notes:
-        columns("To Do", "Text")
+        set_column_titles("To Do", "Text")
         for note in todo_notes:
             snippet = note.text.string.strip().replace("\n", " ")
             if len(snippet) > 200:

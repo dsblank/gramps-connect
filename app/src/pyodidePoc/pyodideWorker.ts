@@ -888,9 +888,10 @@ def and_filters(*clauses):
     return " and ".join(c for c in clauses if c) or None
 
 
-# columns()/row(): named and shaped after Gramps desktop's own GrampyScript
-# addon (../addons-source/GrampyScript/) -- call columns(...) once (optional)
-# and row(...) per row to build a table instead of returning a plain
+# set_column_titles()/row(): named and shaped after Gramps desktop's own
+# GrampyScript addon (../addons-source/GrampyScript/) -- call
+# set_column_titles(...) once (optional) and row(...) per row to build a
+# table instead of returning a plain
 # string; PyodidePocPanel.tsx/GrampletEditDialog.tsx render it as a real
 # GUI table (GrampletResultView.tsx) rather than a Code block whenever any
 # rows were appended. Reset before every run (see onmessage below), not
@@ -909,8 +910,8 @@ def and_filters(*clauses):
 _gramplet_columns = None
 _gramplet_rows = []
 # One set per column index, of every _cell_kind() seen there across every
-# row() call -- how _build_table() names an un-columns()'d column "Person"/
-# "Date"/... instead of "Column N" when every value it saw agreed on one
+# row() call -- how _build_table() names an un-set_column_titles()'d column
+# "Person"/"Date"/... instead of "Column N" when every value it saw agreed on one
 # kind (a None in some rows doesn't break that -- _cell_kind(None) is None
 # and contributes nothing to the set).
 _gramplet_column_kinds = []
@@ -945,18 +946,20 @@ def _reset_table():
     _gramplet_sink_stack = [_gramplet_blocks]
     _gramplet_print_buffer = []
 
-def columns(*names):
-    # NOT the same thing as st.columns() (stBootstrap.ts) despite the name
-    # clash -- this one only names the header row of the *next* row()-built
-    # table; st.columns() lays out side-by-side regions of the result. The
-    # two never collide in practice since this one is a bare builtin and
-    # the other only ever reached via st., but worth keeping straight when
-    # reading either.
+def set_column_titles(*names):
+    # NOT the same thing as st.columns() (stBootstrap.ts) -- this one only
+    # names the header row of the *next* row()-built table; st.columns()
+    # lays out side-by-side regions of the result. Named apart (was
+    # columns()) after that name clash caused a real bug: a Gramplet that
+    # assigned columns = st.columns(...) shadowed this bare builtin in the
+    # shared Pyodide global namespace (gramplet runs don't get a fresh
+    # globals dict each time, see pyodideWorker's runOne()) for every run
+    # afterward, in every Gramplet, until the worker restarted.
     global _gramplet_columns
     # Flushes any print() output buffered since the last row()/html() call
-    # into its own block first, so a print() -> columns()/row() sequence
-    # keeps the print output's place ahead of the table it precedes instead
-    # of folding it into whatever comes next.
+    # into its own block first, so a print() -> set_column_titles()/row()
+    # sequence keeps the print output's place ahead of the table it
+    # precedes instead of folding it into whatever comes next.
     _flush_print()
     _gramplet_columns = [str(n) for n in names]
 
@@ -1025,7 +1028,7 @@ def print(*args, sep=" ", end="\\n", **kwargs):
     # _gramplet_blocks list as html()/row() instead keeps it in true call
     # order with them. Buffers consecutive calls into one block (like row()
     # does for a table) rather than one block per call, flushed by
-    # _flush_print() -- called from columns()/row()/html() when one of
+    # _flush_print() -- called from set_column_titles()/row()/html() when one of
     # those interrupts a run of prints, and from _finalize_blocks() at the
     # run's end. Swallows **kwargs (file=, flush=, ...) -- none of them
     # mean anything without a real stdout stream to honor them.
@@ -1358,7 +1361,7 @@ def _cell(value):
     return _pp(value)
 
 def _cell_kind(value):
-    # What a default (un-columns()'d) header should call this column, if
+    # What a default (un-set_column_titles()'d) header should call this column, if
     # every row agrees -- the primary object's own _class ("Person",
     # "Family", ...) or "Date"; anything else (plain strings/numbers, or a
     # column mixing kinds) has no opinion, so _build_table() falls back to
@@ -1373,8 +1376,9 @@ def _cell_kind(value):
 
 def row(*values):
     # Flushes any print() output buffered since the last flush into its
-    # own block first -- same reasoning as columns() above, since a
-    # Gramplet can call row() straight off without ever calling columns().
+    # own block first -- same reasoning as set_column_titles() above, since
+    # a Gramplet can call row() straight off without ever calling
+    # set_column_titles().
     _flush_print()
     for i, v in enumerate(values):
         if i >= len(_gramplet_column_kinds):
@@ -1395,7 +1399,7 @@ def _build_table():
     return {"columns": cols, "rows": _gramplet_rows}
 
 def _flush_table():
-    # Turns whatever row()/columns() have built up since the last flush
+    # Turns whatever row()/set_column_titles() have built up since the last flush
     # into a table block and clears them, so a later html() call (or the
     # run ending, via _finalize_blocks()) starts a fresh table instead of
     # folding more rows into one already emitted. No-op if row() wasn't
@@ -1572,8 +1576,8 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     const widgetEventArg = request.widgetEvent ? JSON.stringify(JSON.stringify(request.widgetEvent)) : "None";
     await pyodide.runPythonAsync(`_st_begin_run(${grampletIdArg}, ${widgetEventArg})`);
     // The run context get_selected()/get_home_person()/get_filter() read
-    // (see this file's own _set_run_context(), just above columns()/
-    // row()) -- same
+    // (see this file's own _set_run_context(), just above
+    // set_column_titles()/row()) -- same
     // JSON-then-JS-string encoding as grampletIdArg/widgetEventArg above,
     // so `None` lands as the bare Python literal rather than the string
     // `"None"`. Checked against `undefined` too, not just `null` --

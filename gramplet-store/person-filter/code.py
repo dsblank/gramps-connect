@@ -43,6 +43,6 @@ order_column = {"Surname": "surname", "Given name": "given_name", "Gramps ID": "
 matches = people(where, order=[{"column": order_column, "direction": "asc"}], limit=50)
 
 st.write(f"{len(matches)} match(es)")
-columns("Person")
+set_column_titles("Person")
 for person in matches:
     row(person)

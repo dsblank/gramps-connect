@@ -2,7 +2,7 @@
 // runner) and GrampletEditDialog.tsx (the editor's own Execute button) --
 // one place for "how does a Gramplet's output look", rather than two
 // copies of the same status/Code/table switch. A `{type: "blocks"}`
-// response (from `columns()`/`row()`/`html()`/`print()`, see GrampletBlock
+// response (from `set_column_titles()`/`row()`/`html()`/`print()`, see GrampletBlock
 // in types.ts and pyodideWorker.ts's `_finalize_blocks()`) renders each
 // block, in call order, as a real GUI table or raw markup instead of a
 // single Code block -- the whole point of that quartet existing, mirroring

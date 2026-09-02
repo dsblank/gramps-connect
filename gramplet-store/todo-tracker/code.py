@@ -32,7 +32,7 @@ matching_notes = notes(where, order=[{"column": "change", "direction": "desc"}],
 
 st.write(f"{len(matching_notes)} research note(s)")
 
-columns("Note", "Tags", "Text")
+set_column_titles("Note", "Tags", "Text")
 for note in matching_notes:
     # A Note's own tag_list holds handles, not the tags themselves -- the
     # same handle-indirection event_ref_list uses (see

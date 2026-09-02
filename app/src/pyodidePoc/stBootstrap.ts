@@ -184,7 +184,7 @@ class _St:
         col:' -- row()/html()/print(), or another st.* widget -- lands
         nested inside that column instead of at the top level; col.write(x)
         without a 'with' block works too (see _Column.__getattr__ below).
-        NOT the same columns() as BOOTSTRAP_PY's bare builtin (that one
+        NOT the same thing as BOOTSTRAP_PY's set_column_titles() (that one
         only names a row()-built table's headers) -- this is layout, always
         reached via st."""
         n = spec if isinstance(spec, int) else len(spec)

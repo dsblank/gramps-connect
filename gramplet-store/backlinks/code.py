@@ -16,7 +16,7 @@ else:
     if not backlinks:
         html("<i>Nothing else in the tree refers to this person</i>")
     else:
-        columns("Type", "Record")
+        set_column_titles("Type", "Record")
         for obj_type, handles in backlinks.items():
             # obj_type is picked dynamically (a Person can be referred to by
             # a Family as father/mother/child, or by another Person's own

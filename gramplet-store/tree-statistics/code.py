@@ -28,7 +28,7 @@ counts = [
     ("Notes", db.get_number_of_notes()),
 ]
 
-columns("Record type", "Count")
+set_column_titles("Record type", "Count")
 for label, total in counts:
     row(label, total)
 

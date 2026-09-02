@@ -65,7 +65,7 @@ st.write(f"{len(results)} match(es)")
 
 # A whole Person object renders as a clickable row on its own (see
 # 01_hello_table.py) -- no need to build the name text by hand.
-columns("Person")
+set_column_titles("Person")
 for person in results:
     row(person)
 

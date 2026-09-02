@@ -23,7 +23,7 @@ else:
                 return None
             return a_person.event_ref_list[ref_index].ref
 
-        columns("Child", "Birth Date", "Death Date", "Spouse")
+        set_column_titles("Child", "Birth Date", "Death Date", "Spouse")
         for family_handle in person.family_list:
             family = db.get_family_from_handle(family_handle)
             spouse_handle = (

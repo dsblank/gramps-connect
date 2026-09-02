@@ -28,7 +28,7 @@ from unidecode import unidecode
 rows = filter("person", what=["surname"], limit=5000)
 surnames = sorted({r.surname for r in rows if r.surname}, key=unidecode)
 
-columns("Surname", "Sorts as")
+set_column_titles("Surname", "Sorts as")
 for surname in surnames:
     ascii_form = unidecode(surname)
     # Only show the ones where accent-folding actually changed anything --

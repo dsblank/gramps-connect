@@ -33,7 +33,7 @@ else:
         # lat/long are stored as plain text ('' when not recorded) --
         # shown as-is, same as Gramps Desktop's own version of this
         # gramplet, rather than skipping rows with nothing recorded.
-        columns("Event", "Participant", "Date", "Place", "Place ID", "Latitude", "Longitude")
+        set_column_titles("Event", "Participant", "Date", "Place", "Place ID", "Latitude", "Longitude")
         for event_ref, participant in event_sources:
             event = db.get_event_from_handle(event_ref.ref)
             place = db.get_place_from_handle(event.place) if event.place else None

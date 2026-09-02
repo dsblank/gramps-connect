@@ -5,7 +5,7 @@
 # results as a table. Start here if you have never written a Gramplet
 # before.
 #
-# Everything you see here (people(), row(), columns(), the "where" string)
+# Everything you see here (people(), row(), set_column_titles(), the "where" string)
 # is provided for you automatically -- a Gramplet's code runs in a sandbox
 # with no imports needed to reach the tree. See the (i) "Writing a
 # Gramplet" help button in the Gramplet editor for the full list.
@@ -47,7 +47,7 @@ matches = people(
 # just to display them), and clicking it opens a popup to view that
 # record in List, Map, Graph, or Timeline. So the one-column version below
 # is already a genuinely useful table on its own.
-columns("Person")
+set_column_titles("Person")
 for person in matches:
     row(person)
 

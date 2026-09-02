@@ -35,7 +35,7 @@ if birth_place and burial_column_label:
     # walking event_ref_list by hand, stopping at the first Burial event
     # found.
 
-    columns("Person", burial_column_label)
+    set_column_titles("Person", burial_column_label)
     for person in chicago_born:
         burial_place = None
         for event_ref in person.event_ref_list:

@@ -11,7 +11,7 @@ else:
         # way to fetch and embed the actual image bytes here (unlike
         # Gramps Desktop's own Gallery gramplet, which shows thumbnails) --
         # a table of the attached records is the closest equivalent.
-        columns("Media", "Description", "Type", "Path")
+        set_column_titles("Media", "Description", "Type", "Path")
         for media_ref in person.media_list:
             media = db.get_media_from_handle(media_ref.ref)
             row(media, media.desc, media.mime, media.path)

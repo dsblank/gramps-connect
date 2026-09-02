@@ -22,7 +22,7 @@ else:
             Citation.CONF_VERY_LOW: "Very Low",
         }
 
-        columns("Source", "Page", "Confidence", "Date")
+        set_column_titles("Source", "Page", "Confidence", "Date")
         for citation_handle in person.citation_list:
             citation = db.get_citation_from_handle(citation_handle)
             source = (

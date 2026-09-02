@@ -43,7 +43,7 @@ else:
         # even though they have no common ancestor at all.
         relationship = db.get_relationship(home_person, person)
 
-        columns("Home person", "Relationship")
+        set_column_titles("Home person", "Relationship")
         row(home_person, relationship or "Not related")
 
         if relationship:

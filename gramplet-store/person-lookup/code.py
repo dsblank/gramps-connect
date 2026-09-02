@@ -59,7 +59,7 @@ else:
     # to birth/death for a *query* (see 07_relationship_queries.py) --
     # this is the by-hand equivalent for a single record you already have,
     # covering every event, not just birth/death.
-    columns("Role", "Type", "Date", "Place")
+    set_column_titles("Role", "Type", "Date", "Place")
     for event_ref in person.event_ref_list:
         event = db.get_event_from_handle(event_ref.ref)
         place = db.get_place_from_handle(event.place) if event.place else None

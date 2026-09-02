@@ -51,7 +51,7 @@ def birth_place(person):
     return db.get_place_from_handle(event.place) if event.place else None
 
 
-columns("Person", "Birth & death place")
+set_column_titles("Person", "Birth & death place")
 for person in born_and_died_same_place:
     # A Place object renders as a clickable link too, same as person does
     # -- row() special-cases any primary Gramps object, not just Person.
@@ -68,13 +68,13 @@ well_sourced_undocumented = people(
     and_filters(get_filter(), "exists(citations, confidence >= Citation.CONF_HIGH) and not exists(notes)"),
     limit=25,
 )
-columns("Person")
+set_column_titles("Person")
 for person in well_sourced_undocumented:
     row(person)
 
 html("<hr>")
 print("Families with more than 4 children:")
 large_families = families("count(children) > 4", limit=25)
-columns("Family", "Children")
+set_column_titles("Family", "Children")
 for family in large_families:
     row(family, len(family.child_ref_list))

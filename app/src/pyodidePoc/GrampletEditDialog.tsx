@@ -70,7 +70,7 @@ function viewSelectValue(views: string[] | undefined): string {
 
 // people() (and where -- Gramps Object Query Language, see the (i) button
 // above) plus row() -- the last 10 people changed, most recent first.
-// row() takes person and when straight (no columns() call, no field
+// row() takes person and when straight (no set_column_titles() call, no field
 // picked out by hand): a primary object renders as a clickable link
 // (ObjectCellButton.tsx) and a datetime renders as a formatted date
 // (pyodideWorker.ts's _pp()/_format_stdlib_datetime()), and since every

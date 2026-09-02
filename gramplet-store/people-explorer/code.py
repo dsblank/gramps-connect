@@ -58,7 +58,7 @@ results = people(where, order=[{"column": order_column, "direction": "asc"}], li
 # **bold**/*italic* rendering, unlike real Streamlit's st.write().
 st.write(f"{len(results)} match(es)")
 
-columns("Person")
+set_column_titles("Person")
 for person in results:
     row(person)
 

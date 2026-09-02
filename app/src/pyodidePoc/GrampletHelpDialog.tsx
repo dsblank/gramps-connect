@@ -120,7 +120,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           <Code block>
             {'person = get_selected()\n'
               + 'if person is not None:\n'
-              + '    columns("Selected")\n'
+              + '    set_column_titles("Selected")\n'
               + '    row(person)  # renders as a clickable link, not str(person)\n'
               + "else:\n"
               + '    print("Nothing selected.")'}
@@ -144,7 +144,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>
               <SymbolRow
-                symbol="columns(*names)"
+                symbol="set_column_titles(*names)"
                 meaning={t(
                   "Names the table's columns. Optional -- left out, a column is named after what it holds (Person, Date, ...) when every row agrees, otherwise just numbered."
                 )}

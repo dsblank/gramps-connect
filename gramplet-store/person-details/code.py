@@ -17,7 +17,7 @@ else:
 
     if person.alternate_names:
         html("<h4>Alternate Names</h4>")
-        columns("Name", "Type")
+        set_column_titles("Name", "Type")
         for alt in person.alternate_names:
             alt_name = f"{alt.first_name} {' '.join(s.surname for s in alt.surname_list)}".strip()
             row(alt_name, str(alt.type))
@@ -32,7 +32,7 @@ else:
         father = db.get_person_from_handle(family.father_handle) if family.father_handle else None
         mother = db.get_person_from_handle(family.mother_handle) if family.mother_handle else None
         html("<h4>Parents</h4>")
-        columns("Parent", "Name")
+        set_column_titles("Parent", "Name")
         row("Father", father if father else "Unknown")
         row("Mother", mother if mother else "Unknown")
 
@@ -53,7 +53,7 @@ else:
                 break
     if life_events:
         html("<h4>Life Events</h4>")
-        columns("Event", "Date", "Place")
+        set_column_titles("Event", "Date", "Place")
         for event in life_events:
             place = db.get_place_from_handle(event.place) if event.place else None
             row(str(event.type), event.date, place)
@@ -67,6 +67,6 @@ else:
             attr_rows.append((label, ", ".join(values)))
     if attr_rows:
         html("<h4>Attributes</h4>")
-        columns("Attribute", "Value")
+        set_column_titles("Attribute", "Value")
         for label, value in attr_rows:
             row(label, value)

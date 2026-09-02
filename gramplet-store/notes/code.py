@@ -7,7 +7,7 @@ else:
     full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
     html(f"<h3>Notes for {full_name}</h3>")
     if person.note_list:
-        columns("Note", "Type", "Text")
+        set_column_titles("Note", "Type", "Text")
         for note_handle in person.note_list:
             note = db.get_note_from_handle(note_handle)
             snippet = note.text.string.strip().replace("\n", " ")

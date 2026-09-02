@@ -40,7 +40,7 @@ else:
             # back than that.
             html("<i>No relationship found</i>")
         else:
-            columns("Relationship", "Through common ancestor")
+            set_column_titles("Relationship", "Through common ancestor")
             for entry in entries:
                 # Handles, not resolved objects -- the same convention
                 # get_backlinks() uses, so the ones actually displayed get
