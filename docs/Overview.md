@@ -1,6 +1,6 @@
 # Gramps Connect
 
-Gramps Connect is a web-based way to work on a family tree built with
+Gramps Connect is an HTML-based way to work on a family tree built with
 [Gramps](https://gramps-project.org/), the free genealogy software. It
 follows the same layout and vocabulary as Gramps itself, so if you've used
 Gramps before, it should feel familiar rather than like a different program
@@ -30,14 +30,11 @@ same — the only difference is whether anyone else is in the tree with you.
 
 ## Telling the story
 
-- **Automatically generated life stories.** For any person, the app puts
-  together a narrative slideshow of their life — their events, the places
+- **Automatically generated life stories.** For any person or family, the app puts
+  together a narrative slideshow of their lives — their events, the places
   they happened, and any related photos — with a short written description
   for each moment. These are editable, not fixed.
-- **Family stories.** A separate kind of story for a couple and their
-  children together — marriage, the arrival of each child, and so on — told
-  as one shared household narrative rather than one person's arc.
-- **Photo comparisons.** Place two photos side by side — useful for
+- **Photo comparisons.** Place two photos on top of each other — useful for
   "then and now" pairs, or comparing photos of the same person at different
   ages.
 - **Tagging photos, and clicking through them.** Draw a region on a photo to
@@ -61,7 +58,7 @@ same — the only difference is whether anyone else is in the tree with you.
   certain place before a certain year, say, or every family where the mother
   died before the father.
 - **Family tree charts.** Ancestor and descendant charts, including a
-  circular "fan" style with an option to size each person's slice by how
+  circular "fan" style with an option to each each person's slice by how
   long they actually lived, so long and short lives are visible at a
   glance.
 - **Maps.** See where events took place, and switch the map's appearance to
@@ -75,19 +72,15 @@ same — the only difference is whether anyone else is in the tree with you.
 
 ## Editing
 
-The Edit button (✏️) on any record opens its full editing form — a person,
+Clicking the edit button on any record opens its full editing form — a person,
 family, event, and so on — for changing that record's own details (a name,
 a date, a description) or its connections to other records, such as exactly
 how a child relates to their parents.
-
-![Edit, delete, and comment icons at the top of a record's detail panel](images/edit-icons-crop.png)
 
 For smaller, everyday changes, the "+" and "−" buttons are a shortcut:
 attach an existing citation, photo, or person without opening a full form,
 or remove one that's already linked. They only change what a record is
 connected to, not the record's own details.
-
-![A "−" next to an existing family link, and a "+" to add another](images/plus-minus-crop.png)
 
 ## Community add-ons, written and editable in Python
 
