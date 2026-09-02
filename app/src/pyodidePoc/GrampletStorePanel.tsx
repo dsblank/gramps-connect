@@ -60,6 +60,10 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
   // tied to any single entry.
   const [installingAll, setInstallingAll] = useState(false);
   const [installAllError, setInstallAllError] = useState<string | null>(null);
+  const [updatingAll, setUpdatingAll] = useState(false);
+  const [updateAllError, setUpdateAllError] = useState<string | null>(null);
+  const [removingAll, setRemovingAll] = useState(false);
+  const [removeAllError, setRemoveAllError] = useState<string | null>(null);
 
   function load() {
     setStatus("loading");
@@ -132,6 +136,12 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
   const visible = catalog.filter((entry) => matches(entry, query.trim()));
   const canAuthor = canAuthorGramplets();
   const pending = visible.filter((entry) => !findInstalledEntry(installed, entry.id));
+  // Same "scoped to the filtered list" behavior as Install all above --
+  // narrowing with the search box first scopes Update all/Remove all too.
+  const installedVisible = visible
+    .map((entry) => ({ entry, gramplet: findInstalledEntry(installed, entry.id) }))
+    .filter((x): x is { entry: CatalogEntry; gramplet: Gramplet } => !!x.gramplet);
+  const updatableVisible = installedVisible.filter(({ entry, gramplet }) => hasCatalogUpdate(gramplet, entry));
 
   async function handleInstallAll() {
     if (!canAuthorGramplets() || pending.length === 0) return;
@@ -148,6 +158,61 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
     }
     if (failures.length > 0) setInstallAllError(failures.join("; "));
     setInstallingAll(false);
+  }
+
+  async function handleUpdateAll() {
+    if (!canAuthorGramplets() || updatableVisible.length === 0) return;
+    const editedCount = updatableVisible.filter(({ gramplet }) => wasEditedSinceInstall(gramplet)).length;
+    if (
+      editedCount > 0 &&
+      !window.confirm(
+        `Update all ${updatableVisible.length} Gramplet(s)? ${editedCount} of them ${
+          editedCount === 1 ? "has" : "have"
+        } been customized since installing -- updating will overwrite ${
+          editedCount === 1 ? "its" : "their"
+        } changes with the Store's current version. There is no undo.`
+      )
+    ) {
+      return;
+    }
+    setUpdatingAll(true);
+    setUpdateAllError(null);
+    const failures: string[] = [];
+    for (const { entry, gramplet } of updatableVisible) {
+      try {
+        const updated = await updateFromCatalog(gramplet, entry);
+        setInstalled((prev) => prev.map((g) => (g.handle === updated.handle ? updated : g)));
+      } catch (err) {
+        failures.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (failures.length > 0) setUpdateAllError(failures.join("; "));
+    setUpdatingAll(false);
+  }
+
+  async function handleRemoveAll() {
+    if (!canAuthorGramplets() || installedVisible.length === 0) return;
+    if (
+      !window.confirm(
+        `Remove all ${installedVisible.length} installed Gramplet(s)? This removes them from the tree entirely, including any you've customized since installing. There is no undo.`
+      )
+    ) {
+      return;
+    }
+    setRemovingAll(true);
+    setRemoveAllError(null);
+    const failures: string[] = [];
+    for (const { entry, gramplet } of installedVisible) {
+      if (!gramplet.handle) continue;
+      try {
+        await removeGramplet(gramplet.handle);
+        setInstalled((prev) => prev.filter((g) => g.handle !== gramplet.handle));
+      } catch (err) {
+        failures.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    if (failures.length > 0) setRemoveAllError(failures.join("; "));
+    setRemovingAll(false);
   }
 
   return (
@@ -184,10 +249,39 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
             >
               {t("Install all")}
             </Button>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleUpdateAll}
+              loading={updatingAll}
+              disabled={!canAuthor || updatableVisible.length === 0}
+            >
+              {t("Update all")}
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              color="red"
+              onClick={handleRemoveAll}
+              loading={removingAll}
+              disabled={!canAuthor || installedVisible.length === 0}
+            >
+              {t("Remove all")}
+            </Button>
           </Group>
           {installAllError && (
             <Alert color="red" title={t("Some Gramplets failed to install")}>
               {installAllError}
+            </Alert>
+          )}
+          {updateAllError && (
+            <Alert color="red" title={t("Some Gramplets failed to update")}>
+              {updateAllError}
+            </Alert>
+          )}
+          {removeAllError && (
+            <Alert color="red" title={t("Some Gramplets failed to remove")}>
+              {removeAllError}
             </Alert>
           )}
           {visible.length === 0 && (
