@@ -12,7 +12,7 @@
 // so this panel looks the same to every client/session on the same tree.
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { ActionIcon, Alert, Box, Group, Loader, Menu, Tabs, Text, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Alert, Box, Group, Loader, Menu, ScrollArea, Tabs, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
 import { getHomePersonHandle } from "../store/homePersonPreference";
@@ -793,27 +793,24 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                       {availableGramplets.length > 0 && (
                         <>
                           <Menu.Divider />
-                          {/* Name first (that's what the tab will say),
-                              with the author's own description under it --
-                              picking one to add is the one place there's
-                              room to explain what it does, unlike the tab
-                              itself. Nothing shows for a Gramplet with no
-                              description (saved before the field existed,
-                              or simply left blank). */}
-                          {availableGramplets.map((gramplet) => (
-                            <Menu.Item
-                              key={gramplet.id}
-                              onClick={() => addToView(gramplet)}
-                              style={{ maxWidth: 320 }}
-                            >
-                              <Text size="sm">{gramplet.label}</Text>
-                              {gramplet.description && (
-                                <Text size="xs" c="dimmed" style={{ whiteSpace: "normal" }}>
-                                  {gramplet.description}
-                                </Text>
-                              )}
-                            </Menu.Item>
-                          ))}
+                          <ScrollArea.Autosize mah={300} type="auto">
+                            {availableGramplets.map((gramplet) => (
+                              <Tooltip
+                                key={gramplet.id}
+                                label={gramplet.description}
+                                disabled={!gramplet.description}
+                                position="right"
+                                openDelay={300}
+                                multiline
+                                w={260}
+                                withArrow
+                              >
+                                <Menu.Item onClick={() => addToView(gramplet)} style={{ maxWidth: 320 }}>
+                                  <Text size="sm">{gramplet.label}</Text>
+                                </Menu.Item>
+                              </Tooltip>
+                            ))}
+                          </ScrollArea.Autosize>
                         </>
                       )}
                     </Menu.Dropdown>
