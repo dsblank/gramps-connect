@@ -9,7 +9,7 @@
 // pattern ExportDialog.tsx already uses, kept consistent rather than
 // introducing a new component family for one dialog.
 import { useEffect, useState } from "react";
-import { Alert, Badge, Button, Card, Collapse, Group, Loader, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Badge, Button, Card, Collapse, Group, Loader, Modal, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import { canAuthorGramplets, fetchGramplets } from "./grampletMedia";
 import {
   DEFAULT_CATALOG_URL,
@@ -23,6 +23,7 @@ import {
   wasEditedSinceInstall,
 } from "./grampletStore";
 import { PythonCodeEditor } from "./PythonCodeEditor";
+import { OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import { t } from "../i18n/i18n";
 import type { CatalogEntry, Gramplet } from "./types";
 
@@ -40,6 +41,13 @@ function matches(entry: CatalogEntry, query: string): boolean {
     entry.category.toLowerCase().includes(q) ||
     entry.author.toLowerCase().includes(q)
   );
+}
+
+/** Same "single type shows as itself, anything else shows as All" reading
+ * GrampletEditDialog.tsx's own viewSelectValue() uses for this field. */
+function viewsLabel(views: string[] | undefined): string {
+  if (views && views.length === 1) return t(OBJECT_TYPE_LABELS[views[0]] ?? views[0]);
+  return t("All");
 }
 
 export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
@@ -289,96 +297,101 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
               {t("No matches")}
             </Text>
           )}
-          {visible.map((entry) => {
-            const gramplet = findInstalledEntry(installed, entry.id);
-            const updateAvailable = gramplet ? hasCatalogUpdate(gramplet, entry) : false;
-            const expanded = expandedId === entry.id;
-            const busy = busyId === entry.id;
-            return (
-              <Card key={entry.id} withBorder padding="sm">
-                <Group justify="space-between" wrap="nowrap" align="flex-start">
-                  <Group
-                    gap="sm"
-                    wrap="nowrap"
-                    align="flex-start"
-                    style={{ cursor: "pointer", flex: 1, minWidth: 0 }}
-                    onClick={() => setExpandedId(expanded ? null : entry.id)}
-                  >
-                    {entry.iconUrl && (
-                      <img
-                        src={resolveCatalogAssetUrl(DEFAULT_CATALOG_URL, entry.iconUrl)}
-                        alt=""
-                        width={32}
-                        height={32}
-                        style={{ borderRadius: 4, flexShrink: 0 }}
-                      />
-                    )}
-                    <Stack gap={2} style={{ minWidth: 0 }}>
-                      <Group gap="xs" wrap="wrap">
-                        <Text fw={600}>{entry.name}</Text>
-                        <Badge size="xs" variant="light">
-                          {entry.category}
-                        </Badge>
-                        {gramplet && !updateAvailable && (
-                          <Badge size="xs" color="green" variant="light">
-                            {t("Installed")}
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            {visible.map((entry) => {
+              const gramplet = findInstalledEntry(installed, entry.id);
+              const updateAvailable = gramplet ? hasCatalogUpdate(gramplet, entry) : false;
+              const expanded = expandedId === entry.id;
+              const busy = busyId === entry.id;
+              return (
+                <Card key={entry.id} withBorder padding="sm">
+                  <Group justify="space-between" wrap="nowrap" align="flex-start">
+                    <Group
+                      gap="sm"
+                      wrap="nowrap"
+                      align="flex-start"
+                      style={{ cursor: "pointer", flex: 1, minWidth: 0 }}
+                      onClick={() => setExpandedId(expanded ? null : entry.id)}
+                    >
+                      {entry.iconUrl && (
+                        <img
+                          src={resolveCatalogAssetUrl(DEFAULT_CATALOG_URL, entry.iconUrl)}
+                          alt=""
+                          width={32}
+                          height={32}
+                          style={{ borderRadius: 4, flexShrink: 0 }}
+                        />
+                      )}
+                      <Stack gap={2} style={{ minWidth: 0 }}>
+                        <Group gap="xs" wrap="wrap">
+                          <Text fw={600}>{entry.name}</Text>
+                          <Badge size="xs" variant="light">
+                            {entry.category}
                           </Badge>
-                        )}
-                        {updateAvailable && (
-                          <Badge size="xs" color="orange" variant="light">
-                            {t("Update available")}
+                          <Badge size="xs" variant="outline" color="gray">
+                            {viewsLabel(entry.views)}
                           </Badge>
-                        )}
-                      </Group>
-                      <Text size="sm" c="dimmed">
-                        {entry.description}
+                          {gramplet && !updateAvailable && (
+                            <Badge size="xs" color="green" variant="light">
+                              {t("Installed")}
+                            </Badge>
+                          )}
+                          {updateAvailable && (
+                            <Badge size="xs" color="orange" variant="light">
+                              {t("Update available")}
+                            </Badge>
+                          )}
+                        </Group>
+                        <Text size="sm" c="dimmed">
+                          {entry.description}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {entry.author} · v{entry.version}
+                        </Text>
+                      </Stack>
+                    </Group>
+                    <Group gap="xs" wrap="nowrap">
+                      {!gramplet && (
+                        <Button size="xs" onClick={() => handleInstall(entry)} loading={busy} disabled={!canAuthor}>
+                          {t("Install")}
+                        </Button>
+                      )}
+                      {gramplet && updateAvailable && (
+                        <Button size="xs" onClick={() => handleUpdate(entry, gramplet)} loading={busy} disabled={!canAuthor}>
+                          {t("Update")}
+                        </Button>
+                      )}
+                      {gramplet && (
+                        <Button
+                          size="xs"
+                          variant="default"
+                          color="red"
+                          onClick={() => handleRemove(entry, gramplet)}
+                          loading={busy}
+                          disabled={!canAuthor}
+                        >
+                          {t("Remove")}
+                        </Button>
+                      )}
+                    </Group>
+                  </Group>
+                  {actionError?.id === entry.id && (
+                    <Alert color="red" mt="xs">
+                      {actionError.message}
+                    </Alert>
+                  )}
+                  <Collapse in={expanded}>
+                    <Stack gap="xs" mt="sm">
+                      <Text size="sm" fw={500}>
+                        {t("Code preview")}
                       </Text>
-                      <Text size="xs" c="dimmed">
-                        {entry.author} · v{entry.version}
-                      </Text>
+                      <PythonCodeEditor value={entry.code} onChange={() => {}} minHeight={200} readOnly />
                     </Stack>
-                  </Group>
-                  <Group gap="xs" wrap="nowrap">
-                    {!gramplet && (
-                      <Button size="xs" onClick={() => handleInstall(entry)} loading={busy} disabled={!canAuthor}>
-                        {t("Install")}
-                      </Button>
-                    )}
-                    {gramplet && updateAvailable && (
-                      <Button size="xs" onClick={() => handleUpdate(entry, gramplet)} loading={busy} disabled={!canAuthor}>
-                        {t("Update")}
-                      </Button>
-                    )}
-                    {gramplet && (
-                      <Button
-                        size="xs"
-                        variant="default"
-                        color="red"
-                        onClick={() => handleRemove(entry, gramplet)}
-                        loading={busy}
-                        disabled={!canAuthor}
-                      >
-                        {t("Remove")}
-                      </Button>
-                    )}
-                  </Group>
-                </Group>
-                {actionError?.id === entry.id && (
-                  <Alert color="red" mt="xs">
-                    {actionError.message}
-                  </Alert>
-                )}
-                <Collapse in={expanded}>
-                  <Stack gap="xs" mt="sm">
-                    <Text size="sm" fw={500}>
-                      {t("Code preview")}
-                    </Text>
-                    <PythonCodeEditor value={entry.code} onChange={() => {}} minHeight={200} readOnly />
-                  </Stack>
-                </Collapse>
-              </Card>
-            );
-          })}
+                  </Collapse>
+                </Card>
+              );
+            })}
+          </SimpleGrid>
         </Stack>
       )}
     </Modal>
