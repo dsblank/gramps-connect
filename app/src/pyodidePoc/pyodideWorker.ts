@@ -915,8 +915,20 @@ _gramplet_rows = []
 # and contributes nothing to the set).
 _gramplet_column_kinds = []
 # Appended to by _flush_table()/_flush_print()/html() -- see above. Empty
-# means the code never called row(), html(), or print().
+# means the code never called row(), html(), or print(). Always the *first*
+# entry of _gramplet_sink_stack below (never appended to directly by name
+# any more) -- it's what _report_progress()/_finalize_blocks() serialize as
+# the whole run's output, nested "columns" blocks included.
 _gramplet_blocks = []
+# The append target every table/html/print flush actually writes to --
+# _gramplet_blocks until st.columns() (stBootstrap.ts) is in play, at which
+# point a 'with col:' block (stBootstrap.ts's _Column) pushes that column's
+# own list here for its duration, so anything a Gramplet writes inside it
+# (row()/html()/print(), or another st.* widget) lands nested inside that
+# column's block instead of at the top level. Always at least one entry
+# deep, and always back to exactly [_gramplet_blocks] by the time a run
+# ends -- _Column.__exit__ pops what it pushed.
+_gramplet_sink_stack = [_gramplet_blocks]
 # Text from consecutive print() calls, not yet flushed into its own block --
 # see print()/_flush_print() below.
 _gramplet_print_buffer = []
@@ -925,14 +937,21 @@ def _reset_table():
     # Name kept from when this only reset the table (still called that way
     # from onmessage below) -- now the one place every per-run global gets
     # cleared, table or not, so nothing from one run leaks into the next.
-    global _gramplet_columns, _gramplet_rows, _gramplet_column_kinds, _gramplet_blocks, _gramplet_print_buffer
+    global _gramplet_columns, _gramplet_rows, _gramplet_column_kinds, _gramplet_blocks, _gramplet_sink_stack, _gramplet_print_buffer
     _gramplet_columns = None
     _gramplet_rows = []
     _gramplet_column_kinds = []
     _gramplet_blocks = []
+    _gramplet_sink_stack = [_gramplet_blocks]
     _gramplet_print_buffer = []
 
 def columns(*names):
+    # NOT the same thing as st.columns() (stBootstrap.ts) despite the name
+    # clash -- this one only names the header row of the *next* row()-built
+    # table; st.columns() lays out side-by-side regions of the result. The
+    # two never collide in practice since this one is a bare builtin and
+    # the other only ever reached via st., but worth keeping straight when
+    # reading either.
     global _gramplet_columns
     # Flushes any print() output buffered since the last row()/html() call
     # into its own block first, so a print() -> columns()/row() sequence
@@ -961,7 +980,7 @@ def html(markup):
         markup = markup.decode("utf-8")
     _flush_print()
     _flush_table()
-    _gramplet_blocks.append({"type": "html", "markup": str(markup)})
+    _gramplet_sink_stack[-1].append({"type": "html", "markup": str(markup)})
 
 def _matplotlib_figure_from(obj):
     # Never imports matplotlib itself -- only recognizes it if the
@@ -1385,7 +1404,7 @@ def _flush_table():
     if not _gramplet_rows:
         return
     table = _build_table()
-    _gramplet_blocks.append({"type": "table", "columns": table["columns"], "rows": table["rows"]})
+    _gramplet_sink_stack[-1].append({"type": "table", "columns": table["columns"], "rows": table["rows"]})
     _gramplet_columns = None
     _gramplet_rows = []
     _gramplet_column_kinds = []
@@ -1413,7 +1432,7 @@ def _flush_print():
     global _gramplet_print_buffer
     if not _gramplet_print_buffer:
         return
-    _gramplet_blocks.append(_print_buffer_block())
+    _gramplet_sink_stack[-1].append(_print_buffer_block())
     _gramplet_print_buffer = []
 
 def _report_progress():
@@ -1425,6 +1444,14 @@ def _report_progress():
     # a print()-then-time.sleep() loop's output shows up live instead of
     # only once the whole run finishes. See print()'s own call to this and
     # bridge.reportProgress()/pyodideWorker.ts's onmessage for the JS side.
+    # Known PoC gap: if the pending print buffer was accumulated inside a
+    # still-open 'with col:' block (st.columns(), stBootstrap.ts), this
+    # snapshot appends it at the top level rather than nested in that
+    # column -- it only lands in the right place once the column actually
+    # exits (or the run ends, via _finalize_blocks()) and really flushes.
+    # Not fixing here: a live progress snapshot mid-column is a narrow
+    # enough case (print()-in-a-loop inside a 'with col:' block) not to be
+    # worth complicating this with a nested-copy of the sink stack for.
     import json as _json
     blocks = list(_gramplet_blocks)
     if _gramplet_print_buffer:

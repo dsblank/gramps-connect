@@ -328,7 +328,16 @@ export type GrampletBlock =
    * HTML-escaped before landing here (unlike an explicit html() call's
    * markup), simply because there's no reason for those specifically to
    * ever contain markup. */
-  | { type: "html"; markup: string };
+  | { type: "html"; markup: string }
+  /** `st.columns(spec)` (stBootstrap.ts) -- one entry per side-by-side
+   * region, each its own nested block list (whatever that column's `with
+   * col:` block, or direct `col.write(...)`-style call, wrote into it, in
+   * the same call-order/one-block-per-kind shape as the top-level `blocks`
+   * list itself -- GrampletResultView.tsx renders these recursively).
+   * `weights` is `spec` itself normalized to one number per column (an int
+   * `spec` becomes `n` equal 1s); a column's rendered width is its share of
+   * the weights' sum. Always the same length as `columns`. */
+  | { type: "columns"; columns: GrampletBlock[][]; weights: number[] };
 
 /** No `printed` field -- unlike the pre-blocks design, a Gramplet's own
  * print() calls aren't captured as a separate side channel (pyodideWorker.

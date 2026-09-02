@@ -296,6 +296,35 @@ function TableOutput({
 // One block's worth of output -- see GrampletBlock in types.ts. Rendered in
 // call order, so html()/row() calls interleaved in a single run each keep
 // their own place in the result instead of one silently overwriting another.
+// st.columns()'s own block (see GrampletBlock in types.ts) -- one flex row,
+// one child div per column, each recursively rendering its own nested block
+// list via BlockOutput again (a column can itself contain another "columns"
+// block -- st.columns() called while a column is already the active sink --
+// which just recurses one level deeper here, same as it does in Python).
+function ColumnsOutput({
+  columns,
+  weights,
+  interactive,
+  onWidgetEvent,
+}: {
+  columns: GrampletBlock[][];
+  weights: number[];
+  interactive: boolean;
+  onWidgetEvent?: (key: string, value: unknown) => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: "var(--mantine-spacing-md)", marginBottom: "var(--mantine-spacing-xs)" }}>
+      {columns.map((blocks, i) => (
+        <div key={i} style={{ flex: weights[i] ?? 1, minWidth: 0 }}>
+          {blocks.map((block, j) => (
+            <BlockOutput key={j} block={block} interactive={interactive} onWidgetEvent={onWidgetEvent} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BlockOutput({
   block,
   interactive,
@@ -307,6 +336,16 @@ function BlockOutput({
 }) {
   if (block.type === "html") {
     return <HtmlOutput markup={block.markup} interactive={interactive} onWidgetEvent={onWidgetEvent} />;
+  }
+  if (block.type === "columns") {
+    return (
+      <ColumnsOutput
+        columns={block.columns}
+        weights={block.weights}
+        interactive={interactive}
+        onWidgetEvent={onWidgetEvent}
+      />
+    );
   }
   return <TableOutput columns={block.columns} rows={block.rows} interactive={interactive} />;
 }

@@ -177,5 +177,89 @@ class _St:
     def session_state(self):
         return _st_current_instance
 
+    def columns(self, spec, gap=None):
+        """Lays out spec side-by-side regions (equal widths for an int,
+        proportional to the given weights for a list, e.g. st.columns([2, 1]))
+        and returns one _Column per region. Anything written inside 'with
+        col:' -- row()/html()/print(), or another st.* widget -- lands
+        nested inside that column instead of at the top level; col.write(x)
+        without a 'with' block works too (see _Column.__getattr__ below).
+        NOT the same columns() as BOOTSTRAP_PY's bare builtin (that one
+        only names a row()-built table's headers) -- this is layout, always
+        reached via st."""
+        n = spec if isinstance(spec, int) else len(spec)
+        weights = [1] * n if isinstance(spec, int) else list(spec)
+        column_blocks = [[] for _ in range(n)]
+        # Flushes a pending table/print buffer *before* inserting this
+        # "columns" block, same reasoning as _Column.__enter__ below --
+        # without this, e.g. st.write("x") then st.columns(2) leaves "x"
+        # sitting unflushed until something later triggers the flush, by
+        # which point this "columns" block is already ahead of it in the
+        # list -- "x" ends up rendered *after* the row instead of before it,
+        # even though it was written first. Found live, the same way
+        # _Column.__enter__'s bug was: st.write("Hello") then st.columns(2)
+        # put "Hello" below the row instead of above it.
+        _flush_print()
+        _flush_table()
+        _gramplet_sink_stack[-1].append({"type": "columns", "columns": column_blocks, "weights": weights})
+        return tuple(_Column(cb) for cb in column_blocks)
+
 st = _St()
+
+class _Column:
+    """One region returned by st.columns() -- a plain list of blocks
+    (self._blocks, already linked into its parent "columns" block by
+    st.columns() above) plus a context-manager/attribute-proxy pair that
+    redirects output into it, two ways:
+      'with col: st.write(x)' (or a bare row()/html()/print() call) --
+      __enter__/__exit__ push/pop this column's own list onto
+      _gramplet_sink_stack for the duration of the 'with' block, same stack
+      every table/html/print flush already appends to (pyodideWorker.ts).
+      'col.write(x)' with no 'with' -- __getattr__ wraps whatever st
+      attribute was asked for in that same push/pop, so direct-call style
+      needs no 'with' of its own.
+    Nests correctly with no extra work: st.columns() called while a column
+    is already the active sink just appends its own "columns" block to
+    that column's list instead of the top level."""
+    def __init__(self, blocks):
+        self._blocks = blocks
+
+    def __enter__(self):
+        # Flushes a pending table/print buffer from *outside* this column
+        # into the sink that's still active right now (the outer column, or
+        # the top level) before switching sinks -- otherwise it would sit
+        # unflushed until some later html()/row() call inside *this* column
+        # finally triggers it, sweeping it into this column's output even
+        # though it was actually written before this column ever became the
+        # active sink. Found live: st.write("x") then 'with col: st.button(...)'
+        # put "x" inside col, not at the top level where it was written --
+        # button()'s own html() call was what triggered the flush, by which
+        # point this push had already happened.
+        _flush_print()
+        _flush_table()
+        _gramplet_sink_stack.append(self._blocks)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # Flushes a still-open table/print buffer *before* popping, so it
+        # lands nested in this column rather than leaking out to whatever
+        # sink is active next (the outer column, or the top level) once
+        # some later, unrelated html()/row() call elsewhere finally
+        # triggers the flush.
+        _flush_print()
+        _flush_table()
+        _gramplet_sink_stack.pop()
+        return False
+
+    def __getattr__(self, name):
+        attr = getattr(st, name)
+        if not callable(attr):
+            # e.g. col.session_state -- st.session_state is a property, not
+            # a widget call; nothing to push/pop a sink around, just the
+            # same shared _SessionState st.session_state itself returns.
+            return attr
+        def _wrapped(*args, **kwargs):
+            with self:
+                return attr(*args, **kwargs)
+        return _wrapped
 `;
