@@ -70,6 +70,36 @@ export function OverviewDialog({ opened, onClose }: OverviewDialogProps) {
           </List>
         </Section>
 
+        <Section title={t("Telling your family's story")}>
+          <Text size="sm">
+            {t("Beyond browsing records, the app can help turn them into something worth reading or looking at:")}
+          </Text>
+          <List size="sm" spacing="xs">
+            <List.Item>
+              <b>{t("Automatically generated life stories.")}</b> For any person or family, a
+              narrative slideshow of their events, the places they happened, and any related
+              photos, with a short written description for each moment. These are editable,
+              not fixed.
+            </List.Item>
+            <List.Item>
+              <b>{t("Photo comparisons and tagging.")}</b> Lay two photos on top of each other
+              for "then and now" pairs, or draw a region on a photo to mark who or what's in
+              it — then click that region later to jump straight to that person's page.
+            </List.Item>
+            <List.Item>
+              <b>{t("Maps.")}</b> See where events took place, switch the map to look the way
+              the area did during that historical period, and draw your own lines, shapes and
+              images onto it — a farm's boundary, a route someone traveled, an old survey map.
+            </List.Item>
+          </List>
+        </Section>
+
+        <Section title={t("Community add-ons, written in Python")}>
+          <Text size="sm">
+            {t("A browsable catalog of small tools other people have written and shared — relationship calculators, statistics, custom lookups — that you can install, update or remove with a click. Each one is a real Python program running in your browser with nothing installed and no server involved, and you can open any add-on's code from inside the app and edit it yourself, or write a new one from scratch.")}
+          </Text>
+        </Section>
+
         <Section title={t("It is built to be fast")}>
           <Text size="sm">
             {t("Large family trees — tens of thousands of people — have historically been slow to browse over the web. A single search could take well over a minute, which is long enough that you stop searching.")}
@@ -102,9 +132,9 @@ export function OverviewDialog({ opened, onClose }: OverviewDialogProps) {
               under active construction, and parts of it are missing or will change.
             </List.Item>
             <List.Item>
-              <b>{t("Editing.")}</b> Gramps Web lets you edit your tree. Here, editing is barely
-              started — this is mostly for browsing and reading so far. Several of the
-              menus are still empty.
+              <b>{t("Editing.")}</b> Both let you edit your tree. Gramps Web has been doing it
+              longer and still covers a couple of things this doesn't yet — see "What to
+              expect" below.
             </List.Item>
             <List.Item>
               <b>{t("Shape.")}</b> Gramps Web has its own design, built for phones first. This
@@ -125,7 +155,7 @@ export function OverviewDialog({ opened, onClose }: OverviewDialogProps) {
 
         <Section title={t("What to expect")}>
           <Text size="sm">
-            {t("Treat this as something to try, not somewhere to keep the only copy of your research. Keep your tree backed up, as you would anyway. Empty menus, missing features and things that move between visits are all expected at this stage.")}
+            {t("Treat this as something to try, not somewhere to keep the only copy of your research. Keep your tree backed up, as you would anyway. Two gaps worth knowing about: there's no tool yet for finding and merging duplicate records, and no user-facing view of a record's edit history — the live updates work, but you can't browse \"who changed what, when\" after the fact.")}
           </Text>
           <Text size="sm">
             Questions, complaints and ideas are all genuinely useful right now — the{" "}
