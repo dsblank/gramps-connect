@@ -1,5 +1,4 @@
-import { Image, Text, Tooltip, UnstyledButton } from "@mantine/core";
-import iconChat from "../../assets/icons/chat-message.svg";
+import { Button, Text } from "@mantine/core";
 import { hasPermissions } from "../../auth/auth";
 import { attachNoteToObject } from "../../store/notesApi";
 import type { ObjectDetail } from "../../store/objectDetail";
@@ -7,6 +6,7 @@ import type { ViewConfig } from "../../store/views";
 import { MessageComposer } from "../MessageComposer";
 import { RELATED_CONFIG } from "./config";
 import { summaryLine } from "./summary";
+import { t } from "../../i18n/i18n";
 
 /** view.label is the sidebar's plural/collective name ("People", "Events",
  * "Places", ...) -- fine there, wrong in "Message about this ___" ("this
@@ -25,7 +25,7 @@ function singularLabel(view: ViewConfig): string {
   return SINGULAR_LABEL[view.key] ?? view.label.toLowerCase();
 }
 
-/** Top-right icon on a RelatedPanel that starts a Gramps Connect message
+/** Top-right button on a RelatedPanel that starts a Gramps Connect message
  * "about" the object currently shown -- opens the same MessageComposer
  * modal Messages' own trigger uses, but on save also attaches the new
  * note's handle to this object's own note_list (Gramps' own way for a Note
@@ -72,11 +72,9 @@ export function MessageButton({
         </>
       }
       renderTrigger={(open) => (
-        <Tooltip label={label} withArrow>
-          <UnstyledButton onClick={open} aria-label={label}>
-            <Image src={iconChat} alt="" w={20} h={20} />
-          </UnstyledButton>
-        </Tooltip>
+        <Button variant="default" size="xs" onClick={open} aria-label={label}>
+          {t("Message")}
+        </Button>
       )}
       onSaved={async (noteHandle, token) => {
         await attachNoteToObject(token, view, detail.handle, noteHandle);
