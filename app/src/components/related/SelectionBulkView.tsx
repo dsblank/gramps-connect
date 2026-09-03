@@ -76,19 +76,23 @@ export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewCon
         </Alert>
       )}
       <Stack gap={4}>
-        {handles.map((h) => (
-          <Anchor
-            key={h}
-            component="button"
-            type="button"
-            size="sm"
-            underline="hover"
-            style={LINK_STYLE}
-            truncate
-            onClick={() => onNavigate(view.key, h)}
-          >
-            {labels[h] || h}
-          </Anchor>
+        {handles.map((h, i) => (
+          <Group key={h} gap={6} wrap="nowrap">
+            <Text size="md" c="dimmed" style={{ flex: "none", textAlign: "right", minWidth: `${String(handles.length).length}ch` }}>
+              {i + 1}.
+            </Text>
+            <Anchor
+              component="button"
+              type="button"
+              size="md"
+              underline="hover"
+              style={{ ...LINK_STYLE, flex: 1, minWidth: 0 }}
+              truncate
+              onClick={() => onNavigate(view.key, h)}
+            >
+              {labels[h] || h}
+            </Anchor>
+          </Group>
         ))}
       </Stack>
     </Stack>

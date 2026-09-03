@@ -558,3 +558,87 @@ describe("ViewStore.toggleSelect (ctrl/cmd+click multi-select)", () => {
     expect(snap.selectedIndex).toBe(0);
   });
 });
+
+describe("ViewStore.selectRange (shift+click range-select)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("selects every row between the anchor and the shift-clicked row, inclusive", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3"), tagRow("H4")]);
+    store.select(0); // H1 -- the anchor
+
+    store.selectRange(2, 50); // shift+click H3
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H1", "H2", "H3"]);
+    expect(snap.selectedIndices).toEqual([0, 1, 2]);
+  });
+
+  it("works in either direction from the anchor", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3"), tagRow("H4")]);
+    store.select(3); // H4 -- the anchor
+
+    store.selectRange(1, 50); // shift+click H2, above the anchor
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H2", "H3", "H4"]);
+    expect(snap.selectedIndices).toEqual([1, 2, 3]);
+  });
+
+  it("sets the anchor as the just-shift-clicked endpoint, not the last array element", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3"), tagRow("H4")]);
+    store.select(3); // H4 -- the anchor
+
+    store.selectRange(1, 50); // shift+click H2, above the anchor -- H4 ends up last in the array
+
+    const snap = store.getSnapshot();
+    // The array is in ascending index order (H2..H4), but the endpoint the
+    // user actually just clicked was H2 -- that's what selectedHandle must
+    // report, not array[length-1] (which would wrongly be H4 here).
+    expect(snap.selectedHandle).toBe("H2");
+    expect(snap.selectedIndex).toBe(1);
+  });
+
+  it("keeps extending/shrinking from the same fixed anchor across repeated shift+clicks", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3"), tagRow("H4"), tagRow("H5")]);
+    store.select(1); // H2 -- the anchor
+    store.selectRange(3, 50); // shift+click H4 -> H2..H4
+    expect(store.getSnapshot().selectedHandles).toEqual(["H2", "H3", "H4"]);
+
+    store.selectRange(4, 50); // shift+click H5 -> extends from the *original* anchor (H2), not H4
+
+    expect(store.getSnapshot().selectedHandles).toEqual(["H2", "H3", "H4", "H5"]);
+  });
+
+  it("does nothing at all when the range would exceed the cap", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+    store.select(0); // H1
+    const before = store.getSnapshot();
+
+    store.selectRange(2, 2); // H1..H3 is 3 rows, over the cap of 2
+
+    expect(store.getSnapshot()).toBe(before); // unchanged reference -> no emit at all
+  });
+
+  it("a plain click afterward moves the range anchor to the newly clicked row", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3"), tagRow("H4")]);
+    store.select(0); // H1 -- the anchor
+    store.select(2); // plain click H3 -- anchor moves here
+
+    store.selectRange(3, 50); // shift+click H4 -> range is H3..H4, not H1..H4
+
+    expect(store.getSnapshot().selectedHandles).toEqual(["H3", "H4"]);
+  });
+
+  it("ctrl+click also moves the range anchor", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3"), tagRow("H4")]);
+    store.select(0); // H1 -- the anchor
+    store.toggleSelect(2); // ctrl+click H3 -- anchor moves here, H1 stays selected too
+
+    store.selectRange(3, 50); // shift+click H4 -> range is H3..H4, replacing the whole prior selection
+
+    expect(store.getSnapshot().selectedHandles).toEqual(["H3", "H4"]);
+  });
+});

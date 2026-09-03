@@ -124,6 +124,12 @@ export class ViewStore {
   private selectedHandle: string | null = null;
   private selectedHandles: string[] = [];
   private selectedIndices: number[] = [];
+  /** The index a shift+click range-selects *from* -- updated by select()
+   * and toggleSelect() (a plain or ctrl/cmd+click moves it to wherever was
+   * just clicked) but deliberately left untouched by selectRange() itself,
+   * so repeated shift+clicks keep extending/shrinking the range from the
+   * same fixed start rather than drifting to the last shift+click. */
+  private rangeAnchorIndex: number | null = null;
   private selectionIsDefault = false;
   private selectedRevision = 0;
   /** See navigateToHandle()'s doc comment -- true only while it's using
@@ -184,6 +190,7 @@ export class ViewStore {
     this.selectedHandle = this.getHandleAt(index);
     this.selectedHandles = this.selectedHandle !== null ? [this.selectedHandle] : [];
     this.selectedIndices = this.selectedHandle !== null ? [index] : [];
+    this.rangeAnchorIndex = index;
     this.selectionIsDefault = false;
     this.emit();
   }
@@ -209,6 +216,45 @@ export class ViewStore {
     }
     this.selectedHandle = this.selectedHandles[this.selectedHandles.length - 1] ?? null;
     this.selectedIndex = this.selectedIndices[this.selectedIndices.length - 1] ?? null;
+    this.rangeAnchorIndex = index;
+    this.selectionIsDefault = false;
+    this.emit();
+  }
+
+  /** Shift+click: replaces the selection with the contiguous range between
+   * `rangeAnchorIndex` (wherever the last plain or ctrl/cmd+click landed --
+   * see its own doc comment) and `index`, inclusive of both ends, same as
+   * a file browser's shift+click. Capped at `maxCount` rows -- deliberately
+   * a no-op (selection left exactly as it was) rather than clamping to a
+   * partial range when the span is larger, so a shift+click on a
+   * hundred-thousand-row view can't silently kick off a huge fetch; every
+   * caller of `selectRange` owns picking that cap; ViewStore itself has no
+   * opinion on what's "too many". Bails the same way (no-op) if any row in
+   * the range isn't in the local cache yet -- unlike select()/toggleSelect()
+   * this never falls back to a server round trip (findGlobalIndex), so a
+   * range reaching past what's loaded so far just can't be resolved yet. */
+  selectRange(index: number, maxCount: number): void {
+    if (!this.db) return;
+    const anchor = this.rangeAnchorIndex ?? index;
+    const lo = Math.min(anchor, index);
+    const hi = Math.max(anchor, index);
+    if (hi - lo + 1 > maxCount) return;
+    const handles: string[] = [];
+    const indices: number[] = [];
+    for (let i = lo; i <= hi; i++) {
+      const h = this.getHandleAt(i);
+      if (h === null) return;
+      handles.push(h);
+      indices.push(i);
+    }
+    this.selectedHandles = handles;
+    this.selectedIndices = indices;
+    // The just-clicked endpoint, not necessarily the last array element
+    // (that's only true when extending downward) -- see this method's own
+    // doc comment on rangeAnchorIndex staying put across repeated
+    // shift+clicks, which the anchor-vs-index direction can flip.
+    this.selectedHandle = this.getHandleAt(index);
+    this.selectedIndex = index;
     this.selectionIsDefault = false;
     this.emit();
   }
@@ -249,6 +295,7 @@ export class ViewStore {
     this.selectedHandle = handle;
     this.selectedHandles = [handle];
     this.selectedIndices = [0];
+    this.rangeAnchorIndex = 0;
     this.selectionIsDefault = true;
   }
 
@@ -266,6 +313,7 @@ export class ViewStore {
     this.selectedHandle = null;
     this.selectedHandles = [];
     this.selectedIndices = [];
+    this.rangeAnchorIndex = null;
     this.applyDefaultSelection();
     this.emit();
   }
@@ -280,6 +328,7 @@ export class ViewStore {
     this.selectedHandle = handle;
     this.selectedHandles = [handle];
     this.selectedIndices = [index];
+    this.rangeAnchorIndex = index;
     this.selectionIsDefault = false;
     this.emit();
   }
@@ -652,6 +701,7 @@ export class ViewStore {
       this.selectedHandle = null;
       this.selectedHandles = [];
       this.selectedIndices = [];
+      this.rangeAnchorIndex = null;
       this.selectionIsDefault = false;
     }
     this.emit();

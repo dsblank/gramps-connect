@@ -17,6 +17,12 @@ const ROW_HEIGHT = 28;
 const BUFFER_ROWS = 6;
 const DEFAULT_COLUMN_WIDTH = 160;
 const MIN_COLUMN_WIDTH = 60;
+// A view can have well over 100k rows -- shift+click range-select is capped
+// here (a UI-policy number ViewStore.selectRange() itself has no opinion
+// on) so a stray shift+click near the top of a huge, freshly sorted view
+// can't kick off a fetch/select of tens of thousands of rows. Past the cap
+// the click is simply ignored -- selection stays exactly as it was.
+const MAX_RANGE_SELECT = 50;
 
 interface DataTableProps {
   view: ViewConfig;
@@ -245,9 +251,19 @@ export function DataTable({ view }: DataTableProps) {
               key={item.key}
               className={classes.row}
               data-selected={snapshot.selectedIndices.includes(item.index) || undefined}
+              // Shift+click's native browser behavior (extending a text
+              // selection across everything between the last click and
+              // this one) fires on mousedown, before our own onClick below
+              // ever runs -- preventDefault has to happen here, on
+              // mousedown, to stop it; doing it in onClick instead is too
+              // late, the text selection has already happened by then.
+              onMouseDown={(e) => {
+                if (e.shiftKey) e.preventDefault();
+              }}
               onClick={(e) => {
                 if (!rawRow) return;
-                if (e.ctrlKey || e.metaKey) store.toggleSelect(item.index);
+                if (e.shiftKey) store.selectRange(item.index, MAX_RANGE_SELECT);
+                else if (e.ctrlKey || e.metaKey) store.toggleSelect(item.index);
                 else store.select(item.index);
               }}
               style={{
