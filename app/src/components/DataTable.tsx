@@ -244,8 +244,12 @@ export function DataTable({ view }: DataTableProps) {
             <div
               key={item.key}
               className={classes.row}
-              data-selected={item.index === snapshot.selectedIndex || undefined}
-              onClick={() => rawRow && store.select(item.index)}
+              data-selected={snapshot.selectedIndices.includes(item.index) || undefined}
+              onClick={(e) => {
+                if (!rawRow) return;
+                if (e.ctrlKey || e.metaKey) store.toggleSelect(item.index);
+                else store.select(item.index);
+              }}
               style={{
                 ...gridStyle,
                 position: "absolute",

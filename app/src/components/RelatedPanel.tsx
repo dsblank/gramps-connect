@@ -60,6 +60,13 @@ interface RelatedPanelProps {
    * *page* is what scrolls -- nesting a scroller inside a scroller there
    * just hides content behind a second, easily-missed scrollbar. */
   flow?: boolean;
+  /** False for a pane mounted inside a 2-selected split view
+   * (SelectionMergeView.tsx) -- there, the header's action slot
+   * (Edit/Delete/Message) is replaced by a single shared "Merge" button
+   * above both panes, so each individual pane must not also offer its own.
+   * Defaults to true (today's only behavior: every other mount keeps its
+   * own action row). */
+  actions?: boolean;
 }
 
 type LoadState =
@@ -292,7 +299,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
  * selection) -- the only difference between the two mountings is which
  * onNavigate callback AsideSplit wires in. */
 export function RelatedPanel({
-  view, handle, draftStack, revision, onNavigate, onViewGallery, updateDocumentTitle, flow,
+  view, handle, draftStack, revision, onNavigate, onViewGallery, updateDocumentTitle, flow, actions = true,
 }: RelatedPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   // Bumped by MessageActions after a Mark done/Reopen toggle -- that write
@@ -393,15 +400,17 @@ export function RelatedPanel({
 
   const body = (
     <Stack gap="md" p="md">
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
-        </div>
-        {/* The header's action slot: things that act on the record itself
-            (edit it, delete it, start a message about it) rather than ways
-            of looking at it. Kept as a Group so more can sit beside
-            MessageButton without disturbing the title's own layout. */}
-        <Group gap="xs" wrap="nowrap" style={{ flex: "none" }}>
+      {/* The header's action slot, above the title rather than beside it:
+          things that act on the record itself (edit it, delete it, start a
+          message about it) rather than ways of looking at it. Its own row
+          -- rather than the old side-by-side Group -- is what lets a
+          multi-select mount (SelectionMergeView/SelectionBulkView) swap
+          this whole row out for Merge/bulk Delete+Tag without disturbing
+          the title's own layout, and gives the buttons room to wrap on
+          narrow panes without crowding the title. Omitted entirely when
+          `actions` is false (see RelatedPanelProps' doc comment). */}
+      {actions && (
+        <Group gap="xs" wrap="wrap" justify="flex-end">
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           {view.key === "media" && (
             <>
@@ -412,7 +421,8 @@ export function RelatedPanel({
           <DeleteButton view={view} detail={detail} />
           <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
-      </Group>
+      )}
+      <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
       {/* Directly under the title, not up in the header slot above: these
           are ways of *viewing* this record rather than actions on it, and
           they only exist for four of the types -- on their own row and at

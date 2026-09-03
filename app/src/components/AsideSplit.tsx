@@ -4,7 +4,8 @@ import { useViewStore } from "../hooks/useViewStore";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { formatHash } from "../hash";
 import { VIEWS, type ViewConfig } from "../store/views";
-import { RelatedPanel } from "./RelatedPanel";
+import { SelectionDetailView } from "./related/SelectionDetailView";
+import { SelectionBulkView } from "./related/SelectionBulkView";
 import { ReferenceDetail } from "./ReferenceDetail";
 import type { SubSelection } from "./ReferenceDetail";
 import { CurrentPageContext } from "./related/CurrentPageContext";
@@ -145,29 +146,39 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
     // See CurrentPageContext's doc comment for why (self-referencing
     // links, e.g. a family's Children list including the very person
     // whose page you're already on).
-    <CurrentPageContext.Provider value={{ type: view.key, handle: snapshot.selectedHandle }}>
+    <CurrentPageContext.Provider value={{ type: view.key, handles: snapshot.selectedHandles }}>
       <Stack h={flow ? undefined : "100%"} gap={0}>
         <Box
           ref={topPaneRef}
           onClickCapture={(e) => { lastClickedRef.current = e.target as HTMLElement; }}
           style={flow ? undefined : { flex: 1, minHeight: 0, overflow: "auto" }}
         >
-          <RelatedPanel
-            flow={flow}
-            view={view}
-            draftStack={draftStack}
-            handle={snapshot.selectedHandle}
-            revision={snapshot.selectedRevision}
-            onNavigate={(type, handle, refMeta) => {
-              setSubSelection({ kind: "object", type, handle, refMeta });
-              setDetailOpen(true);
-            }}
-            onViewGallery={(items, label) => {
-              setSubSelection({ kind: "gallery", items, label });
-              setDetailOpen(true);
-            }}
-            updateDocumentTitle
-          />
+          {snapshot.selectedHandles.length >= 3 ? (
+            <SelectionBulkView
+              view={view}
+              handles={snapshot.selectedHandles}
+              onNavigate={(type, handle, refMeta) => {
+                setSubSelection({ kind: "object", type, handle, refMeta });
+                setDetailOpen(true);
+              }}
+            />
+          ) : (
+            <SelectionDetailView
+              flow={flow}
+              view={view}
+              draftStack={draftStack}
+              handles={snapshot.selectedHandles as [string] | [string, string]}
+              revision={snapshot.selectedRevision}
+              onNavigate={(type, handle, refMeta) => {
+                setSubSelection({ kind: "object", type, handle, refMeta });
+                setDetailOpen(true);
+              }}
+              onViewGallery={(items, label) => {
+                setSubSelection({ kind: "gallery", items, label });
+                setDetailOpen(true);
+              }}
+            />
+          )}
         </Box>
         <UnstyledButton
           onClick={() => setDetailOpen((open) => !open)}

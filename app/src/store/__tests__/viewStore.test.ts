@@ -445,3 +445,116 @@ describe("ViewStore.applyLiveChange", () => {
     expect(store.getSnapshot().selectionIsDefault).toBe(false);
   });
 });
+
+describe("ViewStore.toggleSelect (ctrl/cmd+click multi-select)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("adds a second row to the selection without dropping the first, and makes it the new anchor", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+    store.select(0); // H1
+
+    store.toggleSelect(2); // ctrl+click H3
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H1", "H3"]);
+    expect(snap.selectedIndices).toEqual([0, 2]);
+    expect(snap.selectedHandle).toBe("H3"); // anchor = most recently toggled
+    expect(snap.selectedIndex).toBe(2);
+  });
+
+  it("removes a row from the selection on a second ctrl+click, without disturbing the rest", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+    store.select(0); // H1
+    store.toggleSelect(1); // + H2
+    store.toggleSelect(2); // + H3
+
+    store.toggleSelect(1); // ctrl+click H2 again -- removes it
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H1", "H3"]);
+    expect(snap.selectedIndices).toEqual([0, 2]);
+    // The anchor (H3) wasn't touched, so it stays the anchor.
+    expect(snap.selectedHandle).toBe("H3");
+  });
+
+  it("falls back to the new last-selected handle as anchor when the anchor itself is toggled off", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.select(0); // H1
+    store.toggleSelect(1); // + H2, H2 is now the anchor
+
+    store.toggleSelect(1); // ctrl+click H2 again -- removes the anchor
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H1"]);
+    expect(snap.selectedHandle).toBe("H1");
+    expect(snap.selectedIndex).toBe(0);
+  });
+
+  it("empties the selection entirely when the only selected row is toggled off -- no default reselect", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.select(0); // H1
+
+    store.toggleSelect(0); // ctrl+click H1 again
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual([]);
+    expect(snap.selectedHandle).toBeNull();
+    expect(snap.selectedIndex).toBeNull();
+  });
+
+  it("a plain select() collapses a multi-selection back to just the clicked row", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+    store.select(0);
+    store.toggleSelect(1);
+    store.toggleSelect(2);
+    expect(store.getSnapshot().selectedHandles.length).toBe(3);
+
+    store.select(1); // plain click H2
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H2"]);
+    expect(snap.selectedHandle).toBe("H2");
+  });
+
+  it("clearSelection() drops the whole multi-selection, not just the anchor", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.select(1); // H2 (not the default row 0, so clearSelection has work to do)
+    store.toggleSelect(0); // + H1
+
+    store.clearSelection();
+
+    // Falls back to the view's default (row 0 = H1) same as the single-select case.
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H1"]);
+    expect(snap.selectionIsDefault).toBe(true);
+  });
+
+  it("drops a multi-selected (non-anchor) handle that a live delete removes, keeping the rest and the anchor", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+    store.select(0); // H1
+    store.toggleSelect(2); // + H3, H3 is now the anchor
+
+    await store.applyLiveChange(notification("H1", "DELETE"));
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H3"]);
+    expect(snap.selectedHandle).toBe("H3"); // anchor untouched
+    expect(snap.selectedIndex).toBe(1); // shifted up by H1's removal
+  });
+
+  it("falls back to the new last-remaining handle as anchor when a live delete removes the anchor out of a multi-selection", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+    store.select(0); // H1
+    store.toggleSelect(2); // + H3, H3 is now the anchor
+
+    await store.applyLiveChange(notification("H3", "DELETE"));
+
+    const snap = store.getSnapshot();
+    expect(snap.selectedHandles).toEqual(["H1"]);
+    expect(snap.selectedHandle).toBe("H1");
+    expect(snap.selectedIndex).toBe(0);
+  });
+});

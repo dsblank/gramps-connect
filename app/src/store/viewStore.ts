@@ -48,6 +48,21 @@ export interface ViewSnapshot {
    * where_expr/sort means the old index no longer names the same row. */
   selectedIndex: number | null;
   selectedHandle: string | null;
+  /** Every currently-selected handle, ordered by click order (most recently
+   * clicked/ctrl+clicked last). `selectedHandle`/`selectedIndex` always
+   * mirror the last element of this array (the "anchor") -- kept that way
+   * so every existing single-select consumer (RelatedPanel's single mount,
+   * Pyodide's get_selected() via PyodidePocPanel.tsx, useHistorySync.ts,
+   * navigateToHandle) needs no changes at all. `select()` collapses this to
+   * a single element; `toggleSelect()` (ctrl/cmd+click) adds or removes one
+   * element without disturbing the rest. */
+  selectedHandles: string[];
+  /** Parallel to selectedHandles (same order, same length) -- the local
+   * row index each selected handle currently occupies, for DataTable's
+   * index-based highlighting/rendering (row data itself carries no handle
+   * column, see getRows()'s doc comment on why -- only ViewStore's own
+   * sql.js cache does). */
+  selectedIndices: number[];
   /** True when the current selection is the one applied automatically
    * against a freshly loaded cache (see applyDefaultSelection) rather than
    * one the user actually clicked or navigated to. The detail panes read
@@ -76,6 +91,8 @@ const EMPTY_SNAPSHOT_BASE = {
   revision: 0,
   selectedIndex: null,
   selectedHandle: null,
+  selectedHandles: [] as string[],
+  selectedIndices: [] as number[],
   selectionIsDefault: false,
   selectedRevision: 0,
 };
@@ -105,6 +122,8 @@ export class ViewStore {
   private revision = 0;
   private selectedIndex: number | null = null;
   private selectedHandle: string | null = null;
+  private selectedHandles: string[] = [];
+  private selectedIndices: number[] = [];
   private selectionIsDefault = false;
   private selectedRevision = 0;
   /** See navigateToHandle()'s doc comment -- true only while it's using
@@ -141,6 +160,8 @@ export class ViewStore {
       revision: this.revision,
       selectedIndex: this.selectedIndex,
       selectedHandle: this.selectedHandle,
+      selectedHandles: this.selectedHandles,
+      selectedIndices: this.selectedIndices,
       selectionIsDefault: this.selectionIsDefault,
       selectedRevision: this.selectedRevision,
     };
@@ -161,6 +182,33 @@ export class ViewStore {
     if (!this.db) return;
     this.selectedIndex = index;
     this.selectedHandle = this.getHandleAt(index);
+    this.selectedHandles = this.selectedHandle !== null ? [this.selectedHandle] : [];
+    this.selectedIndices = this.selectedHandle !== null ? [index] : [];
+    this.selectionIsDefault = false;
+    this.emit();
+  }
+
+  /** Ctrl/cmd+click: adds `index`'s row to the selection, or removes it if
+   * already selected -- unlike select(), never collapses the rest of the
+   * selection. The just-toggled-on handle becomes the new anchor
+   * (selectedHandle/selectedIndex); toggling off the anchor falls back to
+   * whatever's now last in the array (or "nothing selected" if that empties
+   * it) rather than re-picking a default -- a deliberate deselect shouldn't
+   * silently reselect row 0. */
+  toggleSelect(index: number): void {
+    if (!this.db) return;
+    const handle = this.getHandleAt(index);
+    if (handle === null) return;
+    const pos = this.selectedHandles.indexOf(handle);
+    if (pos !== -1) {
+      this.selectedHandles = this.selectedHandles.filter((_, i) => i !== pos);
+      this.selectedIndices = this.selectedIndices.filter((_, i) => i !== pos);
+    } else {
+      this.selectedHandles = [...this.selectedHandles, handle];
+      this.selectedIndices = [...this.selectedIndices, index];
+    }
+    this.selectedHandle = this.selectedHandles[this.selectedHandles.length - 1] ?? null;
+    this.selectedIndex = this.selectedIndices[this.selectedIndices.length - 1] ?? null;
     this.selectionIsDefault = false;
     this.emit();
   }
@@ -199,6 +247,8 @@ export class ViewStore {
     if (handle === null) return; // totalCount > 0 but page one hasn't landed yet
     this.selectedIndex = 0;
     this.selectedHandle = handle;
+    this.selectedHandles = [handle];
+    this.selectedIndices = [0];
     this.selectionIsDefault = true;
   }
 
@@ -214,6 +264,8 @@ export class ViewStore {
     if (this.selectedIndex === null && this.selectedHandle === null) return;
     this.selectedIndex = null;
     this.selectedHandle = null;
+    this.selectedHandles = [];
+    this.selectedIndices = [];
     this.applyDefaultSelection();
     this.emit();
   }
@@ -226,6 +278,8 @@ export class ViewStore {
   private selectAt(index: number, handle: string): void {
     this.selectedIndex = index;
     this.selectedHandle = handle;
+    this.selectedHandles = [handle];
+    this.selectedIndices = [index];
     this.selectionIsDefault = false;
     this.emit();
   }
@@ -596,6 +650,8 @@ export class ViewStore {
     if (!this.suppressSelectionClear) {
       this.selectedIndex = null;
       this.selectedHandle = null;
+      this.selectedHandles = [];
+      this.selectedIndices = [];
       this.selectionIsDefault = false;
     }
     this.emit();
@@ -938,16 +994,19 @@ export class ViewStore {
    * live-deleted, or its own edit moved it beyond what's currently loaded
    * (applyLiveChange()'s eviction branch). */
   private reconcileSelection(): void {
-    if (this.selectedHandle !== null) {
-      const index = this.getIndexForHandle(this.selectedHandle);
-      if (index === null) {
-        this.selectedIndex = null;
-        this.selectedHandle = null;
-        this.selectionIsDefault = false;
-      } else {
-        this.selectedIndex = index;
-      }
-    }
+    // Re-derive every selected handle's index (dropping any that no longer
+    // exist in the cache at all -- e.g. live-deleted) rather than only the
+    // anchor's, since an unrelated row's INSERT/DELETE/reposition can shift
+    // every other selected row's position too.
+    const survivors = this.selectedHandles
+      .map((h) => ({ h, i: this.getIndexForHandle(h) }))
+      .filter((e): e is { h: string; i: number } => e.i !== null);
+    this.selectedHandles = survivors.map((e) => e.h);
+    this.selectedIndices = survivors.map((e) => e.i);
+    const anchorVanished = this.selectedHandle !== null && !this.selectedHandles.includes(this.selectedHandle);
+    this.selectedHandle = this.selectedHandles[this.selectedHandles.length - 1] ?? null;
+    this.selectedIndex = this.selectedIndices[this.selectedIndices.length - 1] ?? null;
+    if (anchorVanished) this.selectionIsDefault = false;
     // Losing the selected row to a live delete/eviction leaves the detail
     // panes with nothing to show -- fall back to the view's default rather
     // than blanking them (see applyDefaultSelection).

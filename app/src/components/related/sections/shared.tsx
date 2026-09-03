@@ -16,8 +16,9 @@ import { t } from "../../../i18n/i18n";
 // Anchor's own "rendered as a button" styles default to a flex-centered,
 // full-width control -- overridden back to plain inline text so these read
 // as a name/date/title, not a wide centered button (ported from the
-// original PersonDetail.tsx's LINK_STYLE).
-const LINK_STYLE = { display: "inline", width: "auto", textAlign: "left" } as const;
+// original PersonDetail.tsx's LINK_STYLE). Exported since SelectionBulkView
+// wants the exact same look for its own onNavigate-driven rows.
+export const LINK_STYLE = { display: "inline", width: "auto", textAlign: "left" } as const;
 
 /** No collapse/expand -- every one of this file's ~18 call sites always
  * passed `defaultOpen` anyway (collapsed-by-default was never actually
