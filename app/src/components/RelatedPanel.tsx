@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { Alert, Box, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, zipRefs } from "../store/objectDetail";
@@ -246,7 +246,9 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
           {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t(view.label)} <PrivateIndicator detail={detail} />
         </Text>
         {isSelf ? (
-          <Text fw={700}>{text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}</Text>
+          <Box p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: "var(--mantine-radius-md)" }}>
+            {text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}
+          </Box>
         ) : (
           // A plain div, not component="button" -- NoteText's embedded
           // gramps://... links render as real <button>s (via Anchor), and
