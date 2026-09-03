@@ -547,6 +547,34 @@ export const CITATION_VIEW: ViewConfig = {
   ],
 };
 
+// Same literal as visualData.ts's own KML_MIME -- not imported from there
+// to avoid a cycle (visualData.ts already imports from this file).
+const KML_MIME = "application/vnd.google-earth.kml+xml";
+
+// Same tag name as grampletMedia.ts's own GRAMPLET_TAG_NAME -- not imported
+// from there (pyodidePoc/ pulls in auth/jobsApi/etc., which this file has no
+// business depending on) so the literal is duplicated instead.
+const GRAMPLET_TAG_NAME = "Gramplet";
+
+/** MEDIA_VIEW's "category" column -- `mime`'s stored value (still the raw
+ * MIME type, aliased through unchanged: see the column's own `select`) plus
+ * `is_gramplet`'s sibling column (a `count(tags, ...)` select, 0 or more),
+ * both already fetched in the same row since every column is requested
+ * together. A raw mime string is precise but meaningless to read at a
+ * glance in a table row; this collapses it to what the user actually cares
+ * about, with a Gramplet's tag taking priority since its own mime
+ * (whatever the uploaded manifest's file type is) isn't the interesting
+ * fact about it. */
+function mediaCategory(mime: unknown, item?: Record<string, unknown>): string {
+  if (Number(item?.is_gramplet ?? 0) > 0) return "Gramplet";
+  const value = typeof mime === "string" ? mime : "";
+  if (value === KML_MIME) return "Map overlay";
+  if (value.startsWith("image/")) return "Image";
+  if (value.startsWith("video/")) return "Video";
+  if (value.startsWith("audio/")) return "Audio";
+  return "Document";
+}
+
 export const MEDIA_VIEW: ViewConfig = {
   key: "media",
   label: "Media",
@@ -567,7 +595,36 @@ export const MEDIA_VIEW: ViewConfig = {
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
     { key: "path", label: "Path", select: "path", sqlType: "TEXT" },
-    { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT" },
+    // Hidden: kept as the raw MIME type -- visualData.ts's readColumns(["handle",
+    // "mime"]) reads this column by name to find a place's attached KML
+    // files, so its stored value can't become the category text below.
+    { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT", hidden: true },
+    // Hidden: 0 or more, feeding mediaCategory's "Gramplet" case below --
+    // see grampletMedia.ts's own `exists(tags, name == 'Gramplet')` for the
+    // same tag-based detection used elsewhere.
+    {
+      key: "is_gramplet", label: "Is Gramplet",
+      select: `count(tags, name == ${JSON.stringify(GRAMPLET_TAG_NAME)}) as is_gramplet`,
+      sqlType: "INTEGER", hidden: true,
+    },
+    // The MIME type column, but shown as what it means to the user
+    // (Image/Map overlay/Document/...) rather than the raw string --
+    // mediaCategory reads the sibling `mime`/`is_gramplet` columns above via
+    // `item` (both already fetched in the same row). `select` re-fetches
+    // `mime` under this column's own key via a json_path (a duplicate
+    // response key across columns is rejected server-side, so it can't just
+    // reuse "mime") -- deliberately *not* a plain string select ("mime as
+    // category"): DataTable.tsx treats any string-select column as
+    // sortable and sends it verbatim as order_by, which a bare column name
+    // like "mime" would tolerate but an aliased expression doesn't parse
+    // as. A json_path select is never offered as sortable in the first
+    // place (see ViewConfig.orderBy's own doc comment), which is right
+    // here anyway -- there's no server-side column to sort a *computed*
+    // category by.
+    {
+      key: "category", label: "Type", select: { json_path: ["mime"] }, sqlType: "TEXT",
+      toSql: mediaCategory,
+    },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
