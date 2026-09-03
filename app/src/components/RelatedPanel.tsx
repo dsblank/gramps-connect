@@ -242,9 +242,21 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     const text = (detail.text as { string: string; tags?: { name: string; ranges: [number, number][]; value: string }[] } | undefined) ?? { string: "" };
     return (
       <div>
-        <Text size="sm" c="dimmed" fw={600}>
-          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t(view.label)} <PrivateIndicator detail={detail} />
-        </Text>
+        <Group gap={4} align="center">
+          <Tooltip label={t("Open in its list page")} withArrow disabled={!navigateToSelf}>
+            <Text
+              size="sm"
+              fw={600}
+              component={navigateToSelf ? "button" : "span"}
+              onClick={navigateToSelf}
+              c={navigateToSelf ? "blue" : "dimmed"}
+              style={navigateToSelf ? { cursor: "pointer", background: "none", border: "none", padding: 0 } : undefined}
+            >
+              {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t(view.label)}
+            </Text>
+          </Tooltip>
+          <PrivateIndicator detail={detail} />
+        </Group>
         {isSelf ? (
           <Box p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: "var(--mantine-radius-md)" }}>
             {text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}
