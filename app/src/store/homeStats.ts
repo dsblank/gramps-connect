@@ -26,7 +26,11 @@ function cellText(view: ViewConfig, item: QueryItem, key: string): string {
   const raw = item[key];
   const stored = column.toSql ? column.toSql(raw) : (raw as string | number | null | undefined);
   if (stored === null || stored === undefined || stored === "") return "";
-  return column.toDisplay ? column.toDisplay(stored) : String(stored);
+  const displayed = column.toDisplay ? column.toDisplay(stored) : String(stored);
+  // toDisplay may return non-text ReactNode (e.g. Tag's color swatch) for
+  // DataTable's own rendering -- Home's Recently Changed list wants text,
+  // so fall back to the raw stored value rather than stringifying JSX.
+  return typeof displayed === "string" ? displayed : String(stored);
 }
 
 /** One-line label per type for the Recently Changed list -- deliberately

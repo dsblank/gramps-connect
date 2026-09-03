@@ -51,7 +51,7 @@ const desktopStrings = [
   "Import Family Tree", "Import failed", "Last changed", "Latitude", "Locality", "Longitude",
   "Map", "Media", "Message", "Mother", "Name", "Name type", "New year begins", "Nickname",
   "Notes", "Origin", "Output", "Page", "Parents", "Participants", "People", "Person", "Phone",
-  "Place", "Places", "Postal code", "Prefix", "Preview", "Primary", "Priority", "Private",
+  "Place", "Places", "Postal code", "Prefix", "Preview", "Primary", "Private",
   "Quality", "Relationship", "Remove", "Reports", "Repositories", "Role", "Save", "Select",
   "Sort as", "Source", "Sources", "State", "Statistics", "Street", "Suffix", "Surname",
   "Surnames", "System Information", "Tags", "Text", "Text Reports", "Timeline", "Title",

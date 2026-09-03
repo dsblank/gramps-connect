@@ -5,10 +5,12 @@
 //
 // Forked from the original Layer 2/3 spike's views.ts (since removed, see
 // git history) -- this is the production copy now; see PLAN.md.
+import { createElement, type ReactNode } from "react";
 import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
 import { splitAuthorMessage } from "./authoredText";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
+import { gtkColorToCss } from "../components/related/color";
 import iconPerson from "../assets/icons/gramps-person.svg";
 import iconFamily from "../assets/icons/gramps-family.svg";
 import iconEvent from "../assets/icons/gramps-event.svg";
@@ -38,9 +40,9 @@ export interface ColumnConfig {
    * column whose stored value depends on more than just its own selected
    * field -- see `title`'s fallback to `name` below. */
   toSql?: (apiValue: unknown, item?: Record<string, unknown>) => string | number | null;
-  /** Stored SQLite value -> displayed cell text. Default: String(value),
+  /** Stored SQLite value -> displayed cell content. Default: String(value),
    * or "" for null/undefined. */
-  toDisplay?: (sqlValue: unknown) => string;
+  toDisplay?: (sqlValue: unknown) => ReactNode;
   /** Stored SQLite value -> the cell's hover title attribute. Default: no
    * title -- for a column whose toDisplay is lossy (e.g. "change"'s
    * relative-time text) and wants the precise value available on hover. */
@@ -844,6 +846,23 @@ export const NOTE_VIEW: ViewConfig = {
   ],
 };
 
+// Tag.color as a small swatch instead of the raw (16-bit-per-channel, see
+// gtkColorToCss) hex string -- the table cell's title attribute (toTitle
+// below) still surfaces the hex value on hover for anyone who wants it.
+function colorSwatch(sqlColor: unknown): ReactNode {
+  const css = gtkColorToCss(sqlColor as string | undefined);
+  if (!css) return "";
+  return createElement("span", {
+    style: {
+      display: "inline-block",
+      width: 14,
+      height: 14,
+      background: css,
+      border: "1px solid var(--mantine-color-default-border)",
+    },
+  });
+}
+
 export const TAG_VIEW: ViewConfig = {
   key: "tag",
   label: "Tags",
@@ -860,8 +879,11 @@ export const TAG_VIEW: ViewConfig = {
   },
   columns: [
     { key: "name", label: "Name", select: "name", sqlType: "TEXT" },
-    { key: "color", label: "Color", select: "color", sqlType: "TEXT" },
-    { key: "priority", label: "Priority", select: "priority", sqlType: "INTEGER" },
+    {
+      key: "color", label: "Color", select: "color", sqlType: "TEXT",
+      toDisplay: colorSwatch, toTitle: (v) => (v == null ? "" : String(v)),
+    },
+    { key: "priority", label: "Order priority", select: "priority", sqlType: "INTEGER" },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };

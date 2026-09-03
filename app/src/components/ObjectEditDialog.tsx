@@ -204,7 +204,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     quick: [{ kind: "text", key: "name", label: "Name" }],
     details: [
       { kind: "color", key: "color", label: "Color" },
-      { kind: "number", key: "priority", label: "Priority", min: 0 },
+      { kind: "number", key: "priority", label: "Order priority", min: 0 },
     ],
   },
   // A story note's text.string is a JSON-stringified StorySpec

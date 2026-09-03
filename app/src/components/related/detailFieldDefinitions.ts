@@ -75,7 +75,7 @@ export const DETAIL_FIELDS: Record<string, DetailField[]> = {
   // RelatedPanel's TagSwatch) -- priority is the one field with nowhere
   // else to live.
   tag: [
-    { label: "Priority", value: (d) => (typeof d.priority === "number" ? String(d.priority) : "") },
+    { label: "Order priority", value: (d) => (typeof d.priority === "number" ? String(d.priority) : "") },
   ],
   note: [
     { label: "Type", value: (d) => (d.type as string | undefined) ?? "" },
