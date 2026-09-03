@@ -133,8 +133,8 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
           ? "No records to show."
           : "Select a row to see its details.";
     return (
-      <Stack p="md">
-        <Text c="dimmed" size="md">{message}</Text>
+      <Stack h={flow ? undefined : "100%"} align="center" justify="center" p="md">
+        <Text c="dimmed" size="xl">{message}</Text>
       </Stack>
     );
   }

@@ -1,11 +1,10 @@
 import { Box, Group, Stack } from "@mantine/core";
-import { hasPermissions } from "../../auth/auth";
-import { MERGE_SUPPORTED_VIEWS } from "../../store/mergeApi";
 import type { ViewConfig } from "../../store/views";
 import type { UseDraftStack } from "../../store/draftStack";
 import type { OnNavigate, OnViewGallery } from "./types";
 import { RelatedPanel } from "../RelatedPanel";
 import { MergeButton } from "./MergeButton";
+import { BulkTagButton } from "./BulkTagButton";
 
 /** AsideSplit.tsx's top-pane mount whenever 1 or 2 rows are selected --
  * covers both the plain single-selection case and the 2-selected split
@@ -23,10 +22,13 @@ import { MergeButton } from "./MergeButton";
  * full-width pane with its own action row (Edit/Delete/Message).
  * `handles.length === 2`: two panes side by side, each with its own action
  * row suppressed (`actions={false}`), and a single shared header row above
- * both holding just a Merge button -- "Merge-or-nothing" for a pair, no
- * Edit/Delete/Message fallback, and no button at all when the pair's type
- * has no merge route (MergeButton itself renders nothing then, leaving the
- * shared row empty). 3+ selected is a different display mode entirely
+ * both holding Merge and Tag -- Edit/Delete/Message have no bulk equivalent
+ * here (2-selected mode is Merge/Tag-or-nothing for those), but Tag makes
+ * sense at any selection size 2+, so unlike Merge (which needs both a
+ * mergeable type and Edit+Delete permissions -- MergeButton itself renders
+ * nothing when ineligible, leaving just Tag in the row) it's shown
+ * unconditionally here and gates only on its own EditObject check
+ * internally. 3+ selected is a different display mode entirely
  * (SelectionBulkView.tsx), not handled here. */
 export function SelectionDetailView({
   view, handles, draftStack, revision, onNavigate, onViewGallery, flow,
@@ -40,13 +42,13 @@ export function SelectionDetailView({
   flow?: boolean;
 }) {
   const isSplit = handles.length === 2;
-  const eligible = isSplit && MERGE_SUPPORTED_VIEWS.includes(view.key) && hasPermissions("EditObject", "DeleteObject");
 
   return (
     <Stack gap={0} h={flow ? undefined : "100%"}>
-      {isSplit && eligible && (
+      {isSplit && (
         <Group gap="xs" p="md" pb={0} justify="flex-end" style={{ flex: "none" }}>
           <MergeButton view={view} handles={handles} />
+          <BulkTagButton view={view} handles={handles} />
         </Group>
       )}
       <Group gap={0} wrap="nowrap" align="stretch" style={flow ? undefined : { flex: 1, minHeight: 0 }}>

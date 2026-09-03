@@ -46,8 +46,13 @@ interface RecordPickerProps {
   /** Opts this picker into the "not finding it? create new" bridge -- a
    * search that doesn't turn up the right record shouldn't be a dead end
    * that has to be backed out of first. Omitted entirely by callers whose
-   * reference type doesn't support creating one yet. */
-  onCreateNew?: () => void;
+   * reference type doesn't support creating one yet. Passed the current
+   * (trimmed) query text -- RefPickerField.tsx's SearchOrCreate ignores it
+   * (its "create new" opens a full blank edit dialog instead), but a
+   * caller whose create path is just "get-or-create by this exact name"
+   * (e.g. BulkTagButton.tsx's Tag, which has no dialog of its own to open)
+   * needs it to know what name to create. */
+  onCreateNew?: (query: string) => void;
 }
 
 /** A generic single-field "pick an existing record" search -- the shared
@@ -155,7 +160,7 @@ export function RecordPicker({
       {onCreateNew && query.trim().length > 0 && (
         <Group gap={4}>
           <Text size="xs" c="dimmed">{t("Not finding it?")}</Text>
-          <Anchor component="button" type="button" size="xs" onClick={onCreateNew}>
+          <Anchor component="button" type="button" size="xs" onClick={() => onCreateNew(query.trim())}>
             + Create new {createLabel}…
           </Anchor>
         </Group>
