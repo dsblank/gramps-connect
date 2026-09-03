@@ -16,6 +16,7 @@ import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MediaMapButton } from "./related/MediaMapButton";
 import { MediaKmlEditButton } from "./related/MediaKmlEditButton";
 import { MediaGrampletEditButton } from "./related/MediaGrampletEditButton";
+import { MediaEditButton } from "./related/MediaEditButton";
 import { MessageButton } from "./related/MessageButton";
 import { EditButton } from "./related/EditButton";
 import { DeleteButton } from "./related/DeleteButton";
@@ -414,6 +415,7 @@ export function RelatedPanel({
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           {view.key === "media" && (
             <>
+              <MediaEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
               <MediaKmlEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
               <MediaGrampletEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
             </>
