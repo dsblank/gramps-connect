@@ -1055,7 +1055,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         getViewStore("media").requeryDebounced();
         notifications.show({
           color: "green",
-          title: t("Map item added"),
+          title: t("Map overlay added"),
           message: (
             <Anchor component="a" href={formatHash({ viewKey: "media", handle })} underline="never">
               {t("Open it")}
@@ -1066,7 +1066,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         handle = target.handle;
         await updateMediaFile(token, handle, blob, KML_MIME);
         invalidateKmlFeatures(handle);
-        notifications.show({ color: "blue", title: t("Map item updated"), message: t("Its shapes have been saved.") });
+        notifications.show({ color: "blue", title: t("Map overlay updated"), message: t("Its shapes have been saved.") });
         onSaved?.();
       }
       // Best-effort, after the geometry itself is safely saved: a failure
@@ -1098,7 +1098,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     }
   }
 
-  const title = target.kind === "new" ? t("Add Map Item") : t("Edit Map Item");
+  const title = target.kind === "new" ? t("Add Map Overlay") : t("Edit Map Overlay");
 
   // Cheap to recompute on every render (getSnapshot() is just an array
   // read) rather than mirrored into its own state -- selectedId already

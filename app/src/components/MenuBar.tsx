@@ -21,7 +21,7 @@ import { GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
 
 // maplibre-gl and terra-draw are the heaviest thing this app can pull in
 // (see MapItemEditorDialog.tsx's own doc comment) -- lazy so a session that
-// never opens "Add Map Item…" never fetches either, same reasoning as
+// never opens "Add Map Overlay…" never fetches either, same reasoning as
 // MapView.tsx's own lazy MapCanvas import.
 const MapItemEditorDialog = lazy(() =>
   import("./MapItemEditorDialog").then((m) => ({ default: m.MapItemEditorDialog })));
@@ -331,14 +331,14 @@ export function MenuBar({ draftStack }: MenuBarProps) {
               // Not a draft type (see draftStack.ts's own exclusion of
               // Media) -- opens MapItemEditorDialog.tsx directly instead of
               // going through draftStack.openDraft.
-              label: "Add Map Item…",
+              label: "Add Map Overlay…",
               perm: PERM_ADD_OBJ,
               onClick: () => setMapItemOpened(true),
               separatorBefore: true,
             },
             {
               // Also not a draft type -- opens GrampletEditDialog.tsx
-              // directly, same as Add Map Item just above. Gated well
+              // directly, same as Add Map Overlay just above. Gated well
               // above the AddObject/EditObject an ordinary Media upload
               // needs -- see grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION
               // doc comment (discussion #4, F9): Gramplet code runs in

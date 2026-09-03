@@ -12,7 +12,7 @@ import { t } from "../../i18n/i18n";
 const MapItemEditorDialog = lazy(() =>
   import("../MapItemEditorDialog").then((m) => ({ default: m.MapItemEditorDialog })));
 
-/** A KML media object's own "edit its shapes" action -- same header slot as
+/** A KML media object's own "edit its overlay" action -- same header slot as
  * EditButton.tsx's Edit button (which excludes Media, see its own doc
  * comment: a generic Media has no form to edit, only an uploaded file), but
  * for the one Media type this app *can* meaningfully edit in place: its own drawn
@@ -23,12 +23,12 @@ export function MediaKmlEditButton({ detail, onSaved }: { detail: ObjectDetail; 
   const [opened, setOpened] = useState(false);
   if (detail.mime !== KML_MIME || !hasPermissions("EditObject")) return null;
 
-  const label = t("Edit this map item's shapes");
+  const label = t("Edit this map item's overlay");
 
   return (
     <>
       <Button variant="default" size="xs" onClick={() => setOpened(true)} aria-label={label}>
-        {t("Edit shapes")}
+        {t("Edit overlay")}
       </Button>
       {opened && (
         <Suspense
