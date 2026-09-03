@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { Tooltip } from "@mantine/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
@@ -23,6 +24,11 @@ const MIN_COLUMN_WIDTH = 60;
 // can't kick off a fetch/select of tens of thousands of rows. Past the cap
 // the click is simply ignored -- selection stays exactly as it was.
 const MAX_RANGE_SELECT = 50;
+// Multi-select's ctrl/shift modifiers aren't discoverable from the UI alone
+// -- this is the delay (from the cursor going idle, not from hover-start)
+// before the hint tooltip appears, so it doesn't flash on every pass of the
+// mouse across the rows while scanning/scrolling.
+const ROW_HINT_DELAY_MS = 500;
 
 interface DataTableProps {
   view: ViewConfig;
@@ -33,6 +39,13 @@ export function DataTable({ view }: DataTableProps) {
   const store = getViewStore(view.key);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
+  // Cursor position the hint tooltip is anchored to, set only once the
+  // cursor has been idle over the rows (not the header) for
+  // ROW_HINT_DELAY_MS -- null hides it. Reset on every mousemove so
+  // scanning/scrolling through rows never shows it, only stopping does.
+  const [rowHintPos, setRowHintPos] = useState<{ x: number; y: number } | null>(null);
+  const rowHintTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(rowHintTimer.current), []);
   // Everything below (widths, grid tracks, resize indices, cells) is indexed
   // by position in *this* list, not in view.columns -- a hidden column has no
   // track and no header to drag. The one exception is reading a value out of
@@ -242,7 +255,22 @@ export function DataTable({ view }: DataTableProps) {
           );
         })}
       </div>
-      <div style={{ height: virtualizer.getTotalSize(), width: rowWidth, position: "relative" }}>
+      <div
+        style={{ height: virtualizer.getTotalSize(), width: rowWidth, position: "relative" }}
+        onMouseMove={(e) => {
+          window.clearTimeout(rowHintTimer.current);
+          setRowHintPos(null);
+          const { clientX, clientY } = e;
+          rowHintTimer.current = window.setTimeout(
+            () => setRowHintPos({ x: clientX, y: clientY }),
+            ROW_HINT_DELAY_MS,
+          );
+        }}
+        onMouseLeave={() => {
+          window.clearTimeout(rowHintTimer.current);
+          setRowHintPos(null);
+        }}
+      >
         {virtualItems.map((item) => {
           const rawRow = rows.get(item.index);
           const rowState = store.getRowState(item.index);
@@ -301,6 +329,26 @@ export function DataTable({ view }: DataTableProps) {
           );
         })}
       </div>
+      <Tooltip
+        label={t("Ctrl/Cmd+click selects another row, Shift+click selects a range")}
+        opened={rowHintPos !== null}
+        position="top-end"
+        withArrow
+        multiline
+        w={260}
+        events={{ hover: false, focus: false, touch: false }}
+      >
+        <span
+          style={{
+            position: "fixed",
+            left: rowHintPos?.x ?? 0,
+            top: rowHintPos?.y ?? 0,
+            width: 0,
+            height: 0,
+            pointerEvents: "none",
+          }}
+        />
+      </Tooltip>
     </div>
   );
 }
