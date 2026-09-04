@@ -10,7 +10,8 @@ import {
   useMantineColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { getApiKey, getCurrentUsername, logout } from "../auth/auth";
+import { getApiKey, getCurrentUsername, hasPermissions, logout } from "../auth/auth";
+import { ProfileDialog } from "./ProfileDialog";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { fetchLanguages } from "../store/translationsApi";
 import {
@@ -159,25 +160,32 @@ export function UserMenu() {
   const username = getCurrentUsername();
   const initial = username ? username[0].toUpperCase() : "?";
   const hasApiKey = getApiKey() !== null;
+  const [profileOpened, setProfileOpened] = useState(false);
 
   return (
-    <Menu shadow="md" width={220} position="bottom-end">
-      <Menu.Target>
-        <Avatar radius="xl" size="sm" style={{ cursor: "pointer" }}>
-          {initial}
-        </Avatar>
-      </Menu.Target>
-      <Menu.Dropdown>
-        {username && <Menu.Label>{username}</Menu.Label>}
-        <Stack gap="sm" px="sm" py={4}>
-          <BrowserNotificationsToggle />
-          <ColorSchemeToggle />
-          <LanguagePicker />
-        </Stack>
-        <Menu.Divider />
-        {hasApiKey && <Menu.Item onClick={copyApiKey}>{t("Copy API key")}</Menu.Item>}
-        <Menu.Item onClick={logout}>{t("Sign out")}</Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
+    <>
+      <Menu shadow="md" width={220} position="bottom-end">
+        <Menu.Target>
+          <Avatar radius="xl" size="sm" style={{ cursor: "pointer" }}>
+            {initial}
+          </Avatar>
+        </Menu.Target>
+        <Menu.Dropdown>
+          {username && <Menu.Label>{username}</Menu.Label>}
+          <Stack gap="sm" px="sm" py={4}>
+            <BrowserNotificationsToggle />
+            <ColorSchemeToggle />
+            <LanguagePicker />
+          </Stack>
+          <Menu.Divider />
+          {hasPermissions("EditOwnUser") && (
+            <Menu.Item onClick={() => setProfileOpened(true)}>{t("Profile")}</Menu.Item>
+          )}
+          {hasApiKey && <Menu.Item onClick={copyApiKey}>{t("Copy API key")}</Menu.Item>}
+          <Menu.Item onClick={logout}>{t("Sign out")}</Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      <ProfileDialog opened={profileOpened} onClose={() => setProfileOpened(false)} />
+    </>
   );
 }

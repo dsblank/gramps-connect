@@ -92,6 +92,15 @@ export function getCurrentUsername(): string | null {
   return cachedUsername;
 }
 
+/** Keeps the cached username in sync after a self-service rename
+ * (ProfileDialog.tsx's `name_new`) -- nothing else re-derives it from the
+ * server, and ReloginDialog/history-poll comparisons both read it back via
+ * getCurrentUsername(). */
+export function setCurrentUsername(username: string): void {
+  cachedUsername = username;
+  writeStored(USERNAME_STORAGE_KEY, username);
+}
+
 /** The tree this session's token is scoped to (gramps-web-api's token.py
  * sets a `tree` claim only in multi-tree mode -- see get_tokens there), or
  * null in the single-tree case. Used by the cache-staleness check
