@@ -12,6 +12,8 @@ import {
 import { notifications } from "@mantine/notifications";
 import { getApiKey, getCurrentUsername, hasPermissions, logout } from "../auth/auth";
 import { ProfileDialog } from "./ProfileDialog";
+import { AdministrationDialog } from "./AdministrationDialog";
+import { OwnerAdministrationDialog } from "./OwnerAdministrationDialog";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { fetchLanguages } from "../store/translationsApi";
 import {
@@ -161,6 +163,14 @@ export function UserMenu() {
   const initial = username ? username[0].toUpperCase() : "?";
   const hasApiKey = getApiKey() !== null;
   const [profileOpened, setProfileOpened] = useState(false);
+  const [adminOpened, setAdminOpened] = useState(false);
+  // ViewSettings is ROLE_ADMIN-only; ViewOtherUser is granted from
+  // ROLE_OWNER up (and Admin has it too, since PERMISSIONS[ROLE_ADMIN] is a
+  // superset of PERMISSIONS[ROLE_OWNER]) -- checking ViewSettings first
+  // means an Admin always gets the full site-wide dialog, and an Owner (who
+  // has ViewOtherUser but not ViewSettings) gets the own-tree-scoped one.
+  const isSiteAdmin = hasPermissions("ViewSettings");
+  const isOwner = hasPermissions("ViewOtherUser");
 
   return (
     <>
@@ -181,11 +191,19 @@ export function UserMenu() {
           {hasPermissions("EditOwnUser") && (
             <Menu.Item onClick={() => setProfileOpened(true)}>{t("Profile")}</Menu.Item>
           )}
+          {(isSiteAdmin || isOwner) && (
+            <Menu.Item onClick={() => setAdminOpened(true)}>{t("Administration")}</Menu.Item>
+          )}
           {hasApiKey && <Menu.Item onClick={copyApiKey}>{t("Copy API key")}</Menu.Item>}
           <Menu.Item onClick={logout}>{t("Sign out")}</Menu.Item>
         </Menu.Dropdown>
       </Menu>
       <ProfileDialog opened={profileOpened} onClose={() => setProfileOpened(false)} />
+      {isSiteAdmin ? (
+        <AdministrationDialog opened={adminOpened} onClose={() => setAdminOpened(false)} />
+      ) : (
+        <OwnerAdministrationDialog opened={adminOpened} onClose={() => setAdminOpened(false)} />
+      )}
     </>
   );
 }

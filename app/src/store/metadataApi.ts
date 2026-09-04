@@ -23,7 +23,7 @@ export interface Metadata {
   gramps_object_query_language?: { version?: string };
   locale?: { lang?: string; language?: string; description?: string };
   object_counts?: Record<string, number>;
-  server?: { multi_tree?: boolean; task_queue?: boolean };
+  server?: { multi_tree?: boolean; task_queue?: boolean; semantic_search?: boolean };
 }
 
 /** The block Help > System Information shows and copies: one fact per

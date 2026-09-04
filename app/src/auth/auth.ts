@@ -215,6 +215,20 @@ async function refreshAccessToken(): Promise<string> {
   }
 }
 
+/** Unconditionally mints a fresh access token, bypassing getToken()'s
+ * isExpiringSoon check -- for the rare case where the *server-side* facts a
+ * cached token's claims were built from just changed for the caller
+ * specifically: gramps-web-api's TokenRefreshResource re-derives both
+ * `tree` and `permissions` from the database on every refresh (token.py's
+ * get_tree_id_and_permissions()), not just extending the same claims, so
+ * this is the only way to see a self-service tree/role change
+ * (UserManagementPanel.tsx editing the caller's own row) reflected without
+ * waiting out the access token's full 15-minute lifetime or forcing a
+ * logout/login. */
+export async function refreshTokenNow(): Promise<string> {
+  return refreshAccessToken();
+}
+
 /** Returns the current session token, transparently refreshing it first if
  * it's expired or about to be. ViewStore only ever calls this after
  * App.tsx has gated the UI behind a successful login, so throwing here is a

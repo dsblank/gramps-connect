@@ -7,6 +7,10 @@ import { ImportMediaDialog } from "./ImportMediaDialog";
 import { ExportDialog } from "./ExportDialog";
 import { DeleteAllDialog } from "./DeleteAllDialog";
 import { ReportDialog } from "./ReportDialog";
+import { ReindexDialog } from "./ReindexDialog";
+import { ConfirmTaskDialog } from "./ConfirmTaskDialog";
+import { RestoreBackupDialog } from "./RestoreBackupDialog";
+import { checkRepairDatabase, upgradeSchema } from "../store/toolsApi";
 import { OverviewDialog } from "./OverviewDialog";
 import { SystemInfoDialog } from "./SystemInfoDialog";
 import { AboutDialog } from "./AboutDialog";
@@ -57,6 +61,13 @@ const PERM_EDIT_OBJ = "EditObject";
 // EditObject -- families.py's FamiliesResource.post() checks both, because
 // adding a Family also rewrites its parents' Person records (family_list).
 const PERM_ADD_OBJ = "AddObject";
+// ROLE_OWNER-level per-tree maintenance permissions -- the Tools menu, kept
+// distinct from AdministrationDialog.tsx's ROLE_ADMIN-only (site-wide)
+// scope. See toolsApi.ts's own doc comment for why each of these needs no
+// fresh JWT except restore-from-backup.
+const PERM_TRIGGER_REINDEX = "TriggerReindex";
+const PERM_REPAIR_TREE = "RepairTree";
+const PERM_UPGRADE_SCHEMA = "UpgradeSchema";
 
 interface MenuItemSpec {
   label: string;
@@ -239,6 +250,10 @@ export function MenuBar({ draftStack }: MenuBarProps) {
   const [mapItemOpened, setMapItemOpened] = useState(false);
   const [grampletOpened, setGrampletOpened] = useState(false);
   const [grampletStoreOpened, setGrampletStoreOpened] = useState(false);
+  const [reindexOpened, setReindexOpened] = useState(false);
+  const [checkRepairOpened, setCheckRepairOpened] = useState(false);
+  const [upgradeSchemaOpened, setUpgradeSchemaOpened] = useState(false);
+  const [restoreOpened, setRestoreOpened] = useState(false);
 
   // App.tsx mounts a second MenuBar when the header switches layouts, so
   // the fetch is deduplicated in loadReports() and only its result is
@@ -370,6 +385,36 @@ export function MenuBar({ draftStack }: MenuBarProps) {
             { label: "Search all", onClick: () => goTo("search"), separatorBefore: true },
           ]}
         />
+        {/* Per-tree maintenance actions, all ROLE_OWNER-level -- distinct
+            from UserMenu.tsx's Administration dialog, which is scoped to
+            ROLE_ADMIN (site-wide) capabilities only. See toolsApi.ts. */}
+        <AppMenu
+          label={t("Tools")}
+          items={[
+            {
+              label: "Rebuild Search Index…",
+              perm: PERM_TRIGGER_REINDEX,
+              onClick: () => setReindexOpened(true),
+            },
+            {
+              label: "Check and Repair Database…",
+              perm: PERM_REPAIR_TREE,
+              onClick: () => setCheckRepairOpened(true),
+            },
+            {
+              label: "Upgrade Database Schema…",
+              perm: PERM_UPGRADE_SCHEMA,
+              onClick: () => setUpgradeSchemaOpened(true),
+            },
+            {
+              label: "Restore from Backup…",
+              perm: [PERM_IMPORT_FILE, PERM_DEL_OBJ_BATCH],
+              onClick: () => setRestoreOpened(true),
+              separatorBefore: true,
+              danger: true,
+            },
+          ]}
+        />
         <AppMenu
           label={t("Reports")}
           items={reportMenuItems(reports, setReportId)}
@@ -410,6 +455,26 @@ export function MenuBar({ draftStack }: MenuBarProps) {
       <ImportMediaDialog opened={importMediaOpened} onClose={() => setImportMediaOpened(false)} />
       <ExportDialog opened={exportOpened} onClose={() => setExportOpened(false)} />
       <DeleteAllDialog opened={deleteAllOpened} onClose={() => setDeleteAllOpened(false)} />
+      <ReindexDialog opened={reindexOpened} onClose={() => setReindexOpened(false)} />
+      <ConfirmTaskDialog
+        opened={checkRepairOpened}
+        onClose={() => setCheckRepairOpened(false)}
+        title={t("Check and Repair Database")}
+        description={t("Runs Gramps' integrity checker against this family tree, fixing broken references and other structural issues it finds along the way.")}
+        runningMessage={t("Checking and repairing… this may take a while.")}
+        successMessage={t("Check and repair completed.")}
+        run={checkRepairDatabase}
+      />
+      <ConfirmTaskDialog
+        opened={upgradeSchemaOpened}
+        onClose={() => setUpgradeSchemaOpened(false)}
+        title={t("Upgrade Database Schema")}
+        description={t("Upgrades this family tree's database (and its undo log) to the schema version this server's Gramps build expects. Only needed after a server upgrade flags this tree as out of date.")}
+        runningMessage={t("Upgrading schema… this may take a while.")}
+        successMessage={t("Schema upgrade completed.")}
+        run={upgradeSchema}
+      />
+      <RestoreBackupDialog opened={restoreOpened} onClose={() => setRestoreOpened(false)} />
       <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
       <OverviewDialog opened={overviewOpened} onClose={() => setOverviewOpened(false)} />
       <SystemInfoDialog opened={systemInfoOpened} onClose={() => setSystemInfoOpened(false)} />
