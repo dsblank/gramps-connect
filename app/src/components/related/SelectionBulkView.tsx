@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Anchor, Group, Stack, Text } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { fetchPlainObject } from "../../store/objectsApi";
+import { getViewStore } from "../../store/registry";
 import type { ViewConfig } from "../../store/views";
 import { summaryLine } from "./summary";
 import { LINK_STYLE } from "./sections/shared";
@@ -76,24 +77,27 @@ export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewCon
         </Alert>
       )}
       <Stack gap={4}>
-        {handles.map((h, i) => (
-          <Group key={h} gap={6} wrap="nowrap">
-            <Text size="md" c="dimmed" style={{ flex: "none", textAlign: "right", minWidth: `${String(handles.length).length}ch` }}>
-              {i + 1}.
-            </Text>
-            <Anchor
-              component="button"
-              type="button"
-              size="md"
-              underline="hover"
-              style={{ ...LINK_STYLE, flex: 1, minWidth: 0 }}
-              truncate
-              onClick={() => onNavigate(view.key, h)}
-            >
-              {labels[h] || h}
-            </Anchor>
-          </Group>
-        ))}
+        {handles.map((h, i) => {
+          const grampsId = getViewStore(view.key).grampsIdForHandle(h);
+          return (
+            <Group key={h} gap={6} wrap="nowrap">
+              <Text size="md" c="dimmed" style={{ flex: "none", textAlign: "right", minWidth: `${String(handles.length).length}ch` }}>
+                {i + 1}.
+              </Text>
+              <Anchor
+                component="button"
+                type="button"
+                size="md"
+                underline="hover"
+                style={{ ...LINK_STYLE, flex: 1, minWidth: 0 }}
+                truncate
+                onClick={() => onNavigate(view.key, h)}
+              >
+                {labels[h] ?? (grampsId ? `[${grampsId}]` : "")}
+              </Anchor>
+            </Group>
+          );
+        })}
       </Stack>
     </Stack>
   );
