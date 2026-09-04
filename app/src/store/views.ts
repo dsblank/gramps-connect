@@ -410,13 +410,11 @@ export const EVENT_VIEW: ViewConfig = {
     },
     // An Event's raw `place` *is* the target handle, so this is a flat
     // column, not a json_path -- the sibling place_title above is what
-    // crosses the relationship to read a field off the target (the server
-    // rejects a bare `{json_path: ["place"]}` outright: "'place' is a
-    // relationship on 'event', not a value on its own"). Key has to stay
-    // spelled exactly as the select for a flat column, since that's the
-    // response key toRowValues reads it back under -- `as` aliasing only
-    // applies to json_path entries. Hidden (see ColumnConfig.hidden): it's
-    // here so MapView's time filter can match events to places by key
+    // crosses the relationship to read a field off the target. Key has to
+    // stay spelled exactly as the select for a flat column, since that's
+    // the response key toRowValues reads it back under -- `as` aliasing
+    // only applies to json_path entries. Hidden (see ColumnConfig.hidden):
+    // it's here so MapView's time filter can match events to places by key
     // rather than by comparing display titles.
     { key: "place", label: "Place handle", select: "place", sqlType: "TEXT", hidden: true },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
