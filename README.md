@@ -78,7 +78,10 @@ rival Desktop for day-to-day use.
 anywhere?**
 
 No. It only listens on `127.0.0.1`, telemetry is disabled, and everything
-it stores lives in `~/.gramps-connect-desktop` on your own machine.
+it stores lives in `~/.gramps-connect-desktop` on your own machine. The one
+opt-in exception is outbound e-mail (password reset, etc.) — see
+[Configuration](#configuration) — which is off unless you deliberately set
+it up.
 
 **Can I import my real family tree into gramps-connect-desktop?**
 
@@ -174,6 +177,41 @@ above, but download `gramps-connect-desktop-macos-intel.zip` instead.
 4. This opens in its own **native window** (or falls back to a browser tab)
    — same as the `.deb` above. Log in as `admin` / `admin`.
 5. To uninstall: `sudo dnf remove gramps-connect-desktop`.
+
+## Configuration
+
+gramps-connect-desktop works with no configuration at all. The one optional
+knob is outbound e-mail: by default, anything that would send mail
+(password reset, e-mail confirmation, new-user notification — not that
+there's anyone to notify on a single-user build) just fails with
+"Connection was refused," since there's no mail server on your machine for
+it to talk to. To actually send those e-mails, set these environment
+variables before launching the app:
+
+| Variable | Purpose |
+| --- | --- |
+| `GRAMPSWEB_EMAIL_HOST` | SMTP server hostname |
+| `GRAMPSWEB_EMAIL_PORT` | SMTP server port (default `465`) |
+| `GRAMPSWEB_EMAIL_HOST_USER` | SMTP login username |
+| `GRAMPSWEB_EMAIL_HOST_PASSWORD` | SMTP login password |
+| `GRAMPSWEB_DEFAULT_FROM_EMAIL` | "From" address on sent e-mails |
+| `GRAMPSWEB_EMAIL_USE_SSL` | `true`/`false` — implicit TLS/SSL connection |
+| `GRAMPSWEB_EMAIL_USE_STARTTLS` | `true`/`false` — plain connection upgraded via STARTTLS |
+| `GRAMPSWEB_EMAIL_USE_TLS` | `true`/`false` — older alias; prefer the two above (default `true`, i.e. implicit TLS) |
+
+Only the variables you set take effect; anything left unset falls back to
+gramps-web-api's own default for that option. For example, to send through
+Gmail with an [app password](https://support.google.com/accounts/answer/185833):
+
+```bash
+GRAMPSWEB_EMAIL_HOST=smtp.gmail.com \
+GRAMPSWEB_EMAIL_PORT=587 \
+GRAMPSWEB_EMAIL_HOST_USER=you@gmail.com \
+GRAMPSWEB_EMAIL_HOST_PASSWORD=your-app-password \
+GRAMPSWEB_EMAIL_USE_STARTTLS=true \
+GRAMPSWEB_DEFAULT_FROM_EMAIL=you@gmail.com \
+./gramps-connect-desktop
+```
 
 ## Troubleshooting
 

@@ -14,7 +14,7 @@ import pytest
 from flask import Flask, Response
 from PIL import Image
 
-from launcher import install_avif_transcoder
+from launcher import email_config_from_env, install_avif_transcoder
 
 
 def _avif_bytes(mode="RGB", color=(255, 0, 0), size=(8, 8)):
@@ -119,3 +119,39 @@ def test_non_200_avif_response_is_untouched(app):
     assert resp.status_code == 404
     assert resp.mimetype == "image/avif"
     assert resp.data == b"not an image"
+
+
+def test_email_config_from_env_empty_by_default(monkeypatch):
+    for key in (
+        "GRAMPSWEB_EMAIL_HOST",
+        "GRAMPSWEB_EMAIL_PORT",
+        "GRAMPSWEB_EMAIL_HOST_USER",
+        "GRAMPSWEB_EMAIL_HOST_PASSWORD",
+        "GRAMPSWEB_DEFAULT_FROM_EMAIL",
+        "GRAMPSWEB_EMAIL_USE_TLS",
+        "GRAMPSWEB_EMAIL_USE_SSL",
+        "GRAMPSWEB_EMAIL_USE_STARTTLS",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    assert email_config_from_env() == {}
+
+
+def test_email_config_from_env_reads_str_and_bool_keys(monkeypatch):
+    monkeypatch.setenv("GRAMPSWEB_EMAIL_HOST", "smtp.example.com")
+    monkeypatch.setenv("GRAMPSWEB_EMAIL_PORT", "587")
+    monkeypatch.setenv("GRAMPSWEB_EMAIL_HOST_USER", "tester@example.com")
+    monkeypatch.setenv("GRAMPSWEB_EMAIL_HOST_PASSWORD", "hunter2")
+    monkeypatch.setenv("GRAMPSWEB_DEFAULT_FROM_EMAIL", "noreply@example.com")
+    monkeypatch.setenv("GRAMPSWEB_EMAIL_USE_TLS", "False")
+    monkeypatch.setenv("GRAMPSWEB_EMAIL_USE_STARTTLS", "true")
+
+    assert email_config_from_env() == {
+        "EMAIL_HOST": "smtp.example.com",
+        "EMAIL_PORT": "587",
+        "EMAIL_HOST_USER": "tester@example.com",
+        "EMAIL_HOST_PASSWORD": "hunter2",
+        "DEFAULT_FROM_EMAIL": "noreply@example.com",
+        "EMAIL_USE_TLS": False,
+        "EMAIL_USE_STARTTLS": True,
+    }

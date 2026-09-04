@@ -65,6 +65,48 @@ def ensure_gramps_dirs() -> None:
     os.makedirs(data_path("gramps", "grampsdb"), exist_ok=True)
 
 
+# Outbound SMTP is opt-in: gramps-web-api's own defaults point EMAIL_HOST at
+# "localhost", which has no mail server listening on a tester's machine, so
+# password-reset/e-mail-confirmation/new-user-notification requests would
+# otherwise just fail with "Connection was refused." Setting these mirrors
+# gramps-web-api's own (non-deprecated) GRAMPSWEB_-prefixed env var names,
+# which app.config.from_prefixed_env() would read automatically -- except
+# create_app() is called below with config_from_env=False (this app has no
+# use for gramps-web-api's other env-configurable options, e.g. TREE_MULTI,
+# which don't apply to a single-tree desktop build), so it's replicated by
+# hand here instead, scoped to just the e-mail keys. Booleans are parsed
+# case-insensitively from "true"/"1"/"yes"/"on" (anything else is False),
+# rather than reusing from_prefixed_env's default json.loads -- that would
+# silently misparse e.g. "no" or "False" as truthy non-empty strings.
+_EMAIL_BOOL_KEYS = ("EMAIL_USE_TLS", "EMAIL_USE_SSL", "EMAIL_USE_STARTTLS")
+_EMAIL_STR_KEYS = (
+    "EMAIL_HOST",
+    "EMAIL_PORT",
+    "EMAIL_HOST_USER",
+    "EMAIL_HOST_PASSWORD",
+    "DEFAULT_FROM_EMAIL",
+)
+
+
+def email_config_from_env() -> dict:
+    """Read optional GRAMPSWEB_EMAIL_* / GRAMPSWEB_DEFAULT_FROM_EMAIL env vars.
+
+    Unset variables are omitted entirely (rather than defaulted here) so
+    gramps-web-api's own DefaultConfig values -- e.g. EMAIL_USE_TLS=True,
+    EMAIL_PORT="465" -- still apply to whichever keys the tester didn't set.
+    """
+    config = {}
+    for key in _EMAIL_STR_KEYS:
+        value = os.environ.get(f"GRAMPSWEB_{key}")
+        if value:
+            config[key] = value
+    for key in _EMAIL_BOOL_KEYS:
+        value = os.environ.get(f"GRAMPSWEB_{key}")
+        if value is not None:
+            config[key] = value.strip().lower() in ("true", "1", "yes", "on")
+    return config
+
+
 def build_config() -> dict:
     os.makedirs(data_path(), exist_ok=True)
     # gramps_webapi.api.file.FileHandler raises ValueError if this doesn't
@@ -104,6 +146,7 @@ def build_config() -> dict:
         "EXPORT_DIR": data_path("export_cache"),
         "DISABLE_TELEMETRY": True,
         "CORS_ORIGINS": "*",
+        **email_config_from_env(),
     }
 
 
