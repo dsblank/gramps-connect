@@ -59,8 +59,10 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   media: ["tags", "comparisons", "notes", "attributes", "citations", "backlinks"],
   // The Output view (store/views.ts's GENERATED_VIEW) is Media
   // rows under a fixed tag filter, not a distinct object type -- same
-  // sections as the ordinary Media view.
-  generated: ["tags", "comparisons", "notes", "attributes", "citations", "backlinks"],
+  // sections as the ordinary Media view, minus Comparisons (generated
+  // items aren't compared against each other the way duplicate-merge
+  // candidates are).
+  generated: ["tags", "notes", "attributes", "citations", "backlinks"],
   note: ["tags", "backlinks"],
   messages: ["tags", "backlinks"],
   story: ["tags", "backlinks"],
