@@ -11,6 +11,20 @@ own macOS build onto a separate jhbuild toolchain instead of plain
 PyInstaller, and this build avoids it by default via the synthetic stub
 below.
 
+gi.Repository is also stubbed, for one specific reason: gramps/plugins/
+view/geography.gpr.py -- confirmed the *only* .gpr.py file in the whole
+gramps/plugins tree that imports `gi` directly at module scope (checked
+with a recursive grep across plugins/**/*.gpr.py for "import gi") -- does
+`from gi import Repository` there, to probe for the OsmGpsMap typelib
+before falling back to its own "not available" branch (a no-op headless,
+since that branch's GTK dialog is itself guarded by `has_display()`).
+Without a real gi that import raised, which BasePluginManager's
+scan_dir() logs as "ERROR: Failed reading plugin registration
+geography.gpr.py" on every launch -- harmless (that view is never used
+headless either way) but alarming console noise. `enumerate_versions()`
+returning empty makes the file take that same "not available" branch on
+its own, same end state, just without the error.
+
 This used to also try to import the host's real GTK3/WebKit2 stack first,
 for pywebview's Linux GTK backend to open a native window with. That's
 dead code now: launcher.py's main() always opens Linux in the tester's
@@ -84,9 +98,23 @@ def _install_fake_gi() -> None:
     repository_module = types.ModuleType("gi.repository")
     repository_module.GLib = glib_module
 
+    class Repository:
+        """Stand-in for gi.Repository -- only geography.gpr.py's module-scope
+        `Repository.get_default().enumerate_versions("OsmGpsMap")` probe
+        needs this (see this file's module docstring); an empty result
+        sends it down its own already-headless-safe "not available" path."""
+
+        @staticmethod
+        def get_default():
+            return Repository()
+
+        def enumerate_versions(self, namespace):
+            return []
+
     gi_module = types.ModuleType("gi")
     gi_module.require_version = lambda namespace, version: None
     gi_module.repository = repository_module
+    gi_module.Repository = Repository
 
     sys.modules["gi"] = gi_module
     sys.modules["gi.repository"] = repository_module
