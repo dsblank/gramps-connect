@@ -150,6 +150,32 @@ def build_config() -> dict:
     }
 
 
+def check_port_available() -> None:
+    """Fail fast, with an honest message, if PORT is already bound.
+
+    Without this, a stale/orphaned gramps-connect-desktop process (or any
+    other program) already listening on PORT makes wait_for_server()'s
+    socket check falsely report success -- that check only confirms
+    *something* is listening, not that it's *this* launch's server -- so
+    the app prints "running", opens the browser against the other
+    process's server, while this process's own app.run() then fails to
+    bind (Werkzeug prints "Address already in use" / "Port ... is in use
+    by another program ...") and dies silently on its background thread,
+    with no visible error tying the two together. Checking here, before
+    that thread starts, catches the conflict immediately and explains it
+    up front instead.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((HOST, PORT))
+        except OSError as exc:
+            raise RuntimeError(
+                f"Port {PORT} is already in use -- is another copy of "
+                f"{APP_NAME} (or something else) already running? Stop "
+                "it, then try again."
+            ) from exc
+
+
 def wait_for_server(server_thread: Thread, timeout: float = 30.0) -> None:
     """Block until the Flask server's socket is accepting connections, so
     the webview doesn't navigate to it before it's ready.
@@ -260,6 +286,7 @@ def main() -> None:
     # Used only to word the console message below -- ensure_setup() itself
     # always runs and is safe to repeat, see its own docstring.
     first_run = not os.path.isfile(data_path("users.sqlite"))
+    check_port_available()
     ensure_gramps_dirs()
     config = build_config()
 

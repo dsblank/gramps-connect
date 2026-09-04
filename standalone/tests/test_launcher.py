@@ -9,12 +9,14 @@ AVIF-encoded bytes -- no webview, gramps-web-api, or display required.
 """
 
 import io
+import socket
 
 import pytest
 from flask import Flask, Response
 from PIL import Image
 
-from launcher import email_config_from_env, install_avif_transcoder
+import launcher
+from launcher import check_port_available, email_config_from_env, install_avif_transcoder
 
 
 def _avif_bytes(mode="RGB", color=(255, 0, 0), size=(8, 8)):
@@ -155,3 +157,23 @@ def test_email_config_from_env_reads_str_and_bool_keys(monkeypatch):
         "EMAIL_USE_TLS": False,
         "EMAIL_USE_STARTTLS": True,
     }
+
+
+def test_check_port_available_passes_when_port_is_free(monkeypatch):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind((launcher.HOST, 0))
+        free_port = probe.getsockname()[1]
+
+    monkeypatch.setattr(launcher, "PORT", free_port)
+    check_port_available()
+
+
+def test_check_port_available_raises_when_port_is_taken(monkeypatch):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as holder:
+        holder.bind((launcher.HOST, 0))
+        holder.listen(1)
+        taken_port = holder.getsockname()[1]
+
+        monkeypatch.setattr(launcher, "PORT", taken_port)
+        with pytest.raises(RuntimeError, match=str(taken_port)):
+            check_port_available()
