@@ -121,15 +121,19 @@ function AppMenuItem({ item }: { item: MenuItemSpec }) {
 }
 
 /** One top-level dropdown in the bar. Filters items down to ones the
- * current user is permitted to see; if that leaves nothing (either the
- * menu has no real items yet, or none the user is allowed), the dropdown
+ * current user is permitted to see; if that leaves nothing, the dropdown
  * still opens but shows a single disabled row rather than the menu
  * disappearing or being unclickable -- keeps the bar's layout stable as
- * items land menu by menu instead of the whole row reflowing each time. */
+ * items land menu by menu instead of the whole row reflowing each time.
+ * The row's wording tells the two empty cases apart: a menu with no real
+ * items yet ("Nothing here yet") vs. one whose items all got filtered out
+ * by hasPermissions() ("You don't have permission..."), so a restricted
+ * user doesn't read the latter as "this feature isn't built." */
 function AppMenu({ label, items, onOpen }: AppMenuProps) {
   const visibleItems = items.filter(
     (item) => !item.perm || hasPermissions(...(Array.isArray(item.perm) ? item.perm : [item.perm]))
   );
+  const restricted = items.length > 0 && visibleItems.length === 0;
   return (
     <Menu shadow="md" width={200} position="bottom-start" onOpen={onOpen}>
       <Menu.Target>
@@ -139,7 +143,9 @@ function AppMenu({ label, items, onOpen }: AppMenuProps) {
       </Menu.Target>
       <Menu.Dropdown>
         {visibleItems.length === 0 ? (
-          <Menu.Item disabled>{t("Nothing here yet")}</Menu.Item>
+          <Menu.Item disabled>
+            {restricted ? t("You don't have permission to use this menu.") : t("Nothing here yet")}
+          </Menu.Item>
         ) : (
           visibleItems.map((item) => (
             <Fragment key={item.label}>
