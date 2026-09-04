@@ -1,12 +1,20 @@
 import { Button, Text } from "@mantine/core";
 import { hasPermissions } from "../../auth/auth";
-import { attachNoteToObject } from "../../store/notesApi";
+import { attachNoteToObject, MESSAGE_TYPE } from "../../store/notesApi";
+import { splitAuthorMessage } from "../../store/authoredText";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
 import { MessageComposer } from "../MessageComposer";
 import { RELATED_CONFIG } from "./config";
 import { summaryLine } from "./summary";
+import { zipHandles } from "./sections/shared";
 import { t } from "../../i18n/i18n";
+
+interface RawMessageNote {
+  type?: string;
+  text?: { string?: string };
+  change?: number;
+}
 
 /** view.label is the sidebar's plural/collective name ("People", "Events",
  * "Places", ...) -- fine there, wrong in "Message about this ___" ("this
@@ -62,8 +70,22 @@ export function MessageButton({
   const summary = summaryLine(view.key, detail) || view.label;
   const grampsId = typeof detail.gramps_id === "string" ? detail.gramps_id : "";
 
+  // Same note_list NotesSection.tsx's own "Messages" sub-section reads --
+  // this is just that same list, reshaped into {author, text, change} (via
+  // authoredText.ts's splitAuthorMessage, same split NotesSection's "By"/
+  // "Message" columns use) and sorted oldest-first, so the composer can
+  // render it as a chat thread rather than the row list NotesSection shows.
+  const history = zipHandles<RawMessageNote>(detail.note_list, detail.extended?.notes)
+    .filter(({ target }) => target?.type === MESSAGE_TYPE)
+    .map(({ target }) => {
+      const { author, message } = splitAuthorMessage(target.text?.string ?? "");
+      return { author: author ?? t("Unknown"), text: message, change: target.change };
+    })
+    .sort((a, b) => (a.change ?? 0) - (b.change ?? 0));
+
   return (
     <MessageComposer
+      history={history}
       about={
         <>
           About this {singularLabel(view)}:{" "}

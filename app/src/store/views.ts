@@ -222,7 +222,7 @@ export function formatChange(unixSeconds: unknown): string {
 // Full date/time, for the "Last changed" column's hover tooltip -- the cell
 // itself shows formatChange's relative form, which loses precision the user
 // may still want on demand.
-function formatChangeTitle(unixSeconds: unknown): string {
+export function formatChangeTitle(unixSeconds: unknown): string {
   const n = unixSeconds as number | null;
   if (!n) return "";
   return new Date(n * 1000).toLocaleString();
@@ -810,7 +810,7 @@ export const NOTE_VIEW: ViewConfig = {
   // up a second time in the plain Notes list (or its "Add a note" picker,
   // RefListField.tsx, which shares this same ViewConfig), unlabeled and
   // unstyled as generic notes. homeStats.ts's fetchRecentlyChanged/
-  // fetchLatestMessages both read this same baseFilter through
+  // fetchMessageBoards both read this same baseFilter through
   // combinedFilter(), so this one exclusion covers Home's own lists too.
   baseFilter: "type.string != 'message' and type.string != 'story'",
   // Notes have no flat "name" column -- gramps_id is the stable default.

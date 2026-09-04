@@ -18,10 +18,14 @@ const PERM_EDIT_OBJ = "EditObject";
  * dropdown: a blank story has no person to attach to, only the person-scoped
  * generate flow creates one. Media/Output have no create dialog at all (not
  * in EDITABLE_TYPES), so they get the title with no button. Messages isn't a
- * DraftType at all -- its "Add" is MessageComposer's own modal, wired in via
- * renderTrigger the same way MessageButton.tsx gets its icon trigger, just
- * styled to match every other view's button (this used to be App.tsx's own
- * standalone "+ New message" row). */
+ * DraftType at all -- its "Add ToDo" is MessageComposer's own modal, wired
+ * in via renderTrigger the same way MessageButton.tsx gets its icon
+ * trigger, just styled to match every other view's button (this used to be
+ * App.tsx's own standalone "+ New message" row). Labeled "ToDo" rather than
+ * "Message" because a message created with no target object never becomes
+ * part of a conversation (see MessageButton's own history prop) -- it's a
+ * standalone task, which is exactly what Home's ToDo panel now surfaces it
+ * as (homeStats.ts's fetchMessageBoards). */
 export function ListHeader({ view, draftStack }: { view: ViewConfig; draftStack: UseDraftStack }) {
   const type = view.key as DraftType;
   const canAdd =
@@ -34,7 +38,7 @@ export function ListHeader({ view, draftStack }: { view: ViewConfig; draftStack:
       <Title order={4}>{t(view.label)}</Title>
       {view.key === "messages" && (
         <MessageComposer renderTrigger={(open) => (
-          <Button size="xs" onClick={open}>{t("Add")}</Button>
+          <Button size="xs" onClick={open}>{t("Add ToDo")}</Button>
         )} />
       )}
       {canAdd && (
