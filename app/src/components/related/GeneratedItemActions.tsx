@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Group } from "@mantine/core";
+import { Alert, Button } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { deleteMedia, FILE_NAME_ATTRIBUTE } from "../../store/jobsApi";
 import { clickDownloadLink } from "../../store/downloadFile";
@@ -85,9 +85,9 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
   }
 
   return (
-    <Group gap="xs">
+    <>
       <Button size="xs" onClick={handleDownload}>{t("Download")}</Button>
       {error && <Alert color="red">{error}</Alert>}
-    </Group>
+    </>
   );
 }

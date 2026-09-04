@@ -426,6 +426,11 @@ export function RelatedPanel({
           `actions` is false (see RelatedPanelProps' doc comment). */}
       {actions && (
         <Group gap="xs" wrap="wrap" justify="flex-end">
+          {view.key === "generated" && <GeneratedItemActions detail={detail} />}
+          {view.key === "messages" && (
+            <MessageActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
+          )}
+          {view.key === "story" && <StoryActions detail={detail} />}
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           {view.key === "media" && (
             <>
@@ -440,17 +445,12 @@ export function RelatedPanel({
       )}
       <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
       {/* Directly under the title, not up in the header slot above: these
-          are ways of *viewing* this record rather than actions on it, and
-          they only exist for four of the types -- on their own row and at
-          full size they read as an offer, which a compact icon tucked into
-          a corner shared with the record's own controls did not. */}
+          are ways of *viewing* this record rather than actions on it --
+          on their own row and at full size they read as an offer, which a
+          compact icon tucked into a corner shared with the record's own
+          controls did not. */}
       <VisualButtons view={view} detail={detail} />
       {view.key === "media" && <MediaMapButton detail={detail} />}
-      {view.key === "generated" && <GeneratedItemActions detail={detail} />}
-      {view.key === "messages" && (
-        <MessageActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
-      )}
-      {view.key === "story" && <StoryActions detail={detail} />}
       <DetailFields type={view.key} detail={detail} />
       {sections.map((section) => {
         const Section = SECTION_COMPONENTS[section];

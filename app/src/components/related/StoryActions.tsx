@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Group } from "@mantine/core";
+import { Alert, Button } from "@mantine/core";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { StorySpec } from "../../store/storyBuilder";
 import { StoryView } from "../StoryView";
@@ -34,7 +34,7 @@ export function StoryActions({ detail }: { detail: ObjectDetail }) {
   const spec = parseSpec(detail);
 
   return (
-    <Group gap="xs">
+    <>
       <Button size="xs" onClick={() => setOpened(true)} disabled={!spec}>
         {t("Present")}
       </Button>
@@ -44,6 +44,6 @@ export function StoryActions({ detail }: { detail: ObjectDetail }) {
         </Alert>
       )}
       <StoryView spec={spec} opened={opened} onClose={() => setOpened(false)} />
-    </Group>
+    </>
   );
 }

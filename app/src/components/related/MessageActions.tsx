@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Group } from "@mantine/core";
+import { Alert, Button } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
 import { toggleMessageDone, deleteMessage } from "../../store/notesApi";
@@ -54,14 +54,14 @@ export function MessageActions({ detail, onToggled }: { detail: ObjectDetail; on
   }
 
   return (
-    <Group gap="xs">
+    <>
       {hasPermissions("EditObject") && (
         <Button size="xs" onClick={handleToggle}>{isDone ? "Reopen" : "Mark done"}</Button>
       )}
       {hasPermissions("DeleteObject") && (
-        <Button size="xs" color="red" variant="subtle" onClick={handleDelete}>{t("Delete")}</Button>
+        <Button variant="default" size="xs" onClick={handleDelete}>{t("Delete")}</Button>
       )}
       {error && <Alert color="red">{error}</Alert>}
-    </Group>
+    </>
   );
 }
