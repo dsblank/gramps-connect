@@ -385,7 +385,7 @@ function EditUserDialog({
           </Button>
           <Group gap="xs">
             <Button variant="default" onClick={onClose}>{t("Cancel")}</Button>
-            <Button onClick={handleSave} loading={saving} disabled={!name.trim() || !fullName.trim() || !email.trim()}>
+            <Button onClick={handleSave} loading={saving} disabled={!name.trim() || !fullName.trim()}>
               {t("Save")}
             </Button>
           </Group>
