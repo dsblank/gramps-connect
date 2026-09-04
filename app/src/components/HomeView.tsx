@@ -268,15 +268,15 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** The Home-person panel's body: a clickable name+icon once one is set, or
- * a circled "+" -> Modal -> RecordPicker (AttachControl.tsx's
- * SetFieldControl pattern) to pick one. Purely a per-browser preference
- * (homePersonPreference.ts's localStorage, tree-scoped) -- same convention
- * gramps-web's own GrampsjsHomePerson.js uses (appState.updateSettings(),
- * itself a plain localStorage write), not Gramps' own db.default_person
- * (Edit > Set Home Person in Gramps desktop) -- so no permission check:
- * every user can set their own shortcut, the same as gramps-web lets any
- * logged-in user set theirs. */
+/** The Home-person panel's body: a clickable name+icon once one is set (with
+ * a pencil to change it), or a circled "+" -> Modal -> RecordPicker
+ * (AttachControl.tsx's SetFieldControl pattern) to pick one. Purely a
+ * per-browser preference (homePersonPreference.ts's localStorage,
+ * tree-scoped) -- same convention gramps-web's own GrampsjsHomePerson.js
+ * uses (appState.updateSettings(), itself a plain localStorage write), not
+ * Gramps' own db.default_person (Edit > Set Home Person in Gramps desktop)
+ * -- so no permission check: every user can set their own shortcut, the
+ * same as gramps-web lets any logged-in user set theirs. */
 function HomePersonContent({
   homePerson, onChange,
 }: {
@@ -291,30 +291,37 @@ function HomePersonContent({
     onChange(item);
   }
 
-  if (homePerson) {
-    return (
-      <Anchor
-        component="a"
-        href={formatHash({ viewKey: "person", handle: homePerson.handle })}
-        underline="never"
-        c="inherit"
-      >
-        <Group gap="sm" wrap="nowrap">
-          <Image src={PERSON_VIEW.icon} alt="" w={28} h={28} />
-          <Text fw={600} truncate>{personLabel(homePerson)}</Text>
-        </Group>
-      </Anchor>
-    );
-  }
-
   return (
     <>
-      <CircleGlyphButton
-        glyph="+"
-        label={t("Set home person")}
-        textLabel={t("Set home person")}
-        onClick={() => setOpened(true)}
-      />
+      {homePerson ? (
+        <Group gap="xs" wrap="nowrap">
+          <Anchor
+            component="a"
+            href={formatHash({ viewKey: "person", handle: homePerson.handle })}
+            underline="never"
+            c="inherit"
+            style={{ minWidth: 0 }}
+          >
+            <Group gap="sm" wrap="nowrap">
+              <Image src={PERSON_VIEW.icon} alt="" w={28} h={28} />
+              <Text fw={600} truncate>{personLabel(homePerson)}</Text>
+            </Group>
+          </Anchor>
+          <CircleGlyphButton
+            glyph="✎"
+            label={t("Change home person")}
+            onClick={() => setOpened(true)}
+            size={16}
+          />
+        </Group>
+      ) : (
+        <CircleGlyphButton
+          glyph="+"
+          label={t("Set home person")}
+          textLabel={t("Set home person")}
+          onClick={() => setOpened(true)}
+        />
+      )}
       <Modal opened={opened} onClose={() => setOpened(false)} title={t("Setting the home person")} size="sm">
         <RecordPicker
           view={PERSON_VIEW}
