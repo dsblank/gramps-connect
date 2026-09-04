@@ -1,9 +1,10 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Alert, Box, Button, Group, Modal, ScrollArea, Stack, Text, Textarea } from "@mantine/core";
 import { getToken, getCurrentUsername } from "../auth/auth";
 import { getViewStore } from "../store/registry";
 import { createMessage } from "../store/notesApi";
 import { formatChange, formatChangeTitle } from "../store/views";
+import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
 import { t } from "../i18n/i18n";
 
 export interface ChatMessage {
@@ -31,11 +32,16 @@ function colorForAuthor(author: string): string {
  * still shown, same as everyone else's, just on the right), left-justified
  * for everyone else's. */
 function MessageBubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
+  // Re-renders once the background directory load (App.tsx's
+  // loadUserDirectory) resolves -- it usually hasn't finished yet the first
+  // time a thread renders, so this bubble would otherwise be stuck showing
+  // the raw username until something else happened to re-render it.
+  useSyncExternalStore(subscribeUserDirectory, getUserDirectoryVersion);
   const color = colorForAuthor(message.author);
   return (
     <Stack gap={2} align={mine ? "flex-end" : "flex-start"}>
       <Group gap={6} px={4} wrap="nowrap">
-        <Text size="xs" c="dimmed">{message.author}</Text>
+        <Text size="xs" c="dimmed">{displayName(message.author)}</Text>
         {message.change != null && (
           <Text size="xs" c="dimmed" title={formatChangeTitle(message.change)}>
             {formatChange(message.change)}

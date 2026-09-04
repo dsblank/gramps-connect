@@ -31,6 +31,7 @@ import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep } from "./store/jobsPoll";
+import { loadUserDirectory } from "./store/userDirectory";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
@@ -291,6 +292,14 @@ function AuthenticatedApp() {
   // whole authenticated app, same lifetime as useLiveSync() above.
   useEffect(() => {
     return startCatchupSweep(jobsPollCallbacks);
+  }, []);
+
+  // Background username -> full_name resolution for the message chat view
+  // (MessageComposer.tsx) -- fire-and-forget so it's already warm by the
+  // time a user opens a message thread, same lifetime as useLiveSync()
+  // above. See userDirectory.ts for why this can't always resolve everyone.
+  useEffect(() => {
+    loadUserDirectory();
   }, []);
 
   return (
