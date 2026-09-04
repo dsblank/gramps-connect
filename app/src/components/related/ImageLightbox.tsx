@@ -11,6 +11,14 @@ import { personName, summaryLine } from "./summary";
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
 const DOUBLE_CLICK_SCALE = 2.5;
+/** One wheel notch, same fixed-factor approach TimelineChart.tsx's own wheel
+ * zoom uses -- WheelEvent.deltaY's *magnitude* isn't comparable across
+ * browsers (Firefox reports deltaMode LINE with deltaY ~3 per notch, Chrome
+ * reports deltaMode PIXEL with deltaY ~100+), so scaling zoom by raw deltaY
+ * (as an earlier version of this file did) made zooming imperceptibly slow
+ * on line-mode browsers. Using only deltaY's sign keeps every browser's
+ * "one notch" feeling the same. */
+const WHEEL_FACTOR = 1.2;
 
 /** The raw stored file, not a thumbnail -- same /file endpoint
  * MapItemEditorDialog.tsx uses for map overlays. One image at a time (this
@@ -242,7 +250,7 @@ export function ImageLightbox({ opened, onClose, handle }: {
     if (!frame) return;
     function handleWheelNative(e: WheelEvent) {
       e.preventDefault();
-      const factor = Math.exp(-e.deltaY * 0.0025);
+      const factor = e.deltaY > 0 ? 1 / WHEEL_FACTOR : WHEEL_FACTOR;
       zoomAt(e.clientX, e.clientY, transformRef.current.scale * factor);
     }
     frame.addEventListener("wheel", handleWheelNative, { passive: false });
