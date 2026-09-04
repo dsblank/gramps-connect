@@ -6,6 +6,7 @@ import { ImportDialog } from "./ImportDialog";
 import { ImportMediaDialog } from "./ImportMediaDialog";
 import { ExportDialog } from "./ExportDialog";
 import { DeleteAllDialog } from "./DeleteAllDialog";
+import { ManageTreesDialog } from "./ManageTreesDialog";
 import { ReportDialog } from "./ReportDialog";
 import { ReindexDialog } from "./ReindexDialog";
 import { ConfirmTaskDialog } from "./ConfirmTaskDialog";
@@ -47,6 +48,9 @@ const GrampletStorePanel = lazy(() =>
 // at ROLE_OWNER and above.
 const PERM_IMPORT_FILE = "ImportFile";
 const PERM_DEL_OBJ_BATCH = "BatchDeleteObjects";
+// ROLE_ADMIN-only -- same gate ManageTreesDialog.tsx itself checks before
+// rendering anything, so a non-admin never even sees the menu item.
+const PERM_VIEW_OTHER_TREE = "ViewOtherTree";
 // Exporting itself needs no permission (any logged-in user may POST to the
 // exporters endpoint), but *delivering* the result does: the finished file
 // is handed over as a Media object the client creates, tags and describes
@@ -248,6 +252,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
   const [importMediaOpened, setImportMediaOpened] = useState(false);
   const [exportOpened, setExportOpened] = useState(false);
   const [deleteAllOpened, setDeleteAllOpened] = useState(false);
+  const [manageTreesOpened, setManageTreesOpened] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportId, setReportId] = useState<string | null>(null);
   const [overviewOpened, setOverviewOpened] = useState(false);
@@ -302,8 +307,14 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           label={t("Family Trees")}
           items={[
             {
+              label: "Manage Family Trees…",
+              perm: PERM_VIEW_OTHER_TREE,
+              onClick: () => setManageTreesOpened(true),
+            },
+            {
               label: "Import…",
               perm: PERM_IMPORT_FILE,
+              separatorBefore: true,
               children: [
                 { label: "Family Tree…", onClick: () => setImportOpened(true) },
                 { label: "Media…", onClick: () => setImportMediaOpened(true) },
@@ -457,6 +468,7 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           ]}
         />
       </Group>
+      <ManageTreesDialog opened={manageTreesOpened} onClose={() => setManageTreesOpened(false)} />
       <ImportDialog opened={importOpened} onClose={() => setImportOpened(false)} />
       <ImportMediaDialog opened={importMediaOpened} onClose={() => setImportMediaOpened(false)} />
       <ExportDialog opened={exportOpened} onClose={() => setExportOpened(false)} />
