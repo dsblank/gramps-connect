@@ -32,20 +32,20 @@ interface AdministrationDialogProps {
 export function AdministrationDialog({ opened, onClose }: AdministrationDialogProps) {
   return (
     <Modal opened={opened} onClose={onClose} title={t("Administration")} size="70rem">
-      <Tabs defaultValue="settings" keepMounted={false}>
+      <Tabs defaultValue="users" keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="settings">{t("Site settings")}</Tabs.Tab>
-          <Tabs.Tab value="trees">{t("Trees")}</Tabs.Tab>
           <Tabs.Tab value="users">{t("Users")}</Tabs.Tab>
+          <Tabs.Tab value="trees">{t("Trees")}</Tabs.Tab>
+          <Tabs.Tab value="settings">{t("Site settings")}</Tabs.Tab>
         </Tabs.List>
-        <Tabs.Panel value="settings" pt="sm">
-          <SiteSettingsTab active={opened} />
+        <Tabs.Panel value="users" pt="sm">
+          <UserManagementPanel active={opened} />
         </Tabs.Panel>
         <Tabs.Panel value="trees" pt="sm">
           <TreesTab active={opened} />
         </Tabs.Panel>
-        <Tabs.Panel value="users" pt="sm">
-          <UserManagementPanel active={opened} />
+        <Tabs.Panel value="settings" pt="sm">
+          <SiteSettingsTab active={opened} />
         </Tabs.Panel>
       </Tabs>
     </Modal>

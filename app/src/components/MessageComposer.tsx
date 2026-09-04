@@ -1,4 +1,4 @@
-import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Alert, Box, Button, Group, Modal, ScrollArea, Stack, Text, Textarea } from "@mantine/core";
 import { getToken, getCurrentUsername } from "../auth/auth";
 import { getViewStore } from "../store/registry";
@@ -117,12 +117,27 @@ export function MessageComposer({ renderTrigger, onSaved, about, history }: Mess
   // The callback fires exactly when that div is inserted, whenever that is;
   // the rAF inside it defers past that same paint so scrollHeight already
   // reflects the fully laid-out message list instead of a pre-layout 0.
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const scrollToBottom = useCallback((node: HTMLDivElement | null) => {
+    viewportRef.current = node;
     if (!node) return;
     requestAnimationFrame(() => {
       node.scrollTop = node.scrollHeight;
     });
   }, []);
+
+  // The dialog now stays open after sending (and can sit open while a live-
+  // sync poll brings in someone else's reply), so the initial mount-time
+  // scroll above isn't enough -- re-scroll to bottom any time the thread
+  // grows, whether that's this author's own just-sent message or another
+  // user's arriving via the poll.
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node) return;
+    requestAnimationFrame(() => {
+      node.scrollTop = node.scrollHeight;
+    });
+  }, [history?.length]);
 
   function close() {
     setOpen(false);
@@ -138,7 +153,7 @@ export function MessageComposer({ renderTrigger, onSaved, about, history }: Mess
       const token = await getToken();
       const noteHandle = await createMessage(token, getCurrentUsername() ?? "unknown", text.trim());
       if (onSaved) await onSaved(noteHandle, token);
-      close();
+      setText("");
       // Immediate feedback for the author, rather than waiting on the next
       // live-sync poll tick (up to POLL_INTERVAL_MS) to see their own note.
       getViewStore("messages").requeryDebounced();
@@ -177,7 +192,6 @@ export function MessageComposer({ renderTrigger, onSaved, about, history }: Mess
         />
         {error && <Alert color="red" mt="sm">{error}</Alert>}
         <Group justify="flex-end" mt="md">
-          <Button variant="subtle" onClick={close} disabled={saving}>{t("Cancel")}</Button>
           <Button onClick={save} loading={saving} disabled={!text.trim()}>{t("Send")}</Button>
         </Group>
       </Modal>
