@@ -36,7 +36,7 @@ export function ListHeader({ view, draftStack }: { view: ViewConfig; draftStack:
   return (
     <Group justify="space-between" mb="sm" wrap="nowrap">
       <Title order={4}>{t(view.label)}</Title>
-      {view.key === "messages" && (
+      {view.key === "messages" && hasPermissions(PERM_ADD_OBJ) && (
         <MessageComposer renderTrigger={(open) => (
           <Button size="xs" onClick={open}>{t("Add ToDo")}</Button>
         )} />

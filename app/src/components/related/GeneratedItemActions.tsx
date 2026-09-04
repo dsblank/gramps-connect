@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Alert, Button, Group } from "@mantine/core";
-import { getToken } from "../../auth/auth";
+import { getToken, hasPermissions } from "../../auth/auth";
 import { deleteMedia, FILE_NAME_ATTRIBUTE } from "../../store/jobsApi";
 import { clickDownloadLink } from "../../store/downloadFile";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
@@ -72,7 +72,10 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
         setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
       }
 
-      if (window.confirm(`Delete this ${kind} "${fileName ?? detail.handle}"? There is no undo.`)) {
+      if (
+        hasPermissions("DeleteObject") &&
+        window.confirm(`Delete this ${kind} "${fileName ?? detail.handle}"? There is no undo.`)
+      ) {
         await deleteMedia(token, detail.handle);
         setDeleted(true);
       }
