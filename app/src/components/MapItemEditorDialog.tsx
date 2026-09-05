@@ -1063,6 +1063,20 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     const map = mapRef.current;
     if (!draw || !map) return;
     let cancelled = false;
+    // Both fetches feed one shared `bounds` so the final fitBounds -- fired
+    // once whichever finishes last resolves -- accounts for image overlays
+    // too, not just vector shapes: a KML whose only geographic content is a
+    // GroundOverlay (no Point/LineString/Polygon placemark) would otherwise
+    // leave the map stuck at its hardcoded world-view default, since
+    // fetchAllKmlFeatures strips groundoverlay placemarks out entirely.
+    const bounds = new maplibregl.LngLatBounds();
+    let shapesDone = false;
+    let overlaysDone = false;
+    function maybeFitBounds() {
+      if (shapesDone && overlaysDone && !cancelled && !bounds.isEmpty()) {
+        map!.fitBounds(bounds, { padding: 60, maxZoom: 17, duration: 0 });
+      }
+    }
     fetchAllKmlFeatures([target.handle]).then((features) => {
       if (cancelled || features.length === 0) return;
       const loadable: { type: "Feature"; geometry: Point | LineString | Polygon; properties: { mode: DrawMode; color?: string; name?: string } }[] = [];
@@ -1088,11 +1102,12 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         });
       }
       draw.addFeatures(loadable);
-      const bounds = new maplibregl.LngLatBounds();
       for (const feature of loadable) extendBounds(bounds, feature.geometry);
-      if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 17, duration: 0 });
     }).catch((err: Error) => {
       if (!cancelled) setError(err.message);
+    }).finally(() => {
+      shapesDone = true;
+      maybeFitBounds();
     });
     fetchAllKmlImageOverlays([target.handle]).then((overlays) => {
       if (cancelled) return;
@@ -1102,11 +1117,15 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         };
         setOverlays((prev) => [...prev, draft]);
         mountOverlay(draft);
+        for (const corner of overlay.corners) bounds.extend(corner);
       }
     }).catch(() => {
       // Best-effort, same as the shapes fetch's own catch above wouldn't
       // block the rest of the file's shapes from loading -- one broken
       // overlay shouldn't blank out the rest of an otherwise-editable item.
+    }).finally(() => {
+      overlaysDone = true;
+      maybeFitBounds();
     });
     return () => {
       cancelled = true;
