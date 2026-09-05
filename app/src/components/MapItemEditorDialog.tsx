@@ -154,6 +154,10 @@ function pointInQuad(point: { x: number; y: number }, corners: { x: number; y: n
   return true;
 }
 
+// How see-through a dragged overlay image gets, so whatever's underneath
+// (other images, map features) is visible for positioning it precisely.
+const OVERLAY_DRAG_OPACITY = 0.5;
+
 const OVERLAY_HANDLE_STYLE = {
   width: "20px", height: "20px", borderRadius: "50%", background: "white",
   border: "2px solid #333", display: "flex", alignItems: "center", justifyContent: "center",
@@ -809,6 +813,10 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     const startMove = (e: maplibregl.MapMouseEvent) => {
       e.preventDefault();
       map.dragPan.disable();
+      // Nearly-transparent while being dragged so whatever's underneath
+      // (other images, the base map) stays visible for positioning --
+      // restored to fully opaque on mouseup.
+      map.setPaintProperty(sourceId, "raster-opacity", OVERLAY_DRAG_OPACITY);
       const start = e.lngLat;
       const startBox = { ...box };
       const container = map.getContainer();
@@ -828,6 +836,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         map.dragPan.enable();
+        map.setPaintProperty(sourceId, "raster-opacity", 1);
         commit();
       };
       document.addEventListener("mousemove", onMove);
