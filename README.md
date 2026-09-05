@@ -213,6 +213,16 @@ GRAMPSWEB_DEFAULT_FROM_EMAIL=you@gmail.com \
 ./gramps-connect-desktop
 ```
 
+Run from a terminal, `--browser` skips the native window on macOS/Windows
+and always opens in your default browser instead — the same fallback
+Linux always uses. Handy if you'd rather use your own browser's
+devtools/extensions, or want to rule out the native webview when
+something looks wrong:
+
+```bash
+./gramps-connect-desktop --browser
+```
+
 ## Troubleshooting
 
 - **Windows SmartScreen ("Windows protected your PC")** — expected, since
@@ -252,7 +262,9 @@ GRAMPSWEB_DEFAULT_FROM_EMAIL=you@gmail.com \
   `gir1.2-gtk-3.0`, and `gir1.2-webkit2-4.1`, or your distro's
   equivalents, and relaunch to get a native window instead). The app
   still works fully in the browser tab either way — this only affects how
-  it's presented, not what it can do.
+  it's presented, not what it can do. You can also request this
+  deliberately with `./gramps-connect-desktop --browser` (see
+  [Configuration](#configuration) above).
 - **Start over from a blank tree** — delete the `.gramps-connect-desktop`
   folder in your home directory, then relaunch.
 - **Looking for a real multi-user deployment instead of this single-user
