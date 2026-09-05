@@ -107,6 +107,15 @@ export interface DraftEntry {
   /** Partial (new) or full (edit) Gramps object dict, in the shape the
    * relevant endpoint expects. */
   data: Record<string, unknown>;
+  /** For a "edit" draft only: the plain object dict exactly as fetchPlainObject
+   * returned it when this edit session began -- never mutated afterwards
+   * (unlike `data`, which updateDraft reassigns on every field change), so
+   * saveAll() can re-fetch and diff against it right before the PUT to
+   * detect "someone else saved this object in the meantime" (see saveAll's
+   * doc comment on why -- gramps-web-api's generic object PUT has no way
+   * for this client to supply a working If-Match). Undefined for a "new"
+   * draft, which has nothing on the server yet to conflict with. */
+  originalData?: Record<string, unknown>;
   /** Set only when this draft was opened from a field on another draft
    * (e.g. a Family's "+ New Person" on Father) -- lets Cancel on this
    * dialog clear that field back out on its parent, and lets saveAll()
@@ -124,7 +133,13 @@ export interface DraftEntry {
    * object" shape doesn't need new draftStack plumbing. Populated via
    * setExtraObjects(); untouched by openDraft/openEditDraft. */
   extraCreate: Record<string, unknown>[];
-  extraUpdate: { type: DraftType; handle: string; data: Record<string, unknown> }[];
+  /** `originalData` is the same "as fetched, never mutated" snapshot as
+   * DraftEntry.originalData above, for this linked object rather than the
+   * draft's own -- PersonEditDialog passes its birthEvent/deathEvent.data
+   * state through unchanged, since that's already never touched after the
+   * initial fetchPlainObject (the date/place merge builds a new object at
+   * `data` instead). saveAll()'s conflict check reads it the same way. */
+  extraUpdate: { type: DraftType; handle: string; data: Record<string, unknown>; originalData: Record<string, unknown> }[];
   /** Bumped every time openEditDraft (re)initializes this handle's entry --
    * lets a dialog component (which stays mounted, same `key={handle}`,
    * across a Cancel + re-Edit of the same object, per EditDialogs.tsx's
@@ -184,6 +199,20 @@ function orderedForSave(drafts: DraftEntry[]): DraftEntry[] {
   }
   for (const entry of drafts) visit(entry);
   return ordered;
+}
+
+/** Order-independent structural comparison for two plain object dicts --
+ * plain `===`/JSON.stringify would false-positive a "changed" result on key
+ * reordering alone (e.g. gramps-web-api doesn't promise stable key order
+ * across two separate GETs), which saveAll()'s conflict check would
+ * otherwise misreport as someone else's edit. */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify((value as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 /** One saved draft's identity, handed back by saveAll() so the caller
@@ -311,7 +340,9 @@ export function useDraftStack(): UseDraftStack {
       try {
         const token = await getToken();
         const data = await fetchPlainObject(token, VIEW_BY_TYPE[type], handle);
-        setStack((prev) => prev.map((d) => (d.handle === handle ? { ...d, data, status: "ready" } : d)));
+        setStack((prev) =>
+          prev.map((d) => (d.handle === handle ? { ...d, data, originalData: data, status: "ready" } : d))
+        );
       } catch (err: any) {
         setStack((prev) =>
           prev.map((d) => (d.handle === handle ? { ...d, status: "error", loadError: err.message ?? String(err) } : d))
@@ -370,6 +401,42 @@ export function useDraftStack(): UseDraftStack {
       const active = stack.filter((d) => d.active);
       const newDrafts = orderedForSave(active.filter((d) => d.mode === "new"));
       const editDrafts = active.filter((d) => d.mode === "edit");
+
+      // gramps-web-api's generic object PUT (base.py) already refuses a
+      // stale write when given an If-Match header that doesn't match the
+      // server's current hash_object(obj) -- but its GET doesn't expose
+      // that same hash for a client to echo back (GET's ETag is a hash of
+      // the full serialized response, a different value, computed for
+      // HTTP caching rather than this), so this PUT has never been able to
+      // use it. Without some check, two tabs (or two people) editing the
+      // same record would have the second save silently overwrite the
+      // first's, wholesale, since this is a full-object replace. Checked
+      // for every edit draft before any write happens, so one conflicting
+      // draft aborts the whole save rather than applying some and not
+      // others.
+      for (const draft of editDrafts) {
+        const current = await fetchPlainObject(token, VIEW_BY_TYPE[draft.type], draft.handle);
+        if (stableStringify(current) !== stableStringify(draft.originalData ?? {})) {
+          setError(
+            `${DRAFT_TYPE_LABELS[draft.type]} was changed elsewhere since you started editing it here. ` +
+              "Close this dialog and reopen it to see the latest version before saving."
+          );
+          return [];
+        }
+        // Same check for a linked object this draft also PUTs (currently
+        // only a Person's birth/death Event, see extraUpdate's doc comment)
+        // -- it's just as much a full-object replace as the draft's own PUT.
+        for (const upd of draft.extraUpdate) {
+          const currentExtra = await fetchPlainObject(token, VIEW_BY_TYPE[upd.type], upd.handle);
+          if (stableStringify(currentExtra) !== stableStringify(upd.originalData)) {
+            setError(
+              `${DRAFT_TYPE_LABELS[upd.type]} was changed elsewhere since you started editing it here. ` +
+                "Close this dialog and reopen it to see the latest version before saving."
+            );
+            return [];
+          }
+        }
+      }
 
       const createBatch = newDrafts.flatMap((d) => [...d.extraCreate, d.data]);
       if (createBatch.length > 0) {

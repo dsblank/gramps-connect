@@ -468,6 +468,7 @@ export function PersonEditDialog({
         type: "event",
         handle: birthEvent.handle,
         data: { ...birthEvent.data, date: birthDate, place: birthPlace?.handle ?? "" },
+        originalData: birthEvent.data,
       });
       if (birthPlace?.pendingData) create.push(birthPlace.pendingData);
     } else if (hasBirthInfo && !birthEvent) {
@@ -493,6 +494,7 @@ export function PersonEditDialog({
         type: "event",
         handle: deathEvent.handle,
         data: { ...deathEvent.data, date: deathDate, place: deathPlace?.handle ?? "" },
+        originalData: deathEvent.data,
       });
       if (deathPlace?.pendingData) create.push(deathPlace.pendingData);
     } else if (hasDeathInfo && !deathEvent) {
