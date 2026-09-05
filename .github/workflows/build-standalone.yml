@@ -454,8 +454,9 @@ jobs:
   # Reproduces by hand what used to be a manual `gh release create` --
   # download every leg's artifact, zip the raw Windows/macOS folders (the
   # .deb/.rpm from build-linux need no further packaging), tag the release
-  # off app/package.json's version, mark the previous gramps-connect-desktop-v*
-  # release [superseded], and publish.
+  # off app/package.json's version (plain "v$VERSION", e.g. "v0.7.19" --
+  # no "gramps-connect-desktop-" prefix), mark the previous v* release
+  # [superseded], and publish.
   release:
     needs: [build, build-linux]
     if: ${{ inputs.create_release }}
@@ -502,16 +503,17 @@ jobs:
       - name: Determine version
         run: echo "VERSION=$(node -p "require('./gramps-connect/app/package.json').version")" >> "$GITHUB_ENV"
 
-      # Best-effort -- there may be no prior gramps-connect-desktop-v* release
-      # yet (e.g. the very first one, or the first one since this tag scheme
-      # replaced the old standalone-demo-v* one), which is fine, not an error.
+      # Best-effort -- there may be no prior v* release yet (e.g. the very
+      # first one, or the first one since this tag scheme replaced the old
+      # gramps-connect-desktop-v*/standalone-demo-v* ones), which is fine,
+      # not an error.
       - name: Mark previous release as superseded
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           ALL=$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName,name,createdAt --limit 100)
-          PREV=$(echo "$ALL" | jq --arg cur "gramps-connect-desktop-v$VERSION" '
-            [.[] | select((.tagName | startswith("gramps-connect-desktop-v")) and .tagName != $cur)]
+          PREV=$(echo "$ALL" | jq --arg cur "v$VERSION" '
+            [.[] | select((.tagName | startswith("v")) and .tagName != $cur)]
             | sort_by(.createdAt) | last')
           PREV_TAG=$(echo "$PREV" | jq -r '.tagName // empty')
           PREV_NAME=$(echo "$PREV" | jq -r '.name // empty')
@@ -546,7 +548,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "gramps-connect-desktop-v$VERSION" \
+          gh release create "v$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
             --title "gramps-connect-desktop v$VERSION" \
             --prerelease \
