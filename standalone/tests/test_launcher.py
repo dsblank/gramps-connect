@@ -16,7 +16,7 @@ from flask import Flask, Response
 from PIL import Image
 
 import launcher
-from launcher import check_port_available, email_config_from_env, install_avif_transcoder
+from launcher import check_port_available, email_config_from_env, install_avif_transcoder, should_force_browser
 
 
 def _avif_bytes(mode="RGB", color=(255, 0, 0), size=(8, 8)):
@@ -157,6 +157,23 @@ def test_email_config_from_env_reads_str_and_bool_keys(monkeypatch):
         "EMAIL_USE_TLS": False,
         "EMAIL_USE_STARTTLS": True,
     }
+
+
+def test_should_force_browser_false_by_default(monkeypatch):
+    monkeypatch.delenv("GRAMPS_CONNECT_DESKTOP_BROWSER", raising=False)
+    assert should_force_browser() is False
+
+
+@pytest.mark.parametrize("value", ["true", "True", "1", "yes", "on"])
+def test_should_force_browser_true_values(monkeypatch, value):
+    monkeypatch.setenv("GRAMPS_CONNECT_DESKTOP_BROWSER", value)
+    assert should_force_browser() is True
+
+
+@pytest.mark.parametrize("value", ["false", "False", "0", "no", "off", ""])
+def test_should_force_browser_false_values(monkeypatch, value):
+    monkeypatch.setenv("GRAMPS_CONNECT_DESKTOP_BROWSER", value)
+    assert should_force_browser() is False
 
 
 def test_check_port_available_passes_when_port_is_free(monkeypatch):

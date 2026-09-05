@@ -150,6 +150,14 @@ def build_config() -> dict:
     }
 
 
+def should_force_browser() -> bool:
+    """Whether GRAMPS_CONNECT_DESKTOP_BROWSER opts out of the native window
+    on macOS/Windows (Linux never looks at this -- see main()'s own doc
+    comment on why it always uses the browser regardless). Same boolean
+    parsing as the email config vars above."""
+    return os.environ.get("GRAMPS_CONNECT_DESKTOP_BROWSER", "").strip().lower() in ("true", "1", "yes", "on")
+
+
 def check_port_available() -> None:
     """Fail fast, with an honest message, if PORT is already bound.
 
@@ -331,7 +339,11 @@ def main() -> None:
     print(f"Gramps Connect Desktop running at http://{HOST}:{PORT}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
 
-    if sys.platform.startswith("linux"):
+    # GRAMPS_CONNECT_DESKTOP_BROWSER is an opt-out escape hatch for the
+    # native window on macOS/Windows -- e.g. a tester who prefers their
+    # browser's devtools/extensions, or is hitting a webview-specific bug
+    # and wants to confirm it's the webview and not the app itself.
+    if sys.platform.startswith("linux") or should_force_browser():
         # Linux's only pywebview backend here is GTK/WebKitGTK, which lags
         # upstream WebKit/Chromium enough to have already produced two
         # confirmed bugs (PointerEvents never dispatched, breaking
@@ -343,8 +355,10 @@ def main() -> None:
         # own actual browser instead of a native window -- whatever they
         # already have there is a real, currently-maintained engine, the
         # same tradeoff the except branch below already falls back to when
-        # no native backend is found at all.
-        print("Linux: opening in your default browser instead of a native window ...")
+        # no native backend is found at all. GRAMPS_CONNECT_DESKTOP_BROWSER
+        # takes the same path deliberately, on any platform.
+        reason = "Linux" if sys.platform.startswith("linux") else "GRAMPS_CONNECT_DESKTOP_BROWSER is set"
+        print(f"{reason}: opening in your default browser instead of a native window ...")
         webbrowser.open(f"http://{HOST}:{PORT}")
         print("Press Control+C to quit")
         server_thread.join()
