@@ -728,6 +728,7 @@ export class ViewStore {
       first = await fetchPage(this.view, token, after, true, this.combinedFilter(whereExpr), orderBy);
     } catch (err: any) {
       stmt.free();
+      newDb.close();
       if (myGeneration !== this.queryGeneration) return;
       this.status = "error";
       this.error = err.message ?? String(err);
@@ -736,6 +737,7 @@ export class ViewStore {
     }
     if (myGeneration !== this.queryGeneration) {
       stmt.free();
+      newDb.close(); // superseded before ever becoming this.db -- nothing else will free it
       return; // superseded by a newer query while this was in flight
     }
 
@@ -751,7 +753,15 @@ export class ViewStore {
     // already showing (see this method's own doc comment).
     const swapIn = () => {
       swapped = true;
+      // sql.js Database instances hold native memory in the shared wasm
+      // heap that only .close() releases -- JS GC never reclaims it. Left
+      // unclosed, each requery (search/sort change, live-sync
+      // requeryDebounced) leaks the outgoing db's entire cache forever,
+      // eventually exhausting the wasm heap and surfacing as an unrelated
+      // "memory access out of bounds" from some later, innocent exec().
+      const previousDb = this.db;
       this.db = newDb;
+      previousDb?.close();
       this.totalCount = newTotalCount;
       this.whereExpr = whereExpr;
       this.loadedCount = loadedSoFar;
@@ -775,6 +785,11 @@ export class ViewStore {
         const { page } = await fetchPage(this.view, await getToken(), after, false, this.combinedFilter(whereExpr), orderBy);
         if (myGeneration !== this.queryGeneration) {
           stmt.free();
+          // If swapIn() already ran, newDb is the live this.db and the
+          // query that superseded this one will close it (as the
+          // "previous" db) when its own swapIn() runs. Otherwise nothing
+          // else references newDb -- close it here or it leaks.
+          if (!swapped) newDb.close();
           return;
         }
         this.insertPage(newDb, stmt, page.items);
