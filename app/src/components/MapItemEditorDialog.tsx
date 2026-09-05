@@ -11,21 +11,23 @@ import type { GeoJSONStoreFeatures, HexColor } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
 import {
-  Alert, Anchor, Box, Button, ColorInput, Group, Kbd, List, Loader, Modal, Stack, Text, TextInput,
-  useComputedColorScheme,
+  Alert, Anchor, Box, Button, ColorInput, Divider, Group, Kbd, List, Loader, Modal, SegmentedControl, Stack, Text,
+  TextInput, useComputedColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getToken } from "../auth/auth";
 import { fetchAuthedBlobUrl } from "../store/authedFetch";
 import { formatHash } from "../hash";
 import {
-  fetchAllKmlFeatures, fetchAllKmlImageOverlays, invalidateKmlFeatures, rotatedOverlayCorners, rotatePoint,
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, invalidateKmlFeatures, mercatorBearing, mercatorDistance, rotatePoint,
+  scalePoint, type OverlayCorners,
 } from "../store/kmlMedia";
 import { featuresToKml, type ImageOverlay } from "../store/kmlWrite";
 import { uploadMedia, updateMediaFile, setMediaDesc } from "../store/jobsApi";
 import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
+import { buildSimpleSearchExpr } from "../store/simpleSearch";
 import { KML_MIME } from "../store/visualData";
 import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { readVisualColors } from "./visuals/cssVar";
@@ -67,25 +69,32 @@ const EMPTY_LABEL_PREVIEW: FeatureCollection = { type: "FeatureCollection", feat
 
 export type MapItemEditorTarget = { kind: "new" } | { kind: "edit"; handle: string };
 
-/** One placed-and-sized image overlay in this dialog -- see this file's
- * own doc comment on the overlay system further down for how it's rendered
- * and manipulated. `id` is a local key only (React list key + maplibre
- * source/layer id prefix), not persisted -- kmlWrite.ts's ImageOverlay
- * (what actually gets saved) is just the box plus the media handle. */
+/** One placed-and-sized image overlay in this dialog -- always 4 explicit
+ * world corners, mirroring kmlMedia.ts's KmlImageOverlay (what a save
+ * round-trips to). `id` is a local key only (React list key + maplibre
+ * source/layer id prefix), not persisted.
+ *
+ * There's deliberately no separate "box" (north/south/east/west/rotation)
+ * representation: move/resize/rotate/corner-drag all transform these same
+ * 4 points directly (see mountOverlay) -- resize scales all 4 uniformly
+ * from their shared center, rotate spins all 4 uniformly around it, a
+ * corner drag moves just the one point -- so a plain rectangle is simply
+ * the case where the 4 points happen to describe one, and resize/rotate
+ * stay exactly as meaningful (and aspect-preserving) on an already-warped
+ * quad as on a rectangle. The free-transform checkbox only ever shows or
+ * hides the 4 individual corner-drag handles (see showCornerHandles further
+ * down) -- it never touches `corners` itself. */
 interface ImageOverlayDraft {
   id: string;
   handle: string;
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-  rotation: number;
+  corners: OverlayCorners;
 }
 
 /** What's tracked per mounted image overlay -- everything needed to move
- * it (imperatively, outside React) and tear it down again. `box` is the
- * live, authoritative geometry during a drag; `overlays` state (committed
- * on drag end) only needs to be right at Save time and on remount.
+ * it (imperatively, outside React) and tear it down again. `box.corners`
+ * is the live, authoritative geometry during a drag; `overlays` state
+ * (committed on drag end) only needs to be right at Save time and on
+ * remount.
  *
  * No mousedown listener of its own -- maplibre's layer-filtered events
  * (`map.on(type, layerId, listener)`) work by hit-testing via
@@ -98,11 +107,24 @@ interface ImageOverlayDraft {
  * box hit test against every mount's `box`. */
 interface OverlayMount {
   sourceId: string;
-  box: { north: number; south: number; east: number; west: number; rotation: number };
+  box: { corners: OverlayCorners };
   deleteMarker: maplibregl.Marker;
   resizeMarker: maplibregl.Marker;
   rotateMarker: maplibregl.Marker;
+  /** The 4 free-transform corner handles, maplibre's own `coordinates`
+   * order -- shown only while this overlay's id is in `warpHandleIds` (see
+   * the selection/visibility effect below); dragging one is the only way
+   * to actually turn a rectangle into a non-rectangular quad. */
+  cornerMarkers: [maplibregl.Marker, maplibregl.Marker, maplibregl.Marker, maplibregl.Marker];
   startMove: (e: maplibregl.MapMouseEvent) => void;
+  /** Applies a new set of corners to `box` and the live map source in one
+   * step -- shared by every drag handler (move/resize/rotate/corner-drag),
+   * so there's exactly one place that keeps `box` and the rendered image
+   * in sync. */
+  setCorners: (next: OverlayCorners) => void;
+  /** Snaps every handle back onto `box`'s current corners -- called after
+   * every geometry change. */
+  repositionHandles: () => void;
   /** The blob: URL fetchAuthedBlobUrl() built for this overlay's `image`
    * source (discussion #4: keeps the access token out of the URL) --
    * revoked in unmountOverlay() and the map-teardown effect's own cleanup,
@@ -125,14 +147,29 @@ const OVERLAY_ANCHOR_LAYER = "image-overlay-anchor";
 const LABEL_PREVIEW_SOURCE = "label-preview";
 const LABEL_PREVIEW_LAYER = "label-preview-text";
 
-/** The rotate handle's own position, unrotated -- above the box's north
- * edge, offset further out by a fraction of the box's own height so it
- * doesn't crowd the top-edge midpoint. Rotating this same point (like
- * every corner) about the box's center is what makes it orbit the shape
- * as `box.rotation` changes, the standard "stalk above a selected object"
- * rotate-handle convention. */
-function rotateHandleAnchor(box: { north: number; south: number; east: number; west: number }): [number, number] {
-  return [(box.west + box.east) / 2, box.north + (box.north - box.south) * 0.25];
+/** The average of `corners` -- a plain centroid, not an area-weighted one,
+ * which is all a resize/rotate pivot or a delete-handle position needs.
+ * Corner indices are tracked by identity (index 0 is always "whichever
+ * point started as top-left", however far move/resize/rotate/warp has
+ * since carried it), so this stays a stable, sensible center throughout. */
+function overlayCenter(corners: OverlayCorners): [number, number] {
+  let lng = 0, lat = 0;
+  for (const [x, y] of corners) { lng += x; lat += y; }
+  return [lng / 4, lat / 4];
+}
+
+/** The rotate handle's own resting position -- beyond the midpoint of the
+ * corners[0]-corners[1] edge (this overlay's "top" edge, by index, however
+ * it's currently oriented), extended further out from `center` so the
+ * handle doesn't crowd that edge. Since this is recomputed from the
+ * *current* corners every time (not from a persisted rotation angle), it
+ * naturally orbits the shape as move/resize/rotate/corner-drag change it,
+ * the standard "stalk above a selected object" rotate-handle convention --
+ * with no separate "unrotated" reference frame needed. */
+function rotateHandleAnchor(corners: OverlayCorners, center: [number, number]): [number, number] {
+  const [topLeft, topRight] = corners;
+  const topMid: [number, number] = [(topLeft[0] + topRight[0]) / 2, (topLeft[1] + topRight[1]) / 2];
+  return [center[0] + (topMid[0] - center[0]) * 1.5, center[1] + (topMid[1] - center[1]) * 1.5];
 }
 
 /** Whether `point` (screen pixels) falls inside the convex quad described
@@ -152,6 +189,20 @@ function pointInQuad(point: { x: number; y: number }, corners: { x: number; y: n
     else if (s !== sign) return false;
   }
   return true;
+}
+
+// MEDIA_VIEW's own default simpleSearch fields, with an always-on
+// "images only" filter ANDed in -- only an image can be overlaid on the
+// map, unlike Media's own broader picker elsewhere in the app. Since
+// RecordPicker asks buildExpr even for an empty term, this filters the
+// picker's default browse-all list too, not just once something's typed --
+// same pattern as ComparisonsSection.tsx's own imageOnlyExpr (that one also
+// excludes a self handle, which doesn't apply here -- there's no existing
+// media object to exclude when picking one to newly overlay).
+function imageOnlyExpr(term: string): string | null {
+  const termExpr = buildSimpleSearchExpr(["gramps_id", "desc", "path"])(term);
+  const fixed = 'like(mime, "image/%")';
+  return termExpr ? `(${termExpr}) and ${fixed}` : fixed;
 }
 
 // How see-through a dragged overlay image gets, so whatever's underneath
@@ -306,6 +357,12 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // by clicking anywhere else on the map (see the map-setup effect's own
   // mousedown handler) or by deleting the selected overlay itself.
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
+  // Which overlays currently show their 4 free-transform corner handles
+  // (in addition to the always-available delete/resize/rotate) -- purely a
+  // display preference, never touched by geometry (see
+  // toggleCornerHandles's own doc comment), so it lives here rather than on
+  // ImageOverlayDraft/`overlays` state.
+  const [warpHandleIds, setWarpHandleIds] = useState<Set<string>>(new Set());
   // Whether the canvas currently holds anything worth saving -- Save stays
   // disabled at zero, same as every create dialog's own empty-state guard.
   const [hasFeatures, setHasFeatures] = useState(false);
@@ -573,16 +630,18 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // every mounted overlay's live geometry, topmost (last-added) first,
     // mirroring how they're actually layered on screen.
     map.on("mousedown", (e) => {
-      // Marker handles (delete/resize/rotate) are DOM elements appended
-      // into maplibre's own canvas container, not the canvas itself --
-      // they still receive this same "mousedown" event, so without this
-      // check a click that landed on one would also match the point-in-
-      // quad test below (a handle sits right at or near the box's own
-      // edge) and start a move, fighting the marker's own native drag
+      // Marker handles (delete/resize/rotate/corner) are DOM elements
+      // appended into maplibre's own canvas container, not the canvas
+      // itself -- they still receive this same "mousedown" event, so
+      // without this check a click that landed on one would also match the
+      // point-in-quad test below (a handle sits right at or near the box's
+      // own edge) and start a move, fighting the marker's own native drag
       // (found live: dragging the resize handle just moved the image
-      // instead of resizing it). Bail out entirely for a click on any
-      // handle and let its own listener (Marker's built-in drag, or the
-      // delete element's own click handler) run uncontested.
+      // instead of resizing it -- the same bug recurred for the 4 warp-
+      // mode corner handles until they were added to this same check).
+      // Bail out entirely for a click on any handle and let its own
+      // listener (Marker's built-in drag, or the delete element's own
+      // click handler) run uncontested.
       const target = e.originalEvent.target;
       if (target instanceof Node) {
         for (const mount of overlayMountsRef.current.values()) {
@@ -590,12 +649,13 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             mount.deleteMarker.getElement().contains(target)
             || mount.resizeMarker.getElement().contains(target)
             || mount.rotateMarker.getElement().contains(target)
+            || mount.cornerMarkers.some((marker) => marker.getElement().contains(target))
           ) return;
         }
       }
       const mounts = [...overlayMountsRef.current.entries()].reverse();
       for (const [id, mount] of mounts) {
-        const corners = rotatedOverlayCorners(mount.box).map((c) => map.project(c));
+        const corners = mount.box.corners.map((c) => map.project(c));
         if (pointInQuad(e.point, corners)) {
           setSelectedOverlayId(id);
           mount.startMove(e);
@@ -678,6 +738,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         mount.deleteMarker.remove();
         mount.resizeMarker.remove();
         mount.rotateMarker.remove();
+        for (const marker of mount.cornerMarkers) marker.remove();
         URL.revokeObjectURL(mount.objectUrl);
       }
       overlayMountsRef.current.clear();
@@ -703,11 +764,9 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     if (!map) return;
     const token = await getToken();
     const sourceId = `img-${overlay.id}`;
-    const box = {
-      north: overlay.north, south: overlay.south, east: overlay.east, west: overlay.west, rotation: overlay.rotation,
-    };
+    const box: { corners: OverlayCorners } = { corners: overlay.corners };
     const objectUrl = await fetchAuthedBlobUrl(`/api/media/${encodeURIComponent(overlay.handle)}/file`, token);
-    map.addSource(sourceId, { type: "image", url: objectUrl, coordinates: rotatedOverlayCorners(box) });
+    map.addSource(sourceId, { type: "image", url: objectUrl, coordinates: box.corners });
     // beforeId keeps this under terra-draw's own shape layers -- see
     // OVERLAY_ANCHOR_LAYER's own doc comment.
     map.addLayer({ id: sourceId, type: "raster", source: sourceId }, OVERLAY_ANCHOR_LAYER);
@@ -715,19 +774,18 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // The live geometry during a drag -- `overlays` state (below) is only
     // synced at gesture end, both for perf (no re-render per drag frame)
     // and because Save just needs it right at the end, not mid-drag.
-    const setBox = (next: typeof box) => {
-      Object.assign(box, next);
-      (map.getSource(sourceId) as maplibregl.ImageSource | undefined)?.setCoordinates(rotatedOverlayCorners(box));
+    const setCorners = (next: OverlayCorners) => {
+      box.corners = next;
+      (map.getSource(sourceId) as maplibregl.ImageSource | undefined)?.setCoordinates(box.corners);
     };
     const commit = () => {
-      setOverlays((prev) => prev.map((o) => (o.id === overlay.id ? { ...o, ...box } : o)));
+      setOverlays((prev) => prev.map((o) => (o.id === overlay.id ? { ...o, corners: box.corners } : o)));
     };
 
-    // Not added to the map yet -- all three handles are selection-gated
-    // (see the sync effect below), same as terra-draw's own vertex
-    // handles only showing up once a shape is actually selected, rather
-    // than cluttering every image on screen with three more controls all
-    // the time.
+    // Not added to the map yet -- all handles are selection-gated (see the
+    // sync effect below), same as terra-draw's own vertex handles only
+    // showing up once a shape is actually selected, rather than cluttering
+    // every image on screen with several more controls all the time.
     const deleteEl = document.createElement("div");
     deleteEl.textContent = "×";
     deleteEl.title = t("Remove this image");
@@ -742,31 +800,34 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
 
     const resizeEl = document.createElement("div");
     resizeEl.textContent = "↘";
-    resizeEl.title = t("Drag to resize (aspect ratio kept)");
+    resizeEl.title = t("Drag to resize (keeps its exact shape, warped or not)");
     Object.assign(resizeEl.style, OVERLAY_HANDLE_STYLE);
     const resizeMarker = new maplibregl.Marker({ element: resizeEl, anchor: "center", draggable: true });
-    let aspect = 1;
+    // Captured at the start of each drag: the corners and the handle's own
+    // distance from their shared center right then, so every subsequent
+    // "drag" frame computes one clean scale factor relative to the drag's
+    // own start (distance-now / distance-then) rather than compounding a
+    // per-frame ratio, which would drift.
+    let resizeStartCorners: OverlayCorners = box.corners;
+    let resizeStartDist = 1;
     resizeMarker.on("dragstart", () => {
-      // Captured fresh each gesture from the box's *current* local
-      // (unrotated) shape -- true to the image's own aspect right after
-      // mountOverlay first places it, and locked through every resize
-      // after that, without needing a separately-stored aspect field.
-      aspect = (box.east - box.west) / (box.north - box.south);
+      resizeStartCorners = box.corners;
+      const center = overlayCenter(resizeStartCorners);
+      const p = resizeMarker.getLngLat();
+      resizeStartDist = Math.max(1e-9, mercatorDistance(center, [p.lng, p.lat]));
     });
     resizeMarker.on("drag", () => {
-      // Resizing works entirely in the box's own *local* (unrotated)
-      // lng/lat frame, matching how rotation itself is defined (plain
-      // lng/lat, not Mercator-corrected -- see rotatePoint's own doc
-      // comment): the handle's live *world* position is rotated back by
-      // -box.rotation around the box's current center to find where that
-      // corresponds to locally, then the usual anchor (local top-left,
-      // which resizing never itself moves)-relative resize applies.
-      const center: [number, number] = [(box.west + box.east) / 2, (box.north + box.south) / 2];
-      const world = resizeMarker.getLngLat();
-      const local = rotatePoint([world.lng, world.lat], center, -box.rotation);
-      const w = Math.max(1e-6, local[0] - box.west);
-      const h = w / aspect;
-      setBox({ ...box, east: box.west + w, south: box.north - h });
+      // Scales every corner's distance from their shared center by the
+      // same factor (in Mercator-projected space -- see scalePoint's own
+      // doc comment), so this works identically whether the current
+      // corners describe a plain rectangle or an already-warped quad: the
+      // exact shape is preserved either way, just bigger or smaller. No
+      // separate "aspect ratio" to track at all -- a uniform scale from
+      // center can't distort it.
+      const center = overlayCenter(resizeStartCorners);
+      const p = resizeMarker.getLngLat();
+      const scale = Math.max(0.02, mercatorDistance(center, [p.lng, p.lat]) / resizeStartDist);
+      setCorners(resizeStartCorners.map((c) => scalePoint(c, center, scale)) as OverlayCorners);
       repositionHandles();
     });
     resizeMarker.on("dragend", commit);
@@ -776,31 +837,67 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     rotateEl.title = t("Drag to rotate");
     Object.assign(rotateEl.style, OVERLAY_HANDLE_STYLE);
     const rotateMarker = new maplibregl.Marker({ element: rotateEl, anchor: "center", draggable: true });
-    rotateMarker.on("drag", () => {
-      // The handle's own *unrotated* anchor sits due north of the box's
-      // center (see rotateHandleAnchor), where atan2 below would read 90°
-      // -- subtracting 90 makes "handle pointing north" mean rotation 0,
-      // matching rotatePoint's own convention (positive = counter-
-      // clockwise), so the handle's angle directly *is* the new rotation
-      // with no separate start-offset to track.
-      const center: [number, number] = [(box.west + box.east) / 2, (box.north + box.south) / 2];
+    // Same start-of-drag capture as resize, but for an angle instead of a
+    // distance: every "drag" frame rotates the *start* corners by
+    // (current handle bearing - start handle bearing), an incremental
+    // delta from center rather than an absolute angle -- there's no
+    // persisted "rotation" field to be absolute relative to anymore (see
+    // rotateHandleAnchor's own doc comment on why that's fine).
+    let rotateStartCorners: OverlayCorners = box.corners;
+    let rotateStartAngle = 0;
+    rotateMarker.on("dragstart", () => {
+      rotateStartCorners = box.corners;
+      const center = overlayCenter(rotateStartCorners);
       const p = rotateMarker.getLngLat();
-      const rotation = Math.atan2(p.lat - center[1], p.lng - center[0]) / (Math.PI / 180) - 90;
-      setBox({ ...box, rotation });
+      rotateStartAngle = mercatorBearing(center, [p.lng, p.lat]);
+    });
+    rotateMarker.on("drag", () => {
+      const center = overlayCenter(rotateStartCorners);
+      const p = rotateMarker.getLngLat();
+      const delta = mercatorBearing(center, [p.lng, p.lat]) - rotateStartAngle;
+      setCorners(rotateStartCorners.map((c) => rotatePoint(c, center, delta)) as OverlayCorners);
       repositionHandles();
     });
     rotateMarker.on("dragend", commit);
 
-    // Snaps all three handles back onto the box's current rotated
-    // corners/anchor -- called after every geometry change (move, resize,
-    // rotate) so they stay glued to the shape instead of drifting back to
-    // where an unrotated box's corners would sit.
+    // Free-transform's 4 independent corner handles -- one per index of
+    // maplibre's own `coordinates` order (top-left, top-right,
+    // bottom-right, bottom-left). Each drag writes only its own corner,
+    // leaving the other 3 exactly where they were -- the actual "rubber
+    // sheet" warp, as opposed to resize/rotate's whole-shape transforms.
+    const cornerMarkers = [0, 1, 2, 3].map((i) => {
+      const el = document.createElement("div");
+      el.title = t("Drag to warp this corner");
+      Object.assign(el.style, OVERLAY_HANDLE_STYLE);
+      const marker = new maplibregl.Marker({ element: el, anchor: "center", draggable: true });
+      marker.on("drag", () => {
+        const corners = [...box.corners] as OverlayCorners;
+        const p = marker.getLngLat();
+        corners[i] = [p.lng, p.lat];
+        setCorners(corners);
+        repositionHandles();
+      });
+      marker.on("dragend", commit);
+      return marker;
+    }) as [maplibregl.Marker, maplibregl.Marker, maplibregl.Marker, maplibregl.Marker];
+
+    // Snaps every handle back onto the box's current corners -- called
+    // after every geometry change (move, resize, rotate, corner drag) so
+    // they stay glued to the image instead of drifting back to a stale
+    // position. Delete/resize/rotate always track the actual corners (no
+    // separate "rect" representation to fall back to); the 4 corner
+    // handles are additionally repositioned here too, since a resize or
+    // rotate gesture moves them right along with everything else.
     const repositionHandles = () => {
-      const [topLeft, , bottomRight] = rotatedOverlayCorners(box);
-      const center: [number, number] = [(box.west + box.east) / 2, (box.north + box.south) / 2];
-      deleteMarker.setLngLat(topLeft);
+      const [topLeft, topRight, bottomRight, bottomLeft] = box.corners;
+      const center = overlayCenter(box.corners);
+      deleteMarker.setLngLat(center);
       resizeMarker.setLngLat(bottomRight);
-      rotateMarker.setLngLat(rotatePoint(rotateHandleAnchor(box), center, box.rotation));
+      rotateMarker.setLngLat(rotateHandleAnchor(box.corners, center));
+      cornerMarkers[0].setLngLat(topLeft);
+      cornerMarkers[1].setLngLat(topRight);
+      cornerMarkers[2].setLngLat(bottomRight);
+      cornerMarkers[3].setLngLat(bottomLeft);
     };
 
     // Move -- dragging anywhere on the image itself (not a small handle;
@@ -818,18 +915,14 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       // restored to fully opaque on mouseup.
       map.setPaintProperty(sourceId, "raster-opacity", OVERLAY_DRAG_OPACITY);
       const start = e.lngLat;
-      const startBox = { ...box };
+      const startCorners = box.corners;
       const container = map.getContainer();
       const onMove = (moveEvent: MouseEvent) => {
         const rect = container.getBoundingClientRect();
         const lngLat = map.unproject([moveEvent.clientX - rect.left, moveEvent.clientY - rect.top]);
         const dLng = lngLat.lng - start.lng;
         const dLat = lngLat.lat - start.lat;
-        setBox({
-          ...box,
-          north: startBox.north + dLat, south: startBox.south + dLat,
-          east: startBox.east + dLng, west: startBox.west + dLng,
-        });
+        setCorners(startCorners.map(([lng, lat]) => [lng + dLng, lat + dLat]) as OverlayCorners);
         repositionHandles();
       };
       const onUp = () => {
@@ -844,7 +937,9 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     };
 
     repositionHandles();
-    overlayMountsRef.current.set(overlay.id, { sourceId, box, deleteMarker, resizeMarker, rotateMarker, startMove, objectUrl });
+    overlayMountsRef.current.set(overlay.id, {
+      sourceId, box, deleteMarker, resizeMarker, rotateMarker, cornerMarkers, startMove, setCorners, repositionHandles, objectUrl,
+    });
   }
 
   function unmountOverlay(id: string) {
@@ -854,32 +949,53 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     mount.deleteMarker.remove();
     mount.resizeMarker.remove();
     mount.rotateMarker.remove();
+    for (const marker of mount.cornerMarkers) marker.remove();
     if (map.getLayer(mount.sourceId)) map.removeLayer(mount.sourceId);
     if (map.getSource(mount.sourceId)) map.removeSource(mount.sourceId);
     URL.revokeObjectURL(mount.objectUrl);
     overlayMountsRef.current.delete(id);
   }
 
-  // Shows the selected overlay's move/resize/rotate/delete handles, hides
-  // every other overlay's -- mountOverlay creates all three markers
-  // detached (not added to the map), so a freshly-added or freshly-loaded
-  // overlay correctly starts with nothing showing until it's actually
-  // clicked.
+  /** Shows or hides one overlay's 4 free-transform corner handles -- the
+   * "Scale" / "Transform" SegmentedControl's onChange. Purely a
+   * display preference (see warpHandleIds' own doc comment): move/resize/
+   * rotate/delete always work the same way regardless of this, uniformly
+   * transforming whatever the current corners are (see mountOverlay), so
+   * unlike an earlier version of this feature, picking either option never
+   * touches geometry at all -- there's nothing here to make lossy or to
+   * restore. */
+  function setCornerHandlesVisible(id: string, visible: boolean) {
+    setWarpHandleIds((prev) => {
+      const next = new Set(prev);
+      if (visible) next.add(id); else next.delete(id);
+      return next;
+    });
+  }
+
+  // Shows the selected overlay's delete/resize/rotate handles (always) and
+  // its 4 free-transform corner handles (only while its id is in
+  // warpHandleIds), hides every other overlay's -- mountOverlay creates
+  // every marker detached (not added to the map), so a freshly-added or
+  // freshly-loaded overlay correctly starts with nothing showing until
+  // it's actually clicked.
+  const showCornerHandles = selectedOverlayId !== null && warpHandleIds.has(selectedOverlayId);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     for (const [id, mount] of overlayMountsRef.current) {
-      if (id === selectedOverlayId) {
-        mount.deleteMarker.addTo(map);
-        mount.resizeMarker.addTo(map);
-        mount.rotateMarker.addTo(map);
-      } else {
+      if (id !== selectedOverlayId) {
         mount.deleteMarker.remove();
         mount.resizeMarker.remove();
         mount.rotateMarker.remove();
+        for (const marker of mount.cornerMarkers) marker.remove();
+        continue;
       }
+      mount.deleteMarker.addTo(map);
+      mount.resizeMarker.addTo(map);
+      mount.rotateMarker.addTo(map);
+      for (const marker of mount.cornerMarkers) (showCornerHandles ? marker.addTo(map) : marker.remove());
     }
-  }, [selectedOverlayId]);
+  }, [selectedOverlayId, showCornerHandles]);
 
   /** RecordPicker's onPick for the image overlay picker -- rejects
    * anything that isn't actually an image (a KML/PDF/audio media object
@@ -915,8 +1031,10 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       const draft: ImageOverlayDraft = {
         id: crypto.randomUUID(),
         handle: item.handle,
-        north: topLeft.lat, west: topLeft.lng, south: bottomRight.lat, east: bottomRight.lng,
-        rotation: 0,
+        corners: [
+          [topLeft.lng, topLeft.lat], [bottomRight.lng, topLeft.lat],
+          [bottomRight.lng, bottomRight.lat], [topLeft.lng, bottomRight.lat],
+        ],
       };
       setOverlays((prev) => [...prev, draft]);
       // Awaited (unlike the edit-mode load effect's own fire-and-forget
@@ -980,9 +1098,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       if (cancelled) return;
       for (const overlay of overlays) {
         const draft: ImageOverlayDraft = {
-          id: crypto.randomUUID(), handle: overlay.imageHandle,
-          north: overlay.north, south: overlay.south, east: overlay.east, west: overlay.west,
-          rotation: overlay.rotation,
+          id: crypto.randomUUID(), handle: overlay.imageHandle, corners: overlay.corners,
         };
         setOverlays((prev) => [...prev, draft]);
         mountOverlay(draft);
@@ -1048,8 +1164,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     setError(null);
     try {
       const token = await getToken();
-      const imageOverlays: ImageOverlay[] = overlays.map(({ handle, north, south, east, west, rotation }) =>
-        ({ handle, north, south, east, west, rotation }));
+      const imageOverlays: ImageOverlay[] = overlays.map(({ handle, corners }) => ({ handle, corners }));
       const blob = new Blob([featuresToKml(features, imageOverlays)], { type: KML_MIME });
       const trimmedDesc = desc.trim();
       let handle: string;
@@ -1234,10 +1349,18 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
               {t("Image")}
             </Button>
             {TOOLBAR.filter((entry) => entry.mode === "select").map(renderModeButton)}
+
+            <Divider my={2} />
+            <Text size="xs" fw={600} c="dimmed">{t("Edit Options")}</Text>
+
             {/* The next shape's color -- or, with a shape currently
                 selected (terra-draw's Select mode), that shape's color.
                 Swatches-only compact picker; ColorInput's own popover
-                still opens the full picker underneath for anything else. */}
+                still opens the full picker underneath for anything else.
+                Disabled (not hidden) while an image overlay is selected --
+                color has no effect on an image, but this stays in place so
+                the panel doesn't reflow every time selection switches
+                between a shape and an image. */}
             <ColorInput
               size="xs"
               value={color}
@@ -1247,7 +1370,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
                 if (draw && selectedId) draw.updateFeatureProperties(selectedId, { color: next });
               }}
               swatches={COLOR_SWATCHES}
-              disabled={!ready}
+              disabled={!ready || selectedOverlayId !== null}
               popoverProps={{ withinPortal: true, zIndex: 1000 }}
             />
             {/* Only a selected point offers this -- lines/polygons have no
@@ -1264,6 +1387,23 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
                   if (draw && selectedId) draw.updateFeatureProperties(selectedId, { name: e.currentTarget.value });
                 }}
                 disabled={!ready}
+              />
+            )}
+            {/* Only a selected image overlay offers this -- purely shows or
+                hides the 4 corner-drag handles (see setCornerHandlesVisible's
+                own doc comment); move/resize/rotate/delete work the same
+                either way, "Scale" rather than "Rotate and scale" since
+                rotate is available in both, not just this one. */}
+            {selectedOverlayId && (
+              <SegmentedControl
+                size="xs"
+                value={showCornerHandles ? "transform" : "scale"}
+                onChange={(value) => setCornerHandlesVisible(selectedOverlayId, value === "transform")}
+                disabled={!ready}
+                data={[
+                  { label: t("Scale"), value: "scale" },
+                  { label: t("Transform"), value: "transform" },
+                ]}
               />
             )}
           </Stack>
@@ -1332,7 +1472,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           view={MEDIA_VIEW}
           searchField="desc"
           placeholder={MEDIA_VIEW.simpleSearch?.placeholder ?? "Search…"}
-          buildExpr={MEDIA_VIEW.simpleSearch?.buildExpr}
+          buildExpr={imageOnlyExpr}
           renderLabel={(item) => pickerResultLabel("media", item)}
           onPick={handleAddImage}
           confirmWithButton
@@ -1375,8 +1515,15 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           <Text size="sm" fw={600}>{t("Images")}</Text>
           <List spacing={4} size="sm">
             <List.Item>{t("Drag anywhere on an image to move it.")}</List.Item>
-            <List.Item>{t("Drag its ↘ handle to resize it -- its aspect ratio is always kept.")}</List.Item>
+            <List.Item>{t("Drag its ↘ handle to resize it -- grows or shrinks from its own center, "
+              + "keeping its exact shape (works the same on a warped image, too).")}</List.Item>
             <List.Item>{t("Drag its ↻ handle to rotate it -- handy for aligning a scanned old map.")}</List.Item>
+            <List.Item>
+              {t("Switch to \"Transform\" to also show 4 corner handles you can drag independently "
+                + "(rubber-sheeting) -- for a scanned map that isn't printed at a uniform scale/orientation. "
+                + "Switching back to \"Scale\" just hides those 4 handles again; move/resize/rotate keep "
+                + "working on the image's exact current shape either way.")}
+            </List.Item>
             <List.Item>{t("Click its × handle to remove it.")}</List.Item>
           </List>
         </Stack>

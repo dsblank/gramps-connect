@@ -60,54 +60,130 @@ export async function fetchAllKmlFeatures(handles: string[]): Promise<Feature[]>
   return collections.flat().filter((f) => f.properties?.["@geometry-type"] !== "groundoverlay");
 }
 
+/** An overlay's 4 world corners, maplibre's own ImageSource `coordinates`
+ * order (top-left, top-right, bottom-right, bottom-left) and type. */
+export type OverlayCorners = [[number, number], [number, number], [number, number], [number, number]];
+
 /** An image overlay drawn in MapItemEditorDialog.tsx (kmlWrite.ts's
- * ImageOverlay, round-tripped) -- an axis-aligned box plus a rotation
- * about its own center (KML's own <LatLonBox><rotation> model; see
- * rotatePoint's own doc comment). */
+ * ImageOverlay, round-tripped) -- always 4 explicit world corners.
+ * MapItemEditorDialog.tsx's move/resize/rotate/corner-drag handles all
+ * transform these same 4 points directly (translate, uniform scale-from-
+ * center, uniform rotate-from-center, or move one point independently --
+ * see that file's own mountOverlay), so a plain unwarped rectangle is just
+ * the special case where the 4 points happen to describe one; there's no
+ * separate "box" representation to keep in sync or fall back to. */
 export interface KmlImageOverlay {
   imageHandle: string;
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-  rotation: number;
+  corners: OverlayCorners;
 }
 
 const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
 
-/** Rotates one point by `rotationDeg` around `center`, in plain lng/lat
- * space -- exactly KML's <LatLonBox><rotation> semantics (positive =
- * counterclockwise), matching @tmcw/togeojson's own internal rotateBox
- * (which this mirrors) so a rotated overlay this app writes renders
- * identically everywhere it's read back, KML round-trip included. Not
- * Mercator-corrected -- a rotated box won't be a pixel-perfect visual
- * rotation at high latitudes, but that's an accepted quirk of LatLonBox
- * itself (Google Earth has the same one), not something introduced here.
+/** [lng,lat] -> normalized Web Mercator x/y (x east-positive, y
+ * *south*-positive) -- the exact projection maplibre's own map.project()
+ * uses internally, reimplemented here as plain math (no maplibre-gl
+ * import) so this module stays free of that ~900KB dependency (see
+ * MapItemEditorDialog.tsx's own doc comment on why maplibre-gl is always
+ * behind a lazy import elsewhere in this app). Unlike raw [lng,lat],
+ * Mercator x/y is locally isotropic -- equal scale in both directions at
+ * any given point, which is the whole point of the projection -- making it
+ * the correct space to rotate a box in; see rotatePoint. */
+function mercatorFromLngLat([lng, lat]: [number, number]): [number, number] {
+  const x = (180 + lng) / 360;
+  const y = (180 - RAD_TO_DEG * Math.log(Math.tan(Math.PI / 4 + (lat * DEG_TO_RAD) / 2))) / 360;
+  return [x, y];
+}
+
+/** mercatorFromLngLat's inverse. */
+function lngLatFromMercator([x, y]: [number, number]): [number, number] {
+  const lng = x * 360 - 180;
+  const lat = 90 - 2 * Math.atan(Math.exp((y * 360 - 180) * DEG_TO_RAD)) * RAD_TO_DEG;
+  return [lng, lat];
+}
+
+/** Rotates one point by `rotationDeg` around `center` (positive =
+ * counterclockwise, matching KML's own <LatLonBox><rotation> convention)
+ * -- done in Mercator-projected space (see mercatorFromLngLat), not raw
+ * [lng,lat], so a rectangle stays a rectangle (right angles preserved)
+ * after rotating, regardless of latitude. A naive rotation directly on
+ * [lng,lat] -- this function's original implementation -- shears instead,
+ * since a degree of longitude and a degree of latitude aren't the same
+ * ground (or screen) distance away from the equator (found live: a square
+ * image's corners visibly stopped being 90 degrees once rotated away from
+ * 0). This app's own KML is never meant to be opened in an external KML
+ * viewer (see kmlWrite.ts's own doc comment on why), so diverging here
+ * from what Google Earth's own <LatLonBox><rotation> would render is an
+ * acceptable trade for this app always rendering its own files correctly.
  * Pass a negative `rotationDeg` to go the other way (world -> local). */
 export function rotatePoint(point: [number, number], center: [number, number], rotationDeg: number): [number, number] {
   const angle = rotationDeg * DEG_TO_RAD;
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
-  const dx = point[0] - center[0];
-  const dy = point[1] - center[1];
-  return [center[0] + dx * cos - dy * sin, center[1] + dx * sin + dy * cos];
+  const [px, py] = mercatorFromLngLat(point);
+  const [cx, cy] = mercatorFromLngLat(center);
+  // Mercator y increases southward -- negated here so this rotation is
+  // expressed in a conventional north-up, east-right plane (dx
+  // east-positive, dy north-positive), keeping "positive rotationDeg =
+  // counterclockwise" the same sense every caller already expects.
+  const dx = px - cx;
+  const dy = -(py - cy);
+  const rx = dx * cos - dy * sin;
+  const ry = dx * sin + dy * cos;
+  return lngLatFromMercator([cx + rx, cy - ry]);
 }
 
-/** An overlay's 4 corners, rotated about its own center -- top-left,
- * top-right, bottom-right, bottom-left, maplibre's own ImageSource
- * `coordinates` order. The one place both the editor and every read-only
- * renderer (MapCanvas.tsx, StoryMapBackground.tsx) compute an overlay's
- * actual on-map footprint, so they can never disagree. */
-export function rotatedOverlayCorners(
-  overlay: { north: number; south: number; east: number; west: number; rotation: number },
-): [[number, number], [number, number], [number, number], [number, number]] {
-  const center: [number, number] = [(overlay.west + overlay.east) / 2, (overlay.north + overlay.south) / 2];
+/** Scales the distance from `center` to `point` by `scale`, in the same
+ * Mercator-projected space rotatePoint rotates in -- so scaling a
+ * rectangle (or an already-warped quad) uniformly from its own center
+ * preserves its exact shape/aspect ratio regardless of latitude, the same
+ * way rotatePoint preserves angles. MapItemEditorDialog.tsx's resize
+ * handle applies this to all 4 corners at once (see mountOverlay). */
+export function scalePoint(point: [number, number], center: [number, number], scale: number): [number, number] {
+  const [px, py] = mercatorFromLngLat(point);
+  const [cx, cy] = mercatorFromLngLat(center);
+  return lngLatFromMercator([cx + (px - cx) * scale, cy + (py - cy) * scale]);
+}
+
+/** The distance between `a` and `b` in the same Mercator-projected space
+ * scalePoint scales in -- not a real-world distance (Mercator distorts
+ * those away from the equator), just a consistent unit for computing a
+ * resize handle's before/after scale ratio, which only ever needs to be
+ * internally consistent with scalePoint's own projection, not physically
+ * meaningful on its own. */
+export function mercatorDistance(a: [number, number], b: [number, number]): number {
+  const [ax, ay] = mercatorFromLngLat(a);
+  const [bx, by] = mercatorFromLngLat(b);
+  return Math.hypot(bx - ax, by - ay);
+}
+
+/** The angle (degrees, positive = counterclockwise, 0 = due east) from
+ * `from` to `to` -- measured in the same Mercator-projected, north-up
+ * plane rotatePoint itself rotates in, so a caller tracking "how far has
+ * the user dragged this handle around the center" gets an angle that
+ * matches how rotatePoint will then actually render it (unlike a plain
+ * atan2 on raw [lng,lat], which suffers the same latitude-dependent skew
+ * rotatePoint's own doc comment describes). */
+export function mercatorBearing(from: [number, number], to: [number, number]): number {
+  const [fx, fy] = mercatorFromLngLat(from);
+  const [tx, ty] = mercatorFromLngLat(to);
+  return Math.atan2(-(ty - fy), tx - fx) * RAD_TO_DEG;
+}
+
+/** An axis-aligned box plus a rotation about its own center's 4 world
+ * corners -- KML's own <LatLonBox><rotation> model. Only ever needed to
+ * interpret an *old* overlay saved before this app always wrote explicit
+ * corners (see fetchAllKmlImageOverlays); MapItemEditorDialog.tsx itself
+ * only ever deals with corners directly, never this box shape, so this
+ * isn't exported. */
+function cornersFromBox(
+  box: { north: number; south: number; east: number; west: number; rotation: number },
+): OverlayCorners {
+  const center: [number, number] = [(box.west + box.east) / 2, (box.north + box.south) / 2];
   const corners: [number, number][] = [
-    [overlay.west, overlay.north], [overlay.east, overlay.north], [overlay.east, overlay.south], [overlay.west, overlay.south],
+    [box.west, box.north], [box.east, box.north], [box.east, box.south], [box.west, box.south],
   ];
-  return corners.map((p) => rotatePoint(p, center, overlay.rotation)) as [
-    [number, number], [number, number], [number, number], [number, number],
-  ];
+  return corners.map((p) => rotatePoint(p, center, box.rotation)) as OverlayCorners;
 }
 
 /** kmlWrite.ts writes an overlay's href as this marker string (not a real
@@ -128,22 +204,31 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
     if (feature.properties?.["@geometry-type"] !== "groundoverlay") continue;
     const icon = feature.properties?.icon as string | undefined;
     if (!icon || !icon.startsWith(MEDIA_HANDLE_PREFIX)) continue;
+    const imageHandle = icon.slice(MEDIA_HANDLE_PREFIX.length);
     const bbox = feature.bbox as [number, number, number, number] | undefined;
-    if (!bbox) continue;
-    // @tmcw/togeojson's own LatLonBox parsing folds <rotation> straight
-    // into the geometry ring it returns (bakes it into already-rotated
-    // coordinates) rather than exposing the raw number anywhere -- so
-    // kmlWrite.ts also writes it redundantly as a plain ExtendedData
-    // property, the same round-trip trick used for a drawn shape's
-    // `color`, read back here instead of reverse-engineering the angle
-    // from the ring. Missing/unparsed (a pre-rotation save, or a file this
-    // app didn't write) defaults to 0 -- an unrotated box, same as before
-    // this feature existed.
-    const rotation = Number(feature.properties?.rotation ?? 0) || 0;
-    overlays.push({
-      imageHandle: icon.slice(MEDIA_HANDLE_PREFIX.length),
-      west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3], rotation,
-    });
+    if (bbox) {
+      // An *old* overlay, saved before this app always wrote explicit
+      // corners -- a plain <LatLonBox><rotation>. @tmcw/togeojson's own
+      // LatLonBox parsing folds <rotation> straight into the geometry ring
+      // it returns (bakes it into already-rotated coordinates) rather than
+      // exposing the raw number anywhere -- so kmlWrite.ts used to also
+      // write it redundantly as a plain ExtendedData property, the same
+      // round-trip trick used for a drawn shape's `color`, read back here
+      // instead of reverse-engineering the angle from the ring. Missing
+      // (a save from before rotation existed at all) defaults to 0.
+      const rotation = Number(feature.properties?.rotation ?? 0) || 0;
+      const corners = cornersFromBox({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3], rotation });
+      overlays.push({ imageHandle, corners });
+      continue;
+    }
+    // No bbox -- @tmcw/togeojson's getGroundOverlayBox() only omits it for
+    // a <gx:LatLonQuad> overlay (kmlWrite.ts's own output), whose 4 free
+    // corners it instead returns as a Polygon ring (closed: first point
+    // repeated last). A ring that isn't exactly that shape (a foreign file,
+    // or a parse failure) is skipped, same as a missing bbox always was.
+    const ring = feature.geometry?.type === "Polygon" ? (feature.geometry.coordinates[0] as [number, number][]) : undefined;
+    if (!ring || ring.length !== 5) continue;
+    overlays.push({ imageHandle, corners: ring.slice(0, 4) as OverlayCorners });
   }
   return overlays;
 }

@@ -284,7 +284,7 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
     const objectUrls: string[] = [];
     (async () => {
       if (kmlKey === "") return;
-      const { fetchAllKmlImageOverlays, rotatedOverlayCorners } = await import("../../store/kmlMedia");
+      const { fetchAllKmlImageOverlays } = await import("../../store/kmlMedia");
       const overlays = await fetchAllKmlImageOverlays(kmlKey.split(","));
       if (cancelled || overlays.length === 0) return;
       const token = await getToken();
@@ -298,7 +298,7 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
           return;
         }
         objectUrls.push(url);
-        map.addSource(id, { type: "image", url, coordinates: rotatedOverlayCorners(overlay) });
+        map.addSource(id, { type: "image", url, coordinates: overlay.corners });
         map.addLayer({ id, type: "raster", source: id }, KML_FILL_LAYER);
         addedIds.push(id);
       }

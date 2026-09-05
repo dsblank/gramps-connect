@@ -5,17 +5,14 @@
 // that library rather than introducing a second KML-writing approach.
 import tokml from "tokml";
 import type { Feature } from "geojson";
+import type { OverlayCorners } from "./kmlMedia";
 
-/** An image overlay, as MapItemEditorDialog.tsx tracks one -- an
- * axis-aligned box plus a rotation about its own center, referencing a
- * media object by handle. */
+/** An image overlay, as MapItemEditorDialog.tsx tracks one -- always 4
+ * explicit world corners; see kmlMedia.ts's KmlImageOverlay, which this
+ * mirrors on the write side. */
 export interface ImageOverlay {
   handle: string;
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-  rotation: number;
+  corners: OverlayCorners;
 }
 
 /** kmlMedia.ts's fetchAllKmlImageOverlays looks for this exact prefix.
@@ -35,18 +32,21 @@ function escapeXml(value: string): string {
 
 function overlayToKml(overlay: ImageOverlay): string {
   const href = escapeXml(`${MEDIA_HANDLE_PREFIX}${overlay.handle}`);
+  const coords = overlay.corners.map(([lng, lat]) => `${lng},${lat}`).join(" ");
+  // Google's <gx:LatLonQuad> extension (which featuresToKml's caller must
+  // declare the xmlns:gx namespace for; see its own doc comment) rather
+  // than KML's plain <LatLonBox> -- a box has no way to express 4
+  // independent corners, and since every overlay is always tracked as 4
+  // corners now (even a plain, never-warped rectangle is just 4 corners
+  // that happen to describe one), there's no separate box-shaped case left
+  // to special-case a <LatLonBox> for. Read back by kmlMedia.ts's own
+  // bbox-vs-Polygon branch (a bbox-less GroundOverlay, i.e. an *old* file
+  // saved before this app always used gx:LatLonQuad, is still read via
+  // <LatLonBox>).
   return (
     "<GroundOverlay>"
     + `<Icon><href>${href}</href></Icon>`
-    + `<LatLonBox><north>${overlay.north}</north><south>${overlay.south}</south>`
-    + `<east>${overlay.east}</east><west>${overlay.west}</west><rotation>${overlay.rotation}</rotation></LatLonBox>`
-    // @tmcw/togeojson folds <rotation> straight into an already-rotated
-    // geometry ring on read rather than exposing the raw number (see
-    // kmlMedia.ts's own doc comment on this) -- written again here as
-    // plain ExtendedData, the same trick a drawn shape's `color` already
-    // uses, so kmlMedia.ts's reader can recover the exact value instead of
-    // reverse-engineering an angle from the ring.
-    + `<ExtendedData><Data name="rotation"><value>${overlay.rotation}</value></Data></ExtendedData>`
+    + `<gx:LatLonQuad><coordinates>${coords}</coordinates></gx:LatLonQuad>`
     + "</GroundOverlay>"
   );
 }
@@ -63,5 +63,14 @@ export function featuresToKml(features: Feature[], overlays: ImageOverlay[] = []
   const placemarks = tokml({ type: "FeatureCollection", features });
   if (overlays.length === 0) return placemarks;
   const overlaysXml = overlays.map(overlayToKml).join("");
-  return placemarks.replace("</Document>", `${overlaysXml}</Document>`);
+  const withOverlays = placemarks.replace("</Document>", `${overlaysXml}</Document>`);
+  // tokml's own <kml> tag only declares the plain KML namespace -- every
+  // overlay's <gx:LatLonQuad> above needs xmlns:gx declared too, or
+  // DOMParser's text/xml mode fails to parse the whole document (a silent
+  // parser-error document, not a thrown exception) the next time this file
+  // is read back in kmlMedia.ts.
+  return withOverlays.replace(
+    '<kml xmlns="http://www.opengis.net/kml/2.2">',
+    '<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">',
+  );
 }

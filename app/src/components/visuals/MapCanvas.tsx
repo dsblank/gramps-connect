@@ -5,7 +5,7 @@ import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point as GeoJsonPoint } from "geojson";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
-import { fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds, rotatedOverlayCorners } from "../../store/kmlMedia";
+import { fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds } from "../../store/kmlMedia";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { readVisualColors } from "./cssVar";
@@ -565,7 +565,7 @@ export function MapCanvas({
           return;
         }
         objectUrls.push(url);
-        map.addSource(id, { type: "image", url, coordinates: rotatedOverlayCorners(overlay) });
+        map.addSource(id, { type: "image", url, coordinates: overlay.corners });
         // Inserted below the KML shape layers (same "underneath the place
         // markers" reasoning as those) so a place pin sitting on top of an
         // old-map overlay stays clickable.
