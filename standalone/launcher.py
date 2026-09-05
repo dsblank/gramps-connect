@@ -15,6 +15,7 @@ getting stuck -- see its own docstring.
 
 from __future__ import annotations
 
+import argparse
 import io
 import os
 import socket
@@ -150,12 +151,21 @@ def build_config() -> dict:
     }
 
 
-def should_force_browser() -> bool:
-    """Whether GRAMPS_CONNECT_DESKTOP_BROWSER opts out of the native window
-    on macOS/Windows (Linux never looks at this -- see main()'s own doc
-    comment on why it always uses the browser regardless). Same boolean
-    parsing as the email config vars above."""
-    return os.environ.get("GRAMPS_CONNECT_DESKTOP_BROWSER", "").strip().lower() in ("true", "1", "yes", "on")
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """CLI flags for a terminal launch -- irrelevant to a double-clicked
+    app-bundle/icon launch, which gets none of these and just falls
+    through to the defaults, same as always."""
+    parser = argparse.ArgumentParser(description="Gramps Connect Desktop")
+    parser.add_argument(
+        "--browser",
+        action="store_true",
+        help=(
+            "Always open in your default browser instead of the native "
+            "window (macOS/Windows only -- Linux already does this "
+            "unconditionally, see main()'s own doc comment on why)."
+        ),
+    )
+    return parser.parse_args(argv)
 
 
 def check_port_available() -> None:
@@ -291,6 +301,7 @@ def ensure_setup(app) -> None:
 
 
 def main() -> None:
+    args = parse_args()
     # Used only to word the console message below -- ensure_setup() itself
     # always runs and is safe to repeat, see its own docstring.
     first_run = not os.path.isfile(data_path("users.sqlite"))
@@ -339,11 +350,11 @@ def main() -> None:
     print(f"Gramps Connect Desktop running at http://{HOST}:{PORT}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
 
-    # GRAMPS_CONNECT_DESKTOP_BROWSER is an opt-out escape hatch for the
-    # native window on macOS/Windows -- e.g. a tester who prefers their
-    # browser's devtools/extensions, or is hitting a webview-specific bug
-    # and wants to confirm it's the webview and not the app itself.
-    if sys.platform.startswith("linux") or should_force_browser():
+    # --browser is an opt-in escape hatch for the native window on
+    # macOS/Windows -- e.g. a tester who prefers their browser's
+    # devtools/extensions, or is hitting a webview-specific bug and wants
+    # to confirm it's the webview and not the app itself.
+    if sys.platform.startswith("linux") or args.browser:
         # Linux's only pywebview backend here is GTK/WebKitGTK, which lags
         # upstream WebKit/Chromium enough to have already produced two
         # confirmed bugs (PointerEvents never dispatched, breaking
@@ -355,9 +366,9 @@ def main() -> None:
         # own actual browser instead of a native window -- whatever they
         # already have there is a real, currently-maintained engine, the
         # same tradeoff the except branch below already falls back to when
-        # no native backend is found at all. GRAMPS_CONNECT_DESKTOP_BROWSER
-        # takes the same path deliberately, on any platform.
-        reason = "Linux" if sys.platform.startswith("linux") else "GRAMPS_CONNECT_DESKTOP_BROWSER is set"
+        # no native backend is found at all. --browser takes the same path
+        # deliberately, on any platform.
+        reason = "Linux" if sys.platform.startswith("linux") else "--browser was given"
         print(f"{reason}: opening in your default browser instead of a native window ...")
         webbrowser.open(f"http://{HOST}:{PORT}")
         print("Press Control+C to quit")
