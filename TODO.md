@@ -59,6 +59,17 @@ to `main` with nothing catching it.
 - Move under gramps-project — would this enable translations?
 - Add recently visited items.
 - Add history of changes per object (once available in gramps-web-api).
+- **KML overlay → source image back-reference**: a KML GroundOverlay embeds
+  the source image's handle as an app-internal `media-handle:<handle>` fake
+  URL (`kmlWrite.ts`/`kmlMedia.ts`) — one-directional and invisible at the
+  Gramps level. It won't show up in a backlink/"referenced by" query, and
+  desktop Gramps' remove-unused-objects tool won't know the two are
+  related; if the image is later detached from whatever else references it
+  (e.g. a Source), the overlay silently breaks with no warning. Cheap fix:
+  `MapItemEditorDialog.tsx`'s `handleSave` also attaches the source image
+  itself to the Place's `media_list` (alongside the KML) when saving an
+  image overlay — makes the relationship visible in the Place's gallery and
+  gives it a real Gramps-level reference.
 
 ## Editing gaps
 
@@ -69,8 +80,12 @@ Not editable at all:
 
 Partially editable, by type:
 - **Person / Family** — LDS ordinances: fully read-only, no edit/add/detach.
-- **Place** — missing: enclosing/parent place hierarchy, alternate names,
-  historical locations, code, name's own language/date.
+- **Place** — enclosing/parent hierarchy (`placeref_list`) can now be set,
+  but only indirectly via Wikidata lookup's Apply (`PlaceEditDialog.tsx`);
+  `ParentPlacesSection.tsx` (RelatedPanel) only displays it, read-only —
+  still no manual add/remove/edit UI for a place's own enclosing places.
+  Also still missing: alternate names, historical locations, code, name's
+  own language/date.
 - **Source** — missing: repository links (can't attach a Source to where
   it's held).
 - **Note** — missing: text formatting/links (plain text only), format
