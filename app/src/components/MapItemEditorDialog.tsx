@@ -38,6 +38,7 @@ import { CircleGlyphButton } from "./CircleGlyphButton";
 import { InfoButton } from "./InfoButton";
 import { RecordPicker } from "./RecordPicker";
 import { pickerResultLabel } from "./RefPickerField";
+import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import type { QueryItem } from "../store/api";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { t } from "../i18n/i18n";
@@ -405,6 +406,15 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   const [newPlaceTitle, setNewPlaceTitle] = useState("");
   const [creatingPlace, setCreatingPlace] = useState(false);
   const [createPlaceError, setCreatePlaceError] = useState<string | null>(null);
+  // Everything WikidataPlaceLookupButton's onChange wrote for this
+  // in-progress place -- place_type/urls/placeref_list, and (only when
+  // newPlaceTitle was still blank) title/name, immediately mirrored into
+  // newPlaceTitle itself below rather than kept here (see that onChange).
+  // Deliberately excludes lat/long: this dialog's whole point is that the
+  // shape just drawn *is* the place, so its own bounds-derived center
+  // (handleCreatePlace's `center`) always wins over whatever coordinates
+  // Wikidata reported for the general area.
+  const [wikidataExtra, setWikidataExtra] = useState<Record<string, unknown>>({});
 
   // Edit mode only: pre-fills `desc` and `place` from the object being
   // edited, so Save doesn't blank out a description or attachment someone
@@ -1293,6 +1303,15 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       await createObjects(token, [{
         _class: "Place",
         handle,
+        // wikidataExtra first, so its own title/name/lat/long (if any --
+        // WikidataPlaceLookupButton's onChange can include title/name
+        // when this was still blank at Apply time) never win over the
+        // authoritative values right after: newPlaceTitle already mirrors
+        // whatever title Wikidata picked (that same onChange), and the
+        // shape's own drawn-bounds center always wins on location, per
+        // this dialog's whole reason for existing (see wikidataExtra's
+        // own doc comment above).
+        ...wikidataExtra,
         title: trimmedTitle,
         name: { _class: "PlaceName", value: trimmedTitle },
         lat: String(center.lat),
@@ -1302,6 +1321,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       setPlace({ handle, title: trimmedTitle });
       setCreatePlaceOpen(false);
       setNewPlaceTitle("");
+      setWikidataExtra({});
     } catch (err: any) {
       setCreatePlaceError(err.message ?? String(err));
     } finally {
@@ -1566,6 +1586,22 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         zIndex={1000}
       >
         <Stack gap="sm">
+          {/* zIndex above this modal's own 1000 -- this dialog lives
+              outside the app's Modal.Stack (see WikidataPlaceLookupButton's
+              own zIndex doc comment), so it needs a manual bump the same
+              way every other nested modal in this file already gets one. */}
+          <WikidataPlaceLookupButton
+            stackId="map-create-place-wikidata"
+            zIndex={1001}
+            data={{ title: newPlaceTitle, ...wikidataExtra }}
+            onChange={(patch) => {
+              // lat/long dropped -- see wikidataExtra's own doc comment on
+              // why this dialog never takes coordinates from Wikidata.
+              const { lat: _lat, long: _long, ...rest } = patch;
+              setWikidataExtra((prev) => ({ ...prev, ...rest }));
+              if (typeof rest.title === "string") setNewPlaceTitle(rest.title);
+            }}
+          />
           <TextInput
             label={t("Place title")}
             placeholder={t("e.g. Smith family farm")}

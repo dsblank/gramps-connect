@@ -1,0 +1,311 @@
+# Wikidata place lookup — implementation plan (gramps-connect)
+
+Supersedes `WIKIDATA_PLACE_LOOKUP_RESEARCH.md` (written against the wrong
+repo). This is the full plan for **this** repo: a React/TS frontend
+(`app/src`) talking to `gramps-web-api` over REST, with no server-side code
+of our own to change (per the project's default of composing existing
+gramps-web-api endpoints rather than modifying it).
+
+## Problem
+
+Users often have `Place` records with weak/missing hierarchy (e.g. a bare
+"Indianapolis" with no link to Marion County / Indiana / United States) and
+no lat/long. Goal: let the user type a place name into the Place editor,
+pick the right match from Wikidata, and have it fill in lat/long **and**
+create/link the missing enclosing places (city → county → state → country),
+each with its own coordinates — with one confirmation step, not a per-level
+wizard.
+
+## Data source & algorithm (verified, carried over unchanged)
+
+Two unauthenticated Wikidata calls, no API key:
+
+1. **Search** — `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=<QUERY>&language=en&format=json&limit=5`.
+   Each hit has `id` (QID), `label`, `description` — the description
+   usually already names the state/country, which is what makes picking the
+   right result easy (e.g. "Indianapolis" → `Q6346`, described as *"capital
+   city of the U.S. state of Indiana and seat of Marion County"*).
+2. **Entity fetch, walked per level** — `https://www.wikidata.org/wiki/Special:EntityData/<QID>.json`.
+   From `entities.<QID>.claims`: `P625` → coordinates, `P131` (take `[0]`)
+   → parent QID (repeat to walk up), `P31` → instance-of QIDs (used to guess
+   a Gramps `PlaceType`), `labels.en.value` → display name. Guard cycles
+   (track visited QIDs) and cap depth (~8).
+
+Verified end-to-end against "Indianapolis" → Marion County → Indiana →
+United States during the original research session. Full worked example and
+prototype Python (to adapt into TS) is preserved below in
+[Appendix: verified example & prototype](#appendix-verified-example--prototype).
+
+`PlaceType` guess table (from `P31`): `Q6256`/`Q3624078` → country,
+`Q35657` → state/province, `Q28575` → county, `Q515` → city, etc.,
+falling back to a free-text custom type using the Wikidata label when
+unmapped. No single Wikidata property cleanly encodes "admin level" across
+every country — this is always best-effort, and the confirmation screen
+(below) lets the user fix a wrong guess before anything is created.
+
+## Repo-specific findings
+
+Answers to the four open questions the original research left for this repo.
+
+### 1. Place schema (gramps core, used as-is by gramps-web-api)
+
+`gramps/gen/lib/place.py:60-98` — `Place` fields relevant here: `title`,
+`name` (`PlaceName`), `lat`/`long` (**strings**, not floats), `place_type`
+(`PlaceType`, a `GrampsType` — built-ins include `COUNTRY`, `STATE`,
+`COUNTY`, `CITY`, `TOWN`, `VILLAGE`, plus `CUSTOM` for freeform text —
+`gen/lib/placetype.py:40-94`), `placeref_list`, and (via `UrlBase`) `urls`.
+
+- **Hierarchy** (`placeref_list`, `gen/lib/placeref.py:44-97`): a flat list
+  of `PlaceRef{ref: handle, date}`. No "type of enclosure" field — a place
+  can have multiple enclosing refs with different dates, but for this
+  feature we always write exactly one (the immediate parent, no date).
+- **No generic Attribute/external-ID field on Place** — unlike
+  Person/Event, `Place` doesn't mix in `AttributeBase`. The only place to
+  stash a Wikidata QID for dedup is `urls` (`UrlBase`): `Url{path, desc,
+  type}`, where `type` is itself a custom-string-capable `GrampsType`.
+  **Convention for this feature**: `path=https://www.wikidata.org/wiki/<QID>`,
+  `type="Wikidata"`.
+- gramps-web-api's Place resource (`gramps-web-api/gramps_webapi/api/resources/places.py:38-65`)
+  is a thin wrapper adding `profile`/`extended` — no schema differences from
+  core to account for.
+
+### 2. API endpoints
+
+`gramps-web-api/gramps_webapi/api/__init__.py:391-408` registers per-object
+CRUD (`POST/GET/PUT/DELETE /places/<handle>`, one `DbTxn` each, needs a
+pre-generated handle) and a `/transactions/` bulk endpoint. **gramps-connect
+already has its own established pattern for this and should keep using
+it**: `POST /api/objects/` (`store/objectsApi.ts`'s `createObjects`) commits
+every object in the array in one `DbTxn`, in array order — so a place can
+reference an enclosing place created earlier in the *same* array by a
+client-generated handle (`createHandle()`, matching gramps'
+`create_id()`). This is exactly what the ancestor chain needs: create
+country, then state (referencing country's handle), then county, then city,
+all in one request.
+
+### 3. Existing UI patterns (app/src)
+
+- `components/PlaceEditDialog.tsx` — presentational Place struct editor
+  (name/type/lat/long/private/urls), data-in/patch-out, no API calls of its
+  own. Nested inside other dialogs (birth/death event's place, etc.).
+- `components/ObjectEditDialog.tsx` — the **generic, FIELD_SPECS-driven**
+  editor that top-level New/Edit Place (MenuBar, Places view) actually goes
+  through (`FIELD_SPECS.place`, lines ~132-142: `place_type`, `lat`, `long`,
+  `private`, `urls`, plus the shared refList/mediaList fields). This is the
+  integration point for the new feature (see Design below) — it currently
+  has **no `placeref_list` field at all**, so enclosing-place hierarchy is
+  not editable through the UI today. This feature is what introduces that
+  write path.
+- `components/RefPickerField.tsx` — the generalized "search, pick, or
+  create new" machinery (`SearchOrCreate`, `RefListField`, backed by
+  `RecordPicker` + `draftStack.ts` for nested drafts). `RecordPicker.tsx`
+  queries via `fetchPage(view, token, ..., whereExpr, ...)` with a
+  query_lang `whereExpr` string (e.g. `like(title, '%term%')`) — this is the
+  mechanism to reuse for the dedup pre-check (see Design).
+- `components/MapItemEditorDialog.tsx` (currently mid-edit on this branch)
+  already has the closest precedent for "compute coordinates, then
+  `createHandle()` + `createObjects()` to mint a new Place in one shot" —
+  its new `handleCreatePlace()` posts `{_class: "Place", handle, title,
+  name, lat, long}` and lets gramps-web-api's `complete_gramps_object_dict`
+  fill in the rest. The Wikidata flow's ancestor-chain creation is the same
+  pattern, just with N places in one `createObjects` call instead of one.
+- `components/related/sections/ParentPlacesSection.tsx` — read-only display
+  of `placeref_list`/`extended.places`, confirming the *display* side
+  already understands the hierarchy; there's no existing *write* flow for
+  it beyond what this feature adds.
+
+### 4. Prior art
+
+**None in this repo or gramps-web-api** — zero hits for
+wikidata/geonames/nominatim/geocod anywhere in gramps-connect or
+gramps-web-api, and no existing external-ID/dedup convention (checked for
+FamilySearch/GEDCOM-X-style linking too — nothing). The sibling **gramps-web**
+(Lit-based) frontend does have working Nominatim geocoding, called
+**directly from the client with no backend proxy**
+(`gramps-web/src/api.js:761-765`'s `queryNominatim()`, used by
+`GrampsjsFormEditLatLong.js` etc.) — useful precedent that calling a public
+geocoding API straight from the browser (no gramps-web-api proxy) is an
+accepted pattern in this ecosystem, which is what we'll do for Wikidata too.
+
+## Design decisions for this repo
+
+- **Entry point**: a new field kind in `ObjectEditDialog.tsx`'s
+  `FIELD_SPECS.place` (e.g. `{ kind: "wikidataLookup" }`), rendered as a
+  "Look up on Wikidata…" button next to `place_type`/`lat`/`long`. Available
+  both when creating a new place and editing an existing one — consistent
+  with how every other Place field already works through this one generic
+  dialog rather than a bespoke component (see `feedback_prefer_consistent_state_pattern`).
+- **New dialog**: `WikidataPlaceLookupDialog.tsx` (new file), opened by that
+  button. Flow: search box (debounced `wbsearchentities` call) → result list
+  showing label + description → pick one → client walks the `P131` chain →
+  one confirmation screen showing the whole resolved chain (root-to-leaf),
+  each row marked **"new"** or **"reuse existing"** (see dedup below), with
+  the guessed `PlaceType` editable inline in case the guess is wrong → single
+  "Apply" commits everything at once. This matches the original research's
+  "one confirmation, not a per-level wizard" decision and the drill-down
+  preview pattern already validated elsewhere in this codebase
+  (`feedback_drilldown_preview_pattern`).
+- **Dedup**: query existing places for the exact Wikidata URL —
+  `like(urls, '%wikidata.org/wiki/<QID>%')` via `fetchPage`/`RecordPicker`'s
+  existing query_lang mechanism. **Verified** (2026-09-06, against
+  `gramps-object-query-language` directly — not just read, actually run):
+  `urls` isn't a registered relationship/collection for `Place` (only
+  `notes`/`citations`/`media`/`tags`/`enclosing_places` are — see
+  `docs/where_expr.md`'s relationship table), so it resolves as an ordinary
+  JSON-path field instead. `like()`/`in`/`regex` force a TEXT extraction
+  regardless of the field's JSON type, and both backends render a
+  composite (array) value as its JSON text on that path —
+  `json_extract(json_data, '$.urls')` on SQLite, `jsonb_extract_path_text
+  (json_data::jsonb, 'urls')` on PostgreSQL — so `LIKE '%wikidata.org/wiki/
+  Q6346%'` does a real substring match against the serialized `urls` array
+  and correctly isolates the one place carrying that QID. Confirmed live,
+  end-to-end, on an in-memory SQLite db (three fixture places, only the
+  matching one returned); confirmed via SQL dry-run + PostgreSQL's
+  documented `jsonb_extract_path_text` semantics for the PostgreSQL
+  dialect (no live Postgres instance available this session to also run
+  it, but the emitted SQL and Postgres's own text-extraction behavior for
+  composite values are unambiguous — no dialect-specific gap expected).
+  No title-match fallback needed. Only the place *currently being edited*
+  is a strict target — every ancestor is either reused (an exact QID
+  match) or newly created; there is no soft/fuzzy match to reject.
+- **Commit**, on "Apply":
+  1. Build the ancestor chain **top-down** (root/country first): for each
+     "new" row, `createHandle()` + a `Place` object dict (`title`, `name`,
+     `lat`, `long`, `place_type`, `urls: [{_class: "Url", path:
+     "https://www.wikidata.org/wiki/<QID>", type: "Wikidata"}]`,
+     `placeref_list: [{_class: "PlaceRef", ref: <parent handle>}]` pointing
+     at the previously-built row in the same array — reused rows contribute
+     their existing handle instead of a new object).
+  2. One `createObjects()` call with every new-row object, in that order
+     (parent before child, matching how `MapItemEditorDialog.tsx`'s
+     `handleCreatePlace` and `createObjects`'s own array-order contract
+     work).
+  3. Patch the dialog's own in-progress Place data (`onChange` on
+     `PlaceEditDialog`/`ObjectEditDialog`'s draft, the same patch-out
+     mechanism every other field already uses) with `lat`, `long`,
+     `place_type` (if accepted), the new `urls` entry for this place's own
+     QID, and a `placeref_list` entry pointing at the immediate parent's
+     handle (new or reused). This still goes through the normal Save button
+     for the place being edited — only the *ancestors* are committed
+     immediately by this dialog; the edited place itself follows the
+     existing create/update path unchanged.
+- **No gramps-web-api changes.** Both Wikidata calls run directly from the
+  browser (matching gramps-web's direct-Nominatim precedent), and all writes
+  go through `objectsApi.ts`'s existing `createObjects`/`updateObject`.
+
+## Implementation steps
+
+1. ~~`store/wikidataApi.ts` (new)~~ — done: `searchWikidata(term)` and
+   `fetchWikidataChain(qid)` (walks `P131`, cycle/depth-guarded), plus the
+   `P31`→`PlaceType` guess table (every QID checked live against real
+   Wikidata labels, not just recalled from the research doc — one, a
+   fabricated `Q13415009`, was dropped). 8 unit tests
+   (`store/__tests__/wikidataApi.test.ts`), `tsc` clean.
+2. ~~Empirically verify the `urls`-field query_lang dedup query~~ — done
+   (see Design above): `like(urls, '%wikidata.org/wiki/<QID>%')` works as-is.
+3. ~~`components/WikidataPlaceLookupDialog.tsx` (new)~~ — done: search UI,
+   root-first chain walk + dedup lookups (the verified `urls` query), one
+   confirmation screen (per-row New/Existing/"This place" badge, editable
+   type override, Back/Apply), "Apply" batches every new ancestor through
+   `createHandle`/`createObjects` top-down then hands the caller a
+   `WikidataLookupResult` for the leaf only. Exports a second component,
+   `WikidataPlaceLookupButton`, that owns the open/close state and the
+   merge-into-existing-`urls`/`placeref_list` logic (appends, never
+   overwrites) against a plain `data`/`onChange` pair — the shared
+   integration point both wiring points below use, so that merge logic is
+   written once.
+4. ~~Wire it into `ObjectEditDialog.tsx`'s `FIELD_SPECS.place`... and
+   `PlaceEditDialog.tsx`~~ — done: a new `wikidataLookup` field kind (no
+   `key`, since it patches several fields at once) in `FIELD_SPECS.place`'s
+   `details`, rendered via `WikidataPlaceLookupButton`, `stackId` derived
+   as `${draft.handle}-wikidata` — confirmed safe under Mantine's
+   Modal.Stack "always mounted, toggle `opened`" rule (EditDialogs.tsx's
+   own doc comment): the field lives inside FIELD_SPECS.place's `details`
+   array, which `Collapse` only animates, never unmounts, and
+   `StoryEditor.tsx`'s own `previewStackId` prop is the exact existing
+   precedent for a field-local nested Modal.Stack member. Same button
+   added directly into `PlaceEditDialog.tsx` (the nested variant), with
+   `stackId` derived from its own `stackId` prop the same way. `tsc` clean,
+   full suite still green (321 tests; the 4 failing files are a pre-existing,
+   unrelated `packages/gramps-date` test-runner issue, confirmed untouched
+   by this work).
+5. Manual test (not yet done): new place from scratch (no existing
+   hierarchy), a place whose county/state already exist (dedup path), a
+   Wikidata entity with an unmapped `P31` (custom-type fallback), and a
+   cyclic/malformed `P131` chain (depth cap). Needs a real login session in
+   the running dev app — hasn't been exercised in a browser yet, only
+   type-checked and unit-tested.
+
+## Out of scope / follow-ups
+
+- No batch/bulk "clean up all my weak places" tool — this is a per-place,
+  user-initiated lookup only.
+- No offline/cached Wikidata mirror — live API calls only, same as
+  gramps-web's Nominatim usage.
+- No plan to ask for a gramps-web-api change to add a proper external-ID
+  field to `Place` — the `urls`-based dedup query works as-is (verified
+  above), per this project's default of not modifying gramps-web-api.
+
+## Appendix: verified example & prototype
+
+### Verified example: "Indianapolis"
+
+Search resolves `"Indianapolis"` → `Q6346` (top hit, correctly
+disambiguated from `Indianapolis Colts`/`Indianapolis Motor Speedway`/etc.
+via the description field). Walking `P131` from `Q6346`:
+
+| Level | QID | Label | Coordinates | `P31` (instance of) | `P131` → |
+|---|---|---|---|---|---|
+| 0 | Q6346 | Indianapolis | 39.7686, -86.1581 | Q62049 (county seat), Q1093829 (big city), Q1074523, Q1549591, Q3301053 | Q506230 |
+| 1 | Q506230 | Marion County | 39.78, -86.14 | Q13410438 (consolidated city-county) | Q1415 |
+| 2 | Q1415 | Indiana | 39.9333, -86.2167 | Q35657 (U.S. state) | Q30 |
+| 3 | Q30 | United States | 39.828, -98.580 | Q3624078, Q1489259, Q6256 (country), Q99541706, Q1520223, Q5035794 | *(none — root)* |
+
+Real, live data pulled during the original research session — confirms the
+chain-walk works end-to-end with no API key.
+
+### Prototype (Python, adapt algorithm to TS)
+
+```python
+import json
+import urllib.request
+
+UA = "GrampsPlaceLookupPrototype/0.1 (doug.blank@gmail.com)"
+
+def get_entity(qid):
+    url = f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json"
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req) as r:
+        data = json.load(r)
+    return data["entities"][qid]
+
+def label(entity, lang="en"):
+    return entity.get("labels", {}).get(lang, {}).get("value", "(no label)")
+
+def get_coords(entity):
+    claims = entity.get("claims", {}).get("P625")
+    if not claims:
+        return None
+    v = claims[0]["mainsnak"].get("datavalue", {}).get("value")
+    return (v["latitude"], v["longitude"]) if v else None
+
+def get_parents(entity):
+    claims = entity.get("claims", {}).get("P131", [])
+    return [c["mainsnak"]["datavalue"]["value"]["id"]
+            for c in claims if c["mainsnak"].get("datavalue")]
+
+def instance_of(entity):
+    claims = entity.get("claims", {}).get("P31", [])
+    return [c["mainsnak"]["datavalue"]["value"]["id"]
+            for c in claims if c["mainsnak"].get("datavalue")]
+
+# Walk from a starting QID up to the root, collecting (qid, label, coords, parents)
+```
+
+## Attribution
+
+Original research session: Claude Sonnet 5,
+https://claude.ai/code/session_01FJos13LHi32uDz7LVXny4p
+
+This plan: Claude Sonnet 5,
+https://claude.ai/code/session_01L2xMTJggDEXRDD82W3ivLv

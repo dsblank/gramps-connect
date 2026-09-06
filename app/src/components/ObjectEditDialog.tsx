@@ -18,6 +18,7 @@ import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
 import { StoryEditor } from "./story/StoryEditor";
+import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -29,6 +30,7 @@ type FieldSpec =
   | { kind: "color"; key: string; label: string }
   | { kind: "date"; key: string; label: string }
   | { kind: "placeName"; label: string }
+  | { kind: "wikidataLookup" }
   | { kind: "styledText"; key: string; label: string }
   | { kind: "storyEditor"; key: string; label: string }
   | {
@@ -132,6 +134,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
   place: {
     quick: [GRAMPS_ID_FIELD, { kind: "placeName", label: "Name" }],
     details: [
+      { kind: "wikidataLookup" },
       { kind: "text", key: "place_type", label: "Type", placeholder: TYPE_HINT },
       { kind: "text", key: "lat", label: "Latitude" },
       { kind: "text", key: "long", label: "Longitude" },
@@ -482,6 +485,15 @@ export function ObjectEditDialog({
           />
         );
       }
+      case "wikidataLookup":
+        return (
+          <WikidataPlaceLookupButton
+            key="wikidataLookup"
+            stackId={`${draft.handle}-wikidata`}
+            data={draft.data}
+            onChange={onChange}
+          />
+        );
       case "styledText": {
         const text = (draft.data[f.key] ?? {}) as Record<string, unknown>;
         const value = (text.string as string | undefined) ?? "";

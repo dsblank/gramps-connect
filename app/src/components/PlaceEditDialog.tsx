@@ -1,5 +1,6 @@
 import { Button, Group, Modal, Stack, Switch, TextInput } from "@mantine/core";
 import { UrlListField, type Url } from "./EmbeddedListFields";
+import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
@@ -23,8 +24,13 @@ interface PlaceEditDialogProps {
  * with its own handle -- top-level New/Edit Place (MenuBar, the Places view)
  * still goes through ObjectEditDialog.tsx's own FIELD_SPECS-driven dialog,
  * unchanged; this component only ever appears nested inside another dialog
- * (see the plan). Same field set as that FIELD_SPECS entry (name, type,
- * lat, long, private, urls) so both stay in sync by inspection. */
+ * (see the plan). Same field set as that FIELD_SPECS entry (Wikidata
+ * lookup, name, type, lat, long, private, urls) so both stay in sync by
+ * inspection. A Wikidata Apply can also silently set `placeref_list`
+ * (WikidataPlaceLookupDialog.tsx) -- there's no field here to see that
+ * directly, same as the top-level dialog; ParentPlacesSection.tsx
+ * (RelatedPanel) is the only place enclosing-place hierarchy is ever
+ * displayed, and only once this place is actually saved. */
 export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone }: PlaceEditDialogProps) {
   const name = (data.name ?? {}) as Record<string, unknown>;
   const titleValue = (name.value as string | undefined) ?? (data.title as string | undefined) ?? "";
@@ -32,6 +38,7 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
   return (
     <Modal opened={opened} onClose={onDone} title={title} size="md" stackId={stackId}>
       <Stack gap="md">
+        <WikidataPlaceLookupButton stackId={`${stackId}-wikidata`} data={data} onChange={onChange} />
         <TextInput
           label={t("Name")}
           value={titleValue}
