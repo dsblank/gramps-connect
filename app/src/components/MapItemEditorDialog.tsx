@@ -24,6 +24,7 @@ import {
 } from "../store/kmlMedia";
 import { featuresToKml, type ImageOverlay } from "../store/kmlWrite";
 import { uploadMedia, updateMediaFile, setMediaDesc } from "../store/jobsApi";
+import { createHandle, createObjects } from "../store/objectsApi";
 import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
@@ -392,6 +393,18 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   const [originalPlace, setOriginalPlace] = useState<{ handle: string; title: string } | null>(null);
   const [placePickerOpen, setPlacePickerOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  // "Create a place from this shape" -- see handleCreatePlace's own doc
+  // comment. A separate small modal rather than routing through
+  // RefPickerField's own onOpenNew/PlaceEditDialog stack: this one specific
+  // field (lat/long) needs to come from the shape just drawn, which that
+  // generic flow has no way to feed in, and everything else a brand-new
+  // place needs beyond a title is exactly what gramps-web-api's own
+  // complete_gramps_object_dict already fills in for a create with just
+  // `{_class: "Place", handle}` (see draftStack.ts's own CLASS_NAME default).
+  const [createPlaceOpen, setCreatePlaceOpen] = useState(false);
+  const [newPlaceTitle, setNewPlaceTitle] = useState("");
+  const [creatingPlace, setCreatingPlace] = useState(false);
+  const [createPlaceError, setCreatePlaceError] = useState<string | null>(null);
 
   // Edit mode only: pre-fills `desc` and `place` from the object being
   // edited, so Save doesn't blank out a description or attachment someone
@@ -1241,6 +1254,61 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     }
   }
 
+  /** Every currently-drawn shape and image overlay's own bounds, combined --
+   * the same "what's on the canvas right now" bounds handleSave itself would
+   * write out, computed synchronously from local state/terra-draw's own
+   * snapshot rather than round-tripping through a save first. Null with
+   * nothing drawn yet (mirrors Save's own disabled condition). */
+  function currentDrawnBounds(): maplibregl.LngLatBounds | null {
+    const bounds = new maplibregl.LngLatBounds();
+    const draw = drawRef.current;
+    if (draw) {
+      for (const f of draw.getSnapshot()) {
+        if (f.geometry == null || f.properties?.selectionPoint || f.properties?.midPoint) continue;
+        extendBounds(bounds, f.geometry as Geometry);
+      }
+    }
+    for (const overlay of overlays) for (const corner of overlay.corners) bounds.extend(corner);
+    return bounds.isEmpty() ? null : bounds;
+  }
+
+  /** Creates a brand-new Place, positioned at the center of whatever's
+   * currently drawn, and attaches this item to it the same way picking an
+   * existing one does -- the actual media_list attach still happens in
+   * handleSave (its own place-vs-originalPlace diff), this just gives that
+   * diff a freshly-created handle to attach to. Answers this feature's own
+   * "would I have to go create the place separately first?" friction for
+   * the common case (a farm, a field, a boundary) where the shape being
+   * drawn *is* the place -- see this dialog's design discussion. */
+  async function handleCreatePlace() {
+    const trimmedTitle = newPlaceTitle.trim();
+    const bounds = currentDrawnBounds();
+    if (!trimmedTitle || !bounds) return;
+    setCreatingPlace(true);
+    setCreatePlaceError(null);
+    try {
+      const token = await getToken();
+      const handle = createHandle();
+      const center = bounds.getCenter();
+      await createObjects(token, [{
+        _class: "Place",
+        handle,
+        title: trimmedTitle,
+        name: { _class: "PlaceName", value: trimmedTitle },
+        lat: String(center.lat),
+        long: String(center.lng),
+      }]);
+      getViewStore("place").requeryDebounced();
+      setPlace({ handle, title: trimmedTitle });
+      setCreatePlaceOpen(false);
+      setNewPlaceTitle("");
+    } catch (err: any) {
+      setCreatePlaceError(err.message ?? String(err));
+    } finally {
+      setCreatingPlace(false);
+    }
+  }
+
   const title = target.kind === "new" ? t("Add Map Overlay") : t("Edit Map Overlay");
 
   // Cheap to recompute on every render (getSnapshot() is just an array
@@ -1331,12 +1399,22 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
               <CircleGlyphButton glyph="−" label={t("Detach this place")} size={18} onClick={() => setPlace(null)} />
             </Group>
           ) : (
-            <CircleGlyphButton
-              glyph="+"
-              label={t("Attach to a place")}
-              textLabel={t("Attach to place")}
-              onClick={() => setPlacePickerOpen(true)}
-            />
+            <Group gap={10} wrap="nowrap">
+              <CircleGlyphButton
+                glyph="+"
+                label={t("Attach to a place")}
+                textLabel={t("Attach to place")}
+                onClick={() => setPlacePickerOpen(true)}
+              />
+              {(hasFeatures || overlays.length > 0) && (
+                <CircleGlyphButton
+                  glyph="⊕"
+                  label={t("Create a new place from this shape's location")}
+                  textLabel={t("New place")}
+                  onClick={() => setCreatePlaceOpen(true)}
+                />
+              )}
+            </Group>
           )}
         </Group>
 
@@ -1478,6 +1556,38 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           }}
           confirmWithButton
         />
+      </Modal>
+
+      <Modal
+        opened={createPlaceOpen}
+        onClose={() => setCreatePlaceOpen(false)}
+        title={t("Create a new place")}
+        size="sm"
+        zIndex={1000}
+      >
+        <Stack gap="sm">
+          <TextInput
+            label={t("Place title")}
+            placeholder={t("e.g. Smith family farm")}
+            value={newPlaceTitle}
+            onChange={(e) => setNewPlaceTitle(e.currentTarget.value)}
+            data-autofocus
+          />
+          <Text size="xs" c="dimmed">
+            {t("Its coordinates will be set to the center of what you've drawn here.")}
+          </Text>
+          {createPlaceError && (
+            <Alert color="red" title={t("Could not create that place")}>{createPlaceError}</Alert>
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setCreatePlaceOpen(false)} disabled={creatingPlace}>
+              {t("Cancel")}
+            </Button>
+            <Button onClick={handleCreatePlace} loading={creatingPlace} disabled={!newPlaceTitle.trim()}>
+              {t("Create")}
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
       <Modal

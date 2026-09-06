@@ -283,3 +283,26 @@ export function kmlCenter(features: Feature[]): [lat: number, long: number] | nu
   if (!bounds) return null;
   return [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2];
 }
+
+/** Same bbox-center guess as kmlCenter, but over a set of image overlays'
+ * corners instead of vector features -- useVisualData.ts's fallback for a
+ * PendingKmlPlace whose only KML attachment is a GroundOverlay (an
+ * overlay-only file: no Point/LineString/Polygon placemark for kmlCenter to
+ * find anything in, since fetchAllKmlFeatures excludes GroundOverlay
+ * placemarks entirely). Without this, a place with only an image overlay
+ * attached and no lat/long of its own never gets a derived position and so
+ * never renders on the map until someone sets its coordinates by hand
+ * (found live). */
+export function kmlOverlayCenter(overlays: KmlImageOverlay[]): [lat: number, long: number] | null {
+  if (overlays.length === 0) return null;
+  const bounds: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const overlay of overlays) {
+    for (const [lng, lat] of overlay.corners) {
+      if (lng < bounds[0]) bounds[0] = lng;
+      if (lat < bounds[1]) bounds[1] = lat;
+      if (lng > bounds[2]) bounds[2] = lng;
+      if (lat > bounds[3]) bounds[3] = lat;
+    }
+  }
+  return [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2];
+}

@@ -101,10 +101,15 @@ export function useVisualData(enabled: boolean): VisualDataState {
     const pending = data.pendingKmlPlaces.filter((place) => !kmlPositionCache.has(place.handle));
     if (pending.length === 0) return;
     let cancelled = false;
-    import("../store/kmlMedia").then(({ fetchAllKmlFeatures, kmlCenter }) => Promise.all(
+    import("../store/kmlMedia").then(({ fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlCenter, kmlOverlayCenter }) => Promise.all(
       pending.map(async (place) => {
         const features = await fetchAllKmlFeatures(place.kmlMedia);
-        kmlPositionCache.set(place.handle, kmlCenter(features));
+        // Falls back to the image overlays' own corners when the file has
+        // no vector shape to read a position from -- see kmlOverlayCenter's
+        // own doc comment on why kmlCenter alone finds nothing for a
+        // GroundOverlay-only attachment.
+        const position = kmlCenter(features) ?? kmlOverlayCenter(await fetchAllKmlImageOverlays(place.kmlMedia));
+        kmlPositionCache.set(place.handle, position);
       }),
     )).then(() => {
       if (!cancelled) setKmlTick((n) => n + 1);
