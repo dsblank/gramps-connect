@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import type { FeatureCollection, Point as GeoJsonPoint } from "geojson";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
 import { fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds } from "../../store/kmlMedia";
@@ -12,7 +13,7 @@ import { readVisualColors } from "./cssVar";
 import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { t } from "../../i18n/i18n";
-import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl } from "./mapStyles";
+import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl, overlayDateVisible } from "./mapStyles";
 // maplibre-gl loads its tile-parsing/clustering work off the main thread via
 // `new Worker(new URL(\`./${name}\`, import.meta.url))`, with the filename
 // built from a template literal at runtime -- Vite's static asset scanner
@@ -113,6 +114,14 @@ interface MapCanvasProps {
    * this year (see MapModeControl / mapStyles.ts); null is the plain
    * OpenFreeMap basemap, unfiltered. */
   ohmYear: number | null;
+  /** Bumped by MapView after OverlayLayersPanel.tsx patches an overlay's
+   * opacity/order/name in place -- the only way an existing KML handle's
+   * *content* changes without the set of attached handles itself changing
+   * (`kmlKey` alone wouldn't notice), so the image-overlay effect below
+   * takes this as an extra "refetch anyway" trigger. Optional/undefined for
+   * every other caller, who never edits a KML file out from under this
+   * component. */
+  overlayRefreshToken?: number;
 }
 
 function toGeoJson(
@@ -150,7 +159,7 @@ const DIM_OPACITY = 0.15;
  * lazily -- maplibre-gl is by far the heaviest thing in this app, and a
  * session that never opens View > Map should never download it. */
 export function MapCanvas({
-  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace, ohmYear,
+  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace, ohmYear, overlayRefreshToken,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -172,6 +181,10 @@ export function MapCanvas({
   onSelectRef.current = onSelectPlace;
   const ohmYearRef = useRef(ohmYear);
   ohmYearRef.current = ohmYear;
+  // layer id -> the owning place's name.date, populated by the image-overlay
+  // effect below and read by the lightweight ohmYear-only effect just after
+  // it -- see both for why this is split into two effects.
+  const overlayNameDateRef = useRef<Map<string, GrampsDate | undefined>>(new Map());
 
   // Create once. The style is swapped in place on a colour-scheme change (see
   // the effect below) rather than recreating the map, which would lose the
@@ -532,6 +545,16 @@ export function MapCanvas({
     };
   }, [kmlKey, ready]);
 
+  // handle (a KML media object, i.e. what a MapPlace.kmlMedia entry is) ->
+  // that place's own name.date -- what gates an overlay parsed out of that
+  // file's date visibility (overlayDateVisible, applied below). Multiple
+  // places could in principle list the same KML handle (they can't today --
+  // one KML is always attached to exactly one place -- but this stays a
+  // plain last-write-wins map rather than assuming that).
+  const nameDateByKmlHandle = new Map(
+    places.flatMap((place) => place.kmlMedia.map((handle) => [handle, place.nameDate] as const))
+  );
+
   // Image overlays (KML GroundOverlay -- see MapItemEditorDialog.tsx's own
   // doc comment on that feature) attached to any currently-plotted place.
   // Not a geojson source like the shapes above: maplibre has no "image"
@@ -540,6 +563,11 @@ export function MapCanvas({
   // `kmlKey` change (add-then-remove rather than a finer diff) -- this only
   // runs when the set of KML-attached places on screen actually changes,
   // same trigger as the geojson overlay above, so it's not a hot path.
+  // Sorted by `order` ascending before insertion: each addLayer(..., beforeId)
+  // call inserts its layer immediately below `beforeId`, pushing whatever was
+  // already there further down -- so inserting lowest-order first means the
+  // highest-order overlay ends up added last, landing closest to (and so
+  // rendering just below) KML_FILL_LAYER, i.e. on top of the others.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -554,6 +582,7 @@ export function MapCanvas({
     (async () => {
       const overlays = kmlKey === "" ? [] : await fetchAllKmlImageOverlays(kmlKey.split(","));
       if (cancelled || overlays.length === 0) return;
+      overlays.sort((a, b) => a.order - b.order);
       const token = await getToken();
       if (cancelled) return;
       for (const [i, overlay] of overlays.entries()) {
@@ -570,18 +599,42 @@ export function MapCanvas({
         // markers" reasoning as those) so a place pin sitting on top of an
         // old-map overlay stays clickable.
         map.addLayer({ id, type: "raster", source: id }, KML_FILL_LAYER);
+        map.setPaintProperty(id, "raster-opacity", overlay.opacity);
+        const nameDate = nameDateByKmlHandle.get(overlay.kmlHandle);
+        overlayNameDateRef.current.set(id, nameDate);
+        map.setLayoutProperty(id, "visibility", overlayDateVisible(nameDate, ohmYearRef.current) ? "visible" : "none");
         addedIds.push(id);
       }
     })();
     return () => {
       cancelled = true;
       for (const id of addedIds) {
+        overlayNameDateRef.current.delete(id);
         if (map.getLayer(id)) map.removeLayer(id);
         if (map.getSource(id)) map.removeSource(id);
       }
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [kmlKey, ready]);
+    // nameDateByKmlHandle is derived fresh from `places` every render --
+    // deliberately not a dependency (it'd fire this whole rebuild on every
+    // place-store tick); `kmlKey` already captures every case that changes
+    // which KML files (and so which overlays/dates) are actually in play.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kmlKey, ready, overlayRefreshToken]);
+
+  // Re-checks each already-added overlay's date visibility against a new
+  // `ohmYear` alone (a slider drag) -- a plain layout-property toggle, not
+  // the rebuild above, so scrubbing the historical-map year never
+  // re-fetches a single image. overlayNameDateRef is populated by the
+  // effect above and outlives it (not cleared on this effect's own re-run).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    for (const [id, nameDate] of overlayNameDateRef.current) {
+      if (!map.getLayer(id)) continue;
+      map.setLayoutProperty(id, "visibility", overlayDateVisible(nameDate, ohmYear) ? "visible" : "none");
+    }
+  }, [ohmYear, ready]);
 
   // Fit to the requested places (see fitRequest). Skipped at fitRequest 0 so
   // the remembered viewport survives the first open.

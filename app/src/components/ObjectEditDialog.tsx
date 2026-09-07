@@ -30,6 +30,14 @@ type FieldSpec =
   | { kind: "color"; key: string; label: string }
   | { kind: "date"; key: string; label: string }
   | { kind: "placeName"; label: string }
+  // Place.name (a PlaceName struct) carries its own `date`/`lang` alongside
+  // `value` -- these read/write draft.data.name.date / .lang the same way
+  // "placeName" already reads/writes .value, rather than a flat top-level
+  // key like the plain "date"/"text" kinds. Nothing else in this dialog
+  // has a struct-nested field, so this stays its own kind rather than a
+  // generalized "nested date"/"nested text".
+  | { kind: "placeNameDate"; label: string }
+  | { kind: "placeNameLang"; label: string }
   | { kind: "wikidataLookup" }
   | { kind: "styledText"; key: string; label: string }
   | { kind: "storyEditor"; key: string; label: string }
@@ -136,6 +144,8 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     details: [
       { kind: "wikidataLookup" },
       { kind: "text", key: "place_type", label: "Type", placeholder: TYPE_HINT },
+      { kind: "placeNameDate", label: "Date" },
+      { kind: "placeNameLang", label: "Language" },
       { kind: "text", key: "lat", label: "Latitude" },
       { kind: "text", key: "long", label: "Longitude" },
       { kind: "switch", key: "private", label: "Private" },
@@ -481,6 +491,35 @@ export function ObjectEditDialog({
             onChange={(e) => {
               const v = e.currentTarget.value;
               onChange({ title: v, name: { _class: "PlaceName", ...name, value: v } });
+            }}
+          />
+        );
+      }
+      case "placeNameDate": {
+        const name = (draft.data.name ?? {}) as Record<string, unknown>;
+        const value = (name.date as GrampsDate | undefined) ?? null;
+        return (
+          <DateInput
+            key="placeNameDate"
+            id={`${draft.handle}-name-date`}
+            label={f.label}
+            value={value}
+            onChange={(date) => onChange({ name: { _class: "PlaceName", ...name, date: date ?? undefined } })}
+          />
+        );
+      }
+      case "placeNameLang": {
+        const name = (draft.data.name ?? {}) as Record<string, unknown>;
+        const value = (name.lang as string | undefined) ?? "";
+        return (
+          <TextInput
+            key="placeNameLang"
+            label={f.label}
+            placeholder="e.g. en, fr, la"
+            value={value}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              onChange({ name: { _class: "PlaceName", ...name, lang: v } });
             }}
           />
         );

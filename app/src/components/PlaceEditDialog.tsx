@@ -1,6 +1,8 @@
 import { Button, Group, Modal, Stack, Switch, TextInput } from "@mantine/core";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { UrlListField, type Url } from "./EmbeddedListFields";
 import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
+import { DateInput } from "./DateInput";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
@@ -53,6 +55,18 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           placeholder={TYPE_HINT}
           value={(data.place_type as string | undefined) ?? ""}
           onChange={(e) => onChange({ place_type: e.currentTarget.value })}
+        />
+        <DateInput
+          id={`${stackId}-name-date`}
+          label={t("Date")}
+          value={(name.date as GrampsDate | undefined) ?? null}
+          onChange={(date) => onChange({ name: { _class: "PlaceName", ...name, date: date ?? undefined } })}
+        />
+        <TextInput
+          label={t("Language")}
+          placeholder="e.g. en, fr, la"
+          value={(name.lang as string | undefined) ?? ""}
+          onChange={(e) => onChange({ name: { _class: "PlaceName", ...name, lang: e.currentTarget.value } })}
         />
         <TextInput
           label={t("Latitude")}

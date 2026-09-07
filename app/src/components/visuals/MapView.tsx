@@ -9,6 +9,7 @@ import type { EventRecord, MapPlace } from "../../store/visualData";
 import { MapModeControl } from "./MapModeControl";
 import type { MapMode } from "./mapStyles";
 import { NoMatches } from "./NoMatches";
+import { OverlayLayersPanel } from "./OverlayLayersPanel";
 import { ScopeChip, type ScopeMode } from "./ScopeChip";
 import { VisualFrame } from "./VisualFrame";
 import { t } from "../../i18n/i18n";
@@ -46,6 +47,9 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   // than which basemap tiles are shown.
   const [mapMode, setMapMode] = useState<MapMode>("standard");
   const [historicalYear, setHistoricalYear] = useState(() => new Date().getFullYear());
+  // Bumped by OverlayLayersPanel after it patches an overlay's opacity/order
+  // in place -- see MapCanvas.tsx's own doc comment on why it needs this.
+  const [overlayRefreshToken, setOverlayRefreshToken] = useState(0);
 
   // "Auto" resolves to the latest year among the current subject's linked
   // events -- null when there's no scoped subject to derive one from (the
@@ -395,8 +399,14 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           selectedHandle={selected?.handle ?? null}
           onSelectPlace={setSelected}
           ohmYear={ohmYear}
+          overlayRefreshToken={overlayRefreshToken}
         />
       </Suspense>
+      <OverlayLayersPanel
+        places={places}
+        ohmYear={ohmYear}
+        onChanged={() => setOverlayRefreshToken((n) => n + 1)}
+      />
       {noMatches && <NoMatches {...noMatches} />}
       {selected && (
         <PlaceCard

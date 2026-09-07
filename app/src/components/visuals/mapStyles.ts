@@ -10,6 +10,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 // and it's what both callers use directly rather than the `map.filterByDate`
 // method the plugin's own README shows for a script-tag install.
 import { filterByDate } from "@openhistoricalmap/maplibre-gl-dates";
+import { Modifier, getStartDate, getStopDate, isCompound, type GrampsDate } from "@gramps-connect/gramps-date";
 
 /** The same OpenFreeMap "liberty" style gramps-web uses for its light
  * basemap, so the two clients' maps look like the same product in light
@@ -122,4 +123,28 @@ export function crossfadeStyleSwap(map: MapLibreMap, styleUrl: string, beforeSwa
  * so a slider drag never needs a style reload to take effect. */
 export function applyOhmYear(map: MapLibreMap, year: number): void {
   filterByDate(map, String(Math.round(year)));
+}
+
+/** Whether a Place's own name.date should be considered "in effect" at
+ * `ohmYear` -- what gates an image overlay attached to that place's
+ * visibility (see MapCanvas.tsx/StoryMapBackground.tsx's own overlay
+ * effects, and the plan: an overlay's visible date range is read from the
+ * Place it's attached to, not stored on the overlay itself). No date at
+ * all, or no year context (ohmYear null -- standard mode, or auto/
+ * historical with nothing to derive a year from), means always visible: an
+ * undated overlay (e.g. a hand-drawn boundary that doesn't depend on any
+ * particular era) should never disappear just because historical mode
+ * happens to be on. A TEXTONLY date (free text, no structured year) has
+ * nothing to compare either, so it's treated the same as no date at all. */
+export function overlayDateVisible(date: GrampsDate | undefined, ohmYear: number | null): boolean {
+  if (!date || ohmYear === null) return true;
+  const startYear = getStartDate(date)[2];
+  if (!startYear) return true;
+  if (date.modifier === Modifier.BEFORE || date.modifier === Modifier.TO) return ohmYear <= startYear;
+  if (date.modifier === Modifier.AFTER || date.modifier === Modifier.FROM) return ohmYear >= startYear;
+  const stopYear = isCompound(date) ? getStopDate(date)[2] : startYear;
+  if (!stopYear) return true;
+  const minYear = Math.min(startYear, stopYear);
+  const maxYear = Math.max(startYear, stopYear);
+  return ohmYear >= minYear && ohmYear <= maxYear;
 }

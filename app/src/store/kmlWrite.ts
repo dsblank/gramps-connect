@@ -13,6 +13,9 @@ import type { OverlayCorners } from "./kmlMedia";
 export interface ImageOverlay {
   handle: string;
   corners: OverlayCorners;
+  name?: string;
+  opacity?: number;
+  order?: number;
 }
 
 /** kmlMedia.ts's fetchAllKmlImageOverlays looks for this exact prefix.
@@ -28,6 +31,25 @@ function escapeXml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Round-trips name/opacity/order the same plain-ExtendedData way a drawn
+ * shape's `color` does (via GeoJSON properties + tokml) and the legacy
+ * <LatLonBox> path's `rotation` used to (see kmlMedia.ts's own comment) --
+ * a GroundOverlay isn't a GeoJSON feature so it gets no automatic
+ * properties->ExtendedData conversion from tokml, hence this hand-built
+ * block. Omits an entry entirely when unset/default, so an overlay with no
+ * name/order override and full opacity still round-trips to the exact same
+ * bytes as before these fields existed. */
+function overlayExtendedData(overlay: ImageOverlay): string {
+  const entries = [
+    overlay.name ? `<Data name="name"><value>${escapeXml(overlay.name)}</value></Data>` : "",
+    overlay.opacity !== undefined && overlay.opacity !== 1
+      ? `<Data name="opacity"><value>${overlay.opacity}</value></Data>`
+      : "",
+    overlay.order !== undefined ? `<Data name="order"><value>${overlay.order}</value></Data>` : "",
+  ].join("");
+  return entries ? `<ExtendedData>${entries}</ExtendedData>` : "";
 }
 
 function overlayToKml(overlay: ImageOverlay): string {
@@ -47,6 +69,7 @@ function overlayToKml(overlay: ImageOverlay): string {
     "<GroundOverlay>"
     + `<Icon><href>${href}</href></Icon>`
     + `<gx:LatLonQuad><coordinates>${coords}</coordinates></gx:LatLonQuad>`
+    + overlayExtendedData(overlay)
     + "</GroundOverlay>"
   );
 }

@@ -75,6 +75,25 @@ export type OverlayCorners = [[number, number], [number, number], [number, numbe
 export interface KmlImageOverlay {
   imageHandle: string;
   corners: OverlayCorners;
+  /** The KML media object this overlay was parsed out of -- lets a caller
+   * that fetched several places' KML at once (MapCanvas.tsx,
+   * StoryMapBackground.tsx) trace an overlay back to the Place it's
+   * attached to, whose own name.date gates this overlay's date
+   * visibility (see kmlMediaToPlace-style lookups built by those
+   * callers). */
+  kmlHandle: string;
+  /** Label shown in the Overlays panel/editor -- purely descriptive, no
+   * effect on rendering. Undefined for an overlay saved before this field
+   * existed. */
+  name?: string;
+  /** 0-1, applied as the rendered raster layer's `raster-opacity`. Defaults
+   * to fully opaque for an overlay saved before this field existed. */
+  opacity: number;
+  /** Stacking rank among every overlay attached to the same place(s) --
+   * higher draws on top. Defaults to this overlay's position in file/array
+   * order (see fetchAllKmlImageOverlays), preserving a pre-existing file's
+   * current visual stacking until the user deliberately reorders it. */
+  order: number;
 }
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -200,35 +219,50 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
   if (handles.length === 0) return [];
   const collections = await Promise.all(handles.map(fetchKmlFeatures));
   const overlays: KmlImageOverlay[] = [];
-  for (const feature of collections.flat()) {
-    if (feature.properties?.["@geometry-type"] !== "groundoverlay") continue;
-    const icon = feature.properties?.icon as string | undefined;
-    if (!icon || !icon.startsWith(MEDIA_HANDLE_PREFIX)) continue;
-    const imageHandle = icon.slice(MEDIA_HANDLE_PREFIX.length);
-    const bbox = feature.bbox as [number, number, number, number] | undefined;
-    if (bbox) {
-      // An *old* overlay, saved before this app always wrote explicit
-      // corners -- a plain <LatLonBox><rotation>. @tmcw/togeojson's own
-      // LatLonBox parsing folds <rotation> straight into the geometry ring
-      // it returns (bakes it into already-rotated coordinates) rather than
-      // exposing the raw number anywhere -- so kmlWrite.ts used to also
-      // write it redundantly as a plain ExtendedData property, the same
-      // round-trip trick used for a drawn shape's `color`, read back here
-      // instead of reverse-engineering the angle from the ring. Missing
-      // (a save from before rotation existed at all) defaults to 0.
-      const rotation = Number(feature.properties?.rotation ?? 0) || 0;
-      const corners = cornersFromBox({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3], rotation });
-      overlays.push({ imageHandle, corners });
-      continue;
+  for (let h = 0; h < handles.length; h++) {
+    const kmlHandle = handles[h];
+    for (const feature of collections[h]) {
+      if (feature.properties?.["@geometry-type"] !== "groundoverlay") continue;
+      const icon = feature.properties?.icon as string | undefined;
+      if (!icon || !icon.startsWith(MEDIA_HANDLE_PREFIX)) continue;
+      const imageHandle = icon.slice(MEDIA_HANDLE_PREFIX.length);
+      // name/opacity/order round-trip the same ExtendedData way `rotation`
+      // used to (see the comment below) -- a plain <Data name="..."> element,
+      // which @tmcw/togeojson surfaces flattened onto `feature.properties`.
+      // Missing/unparseable defaults to "no label", fully opaque, and this
+      // overlay's own position among the ones already collected -- so an
+      // older file (saved before these fields existed) keeps rendering
+      // exactly as it did before.
+      const name = (feature.properties?.name as string | undefined) || undefined;
+      const opacityRaw = Number(feature.properties?.opacity);
+      const opacity = Number.isFinite(opacityRaw) && opacityRaw >= 0 && opacityRaw <= 1 ? opacityRaw : 1;
+      const orderRaw = Number(feature.properties?.order);
+      const order = Number.isFinite(orderRaw) ? orderRaw : overlays.length * 10;
+      const bbox = feature.bbox as [number, number, number, number] | undefined;
+      if (bbox) {
+        // An *old* overlay, saved before this app always wrote explicit
+        // corners -- a plain <LatLonBox><rotation>. @tmcw/togeojson's own
+        // LatLonBox parsing folds <rotation> straight into the geometry ring
+        // it returns (bakes it into already-rotated coordinates) rather than
+        // exposing the raw number anywhere -- so kmlWrite.ts used to also
+        // write it redundantly as a plain ExtendedData property, the same
+        // round-trip trick used for a drawn shape's `color`, read back here
+        // instead of reverse-engineering the angle from the ring. Missing
+        // (a save from before rotation existed at all) defaults to 0.
+        const rotation = Number(feature.properties?.rotation ?? 0) || 0;
+        const corners = cornersFromBox({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3], rotation });
+        overlays.push({ imageHandle, corners, name, opacity, order, kmlHandle });
+        continue;
+      }
+      // No bbox -- @tmcw/togeojson's getGroundOverlayBox() only omits it for
+      // a <gx:LatLonQuad> overlay (kmlWrite.ts's own output), whose 4 free
+      // corners it instead returns as a Polygon ring (closed: first point
+      // repeated last). A ring that isn't exactly that shape (a foreign file,
+      // or a parse failure) is skipped, same as a missing bbox always was.
+      const ring = feature.geometry?.type === "Polygon" ? (feature.geometry.coordinates[0] as [number, number][]) : undefined;
+      if (!ring || ring.length !== 5) continue;
+      overlays.push({ imageHandle, corners: ring.slice(0, 4) as OverlayCorners, name, opacity, order, kmlHandle });
     }
-    // No bbox -- @tmcw/togeojson's getGroundOverlayBox() only omits it for
-    // a <gx:LatLonQuad> overlay (kmlWrite.ts's own output), whose 4 free
-    // corners it instead returns as a Polygon ring (closed: first point
-    // repeated last). A ring that isn't exactly that shape (a foreign file,
-    // or a parse failure) is skipped, same as a missing bbox always was.
-    const ring = feature.geometry?.type === "Polygon" ? (feature.geometry.coordinates[0] as [number, number][]) : undefined;
-    if (!ring || ring.length !== 5) continue;
-    overlays.push({ imageHandle, corners: ring.slice(0, 4) as OverlayCorners });
   }
   return overlays;
 }

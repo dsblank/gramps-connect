@@ -18,7 +18,8 @@ import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { readVisualColors } from "../visuals/cssVar";
 import { seriesColor } from "../visuals/eventCategories";
-import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl } from "../visuals/mapStyles";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl, overlayDateVisible } from "../visuals/mapStyles";
 import { PIN_PATH_D } from "./storyMarker";
 
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
@@ -34,7 +35,7 @@ const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: "FeatureCollection",
 
 export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, panelFraction, ohmYear }: {
   initialCenter: [number, number];
-  currentPoint: { lat: number; long: number; kmlMedia: string[] } | undefined;
+  currentPoint: { lat: number; long: number; kmlMedia: string[]; nameDate?: GrampsDate } | undefined;
   dark: boolean;
   opened: boolean;
   /** How much of the container's right side the content panel covers (see
@@ -66,6 +67,9 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
   darkRef.current = dark;
   const ohmYearRef = useRef(ohmYear);
   ohmYearRef.current = ohmYear;
+  // layer id -> the current slide's own name.date -- see MapCanvas.tsx's
+  // identical ref for why this is split from the rebuild effect below.
+  const overlayNameDateRef = useRef<Map<string, GrampsDate | undefined>>(new Map());
   // What the live map was actually built (or last swapped) with -- lets the
   // style-swap effect below tell "the style actually needs to change" from
   // "this is just the effect's own mount", the same distinction
@@ -289,6 +293,7 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
       if (cancelled || overlays.length === 0) return;
       const token = await getToken();
       if (cancelled) return;
+      overlays.sort((a, b) => a.order - b.order);
       for (const [i, overlay] of overlays.entries()) {
         const id = `${KML_SOURCE}-image-${i}`;
         if (map.getSource(id)) continue;
@@ -300,18 +305,39 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
         objectUrls.push(url);
         map.addSource(id, { type: "image", url, coordinates: overlay.corners });
         map.addLayer({ id, type: "raster", source: id }, KML_FILL_LAYER);
+        map.setPaintProperty(id, "raster-opacity", overlay.opacity);
+        overlayNameDateRef.current.set(id, currentPoint?.nameDate);
+        map.setLayoutProperty(
+          id, "visibility", overlayDateVisible(currentPoint?.nameDate, ohmYearRef.current) ? "visible" : "none",
+        );
         addedIds.push(id);
       }
     })();
     return () => {
       cancelled = true;
       for (const id of addedIds) {
+        overlayNameDateRef.current.delete(id);
         if (map.getLayer(id)) map.removeLayer(id);
         if (map.getSource(id)) map.removeSource(id);
       }
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
+    // currentPoint?.nameDate is 1:1 with kmlKey (both come from the same
+    // place) -- not a separate dependency, same reasoning as
+    // MapCanvas.tsx's nameDateByKmlHandle exclusion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kmlKey, ready]);
+
+  // Re-checks each already-added overlay's date visibility against a new
+  // `ohmYear` alone -- see MapCanvas.tsx's identical effect.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    for (const [id, nameDate] of overlayNameDateRef.current) {
+      if (!map.getLayer(id)) continue;
+      map.setLayoutProperty(id, "visibility", overlayDateVisible(nameDate, ohmYear) ? "visible" : "none");
+    }
+  }, [ohmYear, ready]);
 
   useEffect(() => {
     const map = mapRef.current;

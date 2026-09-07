@@ -84,8 +84,12 @@ Partially editable, by type:
   but only indirectly via Wikidata lookup's Apply (`PlaceEditDialog.tsx`);
   `ParentPlacesSection.tsx` (RelatedPanel) only displays it, read-only —
   still no manual add/remove/edit UI for a place's own enclosing places.
-  Also still missing: alternate names, historical locations, code, name's
-  own language/date.
+  Also still missing: **alternate names** (add/edit/remove — a Place's
+  `alt_names` list is displayed read-only in RelatedPanel but has no editor;
+  each entry is its own `PlaceName` with its own `value`/`date`/`lang`, e.g.
+  for recording a place's older name and the era it applied — the map
+  overlay feature's date gating currently only reads the *primary* name's
+  date for exactly this reason), historical locations, code.
 - **Source** — missing: repository links (can't attach a Source to where
   it's held).
 - **Note** — missing: text formatting/links (plain text only), format

@@ -10,9 +10,10 @@ import {
 import type { GeoJSONStoreFeatures, HexColor } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
+import { formatDate, type GrampsDate } from "@gramps-connect/gramps-date";
 import {
-  Alert, Anchor, Box, Button, ColorInput, Divider, Group, Kbd, List, Loader, Modal, SegmentedControl, Stack, Text,
-  TextInput, useComputedColorScheme,
+  Alert, Anchor, Box, Button, ColorInput, Divider, Group, Kbd, List, Loader, Modal, NumberInput, SegmentedControl,
+  Slider, Stack, Text, TextInput, useComputedColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getToken } from "../auth/auth";
@@ -24,7 +25,7 @@ import {
 } from "../store/kmlMedia";
 import { featuresToKml, type ImageOverlay } from "../store/kmlWrite";
 import { uploadMedia, updateMediaFile, setMediaDesc } from "../store/jobsApi";
-import { createHandle, createObjects } from "../store/objectsApi";
+import { createHandle, createObjects, fetchPlainObject } from "../store/objectsApi";
 import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
@@ -90,6 +91,18 @@ interface ImageOverlayDraft {
   id: string;
   handle: string;
   corners: OverlayCorners;
+  /** Label shown in this dialog's own properties panel and (once saved)
+   * the Overlays panel -- purely descriptive, mirrors kmlMedia.ts's
+   * KmlImageOverlay.name. */
+  name?: string;
+  /** 0-1; undefined means "fully opaque", same default as an overlay saved
+   * before this field existed (see kmlMedia.ts's own default). */
+  opacity?: number;
+  /** Stacking rank among every overlay attached to the currently-plotted
+   * place(s) -- not just the ones in this file (see kmlMedia.ts's
+   * KmlImageOverlay.order). Defaults to this overlay's position among the
+   * others already in `overlays` state when first added/loaded. */
+  order?: number;
 }
 
 /** What's tracked per mounted image overlay -- everything needed to move
@@ -353,6 +366,11 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // system from terra-draw (which has no image geometry type), see the
   // block of effects/handlers below this component's map-setup effect.
   const [overlays, setOverlays] = useState<ImageOverlayDraft[]>([]);
+  // Mirrors `overlays` for startMove's onUp (below), set up once per mount
+  // and so unable to see a later opacity edit via closure alone -- same
+  // colorRef/selectedIdRef pattern as elsewhere in this file.
+  const overlaysRef = useRef(overlays);
+  overlaysRef.current = overlays;
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   // Which overlay's move/resize/delete handles are currently showing --
   // set on mousedown over that overlay's image (see mountOverlay), cleared
@@ -393,6 +411,29 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   const [place, setPlace] = useState<{ handle: string; title: string } | null>(null);
   const [originalPlace, setOriginalPlace] = useState<{ handle: string; title: string } | null>(null);
   const [placePickerOpen, setPlacePickerOpen] = useState(false);
+  // Read-only: an overlay's date visibility comes from the attached
+  // Place's own name.date (see the plan) rather than a field on the
+  // overlay itself, so this is fetched purely to show the user where that
+  // date actually lives -- editing it happens via the ordinary Place
+  // editor (Places view / RelatedPanel), not here.
+  const [placeDate, setPlaceDate] = useState<GrampsDate | null>(null);
+  useEffect(() => {
+    if (!place) {
+      setPlaceDate(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      const obj = await fetchPlainObject(token, PLACE_VIEW, place.handle).catch(() => null);
+      if (cancelled) return;
+      const name = (obj?.name ?? {}) as Record<string, unknown>;
+      setPlaceDate((name.date as GrampsDate | undefined) ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [place]);
   const [infoOpen, setInfoOpen] = useState(false);
   // "Create a place from this shape" -- see handleCreatePlace's own doc
   // comment. A separate small modal rather than routing through
@@ -793,6 +834,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // beforeId keeps this under terra-draw's own shape layers -- see
     // OVERLAY_ANCHOR_LAYER's own doc comment.
     map.addLayer({ id: sourceId, type: "raster", source: sourceId }, OVERLAY_ANCHOR_LAYER);
+    map.setPaintProperty(sourceId, "raster-opacity", overlay.opacity ?? 1);
 
     // The live geometry during a drag -- `overlays` state (below) is only
     // synced at gesture end, both for perf (no re-render per drag frame)
@@ -952,7 +994,12 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         map.dragPan.enable();
-        map.setPaintProperty(sourceId, "raster-opacity", 1);
+        // Restores this overlay's own persisted opacity (not necessarily
+        // fully opaque) -- overlaysRef, not the `overlay` param captured at
+        // mount time, so an opacity edit made since this overlay was
+        // mounted is still honored.
+        const current = overlaysRef.current.find((o) => o.id === overlay.id);
+        map.setPaintProperty(sourceId, "raster-opacity", current?.opacity ?? 1);
         commit();
       };
       document.addEventListener("mousemove", onMove);
@@ -1020,6 +1067,22 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     }
   }, [selectedOverlayId, showCornerHandles]);
 
+  const selectedOverlay = overlays.find((o) => o.id === selectedOverlayId) ?? null;
+
+  /** Patches the selected overlay's name/opacity/order in `overlays` state
+   * -- and, for opacity, also pushes the change straight onto the live
+   * mounted layer for immediate visual feedback, the same way color
+   * changes update terra-draw's own selected feature in place rather than
+   * waiting for Save. No-op with nothing selected. */
+  function updateSelectedOverlay(patch: Partial<Pick<ImageOverlayDraft, "name" | "opacity" | "order">>) {
+    if (!selectedOverlayId) return;
+    setOverlays((prev) => prev.map((o) => (o.id === selectedOverlayId ? { ...o, ...patch } : o)));
+    if (patch.opacity !== undefined) {
+      const mount = overlayMountsRef.current.get(selectedOverlayId);
+      if (mount) mapRef.current?.setPaintProperty(mount.sourceId, "raster-opacity", patch.opacity);
+    }
+  }
+
   /** RecordPicker's onPick for the image overlay picker -- rejects
    * anything that isn't actually an image (a KML/PDF/audio media object
    * picked by mistake) rather than trying to render it, then centers a
@@ -1058,6 +1121,10 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           [topLeft.lng, topLeft.lat], [bottomRight.lng, topLeft.lat],
           [bottomRight.lng, bottomRight.lat], [topLeft.lng, bottomRight.lat],
         ],
+        // Same default-rank convention as kmlMedia.ts's own reader --
+        // leaves room to insert between existing overlays later without
+        // renumbering.
+        order: overlays.length * 10,
       };
       setOverlays((prev) => [...prev, draft]);
       // Awaited (unlike the edit-mode load effect's own fire-and-forget
@@ -1137,6 +1204,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       for (const overlay of overlays) {
         const draft: ImageOverlayDraft = {
           id: crypto.randomUUID(), handle: overlay.imageHandle, corners: overlay.corners,
+          name: overlay.name, opacity: overlay.opacity, order: overlay.order,
         };
         setOverlays((prev) => [...prev, draft]);
         mountOverlay(draft);
@@ -1206,7 +1274,9 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     setError(null);
     try {
       const token = await getToken();
-      const imageOverlays: ImageOverlay[] = overlays.map(({ handle, corners }) => ({ handle, corners }));
+      const imageOverlays: ImageOverlay[] = overlays.map(({ handle, corners, name, opacity, order }) => ({
+        handle, corners, name, opacity, order,
+      }));
       const blob = new Blob([featuresToKml(features, imageOverlays)], { type: KML_MIME });
       const trimmedDesc = desc.trim();
       let handle: string;
@@ -1416,6 +1486,14 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             <Group gap={6} wrap="nowrap">
               <Text size="xs" c="dimmed">{t("Place:")}</Text>
               <Text size="xs" fw={500} truncate style={{ maxWidth: 200 }}>{place.title}</Text>
+              {/* This overlay's visible date range comes from the attached
+                  Place's own name date (edited in the Place editor, not
+                  here) -- shown so it's clear where to go change it. No
+                  date set there means this place's overlay(s) always
+                  show. */}
+              <Text size="xs" c="dimmed" truncate style={{ maxWidth: 200 }}>
+                {placeDate ? formatDate(placeDate) : t("(always visible -- no date on this place)")}
+              </Text>
               <CircleGlyphButton glyph="−" label={t("Detach this place")} size={18} onClick={() => setPlace(null)} />
             </Group>
           ) : (
@@ -1522,6 +1600,45 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
                   { label: t("Transform"), value: "transform" },
                 ]}
               />
+            )}
+            {/* Name/opacity/order -- only the selected image overlay's own
+                properties, no equivalent for a drawn shape. Opacity applies
+                live (see updateSelectedOverlay); order is just this
+                overlay's own rank number -- true reordering *among*
+                overlays that live in different KML files/places happens in
+                the Overlays panel on the map itself, which can see all of
+                them at once, not just this file's. */}
+            {selectedOverlay && (
+              <>
+                <TextInput
+                  size="xs"
+                  placeholder={t("Overlay name (optional)")}
+                  value={selectedOverlay.name ?? ""}
+                  onChange={(e) => updateSelectedOverlay({ name: e.currentTarget.value })}
+                  disabled={!ready}
+                />
+                <Stack gap={2}>
+                  <Text size="xs" c="dimmed">{t("Opacity")}</Text>
+                  <Slider
+                    size="xs"
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    label={(v) => `${Math.round(v * 100)}%`}
+                    value={selectedOverlay.opacity ?? 1}
+                    onChange={(v) => updateSelectedOverlay({ opacity: v })}
+                    disabled={!ready}
+                  />
+                </Stack>
+                <NumberInput
+                  size="xs"
+                  label={t("Stacking order")}
+                  hideControls={false}
+                  value={selectedOverlay.order ?? 0}
+                  onChange={(v) => updateSelectedOverlay({ order: Number(v) || 0 })}
+                  disabled={!ready}
+                />
+              </>
             )}
           </Stack>
         )}

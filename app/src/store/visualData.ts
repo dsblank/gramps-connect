@@ -42,6 +42,12 @@ export interface MapPlace {
    * lets MapCanvas fetch and overlay them when this place is selected.
    * Empty for the common case of a place with no such attachment. */
   kmlMedia: string[];
+  /** This place's own name.date -- what gates the visibility of any image
+   * overlay attached here in historical map mode (MapCanvas.tsx/
+   * StoryMapBackground.tsx compare it against the current ohmYear).
+   * Undefined for the common case of an undated name, meaning any attached
+   * overlay is always visible regardless of map mode. */
+  nameDate?: GrampsDate;
 }
 
 /** A place with no lat/long of its own, but a KML attachment that might
@@ -61,6 +67,9 @@ export interface PendingKmlPlace {
   /** Never empty -- see readVisualData, which only puts a coordinate-less
    * place here when it has at least one KML attachment to try. */
   kmlMedia: string[];
+  /** Same as MapPlace.nameDate -- carried along so it survives
+   * useVisualData.ts's promotion into a real MapPlace. */
+  nameDate?: GrampsDate;
 }
 
 /** A cached Event, whether or not its date can be placed on an axis. */
@@ -275,11 +284,13 @@ export function readVisualData(): VisualData {
   const pendingKmlPlaces: PendingKmlPlace[] = [];
   const childPlaces = new Map<string, string[]>();
   for (const row of placeStore.readColumns(
-    ["handle", "gramps_id", "title", "lat", "long", "enclosed_by", "media_refs"]
+    ["handle", "gramps_id", "title", "lat", "long", "enclosed_by", "media_refs", "name"]
   )) {
-    const [handle, grampsId, title, latText, longText, enclosedBy, mediaRefs] = row as [
-      string, string | null, string | null, string | null, string | null, string | null, string | null,
+    const [handle, grampsId, title, latText, longText, enclosedBy, mediaRefs, nameJson] = row as [
+      string, string | null, string | null, string | null, string | null, string | null, string | null, string | null,
     ];
+    const name = nameJson ? (JSON.parse(nameJson) as { date?: GrampsDate }) : null;
+    const nameDate = name?.date ?? undefined;
     // Before the coordinate check below, not after: a country or county
     // usually has no coordinates of its own but is exactly the level a
     // user scopes to, and dropping it here would sever the towns beneath
@@ -301,7 +312,7 @@ export function readVisualData(): VisualData {
         pendingKmlPlaces.push({
           handle, grampsId: grampsId ?? "", title: title ?? "",
           eventCount: countByPlace.get(handle) ?? 0, years: yearsByPlace.get(handle) ?? [],
-          kmlMedia,
+          kmlMedia, nameDate,
         });
       }
       continue;
@@ -315,6 +326,7 @@ export function readVisualData(): VisualData {
       eventCount: countByPlace.get(handle) ?? 0,
       years: yearsByPlace.get(handle) ?? [],
       kmlMedia,
+      nameDate,
     });
   }
 

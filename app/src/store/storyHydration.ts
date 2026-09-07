@@ -6,6 +6,7 @@
 // record shows up the next time the story is opened, without regenerating
 // the note. A point's `text` is the exception: it's part of the stored
 // spec, so it's used as-is.
+import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
 import { fetchMediaMime, type StoryPoint, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
@@ -21,6 +22,11 @@ export interface HydratedSlide {
    * this place on the tree-wide map. Undefined rather than empty when there
    * is no place at all, matching lat/long's own optionality. */
   kmlMedia?: string[];
+  /** The place's own name.date -- what gates an image overlay attached to
+   * it (StoryMapBackground.tsx's own version of MapCanvas.tsx's date
+   * gating). Undefined whenever kmlMedia is, or when the place has no
+   * dated name. */
+  nameDate?: GrampsDate;
   date?: string;
   year?: number;
   mediaRef?: string;
@@ -74,6 +80,7 @@ function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<
     lat: place?.lat,
     long: place?.long,
     kmlMedia: place?.kmlMedia ?? pending?.kmlMedia,
+    nameDate: place?.nameDate ?? pending?.nameDate,
     date: record?.dateText || undefined,
     year: record?.year ?? undefined,
     mediaRef: point.mediaRef ?? introMediaRef,

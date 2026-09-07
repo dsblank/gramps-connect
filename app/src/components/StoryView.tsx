@@ -240,7 +240,9 @@ export function StoryView({ spec, opened, onClose, stackId }: {
   // Found live: exactly this, only on the Story map (MapCanvas.tsx's own
   // selection state doesn't get rebuilt the same way on a mode switch).
   const currentPoint = useMemo(
-    () => (slide && isLocated(slide) ? { lat: slide.lat, long: slide.long, kmlMedia: slide.kmlMedia ?? [] } : undefined),
+    () => (slide && isLocated(slide)
+      ? { lat: slide.lat, long: slide.long, kmlMedia: slide.kmlMedia ?? [], nameDate: slide.nameDate }
+      : undefined),
     [slide],
   );
 
