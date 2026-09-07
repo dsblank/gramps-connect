@@ -413,25 +413,36 @@ export class ViewStore {
    * called fetchByHandle() to get the row's fresh post-edit data -- isn't
    * forced into a second, redundant fetch just to re-derive it. */
   private async globalRankOfItem(item: Record<string, unknown> & { handle: string }, token: string): Promise<number> {
-    const orderCol = this.orderBy[0]?.column ?? "handle";
-    const desc = this.orderBy[0]?.direction === "desc";
-    const cmp = desc ? ">" : "<";
+    // The full sort key "before" is decided on: every configured order_by
+    // column (Person's surname+given_name secondarySort makes this two,
+    // not just one) plus the server's own trailing tiebreak -- the same
+    // effective_order_by that always appends `OrderBy("handle", "asc")",
+    // *always* ascending regardless of any other key's own direction.
+    const keys: OrderBy[] = [...this.orderBy, { column: "handle", direction: "asc" }];
     // where_expr is parsed as a Python expression (see
     // gramps-object-query-language's query_lang.py) -- JSON's string
     // escaping is a safe subset of Python's, so JSON.stringify doubles as
     // a correct, injection-safe Python string literal here.
-    const sqlType = this.view.columns.find((c) => c.key === orderCol)?.sqlType;
-    const literal = (value: unknown) =>
-      sqlType === "INTEGER" ? String(value) : JSON.stringify(String(value ?? ""));
-    const orderValue = item[orderCol];
-    // Same tie-break as getRows()/getHandleAt(): the server's own
-    // effective_order_by always appends `OrderBy("handle", "asc")", so
-    // "before" has to mean "before in (orderCol, handle) order", not just
-    // "orderCol is less". item's own row (same handle) never counts as
-    // "before itself" under this tie-break, so this correctly excludes it.
-    const beforeExpr =
-      `(${orderCol} ${cmp} ${literal(orderValue)}) or ` +
-      `(${orderCol} == ${literal(orderValue)} and handle ${cmp} ${JSON.stringify(item.handle)})`;
+    const literalFor = (column: string, value: unknown) => {
+      const sqlType = this.view.columns.find((c) => c.key === column)?.sqlType;
+      return sqlType === "INTEGER" ? String(value) : JSON.stringify(String(value ?? ""));
+    };
+    const valueFor = (column: string) => (column === "handle" ? item.handle : item[column]);
+    // Standard multi-key "before" decomposition: item is before a row if,
+    // for some key index i, they're tied on every earlier key and item is
+    // strictly before on key i. Bug this replaced: comparing only the
+    // first column (with the tiebreak wrongly reusing its direction, see
+    // git history) silently mis-ranked ties -- e.g. two people sharing a
+    // surname -- landing selectAt() on a different row than the one
+    // actually selected. item's own row (equal on every key, itself
+    // included) never matches any clause, so this correctly excludes it.
+    const clauses = keys.map((key, i) => {
+      const cmp = key.direction === "desc" ? ">" : "<";
+      const ties = keys.slice(0, i).map((k) => `${k.column} == ${literalFor(k.column, valueFor(k.column))}`);
+      const thisKey = `${key.column} ${cmp} ${literalFor(key.column, valueFor(key.column))}`;
+      return [...ties, thisKey].join(" and ");
+    });
+    const beforeExpr = clauses.map((c) => `(${c})`).join(" or ");
     // combinedFilter() re-applies this view's own baseFilter (if any) --
     // without it, a permanently-filtered view (e.g. Output) would
     // rank against every row of the underlying table, not just the subset
@@ -842,7 +853,12 @@ export class ViewStore {
     const current = this.orderBy[0];
     const direction: "asc" | "desc" =
       current?.column === column && current.direction === "asc" ? "desc" : "asc";
-    this.orderBy = [{ column, direction }];
+    // A configured secondarySort (Person's surname/given_name pair) rides
+    // along at the same direction as the column just clicked -- so
+    // reversing "Surname" also reverses the given-name tiebreak, rather
+    // than leaving ties in a fixed order while everything else flips.
+    const secondary = this.view.columns.find((c) => c.select === column)?.secondarySort;
+    this.orderBy = secondary ? [{ column, direction }, { column: secondary, direction }] : [{ column, direction }];
     return this.runQuery(this.whereExpr, false);
   }
 

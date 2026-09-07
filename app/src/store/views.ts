@@ -55,6 +55,14 @@ export interface ColumnConfig {
    * foreign key, but "a5af0eb667015e355db" is noise in a table that
    * already shows the place's title next to it. */
   hidden?: boolean;
+  /** Another plain column's `key` to break ties on when sorting by this
+   * one -- e.g. Person's surname/given_name pair, so clicking "Surname"
+   * doesn't leave same-surname rows in whatever order the server happens
+   * to otherwise return them. Only meaningful on a column whose own
+   * `select` is a plain string (setSort() ignores it for a json_path
+   * column, which can't be sorted server-side at all -- see
+   * ViewConfig.orderBy's doc comment). */
+  secondarySort?: string;
 }
 
 /** The columns DataTable actually renders, each paired with its index into
@@ -259,8 +267,8 @@ export const PERSON_VIEW: ViewConfig = {
   },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
-    { key: "surname", label: "Surname", select: "surname", sqlType: "TEXT" },
-    { key: "given_name", label: "Given name", select: "given_name", sqlType: "TEXT" },
+    { key: "surname", label: "Surname", select: "surname", sqlType: "TEXT", secondarySort: "given_name" },
+    { key: "given_name", label: "Given name", select: "given_name", sqlType: "TEXT", secondarySort: "surname" },
     {
       key: "birth_date", label: "Birth", select: { json_path: ["birth", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,

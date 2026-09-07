@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import type { TreeChangeNotification } from "../historyPoll";
-import { TAG_VIEW } from "../views";
+import { PERSON_VIEW, TAG_VIEW } from "../views";
 
 vi.mock("../api", () => ({
   fetchPage: vi.fn(),
@@ -29,6 +29,10 @@ function getSql(): Promise<SqlJsStatic> {
 
 function tagRow(handle: string, overrides: Partial<Record<string, unknown>> = {}) {
   return { handle, name: "Chores", color: "#ff0000", priority: 1, change: 1000, ...overrides };
+}
+
+function personRow(handle: string, overrides: Partial<Record<string, unknown>> = {}) {
+  return { handle, gramps_id: handle, surname: "Smith", given_name: "Amy", change: 1000, ...overrides };
 }
 
 function notification(handle: string, op: TreeChangeNotification["op"]): TreeChangeNotification {
@@ -238,6 +242,106 @@ describe("ViewStore.clearFilter", () => {
     expect(store.getSnapshot().whereExpr).toBeNull();
     expect(store.getSnapshot().selectedHandle).toBe("H1");
     expect(store.getSnapshot().selectionIsDefault).toBe(true);
+  });
+
+  it("still tie-breaks by ascending handle when the active sort is descending (regression: clearing a search under a descending sort could land the highlight on a different row than selectedHandle, whenever ties existed in the sort column)", async () => {
+    const store = new ViewStore(TAG_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H2")], next_after: null },
+      totalCount: 2,
+    });
+    await store.runQuery(null, false);
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H2"), tagRow("H1")], next_after: null },
+      totalCount: 2,
+    });
+    await store.setSort("name"); // toggles the default column's initial "asc" to "desc"
+    expect(store.getSnapshot().orderBy).toEqual({ column: "name", direction: "desc" });
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H2")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+
+    // navigateToHandle()'s internal runQuery(null, false), dropping the filter:
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H2"), tagRow("H1")], next_after: null },
+      totalCount: 2,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H2"));
+    mockRank(0); // H2 sorts first under the descending order
+
+    await store.clearFilter();
+
+    // globalRankOfItem()'s count-only rank query -- its where_expr is the
+    // 5th positional argument to fetchPage(). The handle half of its
+    // tie-break must stay "<" (ascending) even though the primary column
+    // is sorted "desc": the server's effective_order_by always appends an
+    // ascending handle tiebreak, regardless of the primary column's own
+    // direction.
+    const calls = vi.mocked(fetchPage).mock.calls;
+    const rankCallArgs = calls[calls.length - 1];
+    const whereExprArg = rankCallArgs[4] as string;
+    expect(whereExprArg).toContain('handle < "H2"');
+    expect(whereExprArg).not.toContain('handle > "H2"');
+  });
+});
+
+describe("ViewStore.setSort secondary sort (Person's surname/given_name pair)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("sorts by given_name then surname when the Given name column is clicked", async () => {
+    const store = new ViewStore(PERSON_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [personRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery(null, false);
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [personRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.setSort("given_name");
+
+    expect(store.getSnapshot().orderBy).toEqual({ column: "given_name", direction: "asc" });
+    const calls = vi.mocked(fetchPage).mock.calls;
+    const orderByArg = calls[calls.length - 1][5];
+    expect(orderByArg).toEqual([
+      { column: "given_name", direction: "asc" },
+      { column: "surname", direction: "asc" },
+    ]);
+  });
+
+  it("keeps the surname tiebreak alongside a repeat click's reversed direction", async () => {
+    const store = new ViewStore(PERSON_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [personRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery(null, false);
+
+    // Surname is already the view's default sort column ("asc") -- the
+    // first click reverses it, same as any other column's repeat click.
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [personRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.setSort("surname");
+
+    expect(store.getSnapshot().orderBy).toEqual({ column: "surname", direction: "desc" });
+    const calls = vi.mocked(fetchPage).mock.calls;
+    const orderByArg = calls[calls.length - 1][5];
+    expect(orderByArg).toEqual([
+      { column: "surname", direction: "desc" },
+      { column: "given_name", direction: "desc" },
+    ]);
   });
 });
 
