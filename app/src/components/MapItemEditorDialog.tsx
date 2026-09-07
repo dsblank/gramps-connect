@@ -1184,6 +1184,23 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       notifications.show({ color: "red", title: t("Not an image"), message: t("Pick a media object whose type is an image.") });
       return;
     }
+    // The same image placed twice on one place has no use: date-gating an
+    // overlay is a *place's* own name.date (see mapStyles.ts's own doc
+    // comment on overlayDateVisible), not something an individual overlay
+    // carries, so a second copy of the same image couldn't even be given a
+    // different active era to justify it -- it would just be a redundant
+    // duplicate always showing (or not) in lockstep with the first. Only
+    // catches a duplicate already open in *this* file's own `overlays`
+    // state -- the same image used in another map-overlay file also
+    // attached to this place isn't checked here.
+    if (overlays.some((o) => o.handle === item.handle)) {
+      notifications.show({
+        color: "red",
+        title: t("Already added"),
+        message: t("This image is already one of this file's overlays."),
+      });
+      return;
+    }
     const map = mapRef.current;
     if (!map) return;
     try {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 // Namespace import: maplibre-gl v5 has no default export.
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import type { FeatureCollection, Point as GeoJsonPoint } from "geojson";
+import type { Feature, FeatureCollection, Point as GeoJsonPoint } from "geojson";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
@@ -87,6 +87,12 @@ const KML_LINE_LAYER = "kml-line";
 const KML_POINT_LAYER = "kml-points";
 const KML_LABEL_LAYER = "kml-labels";
 const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
+// Stable reference for a `hiddenOverlayKeys` prop that's undefined (every
+// caller but MapView) -- avoids a fresh `new Set()` on every render tripping
+// the effects below into re-running for no reason.
+const EMPTY_HIDDEN_KEYS: Set<string> = new Set();
+// Same reasoning, for an undefined `opacityOverrides` prop.
+const EMPTY_OPACITY_OVERRIDES: Map<string, number> = new Map();
 
 interface MapCanvasProps {
   /** Already filtered by MapView's search and time filter. */
@@ -114,14 +120,6 @@ interface MapCanvasProps {
    * this year (see MapModeControl / mapStyles.ts); null is the plain
    * OpenFreeMap basemap, unfiltered. */
   ohmYear: number | null;
-  /** Bumped by MapView after OverlayLayersPanel.tsx patches an overlay's
-   * opacity/order/name in place -- the only way an existing KML handle's
-   * *content* changes without the set of attached handles itself changing
-   * (`kmlKey` alone wouldn't notice), so the image-overlay effect below
-   * takes this as an extra "refetch anyway" trigger. Optional/undefined for
-   * every other caller, who never edits a KML file out from under this
-   * component. */
-  overlayRefreshToken?: number;
   /** Bumped by OverlayLayersPanel.tsx when a row is clicked, to ease the
    * map to that overlay's centroid -- a counter rather than a boolean (same
    * reasoning as fitRequest) so clicking the same overlay twice in a row
@@ -129,6 +127,16 @@ interface MapCanvasProps {
   flyToRequest?: number;
   /** The [lng, lat] to ease to when `flyToRequest` bumps. */
   flyToTarget?: [number, number] | null;
+  /** OverlayLayersPanel.tsx's own unchecked rows (rowKey-keyed) -- a plain
+   * view preference for this session, not persisted anywhere, that this
+   * component honors by not drawing that image overlay/region at all.
+   * Undefined/empty for every caller that never shows the panel. */
+  hiddenOverlayKeys?: Set<string>;
+  /** OverlayLayersPanel.tsx's own per-row opacity override (rowKey-keyed),
+   * same "view preference, not a file edit" nature as hiddenOverlayKeys --
+   * an image/region's own saved opacity (from MapItemEditorDialog.tsx) is
+   * what renders whenever a row has no entry here. */
+  opacityOverrides?: Map<string, number>;
 }
 
 function toGeoJson(
@@ -166,8 +174,8 @@ const DIM_OPACITY = 0.15;
  * lazily -- maplibre-gl is by far the heaviest thing in this app, and a
  * session that never opens View > Map should never download it. */
 export function MapCanvas({
-  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace, ohmYear, overlayRefreshToken,
-  flyToRequest, flyToTarget,
+  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace, ohmYear,
+  flyToRequest, flyToTarget, hiddenOverlayKeys, opacityOverrides,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -189,10 +197,17 @@ export function MapCanvas({
   onSelectRef.current = onSelectPlace;
   const ohmYearRef = useRef(ohmYear);
   ohmYearRef.current = ohmYear;
-  // layer id -> the owning place's name.date, populated by the image-overlay
-  // effect below and read by the lightweight ohmYear-only effect just after
-  // it -- see both for why this is split into two effects.
-  const overlayNameDateRef = useRef<Map<string, GrampsDate | undefined>>(new Map());
+  const hiddenOverlayKeysRef = useRef(hiddenOverlayKeys);
+  hiddenOverlayKeysRef.current = hiddenOverlayKeys;
+  const opacityOverridesRef = useRef(opacityOverrides);
+  opacityOverridesRef.current = opacityOverrides;
+  // layer id -> the owning place's name.date, this overlay's own rowKey
+  // (see OverlayLayersPanel.tsx's own rowKey/hiddenOverlayKeys/
+  // opacityOverrides), and its own saved opacity (what renders absent an
+  // override) -- populated by the image-overlay effect below and read by
+  // the lightweight ohmYear-only effect just after it -- see both for why
+  // this is split into two effects.
+  const overlayMetaRef = useRef<Map<string, { nameDate: GrampsDate | undefined; key: string; opacity: number }>>(new Map());
 
   // Create once. The style is swapped in place on a colour-scheme change (see
   // the effect below) rather than recreating the map, which would lose the
@@ -322,8 +337,13 @@ export function MapCanvas({
       // opacity MapItemEditorDialog.tsx writes on a region (see its own doc
       // comment); coalesced with the fixed defaults so a KML file saved
       // before either property existed keeps rendering exactly as it always
-      // has. Inlined per layer (rather than a shared variable) so each paint
-      // object keeps maplibre's own contextual expression typing.
+      // has. `hidden` is a synthetic property this component itself stamps
+      // onto a region's feature before calling setData below (see the
+      // shapes effect) -- not read back from the KML file at all, it's
+      // OverlayLayersPanel.tsx's per-session show/hide checkbox forcing the
+      // region to zero opacity regardless of its own saved value. Inlined
+      // per layer (rather than a shared variable) so each paint object
+      // keeps maplibre's own contextual expression typing.
       map.addLayer({
         id: KML_FILL_LAYER,
         type: "fill",
@@ -331,7 +351,7 @@ export function MapCanvas({
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: {
           "fill-color": ["coalesce", ["get", "color"], markColor],
-          "fill-opacity": ["coalesce", ["get", "opacity"], 0.25],
+          "fill-opacity": ["case", ["boolean", ["get", "hidden"], false], 0, ["coalesce", ["get", "opacity"], 0.25]],
         },
       });
       map.addLayer({
@@ -341,7 +361,14 @@ export function MapCanvas({
         // Polygon outline and bare LineString (a route) share one style --
         // there's no second thing a line width/colour would need to say.
         filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
-        paint: { "line-color": ["coalesce", ["get", "color"], markColor], "line-width": 2 },
+        paint: {
+          "line-color": ["coalesce", ["get", "color"], markColor],
+          "line-width": 2,
+          // `hidden` is only ever set on a Polygon (see the shapes effect
+          // below) -- a bare LineString route never has it, so this only
+          // ever suppresses a hidden region's own outline, never a route.
+          "line-opacity": ["case", ["boolean", ["get", "hidden"], false], 0, 1],
+        },
       });
       map.addLayer({
         id: KML_POINT_LAYER,
@@ -546,15 +573,53 @@ export function MapCanvas({
       return;
     }
     let cancelled = false;
-    fetchAllKmlFeatures(kmlKey.split(",")).then((features) => {
-      if (!cancelled) source.setData({ type: "FeatureCollection", features });
+    const handles = kmlKey.split(",");
+    // Fetched per handle (not all handles at once) so a region's position
+    // in its own file's own feature array is recoverable -- the same
+    // indexInFile fetchAllKmlRegions computes for OverlayLayersPanel.tsx's
+    // list, and so the same key its rowKey/hiddenOverlayKeys addresses this
+    // region by (see the `hidden` property stamped on below).
+    Promise.all(handles.map((handle) => fetchAllKmlFeatures([handle]))).then((collections) => {
+      if (cancelled) return;
+      const hidden = hiddenOverlayKeys ?? EMPTY_HIDDEN_KEYS;
+      const overrides = opacityOverrides ?? EMPTY_OPACITY_OVERRIDES;
+      const features: Feature[] = [];
+      collections.forEach((handleFeatures, hIdx) => {
+        const kmlHandle = handles[hIdx];
+        handleFeatures.forEach((feature, indexInFile) => {
+          if (feature.geometry?.type !== "Polygon") {
+            features.push(feature);
+            return;
+          }
+          const key = `region:${kmlHandle}:${indexInFile}`;
+          // @tmcw/togeojson surfaces a KML ExtendedData value as a plain
+          // string ("0.25"), not a number -- fill-opacity is a numeric
+          // paint property, so passing that string straight through failed
+          // its expression at render time and silently rendered as if
+          // unset (fully opaque). Same coercion+range check kmlMedia.ts's
+          // own fetchAllKmlRegions already does; undefined (not a bad
+          // value) falls through to fill-opacity's own 0.25 default.
+          const savedRaw = Number(feature.properties?.opacity);
+          const saved = Number.isFinite(savedRaw) && savedRaw >= 0 && savedRaw <= 1 ? savedRaw : undefined;
+          // An override replaces the region's own saved `opacity` outright
+          // (rather than a separate paint-expression layer, the way
+          // `hidden` needs -- fill-opacity already reads this same
+          // property, so overriding it here is enough).
+          const opacity = overrides.has(key) ? overrides.get(key) : saved;
+          features.push({
+            ...feature,
+            properties: { ...feature.properties, opacity, hidden: hidden.has(key) },
+          });
+        });
+      });
+      source.setData({ type: "FeatureCollection", features });
     }).catch(() => {
       if (!cancelled) source.setData(EMPTY_FEATURE_COLLECTION);
     });
     return () => {
       cancelled = true;
     };
-  }, [kmlKey, ready]);
+  }, [kmlKey, ready, hiddenOverlayKeys, opacityOverrides]);
 
   // Unlike the shapes above, image overlays are gated on selection: with the
   // whole tree (or a whole scope) on screen there could be dozens of them
@@ -607,6 +672,8 @@ export function MapCanvas({
       overlays.sort((a, b) => a.order - b.order);
       const token = await getToken();
       if (cancelled) return;
+      const hidden = hiddenOverlayKeysRef.current ?? EMPTY_HIDDEN_KEYS;
+      const overrides = opacityOverridesRef.current ?? EMPTY_OPACITY_OVERRIDES;
       for (const [i, overlay] of overlays.entries()) {
         const id = `${KML_SOURCE}-image-${i}`;
         if (map.getSource(id)) continue;
@@ -621,17 +688,21 @@ export function MapCanvas({
         // markers" reasoning as those) so a place pin sitting on top of an
         // old-map overlay stays clickable.
         map.addLayer({ id, type: "raster", source: id }, KML_FILL_LAYER);
-        map.setPaintProperty(id, "raster-opacity", overlay.opacity);
         const nameDate = nameDateByKmlHandle.get(overlay.kmlHandle);
-        overlayNameDateRef.current.set(id, nameDate);
-        map.setLayoutProperty(id, "visibility", overlayDateVisible(nameDate, ohmYearRef.current) ? "visible" : "none");
+        // Matches OverlayLayersPanel.tsx's own rowKey exactly -- what its
+        // show/hide checkbox and opacity-override slider are keyed by.
+        const key = `image:${overlay.kmlHandle}:${overlay.indexInFile}`;
+        map.setPaintProperty(id, "raster-opacity", overrides.get(key) ?? overlay.opacity);
+        overlayMetaRef.current.set(id, { nameDate, key, opacity: overlay.opacity });
+        const visible = overlayDateVisible(nameDate, ohmYearRef.current) && !hidden.has(key);
+        map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
         addedIds.push(id);
       }
     })();
     return () => {
       cancelled = true;
       for (const id of addedIds) {
-        overlayNameDateRef.current.delete(id);
+        overlayMetaRef.current.delete(id);
         if (map.getLayer(id)) map.removeLayer(id);
         if (map.getSource(id)) map.removeSource(id);
       }
@@ -641,22 +712,32 @@ export function MapCanvas({
     // -- deliberately not a dependency (it'd fire this whole rebuild on
     // every place-store tick); `overlayKmlKey` already captures every case
     // that changes which KML file (and so which overlays/dates) are in play.
+    // hiddenOverlayKeys/opacityOverrides are read via their own refs above
+    // (only for this *initial* mount) rather than listed here -- a later
+    // change to either is handled live by the lightweight effect just below,
+    // without tearing down and refetching every image.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlayKmlKey, ready, overlayRefreshToken]);
+  }, [overlayKmlKey, ready]);
 
-  // Re-checks each already-added overlay's date visibility against a new
-  // `ohmYear` alone (a slider drag) -- a plain layout-property toggle, not
-  // the rebuild above, so scrubbing the historical-map year never
-  // re-fetches a single image. overlayNameDateRef is populated by the
-  // effect above and outlives it (not cleared on this effect's own re-run).
+  // Re-checks each already-added overlay's visibility/opacity against a new
+  // `ohmYear`, `hiddenOverlayKeys`, or `opacityOverrides` alone -- plain
+  // paint/layout-property toggles, not the rebuild above, so scrubbing the
+  // historical-map year, clicking a row's checkbox, or dragging its opacity
+  // slider never re-fetches a single image. overlayMetaRef is populated by
+  // the effect above and outlives it (not cleared on this effect's own
+  // re-run).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    for (const [id, nameDate] of overlayNameDateRef.current) {
+    const hidden = hiddenOverlayKeys ?? EMPTY_HIDDEN_KEYS;
+    const overrides = opacityOverrides ?? EMPTY_OPACITY_OVERRIDES;
+    for (const [id, { nameDate, key, opacity }] of overlayMetaRef.current) {
       if (!map.getLayer(id)) continue;
-      map.setLayoutProperty(id, "visibility", overlayDateVisible(nameDate, ohmYear) ? "visible" : "none");
+      const visible = overlayDateVisible(nameDate, ohmYear) && !hidden.has(key);
+      map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+      map.setPaintProperty(id, "raster-opacity", overrides.get(key) ?? opacity);
     }
-  }, [ohmYear, ready]);
+  }, [ohmYear, ready, hiddenOverlayKeys, opacityOverrides]);
 
   // Fit to the requested places (see fitRequest). Skipped at fitRequest 0 so
   // the remembered viewport survives the first open.

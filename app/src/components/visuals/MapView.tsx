@@ -47,13 +47,31 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   // than which basemap tiles are shown.
   const [mapMode, setMapMode] = useState<MapMode>("standard");
   const [historicalYear, setHistoricalYear] = useState(() => new Date().getFullYear());
-  // Bumped by OverlayLayersPanel after it patches an overlay's opacity/order
-  // in place -- see MapCanvas.tsx's own doc comment on why it needs this.
-  const [overlayRefreshToken, setOverlayRefreshToken] = useState(0);
   // Where to ease the map when a row in OverlayLayersPanel is clicked -- see
   // MapCanvas.tsx's own flyToRequest/flyToTarget doc comments.
   const [flyToRequest, setFlyToRequest] = useState(0);
   const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
+  // Overlays/regions unchecked, or given a different opacity than their own
+  // saved one, in OverlayLayersPanel -- plain view preferences for this
+  // session (nothing is written to any file for either -- an image/region's
+  // *own* opacity is only ever edited in MapItemEditorDialog.tsx's full
+  // editor), shared with MapCanvas so it actually renders them that way.
+  // Both keyed by OverlayLayersPanel's own rowKey. A key with no entry in
+  // `opacityOverrides` shows at that item's own saved opacity -- the
+  // override only ever replaces that for the rest of this session, never
+  // the file itself.
+  const [hiddenOverlayKeys, setHiddenOverlayKeys] = useState<Set<string>>(new Set());
+  const [opacityOverrides, setOpacityOverrides] = useState<Map<string, number>>(new Map());
+  function toggleHiddenOverlay(key: string) {
+    setHiddenOverlayKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+  function overrideOverlayOpacity(key: string, opacity: number) {
+    setOpacityOverrides((prev) => new Map(prev).set(key, opacity));
+  }
 
   // "Auto" resolves to the latest year among the current subject's linked
   // events -- null when there's no scoped subject to derive one from (the
@@ -403,9 +421,10 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           selectedHandle={selected?.handle ?? null}
           onSelectPlace={setSelected}
           ohmYear={ohmYear}
-          overlayRefreshToken={overlayRefreshToken}
           flyToRequest={flyToRequest}
           flyToTarget={flyToTarget}
+          hiddenOverlayKeys={hiddenOverlayKeys}
+          opacityOverrides={opacityOverrides}
         />
       </Suspense>
       <OverlayLayersPanel
@@ -417,11 +436,14 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
         // itself now applies to drawing the overlay(s) on the map.
         places={selected ? [selected] : []}
         ohmYear={ohmYear}
-        onChanged={() => setOverlayRefreshToken((n) => n + 1)}
         onFlyTo={(center) => {
           setFlyToTarget(center);
           setFlyToRequest((n) => n + 1);
         }}
+        hiddenKeys={hiddenOverlayKeys}
+        onToggleHidden={toggleHiddenOverlay}
+        opacityOverrides={opacityOverrides}
+        onOverrideOpacity={overrideOverlayOpacity}
       />
       {noMatches && <NoMatches {...noMatches} />}
       {selected && (

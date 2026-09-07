@@ -94,6 +94,38 @@ export interface KmlImageOverlay {
    * order (see fetchAllKmlImageOverlays), preserving a pre-existing file's
    * current visual stacking until the user deliberately reorders it. */
   order: number;
+  /** This overlay's own position among only the other overlays living in
+   * the same KML file -- distinct from `order`'s rank among every overlay
+   * on the map (possibly spread across several files/places). Combined
+   * with `kmlHandle` into the same rowKey OverlayLayersPanel.tsx's list
+   * (and so MapCanvas.tsx's hiddenOverlayKeys/opacityOverrides) addresses
+   * this overlay by. */
+  indexInFile: number;
+}
+
+/** A drawn region (a Polygon or Rectangle shape from MapItemEditorDialog.tsx
+ * -- both save as a plain Polygon placemark, see that dialog's own
+ * selectedIsRegion) attached to a place, with the two properties
+ * OverlayLayersPanel.tsx's own list needs: mirrors KmlImageOverlay's shape
+ * for the same reason (one list covers both kinds of overlay). */
+export interface KmlRegion {
+  kmlHandle: string;
+  /** This region's position in fetchAllKmlFeatures([kmlHandle])'s own
+   * array (a region is an ordinary drawn placemark, not a GroundOverlay, so
+   * this indexes the *features* array, not the overlays one) -- combined
+   * with `kmlHandle` into the same rowKey OverlayLayersPanel.tsx's list
+   * (and so MapCanvas.tsx's hiddenOverlayKeys/opacityOverrides) addresses
+   * this region by. */
+  indexInFile: number;
+  name?: string;
+  /** 0-1, mirrors MapCanvas.tsx's own KML_FILL_LAYER default -- an
+   * unparseable/missing value there and here mean the same thing. */
+  opacity: number;
+  /** The outer ring's vertices (closing point included, same as GeoJSON's
+   * own convention) -- enough for a rough centroid (see
+   * OverlayLayersPanel.tsx's click-to-fly); holes, if any, don't matter for
+   * that. */
+  ring: [number, number][];
 }
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -221,6 +253,10 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
   const overlays: KmlImageOverlay[] = [];
   for (let h = 0; h < handles.length; h++) {
     const kmlHandle = handles[h];
+    // Counts only the accepted overlays *in this one file* -- what a
+    // caller (OverlayLayersPanel.tsx) needs for this overlay's own rowKey,
+    // rather than having to re-derive it by hand.
+    let indexInFile = 0;
     for (const feature of collections[h]) {
       if (feature.properties?.["@geometry-type"] !== "groundoverlay") continue;
       const icon = feature.properties?.icon as string | undefined;
@@ -251,7 +287,7 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
         // (a save from before rotation existed at all) defaults to 0.
         const rotation = Number(feature.properties?.rotation ?? 0) || 0;
         const corners = cornersFromBox({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3], rotation });
-        overlays.push({ imageHandle, corners, name, opacity, order, kmlHandle });
+        overlays.push({ imageHandle, corners, name, opacity, order, kmlHandle, indexInFile: indexInFile++ });
         continue;
       }
       // No bbox -- @tmcw/togeojson's getGroundOverlayBox() only omits it for
@@ -261,10 +297,46 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
       // or a parse failure) is skipped, same as a missing bbox always was.
       const ring = feature.geometry?.type === "Polygon" ? (feature.geometry.coordinates[0] as [number, number][]) : undefined;
       if (!ring || ring.length !== 5) continue;
-      overlays.push({ imageHandle, corners: ring.slice(0, 4) as OverlayCorners, name, opacity, order, kmlHandle });
+      overlays.push({
+        imageHandle, corners: ring.slice(0, 4) as OverlayCorners, name, opacity, order, kmlHandle,
+        indexInFile: indexInFile++,
+      });
     }
   }
   return overlays;
+}
+
+/** Every drawn region (Polygon/Rectangle shape) across a place's KML
+ * attachment(s) -- the counterpart to fetchAllKmlImageOverlays for
+ * OverlayLayersPanel.tsx's own list, which shows both kinds of overlay
+ * together. A GroundOverlay's own <gx:LatLonQuad> also parses to a Polygon
+ * feature (see fetchAllKmlImageOverlays above), so those are explicitly
+ * excluded here the same way fetchAllKmlFeatures already excludes them from
+ * its own shape rendering. */
+export async function fetchAllKmlRegions(handles: string[]): Promise<KmlRegion[]> {
+  if (handles.length === 0) return [];
+  const collections = await Promise.all(handles.map(fetchKmlFeatures));
+  const regions: KmlRegion[] = [];
+  for (let h = 0; h < handles.length; h++) {
+    const kmlHandle = handles[h];
+    // Every feature in this file (region or not) counts toward the index --
+    // matches fetchAllKmlFeatures' own per-handle array position (it only
+    // *filters out* the groundoverlay ones, which never precede a region in
+    // write order -- see kmlWrite.ts's own doc comment on why placemarks
+    // always come before any appended GroundOverlay -- so the position
+    // survives that filter unchanged), what this region's own rowKey needs.
+    let indexInFile = 0;
+    for (const feature of collections[h]) {
+      if (feature.properties?.["@geometry-type"] === "groundoverlay") { indexInFile++; continue; }
+      if (feature.geometry?.type !== "Polygon") { indexInFile++; continue; }
+      const name = (feature.properties?.name as string | undefined) || undefined;
+      const opacityRaw = Number(feature.properties?.opacity);
+      const opacity = Number.isFinite(opacityRaw) && opacityRaw >= 0 && opacityRaw <= 1 ? opacityRaw : 0.25;
+      const ring = feature.geometry.coordinates[0] as [number, number][];
+      regions.push({ kmlHandle, indexInFile: indexInFile++, name, opacity, ring });
+    }
+  }
+  return regions;
 }
 
 /** Drops a handle's cached parse -- called after MapItemEditorDialog.tsx

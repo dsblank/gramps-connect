@@ -1,67 +1,98 @@
-// A live "layers" list for every image overlay attached to the
-// currently-plotted places -- lets someone with several overlapping
-// historical-map overlays (see the plan) see them, jump the map to one, and
-// dim them all at once without opening MapItemEditorDialog.tsx's full
-// drawing editor. Each edit here goes through overlayEdit.ts's
-// patchOverlaysInFile, which only ever rewrites the file(s) the edited
-// overlays actually live in -- so adjusting opacity never touches a third
-// overlay's file, wherever it lives.
+// A live "layers" list for every image overlay and drawn region attached to
+// the currently-plotted places -- lets someone with several overlapping
+// historical-map overlays (see the plan) see them, jump the map to one,
+// dim one independently of the others, and hide one from view, all without
+// opening MapItemEditorDialog.tsx's full drawing editor.
+//
+// Opacity here is a view-time *override*, not an edit: an image or region's
+// own opacity is only ever set/changed in that full editor, and is what
+// renders on the map by default. This panel's slider (like its show/hide
+// checkbox) only ever overrides what's *displayed*, for the rest of this
+// session -- it never writes to anyone's KML file, so it can't collide with
+// (or be collided into by) another edit the way a persisted opacity control
+// once did here.
 import { useEffect, useState } from "react";
-import { Collapse, Group, NavLink, Paper, ScrollArea, Slider, Stack, Text, UnstyledButton } from "@mantine/core";
+import { Checkbox, Collapse, Group, Paper, ScrollArea, Slider, Stack, Text, UnstyledButton } from "@mantine/core";
 import { formatDate, type GrampsDate } from "@gramps-connect/gramps-date";
-import { getToken } from "../../auth/auth";
 import type { MapPlace } from "../../store/visualData";
-import { fetchAllKmlImageOverlays, type KmlImageOverlay } from "../../store/kmlMedia";
-import { patchOverlaysInFile } from "../../store/overlayEdit";
+import { fetchAllKmlImageOverlays, fetchAllKmlRegions, type KmlImageOverlay, type KmlRegion } from "../../store/kmlMedia";
 import { overlayDateVisible } from "./mapStyles";
 import { t } from "../../i18n/i18n";
 
-interface OverlayRow extends KmlImageOverlay {
-  placeTitle: string;
-  /** This overlay's own position among only the other overlays living in
-   * the same KML file -- what patchOverlaysInFile needs to address it there,
-   * distinct from `order`'s rank among every overlay on the map. */
-  indexInFile: number;
+/** A row's own identity, shared with MapCanvas.tsx so a checked-off or
+ * opacity-overridden item there matches back to the exact overlay or region
+ * this panel is showing a control for. */
+function rowKey(kind: "image" | "region", kmlHandle: string, indexInFile: number): string {
+  return `${kind}:${kmlHandle}:${indexInFile}`;
 }
 
-/** The rectangle's own center -- corners are maplibre's [lng, lat] order
- * (see OverlayCorners), so a plain average of each axis is correct even
- * though the shape can be a warped quadrilateral (move/resize/rotate all
- * transform the 4 points directly), not just an axis-aligned box. */
-function overlayCentroid(row: OverlayRow): [number, number] {
-  const lng = row.corners.reduce((sum, c) => sum + c[0], 0) / row.corners.length;
-  const lat = row.corners.reduce((sum, c) => sum + c[1], 0) / row.corners.length;
-  return [lng, lat];
+interface OverlayRow {
+  kind: "image" | "region";
+  kmlHandle: string;
+  indexInFile: number;
+  name?: string;
+  /** This item's own saved opacity (from MapItemEditorDialog.tsx) -- what
+   * the slider below shows/starts at absent an override for this row (see
+   * `opacityOverrides`). */
+  opacity: number;
+  placeTitle: string;
+  /** [lng, lat] -- an image's 4 corners' average, or a region's ring
+   * vertices' average (dropping GeoJSON's closing repeat of the first
+   * point); either way, what a click here eases the map to. */
+  center: [number, number];
+  /** Images only -- see KmlImageOverlay.order. Regions have no stacking
+   * concept of their own yet, so they simply list after every image,
+   * in whatever order fetchAllKmlRegions happened to return them. */
+  order: number;
+}
+
+function imageToRow(overlay: KmlImageOverlay, placeTitle: string): OverlayRow {
+  const lng = overlay.corners.reduce((sum, c) => sum + c[0], 0) / overlay.corners.length;
+  const lat = overlay.corners.reduce((sum, c) => sum + c[1], 0) / overlay.corners.length;
+  return {
+    kind: "image", kmlHandle: overlay.kmlHandle, indexInFile: overlay.indexInFile, name: overlay.name,
+    opacity: overlay.opacity, placeTitle, center: [lng, lat], order: overlay.order,
+  };
+}
+
+function regionToRow(region: KmlRegion, placeTitle: string): OverlayRow {
+  // GeoJSON closes a ring by repeating its first point as its last --
+  // dropped here so it isn't double-counted in the average.
+  const verts = region.ring.slice(0, -1);
+  const lng = verts.reduce((sum, c) => sum + c[0], 0) / verts.length;
+  const lat = verts.reduce((sum, c) => sum + c[1], 0) / verts.length;
+  return {
+    kind: "region", kmlHandle: region.kmlHandle, indexInFile: region.indexInFile, name: region.name,
+    opacity: region.opacity, placeTitle, center: [lng, lat], order: Infinity,
+  };
 }
 
 interface OverlayLayersPanelProps {
   /** Same set MapView passes to MapCanvas -- the panel only ever lists
-   * overlays actually visible (or hidden-by-date) on the map right now. */
+   * items actually visible (or hidden-by-date) on the map right now. */
   places: MapPlace[];
   ohmYear: number | null;
-  /** Bumped so MapView can pass a fresh `overlayRefreshToken` to MapCanvas,
-   * whose own KML cache-consuming effect otherwise has no way to notice a
-   * content-only edit to a handle it already has (see MapCanvas.tsx's own
-   * doc comment on that prop). */
-  onChanged: () => void;
   /** Fired when a row is clicked, so MapView can ease the map to that
-   * overlay's centroid the same way a search result or a scope does. */
+   * item's centroid the same way a search result or a scope does. */
   onFlyTo: (center: [number, number]) => void;
+  /** Which rows (by rowKey) are checked off the map for the rest of this
+   * session -- owned by MapView (not persisted anywhere; a plain view
+   * preference, not an edit to anyone's file) so MapCanvas can see it too
+   * and actually stop drawing them. */
+  hiddenKeys: Set<string>;
+  onToggleHidden: (key: string) => void;
+  /** Which rows (by rowKey) have a view-time opacity override in place --
+   * same "owned by MapView, not persisted" nature as `hiddenKeys`. A row
+   * with no entry here shows its own saved opacity. */
+  opacityOverrides: Map<string, number>;
+  onOverrideOpacity: (key: string, opacity: number) => void;
 }
 
-export function OverlayLayersPanel({ places, ohmYear, onChanged, onFlyTo }: OverlayLayersPanelProps) {
+export function OverlayLayersPanel({
+  places, ohmYear, onFlyTo, hiddenKeys, onToggleHidden, opacityOverrides, onOverrideOpacity,
+}: OverlayLayersPanelProps) {
   const kmlKey = [...new Set(places.flatMap((place) => place.kmlMedia))].sort().join(",");
   const [rows, setRows] = useState<OverlayRow[]>([]);
-  // Bumped after a successful patch to force a refetch below -- a patch
-  // changes a KML file's *content*, not the set of handles `kmlKey` tracks,
-  // so it wouldn't otherwise be noticed here either.
-  const [reloadTick, setReloadTick] = useState(0);
-  // The one opacity control for every overlay at once -- dragged locally
-  // (so the slider itself feels live) and only patched into the KML file(s)
-  // on release (see onChangeEnd below), the same as the old per-row slider
-  // did: each patch is a full rewrite of the owning file plus a KML refetch,
-  // not something to fire on every pixel of drag.
-  const [masterOpacity, setMasterOpacity] = useState(1);
   // Collapsed by default -- the panel only appears at all once a place with
   // an overlay is on screen, and most of the time there's nothing to do
   // here beyond knowing overlays exist; opening it is a deliberate act.
@@ -73,57 +104,28 @@ export function OverlayLayersPanel({ places, ohmYear, onChanged, onFlyTo }: Over
       return;
     }
     let cancelled = false;
+    const handles = kmlKey.split(",");
     const placeByKmlHandle = new Map(
       places.flatMap((place) => place.kmlMedia.map((handle) => [handle, place] as const))
     );
-    fetchAllKmlImageOverlays(kmlKey.split(",")).then((overlays) => {
+    Promise.all([fetchAllKmlImageOverlays(handles), fetchAllKmlRegions(handles)]).then(([overlays, regions]) => {
       if (cancelled) return;
-      const seenPerHandle = new Map<string, number>();
-      const withMeta = overlays.map((overlay) => {
-        const indexInFile = seenPerHandle.get(overlay.kmlHandle) ?? 0;
-        seenPerHandle.set(overlay.kmlHandle, indexInFile + 1);
-        return {
-          ...overlay,
-          placeTitle: placeByKmlHandle.get(overlay.kmlHandle)?.title ?? "",
-          indexInFile,
-        };
-      });
-      withMeta.sort((a, b) => a.order - b.order);
-      setRows(withMeta);
-      if (withMeta.length > 0) {
-        setMasterOpacity(withMeta.reduce((sum, r) => sum + r.opacity, 0) / withMeta.length);
-      }
+      const imageRows = overlays.map((o) => imageToRow(o, placeByKmlHandle.get(o.kmlHandle)?.title ?? ""));
+      const regionRows = regions.map((r) => regionToRow(r, placeByKmlHandle.get(r.kmlHandle)?.title ?? ""));
+      imageRows.sort((a, b) => a.order - b.order);
+      setRows([...imageRows, ...regionRows]);
     });
     return () => {
       cancelled = true;
     };
     // `places` is read for its own kmlMedia/title only when this actually
-    // refetches (kmlKey or reloadTick changing) -- not a dependency itself,
-    // same reasoning as MapCanvas.tsx's identical exclusion.
+    // refetches (kmlKey changing) -- not a dependency itself, same
+    // reasoning as MapCanvas.tsx's identical exclusion.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kmlKey, reloadTick]);
+  }, [kmlKey]);
 
   function nameDateOf(row: OverlayRow): GrampsDate | undefined {
     return places.find((place) => place.kmlMedia.includes(row.kmlHandle))?.nameDate;
-  }
-
-  async function setOpacityAll(opacity: number) {
-    const token = await getToken();
-    // Grouped by file, one patchOverlaysInFile call per file -- two rows
-    // that share a KML file (see indexInFile) must go through the same
-    // fetch-then-write pass, or whichever finishes last would silently
-    // revert the other (see that function's own doc comment). Different
-    // files stay independent and patch in parallel.
-    const byFile = new Map<string, Map<number, { opacity: number }>>();
-    for (const row of rows) {
-      if (!byFile.has(row.kmlHandle)) byFile.set(row.kmlHandle, new Map());
-      byFile.get(row.kmlHandle)!.set(row.indexInFile, { opacity });
-    }
-    await Promise.all(
-      [...byFile.entries()].map(([kmlHandle, patches]) => patchOverlaysInFile(token, kmlHandle, patches))
-    );
-    setReloadTick((n) => n + 1);
-    onChanged();
   }
 
   if (rows.length === 0) return null;
@@ -133,45 +135,63 @@ export function OverlayLayersPanel({ places, ohmYear, onChanged, onFlyTo }: Over
       <UnstyledButton onClick={() => setOpened((o) => !o)} style={{ display: "block", width: "100%" }}>
         <Group justify="space-between" wrap="nowrap">
           <Text size="xs" fw={600} c="dimmed">
-            {t("Overlay images")} {rows.length > 1 ? `(${rows.length})` : ""}
+            {t("Overlays")} {rows.length > 1 ? `(${rows.length})` : ""}
           </Text>
           <Text size="xs" c="dimmed">{opened ? "▾" : "▸"}</Text>
         </Group>
       </UnstyledButton>
       <Collapse in={opened}>
-        <Stack gap={2} mb={8} mt={8}>
-          <Text size="xs" c="dimmed">{t("Opacity")}</Text>
-          <Slider
-            size="xs"
-            min={0.1}
-            max={1}
-            step={0.05}
-            value={masterOpacity}
-            label={(v) => `${Math.round(v * 100)}%`}
-            onChange={setMasterOpacity}
-            onChangeEnd={setOpacityAll}
-          />
-        </Stack>
-        <ScrollArea.Autosize mah={260}>
-          <Stack gap={0}>
+        <ScrollArea.Autosize mah={320} mt={8}>
+          <Stack gap={10}>
             {rows.map((row) => {
-              const nameDate = nameDateOf(row);
+              const key = rowKey(row.kind, row.kmlHandle, row.indexInFile);
+              const nameDate = row.kind === "image" ? nameDateOf(row) : undefined;
               const visibleNow = overlayDateVisible(nameDate, ohmYear);
+              const shown = !hiddenKeys.has(key);
+              // The override if one's been set this session, otherwise the
+              // item's own saved value -- see this component's own doc
+              // comment on why there's no separate "reset" affordance:
+              // dragging back never needs one, it just sets the override to
+              // the same number the row already started at.
+              const opacity = opacityOverrides.get(key) ?? row.opacity;
               return (
-                <NavLink
-                  key={`${row.kmlHandle}-${row.indexInFile}`}
-                  onClick={() => onFlyTo(overlayCentroid(row))}
-                  title={t("Go to overlay")}
-                  py={4}
-                  label={<Text size="xs" fw={500} truncate>{row.name || t("Untitled overlay")}</Text>}
-                  description={
-                    <Text size="xs" c="dimmed" truncate>
-                      {row.placeTitle}
-                      {nameDate ? ` · ${formatDate(nameDate)}` : ""}
-                      {!visibleNow ? ` (${t("hidden now")})` : ""}
-                    </Text>
-                  }
-                />
+                <Stack key={key} gap={4}>
+                  <Group gap={6} wrap="nowrap" align="flex-start">
+                    <Checkbox
+                      size="xs"
+                      mt={2}
+                      checked={shown}
+                      onChange={() => onToggleHidden(key)}
+                      aria-label={t("Show on map")}
+                    />
+                    <UnstyledButton
+                      onClick={() => onFlyTo(row.center)}
+                      title={t("Go to overlay")}
+                      disabled={!shown}
+                      style={{ flex: 1, minWidth: 0, textAlign: "left" }}
+                    >
+                      <Text size="xs" fw={500} truncate c={shown ? undefined : "dimmed"}>
+                        {row.name || (row.kind === "image" ? t("Untitled overlay") : t("Untitled region"))}
+                      </Text>
+                      <Text size="xs" c="dimmed" truncate>
+                        {row.placeTitle}
+                        {nameDate ? ` · ${formatDate(nameDate)}` : ""}
+                        {!visibleNow ? ` (${t("hidden now")})` : ""}
+                      </Text>
+                    </UnstyledButton>
+                  </Group>
+                  <Slider
+                    size="xs"
+                    ml={26}
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    value={opacity}
+                    label={(v) => `${Math.round(v * 100)}%`}
+                    onChange={(v) => onOverrideOpacity(key, v)}
+                    disabled={!shown}
+                  />
+                </Stack>
               );
             })}
           </Stack>
