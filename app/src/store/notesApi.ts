@@ -53,8 +53,15 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
 
 /** Creates a standalone Note typed "message" and tagged "todo-open". Unlike
  * uploadMedia, Note creation has no blob-upload step -- the POST body is
- * JSON throughout, so type and tag_list can both be set in the same
- * request instead of a follow-up GET+PUT. */
+ * JSON throughout, so type, tag_list and private can all be set in the same
+ * request instead of a follow-up GET+PUT. Always private: gramps-web-api's
+ * ModifiedPrivateProxyDb (api/util.py's get_db_outside_request) filters a
+ * private object out of every read for a caller lacking ViewPrivate --
+ * every role from Member up already holds it, so in practice this only
+ * keeps messages out of a Guest's view, not a real per-recipient ACL (see
+ * scripts/migrate-private-messages.mjs for retroactively flipping messages
+ * created before this existed).
+ */
 export async function createMessage(token: string, author: string, message: string): Promise<string> {
   const openTag = await getOrCreateTagHandle(token, TODO_OPEN_TAG);
   const res = await fetch(`${API_BASE}/api/notes/`, {
@@ -64,6 +71,7 @@ export async function createMessage(token: string, author: string, message: stri
       text: { string: formatAuthoredText(author, message) },
       type: MESSAGE_TYPE,
       tag_list: [openTag],
+      private: true,
     }),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -83,6 +91,20 @@ export async function attachNoteToObject(
   noteHandle: string
 ): Promise<void> {
   await attachRefListEntry(token, view, objectHandle, "note_list", noteHandle);
+}
+
+/** Plain GET of one Note, no `extend`/`backlinks` -- just its own fields
+ * (type, text.string, private, ...). Used by App.tsx's onRemoteNoteChange
+ * to tell a live-synced note's type apart (board message, story,
+ * DirectMessage, or a plain note) before deciding how to notify; same
+ * request shape toggleMessageDone/deleteMessage already build, just a GET
+ * with no follow-up write. */
+export async function fetchNoteRaw(token: string, handle: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  return res.json();
 }
 
 /** Swaps the todo-open/todo-done tag on an existing message. Generic
