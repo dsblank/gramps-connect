@@ -3,6 +3,7 @@ import { getToken, hasPermissions } from "../../../auth/auth";
 import { zipRefs } from "../../../store/objectDetail";
 import { detachRefListEntry, patchRefListEntry } from "../../../store/refListApi";
 import { MEDIA_VIEW } from "../../../store/views";
+import { KML_MIME } from "../../../store/visualData";
 import { AttachControl } from "../AttachControl";
 import { MediaRegionDialog } from "../MediaRegionDialog";
 import { MediaThumbnail } from "../MediaThumbnail";
@@ -27,7 +28,14 @@ import { t } from "../../../i18n/i18n";
  * metadata to read or write. patchRefListEntry (refListApi.ts) already
  * generalizes to media_list's ref-struct shape with no changes needed. */
 export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
-  const rows = zipRefs<{ mime?: string }>(detail.media_list, detail.extended?.media);
+  // A Place's own KML overlays get their own dedicated MapOverlaysSection.tsx
+  // instead -- filtered out here so a place's attached map overlay doesn't
+  // also show up a second time in this plain gallery (where it'd render as
+  // a broken/generic thumbnail anyway, since a KML file isn't an image).
+  // Every other type that carries a media_list has no such section, so this
+  // filter is a no-op for them.
+  const rows = zipRefs<{ mime?: string }>(detail.media_list, detail.extended?.media)
+    .filter(({ target }) => view.key !== "place" || target?.mime !== KML_MIME);
   const canAttach = hasPermissions("EditObject");
   const [regionTarget, setRegionTarget] = useState<{ handle: string; rect?: number[] | null } | null>(null);
   if (rows.length === 0 && !canAttach) return null;

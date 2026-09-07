@@ -17,6 +17,7 @@ export type RelatedSection =
   | "participants"
   | "place"
   | "parentPlaces"
+  | "mapOverlays"
   | "source"
   | "repositories"
   | "citations"
@@ -49,7 +50,7 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   person: ["events", "tags", "media", "parents", "families", "addresses", "urls", "ldsOrdinances", "notes", "attributes", "citations", "associations", "backlinks"],
   family: ["parents", "children", "events", "tags", "media", "ldsOrdinances", "notes", "attributes", "citations", "backlinks"],
   event: ["tags", "media", "place", "participants", "notes", "attributes", "citations", "backlinks"],
-  place: ["tags", "media", "parentPlaces", "urls", "notes", "citations", "backlinks"],
+  place: ["tags", "media", "mapOverlays", "parentPlaces", "urls", "notes", "citations", "backlinks"],
   repository: ["tags", "addresses", "urls", "notes", "backlinks"],
   // Source has no forward citation_list of its own -- citations point *at*
   // a source via their own source_handle, so "which citations use this

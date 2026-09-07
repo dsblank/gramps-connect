@@ -13,6 +13,7 @@ import { EventsSection } from "./EventsSection";
 import { ParticipantsSection } from "./ParticipantsSection";
 import { PlaceSection } from "./PlaceSection";
 import { ParentPlacesSection } from "./ParentPlacesSection";
+import { MapOverlaysSection } from "./MapOverlaysSection";
 import { SourceSection } from "./SourceSection";
 import { RepositoriesSection } from "./RepositoriesSection";
 import { CitationsSection } from "./CitationsSection";
@@ -35,6 +36,7 @@ export const SECTION_COMPONENTS: Record<RelatedSection, ComponentType<SectionPro
   participants: ParticipantsSection,
   place: PlaceSection,
   parentPlaces: ParentPlacesSection,
+  mapOverlays: MapOverlaysSection,
   source: SourceSection,
   repositories: RepositoriesSection,
   citations: CitationsSection,

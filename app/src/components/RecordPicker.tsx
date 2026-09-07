@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Anchor, Button, Card, Group, Loader, NavLink, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
+import { Button, Card, Divider, Group, Loader, NavLink, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
 import type { ViewConfig } from "../store/views";
+import { CircleGlyphButton } from "./CircleGlyphButton";
 import { withGrampsId } from "./related/summary";
 import { t } from "../i18n/i18n";
 
@@ -39,19 +40,28 @@ interface RecordPickerProps {
    * those aren't a separate "confirm this" dialog the way AttachControl's
    * is. */
   confirmWithButton?: boolean;
-  /** e.g. "Person"/"Place" -- shown in the "not finding it?" bridge below,
-   * only rendered once a query's been typed and `onCreateNew` is given (see
-   * that prop's own doc comment). */
+  /** e.g. "Person"/"Place" -- becomes the "(+) Create <createLabel>"
+   * button's own label and the "Select existing <createLabel>" heading
+   * above the search box (both above the results, see the render below),
+   * rendered whenever `onCreateNew` is given (see that prop's own doc
+   * comment) -- with or without a typed query. */
   createLabel?: string;
-  /** Opts this picker into the "not finding it? create new" bridge -- a
+  /** Opts this picker into leading with a "(+) Create X" button (an "or"
+   * divider, then "Select existing X" above the ordinary search box) -- a
    * search that doesn't turn up the right record shouldn't be a dead end
-   * that has to be backed out of first. Omitted entirely by callers whose
-   * reference type doesn't support creating one yet. Passed the current
-   * (trimmed) query text -- RefPickerField.tsx's SearchOrCreate ignores it
-   * (its "create new" opens a full blank edit dialog instead), but a
-   * caller whose create path is just "get-or-create by this exact name"
-   * (e.g. BulkTagButton.tsx's Tag, which has no dialog of its own to open)
-   * needs it to know what name to create. */
+   * that has to be backed out of first, and (for a caller with no separate
+   * "+ New X" trigger of its own, e.g. AttachControl.tsx's `onCreateNew`)
+   * this is the *only* way to reach creation at all, so it's shown
+   * regardless of whether anything's been typed yet -- not gated behind a
+   * query the way it briefly was (found live: with nothing else to reach
+   * it, "add a brand new one" was invisible until you typed junk into the
+   * search box first). Omitted entirely by callers whose reference type
+   * doesn't support creating one yet. Passed the current (trimmed) query
+   * text -- RefPickerField.tsx's SearchOrCreate ignores it (its "create
+   * new" opens a full blank edit dialog instead), but a caller whose create
+   * path is just "get-or-create by this exact name" (e.g. BulkTagButton.tsx's
+   * Tag, which has no dialog of its own to open) needs it to know what name
+   * to create. */
   onCreateNew?: (query: string) => void;
 }
 
@@ -112,6 +122,23 @@ export function RecordPicker({
 
   return (
     <Stack gap="xs">
+      {/* Creating new leads, search-for-existing follows -- only when
+          there's actually a create option (onCreateNew); a plain
+          attach-existing picker (every AttachControl.tsx caller besides
+          MapOverlaysSection.tsx) has nothing to put before the search box,
+          so it stays exactly as it was. */}
+      {onCreateNew && (
+        <>
+          <CircleGlyphButton
+            glyph="+"
+            label={`Create ${createLabel}`}
+            textLabel={`Create ${createLabel}`}
+            onClick={() => onCreateNew(query.trim())}
+          />
+          <Divider label={t("or")} labelPosition="center" />
+          <Text size="sm" fw={500}>{`Select existing ${createLabel}`}</Text>
+        </>
+      )}
       <TextInput
         placeholder={placeholder}
         value={query}
@@ -156,14 +183,6 @@ export function RecordPicker({
         <Text size="xs" c="dimmed">
           Showing {results.length} of {totalCount} — refine your search to narrow this down.
         </Text>
-      )}
-      {onCreateNew && query.trim().length > 0 && (
-        <Group gap={4}>
-          <Text size="xs" c="dimmed">{t("Not finding it?")}</Text>
-          <Anchor component="button" type="button" size="xs" onClick={() => onCreateNew(query.trim())}>
-            + Create new {createLabel}…
-          </Anchor>
-        </Group>
       )}
       {confirmWithButton && (
         <Group justify="flex-end">

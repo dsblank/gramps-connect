@@ -24,19 +24,12 @@ import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
 
-// maplibre-gl and terra-draw are the heaviest thing this app can pull in
-// (see MapItemEditorDialog.tsx's own doc comment) -- lazy so a session that
-// never opens "Add Map Overlay…" never fetches either, same reasoning as
-// MapView.tsx's own lazy MapCanvas import.
-const MapItemEditorDialog = lazy(() =>
-  import("./MapItemEditorDialog").then((m) => ({ default: m.MapItemEditorDialog })));
-
-// pyodidePoc/ pulls in prismjs/react-simple-code-editor -- lazy for the
-// same reason MapItemEditorDialog above is: a session that never opens
-// "Add Gramplet…" never fetches either. GRAMPLET_AUTHOR_PERMISSION below
-// is a plain string constant from the same directory's grampletMedia.ts,
-// not GrampletEditDialog.tsx itself, so importing it plainly doesn't pull
-// prismjs/react-simple-code-editor in regardless.
+// pyodidePoc/ pulls in prismjs/react-simple-code-editor -- lazy since a
+// session that never opens "Add Gramplet…" never fetches either.
+// GRAMPLET_AUTHOR_PERMISSION below is a plain string constant from the same
+// directory's grampletMedia.ts, not GrampletEditDialog.tsx itself, so
+// importing it plainly doesn't pull prismjs/react-simple-code-editor in
+// regardless.
 const GrampletEditDialog = lazy(() =>
   import("../pyodidePoc/GrampletEditDialog").then((m) => ({ default: m.GrampletEditDialog })));
 
@@ -258,7 +251,6 @@ export function MenuBar({ draftStack }: MenuBarProps) {
   const [overviewOpened, setOverviewOpened] = useState(false);
   const [systemInfoOpened, setSystemInfoOpened] = useState(false);
   const [aboutOpened, setAboutOpened] = useState(false);
-  const [mapItemOpened, setMapItemOpened] = useState(false);
   const [grampletOpened, setGrampletOpened] = useState(false);
   const [grampletStoreOpened, setGrampletStoreOpened] = useState(false);
   const [reindexOpened, setReindexOpened] = useState(false);
@@ -360,26 +352,22 @@ export function MenuBar({ draftStack }: MenuBarProps) {
               onClick: () => draftStack.openDraft(type),
             })),
             {
-              // Not a draft type (see draftStack.ts's own exclusion of
-              // Media) -- opens MapItemEditorDialog.tsx directly instead of
-              // going through draftStack.openDraft.
-              label: "Add Map Overlay…",
-              perm: PERM_ADD_OBJ,
-              onClick: () => setMapItemOpened(true),
-              separatorBefore: true,
-            },
-            {
-              // Also not a draft type -- opens GrampletEditDialog.tsx
-              // directly, same as Add Map Overlay just above. Gated well
+              // Not a draft type -- opens GrampletEditDialog.tsx directly,
+              // same as Media (draftStack.ts excludes both). Gated well
               // above the AddObject/EditObject an ordinary Media upload
               // needs -- see grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION
               // doc comment (discussion #4, F9): Gramplet code runs in
               // every viewer's browser who adds it to their own view, not
               // just the author's, so authoring one needs a higher bar
               // than editing an ordinary Media object does.
+              // (Map overlays used to have their own place-less "Add Map
+              // Overlay…" entry here too -- removed once a map overlay was
+              // required to always start from a specific place's own panel
+              // instead, see MapOverlaysSection.tsx.)
               label: "Add Gramplet…",
               perm: GRAMPLET_AUTHOR_PERMISSION,
               onClick: () => setGrampletOpened(true),
+              separatorBefore: true,
             },
           ]}
         />
@@ -506,17 +494,6 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           setOverviewOpened(true);
         }}
       />
-      {mapItemOpened && (
-        <Suspense
-          fallback={
-            <Box style={{ position: "fixed", inset: 0, zIndex: 300 }}>
-              <Loader size="sm" style={{ position: "absolute", top: "50%", left: "50%" }} />
-            </Box>
-          }
-        >
-          <MapItemEditorDialog target={{ kind: "new" }} onClose={() => setMapItemOpened(false)} />
-        </Suspense>
-      )}
       {grampletOpened && (
         <Suspense
           fallback={

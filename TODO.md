@@ -70,6 +70,23 @@ to `main` with nothing catching it.
   itself to the Place's `media_list` (alongside the KML) when saving an
   image overlay — makes the relationship visible in the Place's gallery and
   gives it a real Gramps-level reference.
+- **Unify `SearchOrCreate` with `RecordPicker`'s own "Create X / or / Select
+  existing X" layout**: `RecordPicker.tsx`'s `onCreateNew` path now leads
+  with a "(+) Create X" button, an "or" divider, then "Select existing X"
+  above the search box — used automatically by every modal-triggered picker
+  that passes `onCreateNew` (`AttachControl.tsx`'s Map Overlays case,
+  `BulkTagButton.tsx`). `RefPickerField.tsx`'s `SearchOrCreate` (Event's
+  Place field, Citation's Source field, Family's Father/Mother slots) still
+  has its own separate, older two-button gate ("Select existing…" / "+ New
+  X") before ever opening a `RecordPicker` — clicking "Select existing…"
+  now shows a redundant second "(+) Create X" inside the picker you just
+  opened *from* a button that already offered that. Deliberately left alone
+  for now: collapsing `SearchOrCreate` onto the same unified layout would
+  mean every empty reference field in a busy edit form (Event/Citation/
+  Family) always shows a full search box + results by default instead of a
+  single compact button, a real increase in those forms' visual weight —
+  worth doing, but as its own considered change, not a side effect of
+  another feature.
 
 ## Editing gaps
 

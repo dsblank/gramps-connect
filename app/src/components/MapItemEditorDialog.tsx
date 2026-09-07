@@ -70,7 +70,13 @@ const COLOR_SWATCHES = [
 
 const EMPTY_LABEL_PREVIEW: FeatureCollection = { type: "FeatureCollection", features: [] };
 
-export type MapItemEditorTarget = { kind: "new" } | { kind: "edit"; handle: string };
+export type MapItemEditorTarget =
+  // A map overlay must always belong to a place (see the plan) -- `place`
+  // is required here, not optional, so every caller has to already know
+  // which one before opening this dialog. MapOverlaysSection.tsx (a
+  // place's own detail panel) is the only caller that creates one now.
+  | { kind: "new"; place: { handle: string; title: string } }
+  | { kind: "edit"; handle: string };
 
 /** One placed-and-sized image overlay in this dialog -- always 4 explicit
  * world corners, mirroring kmlMedia.ts's KmlImageOverlay (what a save
@@ -250,24 +256,28 @@ interface MapItemEditorDialogProps {
   onSaved?: () => void;
 }
 
-/** "Add Map Item…" (MenuBar's Add menu) and a KML media object's "Edit"
- * (MediaKmlEditButton.tsx) both open this -- a full-screen map with a
- * terra-draw toolbar for drawing/editing Point/LineString/Polygon shapes,
- * saved as a KML media object's file. Not a reuse of MapCanvas.tsx: that
- * component's source/layers are built around place clustering, which has
- * nothing to do with a blank drawing canvas -- this builds its own small
- * maplibre map instead, reusing only mapStyles.ts's basemap URL (Standard
- * only; no OHM historical mode here) and MapCanvas's worker-registration
- * pattern.
+/** MapOverlaysSection.tsx's own "+ Add overlay" (a place's detail panel) and
+ * "Edit", and a KML media object's own "Edit" (MediaKmlEditButton.tsx),
+ * both open this -- a full-screen map with a terra-draw toolbar for
+ * drawing/editing Point/LineString/Polygon shapes, saved as a KML media
+ * object's file. A map overlay always belongs to a place (see
+ * MapItemEditorTarget) -- there used to also be a place-less "Add Map
+ * Overlay…" entry in MenuBar's Add menu, removed once every overlay was
+ * required to start from a specific place's own panel instead. Not a reuse
+ * of MapCanvas.tsx: that component's source/layers are built around place
+ * clustering, which has nothing to do with a blank drawing canvas -- this
+ * builds its own small maplibre map instead, reusing only mapStyles.ts's
+ * basemap URL (Standard only; no OHM historical mode here) and MapCanvas's
+ * worker-registration pattern.
  *
  * No `opened` prop, unlike this app's other dialogs: maplibre-gl and
  * terra-draw are the heaviest thing this app can pull in (see MapView.tsx's
  * own doc comment on maplibre-gl's ~900KB), so this component is only ever
  * present in the tree at all behind a `lazy()`/`Suspense` boundary each
- * caller owns (MenuBar.tsx, MediaKmlEditButton.tsx) -- mounting it *is*
- * opening it, and the caller unmounts it (dropping this state entirely,
- * fresh next time) via `onClose` instead of toggling a boolean prop on an
- * always-mounted instance. */
+ * caller owns (MapOverlaysSection.tsx, MediaKmlEditButton.tsx) -- mounting
+ * it *is* opening it, and the caller unmounts it (dropping this state
+ * entirely, fresh next time) via `onClose` instead of toggling a boolean
+ * prop on an always-mounted instance. */
 export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorDialogProps) {
   // A callback ref surfaced as state, not a plain useRef -- this dialog's
   // <div> is inside a Mantine Modal, whose own children aren't necessarily
@@ -395,20 +405,26 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // from the existing object for an edit (see the effect below). Optional,
   // like every other field a bare Media object starts without.
   const [desc, setDesc] = useState("");
-  // The one place this item is attached to -- editable here since
-  // attaching the saved item to a place is what actually makes it show up
-  // anywhere else (the map overlay, MediaMapButton's own "Map" link, both
-  // gated on a Place backlink -- see that component's doc comment), and a
-  // freshly-drawn item has nowhere to go otherwise. A single slot, not a
-  // list: this editor treats "which place is this item's" as one choice,
-  // matching how a map item is actually used even though gramps-web-api's
-  // media_list would technically allow attaching it to several. `original`
-  // is what it was (edit mode only, from backlinks) when this dialog
-  // opened, so handleSave can diff against it -- attach/detach are both
-  // deferred to save time rather than firing immediately on pick/remove,
-  // same reasoning as every other field here (and a *new* item has no
-  // handle yet to attach to before that point regardless).
-  const [place, setPlace] = useState<{ handle: string; title: string } | null>(null);
+  // The one place this item is attached to -- required (see
+  // MapItemEditorTarget's own doc comment): a map overlay's date visibility
+  // is entirely the attached place's own doing, so an overlay with no place
+  // at all would have no way to ever be date-gated, and no home for
+  // MediaMapButton's "Map" link either. A single slot, not a list: this
+  // editor treats "which place is this item's" as one choice, matching how
+  // a map item is actually used even though gramps-web-api's media_list
+  // would technically allow attaching it to several. Seeded from
+  // `target.place` for a new item (always present); null only ever appears
+  // in edit mode, for an overlay saved before a place was required (see the
+  // no-place branch in the render below) -- otherwise the same as
+  // `originalPlace` until changed via the picker. `original` is what it was
+  // (edit mode only, from backlinks) when this dialog opened, so handleSave
+  // can diff against it -- attach/detach are both deferred to save time
+  // rather than firing immediately on pick, same reasoning as every other
+  // field here (and a *new* item has no handle yet to attach to before that
+  // point regardless).
+  const [place, setPlace] = useState<{ handle: string; title: string } | null>(
+    target.kind === "new" ? target.place : null
+  );
   const [originalPlace, setOriginalPlace] = useState<{ handle: string; title: string } | null>(null);
   const [placePickerOpen, setPlacePickerOpen] = useState(false);
   // Read-only: an overlay's date visibility comes from the attached
@@ -1452,7 +1468,10 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             <Button variant="default" size="sm" onClick={onClose} disabled={saving}>
               {t("Cancel")}
             </Button>
-            <Button size="sm" onClick={handleSave} loading={saving} disabled={tooComplex || (!hasFeatures && overlays.length === 0)}>
+            <Button
+              size="sm" onClick={handleSave} loading={saving}
+              disabled={tooComplex || (!hasFeatures && overlays.length === 0) || !place}
+            >
               {t("Save")}
             </Button>
           </Group>
@@ -1494,10 +1513,19 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
               <Text size="xs" c="dimmed" truncate style={{ maxWidth: 200 }}>
                 {placeDate ? formatDate(placeDate) : t("(always visible -- no date on this place)")}
               </Text>
-              <CircleGlyphButton glyph="−" label={t("Detach this place")} size={18} onClick={() => setPlace(null)} />
+              {/* Read-only, deliberately -- a map overlay can only ever be
+                  added to the place its own panel was opened from (see
+                  MapOverlaysSection.tsx), and stays there; there's no picker
+                  to reassign it to a different place, matching the plan. */}
             </Group>
           ) : (
+            // Only reachable editing an overlay saved before a place was
+            // required (or one that somehow lost its attachment) -- every
+            // new overlay is created with a place already chosen (see
+            // MapOverlaysSection.tsx, the only place-that-creates-one now
+            // that MenuBar's old unattached "Add Map Overlay…" is gone).
             <Group gap={10} wrap="nowrap">
+              <Text size="xs" c="red">{t("This overlay has no place attached -- pick one before saving.")}</Text>
               <CircleGlyphButton
                 glyph="+"
                 label={t("Attach to a place")}

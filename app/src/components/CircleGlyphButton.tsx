@@ -39,6 +39,12 @@ interface CircleGlyphButtonProps {
    * keyboard-reachable (see PyodidePocPanel.module.css's own
    * :focus-within reveal rule for them). */
   component?: "button" | "span";
+  /** Dims the glyph (and, with `textLabel`, its text too) and blocks
+   * activation -- e.g. NotesSection.tsx's "Add a story" while a generation
+   * request is in flight. Native <button disabled> already blocks a click;
+   * the component="span" case's own hand-rolled Enter/Space handler below
+   * checks this explicitly since a <span> has no native disabled state. */
+  disabled?: boolean;
 }
 
 const CIRCLE_STYLE = (size: number) =>
@@ -78,7 +84,7 @@ const CIRCLE_STYLE = (size: number) =>
  * floating-element target) may need a DOM ref to -- a plain function
  * component would silently drop one. */
 export const CircleGlyphButton = forwardRef<HTMLButtonElement, CircleGlyphButtonProps>(
-  function CircleGlyphButton({ glyph, label, onClick, size = 20, textLabel, component = "button" }, ref) {
+  function CircleGlyphButton({ glyph, label, onClick, size = 20, textLabel, component = "button", disabled }, ref) {
     // See the `component` prop's own doc comment -- a real <button> gets
     // Enter/Space activation and focusability for free; a <span> doesn't,
     // so component="span" adds both by hand instead of silently losing them.
@@ -88,6 +94,7 @@ export const CircleGlyphButton = forwardRef<HTMLButtonElement, CircleGlyphButton
             role: "button" as const,
             tabIndex: 0,
             onKeyDown: (e: KeyboardEvent) => {
+              if (disabled) return;
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault(); // Space's default is to scroll the page
                 onClick(e);
@@ -97,8 +104,10 @@ export const CircleGlyphButton = forwardRef<HTMLButtonElement, CircleGlyphButton
         : undefined;
     if (textLabel) {
       return (
-        <UnstyledButton component={component} ref={ref} onClick={onClick} aria-label={label} {...spanA11yProps}>
-          <Group gap={6} wrap="nowrap">
+        <UnstyledButton
+          component={component} ref={ref} onClick={onClick} aria-label={label} disabled={disabled} {...spanA11yProps}
+        >
+          <Group gap={6} wrap="nowrap" style={disabled ? { opacity: 0.5 } : undefined}>
             <span style={CIRCLE_STYLE(size)}>{glyph}</span>
             <Text size="sm" c="dimmed">{textLabel}</Text>
           </Group>
@@ -112,7 +121,8 @@ export const CircleGlyphButton = forwardRef<HTMLButtonElement, CircleGlyphButton
           ref={ref}
           onClick={onClick}
           aria-label={label}
-          style={CIRCLE_STYLE(size)}
+          disabled={disabled}
+          style={{ ...CIRCLE_STYLE(size), ...(disabled ? { opacity: 0.5 } : {}) }}
           {...spanA11yProps}
         >
           {glyph}

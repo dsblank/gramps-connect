@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Text, UnstyledButton } from "@mantine/core";
+import { Alert, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { getTagHandleCached, MESSAGE_TYPE, TODO_DONE_TAG } from "../../../store/notesApi";
 import { detachRefListEntry } from "../../../store/refListApi";
@@ -8,6 +8,7 @@ import type { StorySpec } from "../../../store/storyBuilder";
 import { NOTE_VIEW } from "../../../store/views";
 import { StoryView } from "../../StoryView";
 import { AttachControl } from "../AttachControl";
+import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
 import type { SectionProps } from "../types";
@@ -95,9 +96,13 @@ function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["vie
 
   return (
     <>
-      <UnstyledButton onClick={handleClick} disabled={busy}>
-        <Text size="sm" c="blue">{t("+ Add a story")}</Text>
-      </UnstyledButton>
+      <CircleGlyphButton
+        glyph="+"
+        label={t("Add a story")}
+        textLabel={t("Add a story")}
+        onClick={handleClick}
+        disabled={busy}
+      />
       {error && <Alert color="red">{error}</Alert>}
       <StoryView spec={spec} opened={opened} onClose={() => setOpened(false)} />
     </>

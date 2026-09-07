@@ -31,7 +31,36 @@ interface AttachControlProps {
    * trigger's tooltip ("Attach a note") and the dialog's own heading
    * ("Adding a note"). */
   itemLabel: string;
-  onAttached: () => void;
+  /** Ignored (and may be omitted) when `onPick` is given -- the default
+   * pick behavior calls this after a successful attach; a custom `onPick`
+   * is responsible for its own equivalent refetch call instead. */
+  onAttached?: () => void;
+  /** Overrides `pickerView.simpleSearch?.buildExpr` -- e.g.
+   * MapOverlaysSection.tsx narrows MEDIA_VIEW's own picker down to just KML
+   * files, which that view's default search expr has no notion of. */
+  buildExpr?: (term: string) => string | null;
+  /** Replaces the default "attachRefListEntry then onAttached" behavior for
+   * a picked item -- e.g. MapOverlaysSection.tsx needs to first detach the
+   * picked item from wherever else it's currently attached (a map overlay
+   * belongs to exactly one place, so picking one already on a different
+   * place moves it rather than duplicating it) before attaching it here.
+   * Must trigger its own caller-side refetch when done, same as the default
+   * path does via `onAttached`. */
+  onPick?: (item: QueryItem) => void | Promise<void>;
+  /** When given, the picker also offers a "+ Create new <createLabel>…"
+   * bridge inline in its results (RecordPicker.tsx's own `onCreateNew`) --
+   * for a type whose "attach an existing one" control should also let you
+   * create a brand new one without leaving this same dialog, e.g.
+   * MapOverlaysSection.tsx's "+ Add map overlay" offering both "pick an
+   * existing overlay" and "draw a new one" behind one trigger. This
+   * control's own Modal closes first, since the caller's creation flow
+   * (typically a full editor) needs the screen to itself. Every existing
+   * attach-only caller (Notes/Citations/Tags/Media/...) omits this, so the
+   * "not finding it?" bridge simply never renders for them, same as today. */
+  onCreateNew?: (query: string) => void;
+  /** Paired with `onCreateNew` -- e.g. "map overlay". Ignored (and may be
+   * omitted) without `onCreateNew`. */
+  createLabel?: string;
 }
 
 /** A small circled "+" trigger (CircleGlyphButton.tsx) that opens a proper
@@ -48,24 +77,36 @@ interface AttachControlProps {
  * registered) -- a Modal has none of that ambiguity.
  *
  * Picking an item appends it to the displayed record's own `listField`
- * (refListApi.ts) and calls `onAttached` so the caller can refetch. Reused
- * by every list-ref section (Notes/Citations/Tags/Media/Children/Events/
- * Associations/Repositories) -- gating on EditObject and rendering nothing
- * otherwise is this component's own job, not each call site's, so a
- * permission check can't be forgotten at any of them. See SetFieldControl
- * below for the singular-ref-field counterpart. */
+ * (refListApi.ts) and calls `onAttached` so the caller can refetch -- or,
+ * with `onPick`, does whatever that caller needs instead (MapOverlaysSection.tsx's
+ * move-instead-of-duplicate logic). `buildExpr`/`onCreateNew`/`createLabel`
+ * are the same standard "the record picker also offers a create-new bridge"
+ * shape as ObjectEditDialog's own reference fields (see
+ * RefPickerField.tsx's SearchOrCreate) -- collapsed here into the one
+ * trigger this app's Related Pane conventions expect, rather than that
+ * component's separate "Select existing…" / "+ New X" pair. Reused by every
+ * list-ref section (Notes/Citations/Tags/Media/Children/Events/
+ * Associations/Repositories/MapOverlaysSection) -- gating on EditObject and
+ * rendering nothing otherwise is this component's own job, not each call
+ * site's, so a permission check can't be forgotten at any of them. See
+ * SetFieldControl below for the singular-ref-field counterpart. */
 export function AttachControl({
   targetView, targetHandle, pickerView, listField, buildEntry, itemLabel, onAttached,
+  buildExpr, onPick, onCreateNew, createLabel,
 }: AttachControlProps) {
   const [opened, setOpened] = useState(false);
   if (!hasPermissions("EditObject")) return null;
 
-  async function handlePick(item: QueryItem) {
-    setOpened(false);
+  async function defaultPick(item: QueryItem) {
     const token = await getToken();
     const entry = buildEntry ? buildEntry(item.handle) : item.handle;
     await attachRefListEntry(token, targetView, targetHandle, listField, entry);
-    onAttached();
+    onAttached?.();
+  }
+
+  async function handlePick(item: QueryItem) {
+    setOpened(false);
+    await (onPick ?? defaultPick)(item);
   }
 
   return (
@@ -81,10 +122,12 @@ export function AttachControl({
           view={pickerView}
           searchField="gramps_id"
           placeholder={pickerView.simpleSearch?.placeholder ?? "Search…"}
-          buildExpr={pickerView.simpleSearch?.buildExpr}
+          buildExpr={buildExpr ?? pickerView.simpleSearch?.buildExpr}
           renderLabel={(item) => pickerResultLabel(pickerView.key, item)}
           onPick={handlePick}
           confirmWithButton
+          createLabel={createLabel}
+          onCreateNew={onCreateNew ? (query) => { setOpened(false); onCreateNew(query); } : undefined}
         />
       </Modal>
     </>
