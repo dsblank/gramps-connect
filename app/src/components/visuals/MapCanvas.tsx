@@ -554,15 +554,14 @@ export function MapCanvas({
     source?.setData(toGeoJson(places, highlighted, selectedHandle));
   }, [places, highlighted, selectedHandle, ready]);
 
-  // Every currently-plotted place's KML attachment(s) (see
-  // MapPlace.kmlMedia), overlaid via KML_SOURCE above -- not gated on
-  // selection, so a shape is visible any time its place is on the map, the
-  // same as the marker itself. Keyed on the deduplicated handles themselves
-  // rather than on `places` directly, so a filter/search change that leaves
-  // the same KML-attached places on screen doesn't requery the source (and
-  // fetchAllKmlFeatures's own per-handle cache means even a real change only
-  // pays for whatever handles are actually new).
-  const kmlKey = [...new Set(places.flatMap((place) => place.kmlMedia))].sort().join(",");
+  // The selected place's own KML attachment(s) (see MapPlace.kmlMedia),
+  // overlaid via KML_SOURCE above -- gated on selection (see selectedPlace
+  // below) so a shape only appears once its place is opened, matching the
+  // image-overlay gating a few lines down. Keyed on the deduplicated handles
+  // themselves rather than on `selectedPlace` directly, so fetchAllKmlFeatures's
+  // own per-handle cache is reused whenever the same handles recur.
+  const selectedPlace = selectedHandle ? places.find((p) => p.handle === selectedHandle) ?? null : null;
+  const kmlKey = selectedPlace ? [...new Set(selectedPlace.kmlMedia)].sort().join(",") : "";
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -621,13 +620,12 @@ export function MapCanvas({
     };
   }, [kmlKey, ready, hiddenOverlayKeys, opacityOverrides]);
 
-  // Unlike the shapes above, image overlays are gated on selection: with the
+  // Like the shapes above, image overlays are gated on selection: with the
   // whole tree (or a whole scope) on screen there could be dozens of them
   // stacked across unrelated places, cluttering a view that's supposed to
   // read as a plain map of markers -- so only the one place currently opened
   // in the detail card (see MapView's `selected`) shows its own overlay(s),
   // the same place OverlayLayersPanel.tsx now restricts its list to.
-  const selectedPlace = selectedHandle ? places.find((p) => p.handle === selectedHandle) ?? null : null;
   const overlayKmlKey = selectedPlace ? [...selectedPlace.kmlMedia].sort().join(",") : "";
 
   // handle (a KML media object, i.e. what a MapPlace.kmlMedia entry is) ->
