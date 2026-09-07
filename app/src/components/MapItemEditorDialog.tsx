@@ -1049,15 +1049,32 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       // (other images, the base map) stays visible for positioning --
       // restored to fully opaque on mouseup.
       map.setPaintProperty(sourceId, "raster-opacity", OVERLAY_DRAG_OPACITY);
-      const start = e.lngLat;
-      const startCorners = box.corners;
+      // In screen pixels, not raw lng/lat degrees -- a fixed degree offset
+      // covers a different on-screen distance depending on latitude (Web
+      // Mercator isn't uniformly scaled north-south), so translating this
+      // way visibly grew/shrank the image as it crossed latitudes mid-drag,
+      // even though its own lat/lng span never actually changed. Found
+      // live. Projecting each corner once up front, shifting all of them by
+      // the same pixel delta the cursor has moved, and unprojecting back
+      // keeps the dragged image's on-screen size constant -- the same
+      // "work in projected space, not raw degrees" fix rotatePoint/
+      // scalePoint already apply to rotate/resize (see their own doc
+      // comments), just via maplibre's own project/unproject here instead
+      // of kmlMedia.ts's hand-rolled Mercator math, since screen pixels
+      // (not zoom-independent normalized Mercator units) are exactly what a
+      // mouse drag is measured in.
+      const startPoint = e.point;
+      const startScreenCorners = box.corners.map((corner) => map.project(corner));
       const container = map.getContainer();
       const onMove = (moveEvent: MouseEvent) => {
         const rect = container.getBoundingClientRect();
-        const lngLat = map.unproject([moveEvent.clientX - rect.left, moveEvent.clientY - rect.top]);
-        const dLng = lngLat.lng - start.lng;
-        const dLat = lngLat.lat - start.lat;
-        setCorners(startCorners.map(([lng, lat]) => [lng + dLng, lat + dLat]) as OverlayCorners);
+        const dx = moveEvent.clientX - rect.left - startPoint.x;
+        const dy = moveEvent.clientY - rect.top - startPoint.y;
+        const newCorners = startScreenCorners.map((screenCorner) => {
+          const lngLat = map.unproject([screenCorner.x + dx, screenCorner.y + dy]);
+          return [lngLat.lng, lngLat.lat] as [number, number];
+        });
+        setCorners(newCorners as OverlayCorners);
         repositionHandles();
       };
       const onUp = () => {
@@ -1547,7 +1564,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             </Button>
             <Button
               size="sm" onClick={handleSave} loading={saving}
-              disabled={tooComplex || (!hasFeatures && overlays.length === 0) || !place}
+              disabled={tooComplex || (!hasFeatures && overlays.length === 0) || !place || !desc.trim()}
             >
               {t("Save")}
             </Button>
@@ -1560,8 +1577,11 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             item belongs to (nothing shows this item anywhere else --
             MediaMapButton's "Map" link, the map/story KML overlay -- until
             it's attached to one; see MediaMapButton.tsx's own doc comment).
-            Not gated on `ready`: both are plain metadata edits, independent
-            of whether the map/canvas has finished loading. */}
+            Both required (see the Save button's own disabled check above):
+            an unlabeled, unattached KML file is nearly impossible to tell
+            apart from another in a media list later. Not gated on `ready`:
+            both are plain metadata edits, independent of whether the map/
+            canvas has finished loading. */}
         <Group
           wrap="nowrap"
           px="md"
@@ -1574,7 +1594,9 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           <TextInput
             size="xs"
             style={{ flex: 1, maxWidth: 360 }}
-            placeholder={t("Description (optional)")}
+            placeholder={t("Description")}
+            withAsterisk
+            error={desc.trim() === ""}
             value={desc}
             onChange={(e) => setDesc(e.currentTarget.value)}
           />
