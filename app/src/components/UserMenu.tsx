@@ -21,6 +21,8 @@ import {
   enableBrowserNotifications,
   isBrowserNotificationsEnabled,
 } from "../store/browserNotifications";
+import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
+import { colorForUsername, initialsFor } from "../store/userAvatar";
 
 const ENGLISH_OPTION = { value: "en", label: "English" };
 
@@ -160,7 +162,11 @@ async function copyApiKey() {
 
 export function UserMenu() {
   const username = getCurrentUsername();
-  const initial = username ? username[0].toUpperCase() : "?";
+  // Re-renders once the own user's full name resolves (userDirectory.ts's
+  // fetchOwnUser -- always available, no permission needed) so the avatar's
+  // initials upgrade from the raw username without fetching anything here.
+  useSyncExternalStore(subscribeUserDirectory, getUserDirectoryVersion);
+  const initials = username ? initialsFor(displayName(username)) : "?";
   const hasApiKey = getApiKey() !== null;
   const [profileOpened, setProfileOpened] = useState(false);
   const [adminOpened, setAdminOpened] = useState(false);
@@ -176,8 +182,14 @@ export function UserMenu() {
     <>
       <Menu shadow="md" width={220} position="bottom-end">
         <Menu.Target>
-          <Avatar radius="xl" size="sm" style={{ cursor: "pointer" }}>
-            {initial}
+          <Avatar
+            radius="xl"
+            size="sm"
+            variant="filled"
+            color={username ? colorForUsername(username) : undefined}
+            style={{ cursor: "pointer" }}
+          >
+            {initials}
           </Avatar>
         </Menu.Target>
         <Menu.Dropdown>

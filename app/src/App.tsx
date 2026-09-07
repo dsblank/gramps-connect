@@ -18,6 +18,7 @@ import { Sidebar } from "./components/Sidebar";
 import { HomeView } from "./components/HomeView";
 import { MenuBar } from "./components/MenuBar";
 import { UserMenu } from "./components/UserMenu";
+import { ActiveUsers } from "./components/ActiveUsers";
 import { FilterBar } from "./components/FilterBar";
 import { ListHeader } from "./components/ListHeader";
 import { DataTable } from "./components/DataTable";
@@ -338,7 +339,10 @@ function AuthenticatedApp() {
             <Stack gap={0} h="100%">
               <Group h={HEADER_HEIGHT} px="md" justify="space-between" wrap="nowrap">
                 {wordmark}
-                <UserMenu />
+                <Group gap="xs" wrap="nowrap">
+                  <ActiveUsers />
+                  <UserMenu />
+                </Group>
               </Group>
               {/* Seven menus still outgrow a phone-width row, so that row
                   scrolls sideways -- MenuBar itself never wraps. */}
@@ -355,7 +359,10 @@ function AuthenticatedApp() {
                 {wordmark}
                 <MenuBar draftStack={draftStack} />
               </Group>
-              <UserMenu />
+              <Group gap="xs" wrap="nowrap">
+                <ActiveUsers />
+                <UserMenu />
+              </Group>
             </Group>
           )}
         </AppShell.Header>
