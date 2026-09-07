@@ -50,11 +50,10 @@ import { t } from "../i18n/i18n";
 // module happens not to have loaded yet in this session costs nothing.
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
-type DrawMode = "point" | "linestring" | "polygon" | "rectangle" | "label" | "select";
+type DrawMode = "point" | "linestring" | "polygon" | "rectangle" | "select";
 
 const TOOLBAR: { mode: DrawMode; label: string }[] = [
   { mode: "point", label: "Point" },
-  { mode: "label", label: "Label" },
   { mode: "linestring", label: "Line" },
   { mode: "polygon", label: "Polygon" },
   { mode: "rectangle", label: "Rectangle" },
@@ -298,10 +297,9 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   const dark = useComputedColorScheme("light") === "dark";
   const [mode, setMode] = useState<DrawMode>("select");
   // Mirrors `mode` state for the finish listener set up once below (same
-  // reasoning as colorRef just under this) -- "label" isn't a real
-  // terra-draw mode (it draws via the "point" mode, see handleModeChange),
-  // so this is how that listener tells a just-placed label apart from an
-  // ordinary point.
+  // reasoning as colorRef just under this) -- lets it tell a just-finished
+  // region (polygon/rectangle) apart from a point/line, since it's
+  // registered once per map rather than fresh on every `mode` change.
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const [ready, setReady] = useState(false);
@@ -318,7 +316,16 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // doesn't need the whole map/draw instance rebuilt to see it.
   const colorRef = useRef(color);
   colorRef.current = color;
-  // The selected point's label text, mirroring `color`'s own pattern --
+  // A region's (polygon/rectangle) fill opacity, same pattern as `color`:
+  // both a newly-finished region's own opacity and, while one is selected,
+  // what changing this edits in place. 0.25 matches MapCanvas.tsx's own
+  // KML_FILL_LAYER default, so an untouched region still renders exactly as
+  // it did before this property existed.
+  const [opacity, setOpacity] = useState(0.25);
+  const opacityRef = useRef(opacity);
+  opacityRef.current = opacity;
+  // The selected point/region's own `name` (a point's label text, or a
+  // region's purely-descriptive name), mirroring `color`'s own pattern --
   // NOT derived from getSnapshot() on every render, since
   // updateFeatureProperties (called on every keystroke below) doesn't
   // itself trigger a re-render, which would leave a derived value stuck
@@ -538,14 +545,19 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // just at construction time.
     const readColor = (feature: GeoJSONStoreFeatures): HexColor =>
       (feature.properties.color as HexColor | undefined) ?? (colorRef.current as HexColor);
+    // Same pattern as readColor, for a region's own `opacity` property --
+    // only polygon/rectangle modes take a `fillOpacity` style at all (point/
+    // line have nothing to fill).
+    const readOpacity = (feature: GeoJSONStoreFeatures): number =>
+      (feature.properties.opacity as number | undefined) ?? opacityRef.current;
 
     const draw = new TerraDraw({
       adapter: new TerraDrawMapLibreGLAdapter({ map }),
       modes: [
         new TerraDrawPointMode({ styles: { pointColor: readColor } }),
         new TerraDrawLineStringMode({ styles: { lineStringColor: readColor } }),
-        new TerraDrawPolygonMode({ styles: { fillColor: readColor, outlineColor: readColor } }),
-        new TerraDrawRectangleMode({ styles: { fillColor: readColor, outlineColor: readColor } }),
+        new TerraDrawPolygonMode({ styles: { fillColor: readColor, fillOpacity: readOpacity, outlineColor: readColor } }),
+        new TerraDrawRectangleMode({ styles: { fillColor: readColor, fillOpacity: readOpacity, outlineColor: readColor } }),
         // Dragging (both a whole feature and its individual vertices) and
         // deletion (terra-draw's own default keybinding, Delete/Backspace
         // on the current selection) are what this editor needs from
@@ -555,6 +567,24 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         // to mean something -- not `point`, a single vertex has nothing to
         // rotate around.
         new TerraDrawSelectMode({
+          // While a feature is selected, terra-draw renders it through
+          // *this* mode's own styling, not the drawing mode that created it
+          // (see TerraDraw's own per-feature style dispatch: only the
+          // selected feature goes through TerraDrawSelectMode.styleFeature;
+          // every other feature keeps using its own mode's, which is why an
+          // unselected shape's color/opacity already reflects its own
+          // properties fine). Without these, the selected-state styling
+          // falls back to terra-draw's fixed defaults regardless of
+          // `feature.properties` -- so dragging the opacity slider (or
+          // recoloring) while a shape is actively selected had no visible
+          // effect until it was deselected. Found live.
+          styles: {
+            selectedPointColor: readColor,
+            selectedLineStringColor: readColor,
+            selectedPolygonColor: readColor,
+            selectedPolygonOutlineColor: readColor,
+            selectedPolygonFillOpacity: readOpacity,
+          },
           // Half terra-draw's own default (40px) -- with labels sitting
           // right next to their point (see LABEL_PREVIEW_LAYER's
           // text-offset above) and vertices sometimes placed close
@@ -604,33 +634,51 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       );
       refreshLabelPreviewRef.current?.();
     });
-    // A shape takes the toolbar's current color the moment it's finished
-    // drawing -- colorRef (not `color` state) since this listener, like
-    // the mode instances above, is registered once per map.
-    draw.on("finish", (id) => {
-      draw.updateFeatureProperties(id, { color: colorRef.current });
-      // A label is a plain terra-draw point (see handleModeChange) placed
-      // with the express purpose of carrying text -- jump straight to
-      // Select and select it so the text field below is ready to type
-      // into immediately, rather than making the user switch to Select
-      // and click the point they just placed.
-      if (modeRef.current === "label") {
-        draw.setMode("select");
-        setMode("select");
-        draw.selectFeature(id);
-        setSelectedId(String(id));
-        setLabelText("");
-      }
-    });
-    draw.on("select", (id) => {
-      setSelectedId(String(id));
-      const feature = draw.getSnapshot().find((f) => f.id === id);
+    // A shape takes the toolbar's current color (and, for a region, opacity)
+    // the moment it's finished drawing -- colorRef/opacityRef (not `color`/
+    // `opacity` state) since this listener, like the mode instances above,
+    // is registered once per map. Opacity only for polygon/rectangle (both
+    // land here as "polygon"/"rectangle" -- see modeRef): a point or line
+    // has no fill for it to mean anything on.
+    //
+    // Shared by the "select" listener below and the finish handler just
+    // under it: selecting an existing feature and just having finished
+    // drawing a new one both need the color/opacity/label widgets to catch
+    // up to *that* feature's own properties, not whatever the toolbar was
+    // last left showing. `id` null means deselected -- nothing to edit, so
+    // the widgets themselves go away entirely (see selectedFeature/
+    // selectedIsRegion in the render body below).
+    function syncSelection(id: string | null) {
+      setSelectedId(id);
+      const feature = id ? draw.getSnapshot().find((f) => String(f.id) === id) : undefined;
       setLabelText((feature?.properties?.name as string | undefined) ?? "");
+      if (feature) {
+        setColor((feature.properties?.color as string | undefined) ?? colorRef.current);
+        setOpacity((feature.properties?.opacity as number | undefined) ?? 0.25);
+        // Mirrors the overlay mousedown handler's own deselectFeature call
+        // -- an image overlay and a drawn shape are mutually exclusive
+        // selections, so a shape becoming selected clears any overlay
+        // selection the same way.
+        setSelectedOverlayId(null);
+      }
+    }
+    draw.on("finish", (id) => {
+      const isRegion = modeRef.current === "polygon" || modeRef.current === "rectangle";
+      draw.updateFeatureProperties(
+        id,
+        isRegion ? { color: colorRef.current, opacity: opacityRef.current } : { color: colorRef.current },
+      );
+      // Every finished shape drops straight into Select mode with itself
+      // selected -- lets someone place a boundary, say, and immediately
+      // see/adjust its color and opacity without an extra click to the
+      // Select tool and back onto the shape it just placed.
+      draw.setMode("select");
+      setMode("select");
+      draw.selectFeature(id);
+      syncSelection(String(id));
     });
-    draw.on("deselect", () => {
-      setSelectedId(null);
-      setLabelText("");
-    });
+    draw.on("select", (id) => syncSelection(String(id)));
+    draw.on("deselect", () => syncSelection(null));
 
     // terra-draw's own delete keybinding only recognizes the literal
     // "Delete" key (terra-draw-maplibre-gl-adapter's default keyEvents) --
@@ -737,6 +785,12 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       for (const [id, mount] of mounts) {
         const corners = mount.box.corners.map((c) => map.project(c));
         if (pointInQuad(e.point, corners)) {
+          // An image overlay and a drawn shape are mutually exclusive
+          // selections -- deselect any terra-draw feature first, or its
+          // own color/name/opacity controls would keep showing alongside
+          // this overlay's, none of them meaningful for the other's kind
+          // of item. Found live.
+          if (selectedIdRef.current) draw.deselectFeature(selectedIdRef.current);
           setSelectedOverlayId(id);
           mount.startMove(e);
           return;
@@ -1185,7 +1239,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     }
     fetchAllKmlFeatures([target.handle]).then((features) => {
       if (cancelled || features.length === 0) return;
-      const loadable: { type: "Feature"; geometry: Point | LineString | Polygon; properties: { mode: DrawMode; color?: string; name?: string } }[] = [];
+      const loadable: { type: "Feature"; geometry: Point | LineString | Polygon; properties: { mode: DrawMode; color?: string; name?: string; opacity?: number } }[] = [];
       for (const feature of features) {
         const geometry = feature.geometry;
         // A direct literal check here (rather than a separate
@@ -1199,11 +1253,19 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         }
         const featureMode: DrawMode =
           geometry.type === "Point" ? "point" : geometry.type === "LineString" ? "linestring" : "polygon";
+        // Round-tripped through tokml/togeojson as a plain string
+        // ExtendedData value (same as color), so it needs the same numeric
+        // coercion+range check kmlMedia.ts's own image-overlay opacity
+        // parsing already does -- undefined (not just any junk value)
+        // falls through to readOpacity's own opacityRef default.
+        const opacityRaw = Number(feature.properties?.opacity);
+        const opacity = Number.isFinite(opacityRaw) && opacityRaw >= 0 && opacityRaw <= 1 ? opacityRaw : undefined;
         loadable.push({
           type: "Feature", geometry,
           properties: {
             mode: featureMode, color: feature.properties?.color as string | undefined,
             name: feature.properties?.name as string | undefined,
+            ...(geometry.type === "Polygon" ? { opacity } : {}),
           },
         });
       }
@@ -1247,20 +1309,23 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // exception -- found live.
     if (!ready) return;
     setMode(next);
-    // "label" has no terra-draw mode of its own -- a label is just a point
-    // with text (see the finish listener above and the text field below),
-    // so it draws via terra-draw's own "point" mode.
-    drawRef.current?.setMode(next === "label" ? "point" : next);
+    // Switching drawing tools while an image overlay is selected leaves it
+    // selected otherwise -- the overlay mousedown handler and syncSelection
+    // (map-setup effect above) only clear it from the *other* direction
+    // (a shape getting selected), not a mere tool change with nothing
+    // clicked yet.
+    setSelectedOverlayId(null);
+    drawRef.current?.setMode(next);
   }
 
   async function handleSave() {
     const draw = drawRef.current;
     if (!draw) return;
-    // Geometry plus color only -- terra-draw's own other bookkeeping
-    // properties (mode, id, ...) aren't meaningful outside the editor and
-    // have no KML counterpart worth writing. color rides through as a
-    // plain ExtendedData property (see kmlWrite.ts's own doc comment on
-    // why that beats KML's simplestyle styling here).
+    // Geometry plus color (and, for a region, opacity) only -- terra-draw's
+    // own other bookkeeping properties (mode, id, ...) aren't meaningful
+    // outside the editor and have no KML counterpart worth writing. Both
+    // ride through as plain ExtendedData properties (see kmlWrite.ts's own
+    // doc comment on why that beats KML's simplestyle styling here).
     //
     // Also excluded: terra-draw's own selection-mode guidance points --
     // the small vertex/midpoint handle dots it draws on a shape's corners
@@ -1279,10 +1344,19 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         // `name` is itself what marks a point as a label), not an
         // invisible label with empty text.
         const name = (f.properties?.name as string | undefined)?.trim();
+        // Opacity only for a region (Polygon) -- meaningless on a point/
+        // line, which have nothing to fill (see readOpacity/opacityRef).
+        const regionOpacity = f.geometry.type === "Polygon"
+          ? (f.properties?.opacity as number | undefined) ?? opacity
+          : undefined;
         return {
           type: "Feature",
           geometry: f.geometry,
-          properties: { color: (f.properties?.color as string | undefined) ?? color, ...(name ? { name } : {}) },
+          properties: {
+            color: (f.properties?.color as string | undefined) ?? color,
+            ...(name ? { name } : {}),
+            ...(regionOpacity !== undefined ? { opacity: regionOpacity } : {}),
+          },
         };
       });
     if (features.length === 0 && overlays.length === 0) return;
@@ -1420,11 +1494,14 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // Cheap to recompute on every render (getSnapshot() is just an array
   // read) rather than mirrored into its own state -- selectedId already
   // triggers a re-render via draw.on("select"/"deselect") above, so this
-  // stays in sync for free. Gated on Point geometry, not on how the point
-  // was created (Point tool vs Label tool): any selected point can carry
-  // text, an untouched one just renders as a plain dot (see MapCanvas.tsx).
+  // stays in sync for free. Any selected point can carry text (see the
+  // "Label text" field below); an untouched one just renders as a plain
+  // dot (see MapCanvas.tsx).
   const selectedFeature = selectedId ? drawRef.current?.getSnapshot().find((f) => String(f.id) === selectedId) : undefined;
   const selectedIsPoint = selectedFeature?.geometry?.type === "Point";
+  // Covers both polygon and rectangle tools -- a rectangle is stored as a
+  // Polygon feature under the hood, same as terra-draw's own styling above.
+  const selectedIsRegion = selectedFeature?.geometry?.type === "Polygon";
 
   function renderModeButton(entry: { mode: DrawMode; label: string }) {
     return (
@@ -1576,33 +1653,39 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             <Divider my={2} />
             <Text size="xs" fw={600} c="dimmed">{t("Edit Options")}</Text>
 
-            {/* The next shape's color -- or, with a shape currently
-                selected (terra-draw's Select mode), that shape's color.
-                Swatches-only compact picker; ColorInput's own popover
-                still opens the full picker underneath for anything else.
-                Disabled (not hidden) while an image overlay is selected --
-                color has no effect on an image, but this stays in place so
-                the panel doesn't reflow every time selection switches
-                between a shape and an image. */}
-            <ColorInput
-              size="xs"
-              value={color}
-              onChange={(next) => {
-                setColor(next);
-                const draw = drawRef.current;
-                if (draw && selectedId) draw.updateFeatureProperties(selectedId, { color: next });
-              }}
-              swatches={COLOR_SWATCHES}
-              disabled={!ready || selectedOverlayId !== null}
-              popoverProps={{ withinPortal: true, zIndex: 1000 }}
-            />
-            {/* Only a selected point offers this -- lines/polygons have no
-                well-supported KML label placement (see this feature's own
-                design discussion), so a label is always its own point. */}
-            {selectedIsPoint && (
+            {/* Only a selected drawn shape (point/line/region) offers this
+                -- hidden, not just disabled, the rest of the time (nothing
+                selected, or an image overlay selected instead, which
+                `selectedFeature` is never set for -- see selectedOverlayId's
+                own separate selection tracking): a picker with nothing to
+                recolor is more confusing left sitting there than gone.
+                Swatches-only compact picker; ColorInput's own popover still
+                opens the full picker underneath for anything else. */}
+            {selectedFeature && (
+              <ColorInput
+                size="xs"
+                value={color}
+                onChange={(next) => {
+                  setColor(next);
+                  const draw = drawRef.current;
+                  if (draw && selectedId) draw.updateFeatureProperties(selectedId, { color: next });
+                }}
+                swatches={COLOR_SWATCHES}
+                disabled={!ready}
+                popoverProps={{ withinPortal: true, zIndex: 1000 }}
+              />
+            )}
+            {/* A point's `name` places a text label on the map (see
+                MapCanvas.tsx's KML_LABEL_LAYER) -- lines have no well-
+                supported KML label placement (see this feature's own design
+                discussion), so a label is always its own point. A region's
+                `name` is purely descriptive, the same as an image overlay's
+                own (mirrors OverlayLayersPanel.tsx's `row.name` there);
+                nothing currently renders it on the map. */}
+            {(selectedIsPoint || selectedIsRegion) && (
               <TextInput
                 size="xs"
-                placeholder={t("Label text")}
+                placeholder={selectedIsPoint ? t("Label text") : t("Region name (optional)")}
                 value={labelText}
                 onChange={(e) => {
                   setLabelText(e.currentTarget.value);
@@ -1611,6 +1694,36 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
                 }}
                 disabled={!ready}
               />
+            )}
+            {/* Only a selected region (polygon/rectangle) offers this,
+                same reasoning as the color picker above -- gone (not just
+                disabled) the moment you're done drawing one and nothing's
+                selected yet, rather than lingering with the previous
+                shape's value showing while it edits nothing. Found live: a
+                finished shape doesn't auto-select (only a just-placed Label
+                point does, see draw.on("finish") above), so the tool
+                staying "active" was never actually the same thing as a
+                region existing to apply this to. Same live-edit pattern as
+                the color picker, applied to fill opacity instead (see
+                readOpacity/opacityRef). */}
+            {selectedIsRegion && (
+              <Stack gap={2}>
+                <Text size="xs" c="dimmed">{t("Fill opacity")}</Text>
+                <Slider
+                  size="xs"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  label={(v) => `${Math.round(v * 100)}%`}
+                  value={opacity}
+                  onChange={(v) => {
+                    setOpacity(v);
+                    const draw = drawRef.current;
+                    if (draw && selectedId) draw.updateFeatureProperties(selectedId, { opacity: v });
+                  }}
+                  disabled={!ready}
+                />
+              </Stack>
             )}
             {/* Only a selected image overlay offers this -- purely shows or
                 hides the 4 corner-drag handles (see setCornerHandlesVisible's
@@ -1630,12 +1743,15 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
               />
             )}
             {/* Name/opacity/order -- only the selected image overlay's own
-                properties, no equivalent for a drawn shape. Opacity applies
-                live (see updateSelectedOverlay); order is just this
-                overlay's own rank number -- true reordering *among*
-                overlays that live in different KML files/places happens in
-                the Overlays panel on the map itself, which can see all of
-                them at once, not just this file's. */}
+                properties (a region's own name/opacity are the two blocks
+                just above, via updateFeatureProperties/terra-draw instead
+                of updateSelectedOverlay -- no `order` for a region, which
+                doesn't stack against anything the way overlapping images
+                do). Opacity applies live (see updateSelectedOverlay); order
+                is just this overlay's own rank number -- true reordering
+                *among* overlays that live in different KML files/places
+                happens in the Overlays panel on the map itself, which can
+                see all of them at once, not just this file's. */}
             {selectedOverlay && (
               <>
                 <TextInput

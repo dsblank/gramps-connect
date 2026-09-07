@@ -12,28 +12,42 @@ import { featuresToKml, type ImageOverlay } from "./kmlWrite";
 import { updateMediaFile } from "./jobsApi";
 import { KML_MIME } from "./visualData";
 
-/** Patches the `indexInFile`-th image overlay (0-based, in the same order
- * fetchAllKmlImageOverlays([kmlHandle]) alone would return them) inside
- * `kmlHandle`'s own file. A no-op if that index no longer exists (the file
- * changed shape since the caller last looked). */
-export async function patchOverlayInFile(
+/** Patches some of `kmlHandle`'s own image overlays at once -- keyed by
+ * `indexInFile` (0-based, in the same order fetchAllKmlImageOverlays
+ * ([kmlHandle]) alone would return them), each mapping to the fields to
+ * change on that one overlay. An index with no entry in `patches` (or one
+ * that no longer exists -- the file changed shape since the caller last
+ * looked) is left exactly as it was.
+ *
+ * Every patch destined for the same file must go through one call: this
+ * does a single fetch-then-write pass over the whole file, and each call is
+ * its own read of the file's current state. Patching overlay 0 and overlay
+ * 1 of the same file via two *separate* calls -- e.g. two concurrent
+ * per-overlay calls fired from a Promise.all -- would each independently
+ * fetch the same pre-edit snapshot and rewrite the whole file from it, so
+ * whichever write lands last silently discards the other's change (both
+ * "know" only their own edit; neither has the other's). Found live via
+ * OverlayLayersPanel's all-overlays-at-once opacity slider, where every
+ * overlay sharing a file with another would randomly revert. */
+export async function patchOverlaysInFile(
   token: string,
   kmlHandle: string,
-  indexInFile: number,
-  patch: Partial<Pick<ImageOverlay, "name" | "opacity" | "order">>,
+  patches: Map<number, Partial<Pick<ImageOverlay, "name" | "opacity" | "order">>>,
 ): Promise<void> {
   const [features, overlays] = await Promise.all([
     fetchAllKmlFeatures([kmlHandle]),
     fetchAllKmlImageOverlays([kmlHandle]),
   ]);
-  if (indexInFile < 0 || indexInFile >= overlays.length) return;
-  const imageOverlays: ImageOverlay[] = overlays.map((o, i) => ({
-    handle: o.imageHandle,
-    corners: o.corners,
-    name: i === indexInFile ? (patch.name ?? o.name) : o.name,
-    opacity: i === indexInFile ? (patch.opacity ?? o.opacity) : o.opacity,
-    order: i === indexInFile ? (patch.order ?? o.order) : o.order,
-  }));
+  const imageOverlays: ImageOverlay[] = overlays.map((o, i) => {
+    const patch = patches.get(i);
+    return {
+      handle: o.imageHandle,
+      corners: o.corners,
+      name: patch?.name ?? o.name,
+      opacity: patch?.opacity ?? o.opacity,
+      order: patch?.order ?? o.order,
+    };
+  });
   const blob = new Blob([featuresToKml(features, imageOverlays)], { type: KML_MIME });
   await updateMediaFile(token, kmlHandle, blob, KML_MIME);
   invalidateKmlFeatures(kmlHandle);

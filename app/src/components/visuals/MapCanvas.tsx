@@ -122,6 +122,13 @@ interface MapCanvasProps {
    * every other caller, who never edits a KML file out from under this
    * component. */
   overlayRefreshToken?: number;
+  /** Bumped by OverlayLayersPanel.tsx when a row is clicked, to ease the
+   * map to that overlay's centroid -- a counter rather than a boolean (same
+   * reasoning as fitRequest) so clicking the same overlay twice in a row
+   * still fires. */
+  flyToRequest?: number;
+  /** The [lng, lat] to ease to when `flyToRequest` bumps. */
+  flyToTarget?: [number, number] | null;
 }
 
 function toGeoJson(
@@ -160,6 +167,7 @@ const DIM_OPACITY = 0.15;
  * session that never opens View > Map should never download it. */
 export function MapCanvas({
   places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace, ohmYear, overlayRefreshToken,
+  flyToRequest, flyToTarget,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -310,18 +318,21 @@ export function MapCanvas({
     // underneath the markers rather than obscuring them.
     if (!map.getSource(KML_SOURCE)) {
       map.addSource(KML_SOURCE, { type: "geojson", data: EMPTY_FEATURE_COLLECTION });
-      // ["get", "color"] reads the per-feature colour MapItemEditorDialog.tsx
-      // writes (see its own doc comment); coalesced with the fixed
-      // markColor default so a KML file saved before per-feature colour
-      // existed keeps rendering exactly as it always has. Inlined per
-      // layer (rather than a shared variable) so each paint object keeps
-      // maplibre's own contextual expression typing.
+      // ["get", "color"]/["get", "opacity"] read the per-feature colour/
+      // opacity MapItemEditorDialog.tsx writes on a region (see its own doc
+      // comment); coalesced with the fixed defaults so a KML file saved
+      // before either property existed keeps rendering exactly as it always
+      // has. Inlined per layer (rather than a shared variable) so each paint
+      // object keeps maplibre's own contextual expression typing.
       map.addLayer({
         id: KML_FILL_LAYER,
         type: "fill",
         source: KML_SOURCE,
         filter: ["==", ["geometry-type"], "Polygon"],
-        paint: { "fill-color": ["coalesce", ["get", "color"], markColor], "fill-opacity": 0.25 },
+        paint: {
+          "fill-color": ["coalesce", ["get", "color"], markColor],
+          "fill-opacity": ["coalesce", ["get", "opacity"], 0.25],
+        },
       });
       map.addLayer({
         id: KML_LINE_LAYER,
@@ -545,6 +556,15 @@ export function MapCanvas({
     };
   }, [kmlKey, ready]);
 
+  // Unlike the shapes above, image overlays are gated on selection: with the
+  // whole tree (or a whole scope) on screen there could be dozens of them
+  // stacked across unrelated places, cluttering a view that's supposed to
+  // read as a plain map of markers -- so only the one place currently opened
+  // in the detail card (see MapView's `selected`) shows its own overlay(s),
+  // the same place OverlayLayersPanel.tsx now restricts its list to.
+  const selectedPlace = selectedHandle ? places.find((p) => p.handle === selectedHandle) ?? null : null;
+  const overlayKmlKey = selectedPlace ? [...selectedPlace.kmlMedia].sort().join(",") : "";
+
   // handle (a KML media object, i.e. what a MapPlace.kmlMedia entry is) ->
   // that place's own name.date -- what gates an overlay parsed out of that
   // file's date visibility (overlayDateVisible, applied below). Multiple
@@ -552,17 +572,19 @@ export function MapCanvas({
   // one KML is always attached to exactly one place -- but this stays a
   // plain last-write-wins map rather than assuming that).
   const nameDateByKmlHandle = new Map(
-    places.flatMap((place) => place.kmlMedia.map((handle) => [handle, place.nameDate] as const))
+    (selectedPlace ? [selectedPlace] : []).flatMap(
+      (place) => place.kmlMedia.map((handle) => [handle, place.nameDate] as const)
+    )
   );
 
   // Image overlays (KML GroundOverlay -- see MapItemEditorDialog.tsx's own
-  // doc comment on that feature) attached to any currently-plotted place.
-  // Not a geojson source like the shapes above: maplibre has no "image"
-  // geometry type inside a geojson source, each overlay needs its own
-  // `type: "image"` source + raster layer. Rebuilt wholesale on every
-  // `kmlKey` change (add-then-remove rather than a finer diff) -- this only
-  // runs when the set of KML-attached places on screen actually changes,
-  // same trigger as the geojson overlay above, so it's not a hot path.
+  // doc comment on that feature) attached to the selected place (see
+  // overlayKmlKey above). Not a geojson source like the shapes above:
+  // maplibre has no "image" geometry type inside a geojson source, each
+  // overlay needs its own `type: "image"` source + raster layer. Rebuilt
+  // wholesale on every `overlayKmlKey` change (add-then-remove rather than a
+  // finer diff) -- this only runs when the selected place's own KML
+  // attachment(s) change, so it's not a hot path.
   // Sorted by `order` ascending before insertion: each addLayer(..., beforeId)
   // call inserts its layer immediately below `beforeId`, pushing whatever was
   // already there further down -- so inserting lowest-order first means the
@@ -580,7 +602,7 @@ export function MapCanvas({
     // effect's own cleanup below, once maplibre no longer needs it.
     const objectUrls: string[] = [];
     (async () => {
-      const overlays = kmlKey === "" ? [] : await fetchAllKmlImageOverlays(kmlKey.split(","));
+      const overlays = overlayKmlKey === "" ? [] : await fetchAllKmlImageOverlays(overlayKmlKey.split(","));
       if (cancelled || overlays.length === 0) return;
       overlays.sort((a, b) => a.order - b.order);
       const token = await getToken();
@@ -615,12 +637,12 @@ export function MapCanvas({
       }
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-    // nameDateByKmlHandle is derived fresh from `places` every render --
-    // deliberately not a dependency (it'd fire this whole rebuild on every
-    // place-store tick); `kmlKey` already captures every case that changes
-    // which KML files (and so which overlays/dates) are actually in play.
+    // nameDateByKmlHandle is derived fresh from `selectedPlace` every render
+    // -- deliberately not a dependency (it'd fire this whole rebuild on
+    // every place-store tick); `overlayKmlKey` already captures every case
+    // that changes which KML file (and so which overlays/dates) are in play.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kmlKey, ready, overlayRefreshToken]);
+  }, [overlayKmlKey, ready, overlayRefreshToken]);
 
   // Re-checks each already-added overlay's date visibility against a new
   // `ohmYear` alone (a slider drag) -- a plain layout-property toggle, not
@@ -684,6 +706,20 @@ export function MapCanvas({
     for (const place of fitPlaces) bounds.extend([place.long, place.lat]);
     map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 600 });
   }, [fitRequest, ready, fitPlaces]);
+
+  // Ease to an overlay's centroid on request (see flyToRequest). Same
+  // already-applied guard as the fit effect above, for the same reason:
+  // `ready` flips false-then-true on a mode/theme swap without the request
+  // itself changing, and re-easing to the last click then would fight
+  // whatever the user has since panned to.
+  const appliedFlyToRequestRef = useRef(0);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !flyToRequest || !flyToTarget) return;
+    if (appliedFlyToRequestRef.current === flyToRequest) return;
+    appliedFlyToRequestRef.current = flyToRequest;
+    map.easeTo({ center: flyToTarget, zoom: Math.max(map.getZoom(), 9), duration: 800 });
+  }, [flyToRequest, flyToTarget, ready]);
 
   return (
     <Box style={{ flex: 1, minHeight: 0, position: "relative" }}>

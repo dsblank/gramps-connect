@@ -50,6 +50,10 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   // Bumped by OverlayLayersPanel after it patches an overlay's opacity/order
   // in place -- see MapCanvas.tsx's own doc comment on why it needs this.
   const [overlayRefreshToken, setOverlayRefreshToken] = useState(0);
+  // Where to ease the map when a row in OverlayLayersPanel is clicked -- see
+  // MapCanvas.tsx's own flyToRequest/flyToTarget doc comments.
+  const [flyToRequest, setFlyToRequest] = useState(0);
+  const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
 
   // "Auto" resolves to the latest year among the current subject's linked
   // events -- null when there's no scoped subject to derive one from (the
@@ -400,12 +404,24 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           onSelectPlace={setSelected}
           ohmYear={ohmYear}
           overlayRefreshToken={overlayRefreshToken}
+          flyToRequest={flyToRequest}
+          flyToTarget={flyToTarget}
         />
       </Suspense>
       <OverlayLayersPanel
-        places={places}
+        // Only the currently-opened place, not every plotted marker -- with
+        // the whole tree (or a whole scope) on screen there's no single
+        // place to attach the panel's controls to, so it stays hidden (see
+        // OverlayLayersPanel's own empty-`places` -> null return) until a
+        // marker is selected, the same "a place is shown" gate MapCanvas
+        // itself now applies to drawing the overlay(s) on the map.
+        places={selected ? [selected] : []}
         ohmYear={ohmYear}
         onChanged={() => setOverlayRefreshToken((n) => n + 1)}
+        onFlyTo={(center) => {
+          setFlyToTarget(center);
+          setFlyToRequest((n) => n + 1);
+        }}
       />
       {noMatches && <NoMatches {...noMatches} />}
       {selected && (
