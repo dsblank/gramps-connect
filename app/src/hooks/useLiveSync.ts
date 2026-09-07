@@ -4,6 +4,7 @@ import { getViewStoresForTable } from "../store/registry";
 import { publishTreeChange } from "../store/treeChangeBus";
 import { getCurrentUsername } from "../auth/auth";
 import { recordActivity } from "../store/activeUsers";
+import { recordKnownUser } from "../store/knownUsers";
 
 export type LiveSyncStatus = "connecting" | "connected" | "disconnected";
 
@@ -25,7 +26,9 @@ const REQUERY_THRESHOLD = 20;
  * that changed in one response. Also fans every notification out over
  * treeChangeBus.ts, for a consumer that isn't a ViewStore (PyodidePocPanel.tsx),
  * and records each changedBy in activeUsers.ts (see its doc comment) so the
- * header's ActiveUsers avatars stay current without their own poll.
+ * header's ActiveUsers avatars stay current without their own poll, and in
+ * knownUsers.ts (never decays, unlike activeUsers.ts) so a DM recipient
+ * picker has something to suggest beyond who's active right now.
  *
  * `onRemoteNoteChange`, if given, fires for Notes-table changes made by
  * someone other than the current user (v1 scope: Notes only, not every
@@ -45,7 +48,10 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
       const byTable = new Map<string, TreeChangeNotification[]>();
       for (const notification of notifications) {
         publishTreeChange(notification);
-        if (notification.changedBy) recordActivity(notification.changedBy);
+        if (notification.changedBy) {
+          recordActivity(notification.changedBy);
+          recordKnownUser(notification.changedBy);
+        }
         if (
           notification.table === "note" &&
           notification.changedBy &&

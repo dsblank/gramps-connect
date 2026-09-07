@@ -11,7 +11,7 @@ import { notifications } from "@mantine/notifications";
 import { EVENT_VIEW, PLACE_VIEW, VIEWS, type ViewConfig } from "./store/views";
 import { getViewStore } from "./store/registry";
 import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
-import { getAuthSnapshot, subscribe as subscribeAuth } from "./auth/auth";
+import { getAuthSnapshot, getCurrentUsername, getToken, subscribe as subscribeAuth } from "./auth/auth";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "./i18n/i18n";
 import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
@@ -19,6 +19,8 @@ import { HomeView } from "./components/HomeView";
 import { MenuBar } from "./components/MenuBar";
 import { UserMenu } from "./components/UserMenu";
 import { ActiveUsers } from "./components/ActiveUsers";
+import { DmInbox } from "./components/DmInbox";
+import { DmThread } from "./components/DmThread";
 import { FilterBar } from "./components/FilterBar";
 import { ListHeader } from "./components/ListHeader";
 import { DataTable } from "./components/DataTable";
@@ -33,6 +35,10 @@ import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep } from "./store/jobsPoll";
 import { loadUserDirectory } from "./store/userDirectory";
+import { loadKnownUsersFromDirectory } from "./store/knownUsers";
+import { bumpDmActivity, DM_TYPE } from "./store/dmApi";
+import { parseDmText } from "./store/dmText";
+import { fetchNoteRaw } from "./store/notesApi";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
@@ -58,11 +64,58 @@ const NOTE_OP_VERB: Record<TreeChangeNotification["op"], string> = {
   DELETE: "deleted",
 };
 
-function onRemoteNoteChange(notification: TreeChangeNotification) {
+function genericNoteToast(notification: TreeChangeNotification) {
   const title = "Gramps Connect message";
   const message = `User ${notification.changedBy} ${NOTE_OP_VERB[notification.op]} a message`;
   notifications.show({ color: "blue", title, message });
   notifyBrowser(title, message);
+}
+
+/** A DirectMessage note's own toast -- "New message from <name>" rather
+ * than the generic "made a message" one, and bumps dmApi.ts's activity
+ * counter so a mounted DmInbox picks up the unread count without waiting on
+ * this poll's next tick to be noticed some other way. */
+function directMessageToast(author: string) {
+  const title = t("Gramps Connect direct message");
+  const message = `${t("New message from")} ${author}`;
+  notifications.show({ color: "grape", title, message });
+  notifyBrowser(title, message);
+  bumpDmActivity();
+}
+
+/** Fires for every Notes-table change by someone else (useLiveSync's own
+ * guard already filters to that). A DELETE can't be resolved -- the note is
+ * gone by the time this runs -- so it falls through to the generic toast,
+ * same as a plain/message/story note would; only a live (INSERT/UPDATE)
+ * DirectMessage note addressed to me gets the distinct one. */
+function onRemoteNoteChange(notification: TreeChangeNotification) {
+  if (notification.op === "DELETE") {
+    genericNoteToast(notification);
+    return;
+  }
+  (async () => {
+    const token = await getToken();
+    const note = await fetchNoteRaw(token, notification.handle);
+    const type = (note.type as { string?: string } | string | null) ?? null;
+    const typeString = typeof type === "string" ? type : type?.string;
+    if (typeString !== DM_TYPE) {
+      genericNoteToast(notification);
+      return;
+    }
+    const rawText = (note.text as { string?: string } | string | null) ?? "";
+    const text = typeof rawText === "string" ? rawText : (rawText.string ?? "");
+    const { recipient, author } = parseDmText(text);
+    const me = getCurrentUsername();
+    if (recipient === me && author !== me) {
+      directMessageToast(author ?? notification.changedBy ?? t("someone"));
+    }
+    // A DirectMessage not addressed to me (someone else's conversation) --
+    // no toast at all, since "any note-view holder can technically read
+    // it" doesn't mean every DM should interrupt every other user.
+  })().catch((err) => {
+    console.error("failed to resolve remote note change", err);
+    genericNoteToast(notification);
+  });
 }
 
 /** Mantine's `sm` breakpoint, spelled as a raw media query because media
@@ -301,6 +354,7 @@ function AuthenticatedApp() {
   // above. See userDirectory.ts for why this can't always resolve everyone.
   useEffect(() => {
     loadUserDirectory();
+    loadKnownUsersFromDirectory();
   }, []);
 
   return (
@@ -341,6 +395,7 @@ function AuthenticatedApp() {
                 {wordmark}
                 <Group gap="xs" wrap="nowrap">
                   <ActiveUsers />
+                  <DmInbox />
                   <UserMenu />
                 </Group>
               </Group>
@@ -361,6 +416,7 @@ function AuthenticatedApp() {
               </Group>
               <Group gap="xs" wrap="nowrap">
                 <ActiveUsers />
+                <DmInbox />
                 <UserMenu />
               </Group>
             </Group>
@@ -519,6 +575,10 @@ function AuthenticatedApp() {
           see draftStack's doc comment above for why. */}
       <EditDialogs draftStack={draftStack} />
       <MediaDropOverlay {...mediaDrop} />
+      {/* One thread modal for the whole app -- both header ActiveUsers
+          avatars and DmInbox's conversation rows just call dmUi.ts's
+          openDmThread() rather than each mounting their own. */}
+      <DmThread />
     </>
   );
 }

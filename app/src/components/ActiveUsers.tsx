@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from "react";
-import { Avatar, Tooltip } from "@mantine/core";
+import { Avatar, Tooltip, UnstyledButton } from "@mantine/core";
+import { hasPermissions } from "../auth/auth";
 import { getActiveUsers, subscribeActiveUsers } from "../store/activeUsers";
+import { openDmThread } from "../store/dmUi";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
 import { colorForUsername, initialsFor } from "../store/userAvatar";
+import { t } from "../i18n/i18n";
 
 // Avatars beyond this many collapse into a single "+N" one, same idea as
 // Mantine's own Avatar.Group truncation but driven manually so the overflow
@@ -25,6 +28,10 @@ export function ActiveUsers() {
 
   const visible = usernames.slice(0, MAX_VISIBLE);
   const overflow = usernames.slice(MAX_VISIBLE);
+  // Only offer "click an avatar to DM them" when the signed-in user could
+  // actually send one -- same AddObject gate MessageButton.tsx/
+  // ListHeader.tsx already check before letting someone compose a message.
+  const canMessage = hasPermissions("AddObject");
 
   return (
     <Avatar.Group>
@@ -35,9 +42,15 @@ export function ActiveUsers() {
               inline style on the root doesn't reach that nested span, which
               is why this used to render low-contrast grey text on every
               color. See userAvatar.ts's doc comment. */}
-          <Avatar radius="xl" size="sm" color={colorForUsername(username)} variant="filled">
-            {initialsFor(displayName(username))}
-          </Avatar>
+          <UnstyledButton
+            onClick={canMessage ? () => openDmThread(username) : undefined}
+            style={{ cursor: canMessage ? "pointer" : "default" }}
+            aria-label={canMessage ? `${t("Message")} ${displayName(username)}` : undefined}
+          >
+            <Avatar radius="xl" size="sm" color={colorForUsername(username)} variant="filled">
+              {initialsFor(displayName(username))}
+            </Avatar>
+          </UnstyledButton>
         </Tooltip>
       ))}
       {overflow.length > 0 && (

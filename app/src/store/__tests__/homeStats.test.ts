@@ -89,13 +89,13 @@ describe("fetchRecentlyChanged", () => {
     expect(result).toEqual([{ viewKey: "tag", handle: "T1", grampsId: "", label: "Ancestors", changeUnix: 100 }]);
   });
 
-  it("excludes message- and story-typed notes -- the Messages/Story panels already cover those", async () => {
+  it("excludes message-, story- and DirectMessage-typed notes -- the Messages/Story panels and DMs already cover those", async () => {
     vi.mocked(fetchPage).mockImplementation(async () => page([]));
 
     await fetchRecentlyChanged("tok", 5);
 
     const noteCall = vi.mocked(fetchPage).mock.calls.find(([view]) => view.key === "note")!;
-    expect(noteCall[4]).toBe("type.string != 'message' and type.string != 'story'");
+    expect(noteCall[4]).toBe("type.string != 'message' and type.string != 'story' and type.string != 'DirectMessage'");
   });
 });
 

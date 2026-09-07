@@ -5,25 +5,13 @@ import { getViewStore } from "../store/registry";
 import { createMessage } from "../store/notesApi";
 import { formatChange, formatChangeTitle } from "../store/views";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
+import { bubbleColorForUsername } from "../store/userAvatar";
 import { t } from "../i18n/i18n";
 
 export interface ChatMessage {
   author: string;
   text: string;
   change?: number;
-}
-
-// Rotating background for each distinct author -- stable across renders
-// (and across the app, since it's keyed only on the name) via a simple
-// string hash into Mantine's own named color list, rather than assigning
-// colors in first-seen order (which would shuffle whenever the fetched
-// order changes) or picking one at random.
-const BUBBLE_COLORS = ["blue", "grape", "teal", "orange", "cyan", "pink", "lime", "indigo", "red", "violet"];
-
-function colorForAuthor(author: string): string {
-  let hash = 0;
-  for (let i = 0; i < author.length; i++) hash = (hash * 31 + author.charCodeAt(i)) >>> 0;
-  return BUBBLE_COLORS[hash % BUBBLE_COLORS.length];
 }
 
 /** One chat-style bubble: the author's name (small, above) then their
@@ -37,7 +25,11 @@ function MessageBubble({ message, mine }: { message: ChatMessage; mine: boolean 
   // time a thread renders, so this bubble would otherwise be stuck showing
   // the raw username until something else happened to re-render it.
   useSyncExternalStore(subscribeUserDirectory, getUserDirectoryVersion);
-  const color = colorForAuthor(message.author);
+  // Same per-user color as their Avatar elsewhere (UserMenu, ActiveUsers)
+  // -- see userAvatar.ts's bubbleColorForUsername doc comment for why this
+  // is a snapped-to-named-color variant of that hue rather than the same
+  // raw hsl() value those Avatars use.
+  const color = bubbleColorForUsername(message.author);
   return (
     <Stack gap={2} align={mine ? "flex-end" : "flex-start"}>
       <Group gap={6} px={4} wrap="nowrap">
@@ -94,6 +86,26 @@ interface MessageComposerProps {
    * read them from); ListHeader's own trigger leaves it unset, same as
    * `about`. */
   history?: ChatMessage[];
+  /** How to actually create the note. Defaults to notesApi.ts's
+   * createMessage (a board message/ToDo) -- DmThread.tsx overrides this
+   * with dmApi.ts's createDm so the same compose form/bubble UI can create
+   * a DirectMessage note instead, with no other change to this component. */
+  send?: (token: string, author: string, text: string) => Promise<string>;
+  /** Runs after a successful send, instead of this component's own default
+   * (requerying the "messages" ViewStore, so the board's own DataTable
+   * shows a just-sent message without waiting on the next live-sync poll
+   * tick). DmThread.tsx overrides this with dmApi.ts's bumpDmActivity --
+   * there's no "direct-message" ViewStore to requery (see views.ts's
+   * DM_VIEW doc comment for why it's deliberately not in VIEWS). */
+  afterSend?: () => void;
+  /** Controlled open state -- when given (with `onOpenChange`), this modal
+   * follows it instead of its own internal useState, and `renderTrigger`'s
+   * `open` callback is a no-op. DmThread.tsx drives the modal this way from
+   * dmUi.ts's openDmThread(), since a DM thread opens from more than one
+   * place (an ActiveUsers avatar, a DmInbox row) rather than from a trigger
+   * button this component renders itself. */
+  opened?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /** Compose form for a new Gramps Connect message -- the app's first Mantine
@@ -101,8 +113,19 @@ interface MessageComposerProps {
  * ListHeader.tsx for the "messages" view's own "Add" button, and per-object
  * by MessageButton.tsx with a custom trigger and an onSaved that links the
  * note to that object. */
-export function MessageComposer({ renderTrigger, onSaved, about, history }: MessageComposerProps) {
-  const [open, setOpen] = useState(false);
+export function MessageComposer({
+  renderTrigger,
+  onSaved,
+  about,
+  history,
+  send = (token, author, text) => createMessage(token, author, text),
+  afterSend = () => getViewStore("messages").requeryDebounced(),
+  opened,
+  onOpenChange,
+}: MessageComposerProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = opened ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -151,12 +174,12 @@ export function MessageComposer({ renderTrigger, onSaved, about, history }: Mess
     setError(null);
     try {
       const token = await getToken();
-      const noteHandle = await createMessage(token, getCurrentUsername() ?? "unknown", text.trim());
+      const noteHandle = await send(token, getCurrentUsername() ?? "unknown", text.trim());
       if (onSaved) await onSaved(noteHandle, token);
       setText("");
       // Immediate feedback for the author, rather than waiting on the next
       // live-sync poll tick (up to POLL_INTERVAL_MS) to see their own note.
-      getViewStore("messages").requeryDebounced();
+      afterSend();
     } catch (err: any) {
       setError(err.message ?? String(err));
     } finally {

@@ -797,6 +797,44 @@ export const STORY_VIEW: ViewConfig = {
   ],
 };
 
+// Gramps Connect direct messages: standalone Notes (never attached to any
+// object's note_list, and -- unlike MESSAGES_VIEW/STORY_VIEW -- never added
+// to the VIEWS array below) whose Note.type is set to "DirectMessage" at
+// creation (see dmApi.ts's DM_TYPE). Deliberately kept out of VIEWS:
+// registry.ts only wires a ViewConfig into the sidebar/OPFS cache/live-sync
+// fanout/RefListField's "attach an existing note" picker when it appears
+// there, and a DM has no business surfacing in any of those -- dmApi.ts
+// reads this view with fetchPage() directly (same ad hoc, no-ViewStore
+// shape homeStats.ts's fetchMessageBoards already uses for MESSAGES_VIEW),
+// which works on any ViewConfig value whether or not it's registered.
+// Recipient is encoded on Note.text's own first line (dmText.ts) rather
+// than a tag, both to avoid a new to:<user> Tag per recipient cluttering
+// the shared Tags view, and because it rides along in the same text.string
+// json_path column MESSAGES_VIEW's "By"/"Message" columns already select --
+// no per-row detail GET needed to resolve it, unlike a tag would.
+export const DM_VIEW: ViewConfig = {
+  key: "direct-message",
+  label: "Direct messages",
+  icon: iconChat,
+  table: "note",
+  endpoint: "/api/notes/query/",
+  baseFilter: "type.string == 'DirectMessage'",
+  orderBy: [{ column: "change", direction: "desc" }],
+  opfsFilename: "app-cache-direct-message.sqlite",
+  // Never actually shown -- DM_VIEW has no FilterBar (it's never in VIEWS,
+  // so no sidebar list ever mounts one) -- set only because ViewConfig
+  // requires it.
+  wherePlaceholder: "",
+  columns: [
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    {
+      key: "text", label: "Message", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
+      toSql: styledTextToSql,
+    },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+  ],
+};
+
 export const NOTE_VIEW: ViewConfig = {
   key: "note",
   label: "Notes",
@@ -810,7 +848,9 @@ export const NOTE_VIEW: ViewConfig = {
   // unstyled as generic notes. homeStats.ts's fetchRecentlyChanged/
   // fetchMessageBoards both read this same baseFilter through
   // combinedFilter(), so this one exclusion covers Home's own lists too.
-  baseFilter: "type.string != 'message' and type.string != 'story'",
+  // DirectMessage notes (DM_VIEW above) are excluded the same way, even
+  // though DM_VIEW itself is never in VIEWS -- this NOTE_VIEW is.
+  baseFilter: "type.string != 'message' and type.string != 'story' and type.string != 'DirectMessage'",
   // Notes have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-note.sqlite",
