@@ -5,7 +5,7 @@
 // columns' toDisplay) and notesApi.ts (writes it at creation) can both
 // import it without notesApi.ts -> jobsApi.ts -> views.ts creating a cycle
 // back through here.
-const AUTHOR_SEPARATOR = ": ";
+export const AUTHOR_SEPARATOR = ": ";
 
 export function formatAuthoredText(author: string, message: string): string {
   return `${author}${AUTHOR_SEPARATOR}${message}`;

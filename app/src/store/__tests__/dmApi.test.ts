@@ -6,9 +6,9 @@ vi.mock("../api", async () => {
 });
 
 import { fetchPage, type QueryItem } from "../api";
-import { fetchDmPool, groupDmConversations } from "../dmApi";
+import { fetchDmConversation, fetchDmPool, fetchMyDmPool, groupDmConversations } from "../dmApi";
 import { DM_VIEW } from "../views";
-import { formatDmText } from "../dmText";
+import { buildDmInvolvesExpr, buildDmPairExpr, formatDmText } from "../dmText";
 
 function page(items: QueryItem[]) {
   return { page: { items, next_after: null }, totalCount: items.length };
@@ -82,6 +82,43 @@ describe("fetchDmPool", () => {
     expect(items).toEqual([{ handle: "N1", change: 100 }]);
     expect(fetchPage).toHaveBeenCalledWith(
       DM_VIEW, "tok", null, false, DM_VIEW.baseFilter, [{ column: "change", direction: "desc" }], 50
+    );
+  });
+
+  it("ANDs an extraFilter onto DM_VIEW's baseFilter when given", async () => {
+    vi.mocked(fetchPage).mockResolvedValue(page([]));
+
+    await fetchDmPool("tok", 50, "some_expr");
+
+    expect(fetchPage).toHaveBeenCalledWith(
+      DM_VIEW, "tok", null, false, `${DM_VIEW.baseFilter} and (some_expr)`,
+      [{ column: "change", direction: "desc" }], 50
+    );
+  });
+});
+
+describe("fetchDmConversation", () => {
+  it("scopes the query to the given pair via buildDmPairExpr", async () => {
+    vi.mocked(fetchPage).mockReset().mockResolvedValue(page([]));
+
+    await fetchDmConversation("tok", "alice", "bob", 50);
+
+    expect(fetchPage).toHaveBeenCalledWith(
+      DM_VIEW, "tok", null, false, `${DM_VIEW.baseFilter} and (${buildDmPairExpr("alice", "bob")})`,
+      [{ column: "change", direction: "desc" }], 50
+    );
+  });
+});
+
+describe("fetchMyDmPool", () => {
+  it("scopes the query to the given user via buildDmInvolvesExpr", async () => {
+    vi.mocked(fetchPage).mockReset().mockResolvedValue(page([]));
+
+    await fetchMyDmPool("tok", "alice", 50);
+
+    expect(fetchPage).toHaveBeenCalledWith(
+      DM_VIEW, "tok", null, false, `${DM_VIEW.baseFilter} and (${buildDmInvolvesExpr("alice")})`,
+      [{ column: "change", direction: "desc" }], 50
     );
   });
 });

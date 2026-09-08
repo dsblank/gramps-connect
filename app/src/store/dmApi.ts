@@ -9,7 +9,7 @@
 // what `private: true` actually buys (hidden from Guest role only).
 import { API_BASE } from "../config";
 import { fetchPage, parseErrorMessage, type QueryItem } from "./api";
-import { formatDmText, parseDmText } from "./dmText";
+import { buildDmInvolvesExpr, buildDmPairExpr, formatDmText, parseDmText } from "./dmText";
 import { DM_VIEW } from "./views";
 
 export const DM_TYPE = "DirectMessage";
@@ -37,17 +37,40 @@ export async function createDm(token: string, author: string, recipient: string,
   return addedHandle(await res.json());
 }
 
-/** Every DirectMessage note (across every conversation, not just the
- * caller's own), newest first -- same ad hoc fetchPage() shape
+/** DirectMessage notes matching DM_VIEW's own baseFilter, AND-ed with
+ * `extraFilter` if given, newest first -- same ad hoc fetchPage() shape
  * homeStats.ts's fetchMessageBoards already uses for MESSAGES_VIEW, no
- * ViewStore/OPFS cache involved. groupDmConversations() below is what
- * narrows this down to conversations `me` is actually part of. */
-export async function fetchDmPool(token: string, limit: number): Promise<QueryItem[]> {
+ * ViewStore/OPFS cache involved. Low-level: fetchDmConversation()/
+ * fetchMyDmPool() below are what callers actually want, each scoping
+ * `extraFilter` server-side via dmText.ts's where_expr builders so a
+ * caller isn't pulling every DM in the whole tree (every conversation,
+ * every user) to find the handful of rows it actually needs -- that
+ * doesn't scale as tree-wide DM volume grows past `limit`, since an
+ * unrelated pair's chatter can crowd out older messages of the
+ * conversation actually being displayed. */
+export async function fetchDmPool(token: string, limit: number, extraFilter?: string): Promise<QueryItem[]> {
+  const whereExpr = extraFilter ? `${DM_VIEW.baseFilter} and (${extraFilter})` : (DM_VIEW.baseFilter ?? null);
   const { page } = await fetchPage(
-    DM_VIEW, token, null, false, DM_VIEW.baseFilter ?? null,
+    DM_VIEW, token, null, false, whereExpr,
     [{ column: "change", direction: "desc" }], limit
   );
   return page.items;
+}
+
+/** Every DM between `me` and `peer`, either direction -- what
+ * DmThread.tsx needs to render one conversation. Scoped server-side via
+ * buildDmPairExpr, so `limit` is a budget for this conversation alone. */
+export async function fetchDmConversation(token: string, me: string, peer: string, limit: number): Promise<QueryItem[]> {
+  return fetchDmPool(token, limit, buildDmPairExpr(me, peer));
+}
+
+/** Every DM `me` is a party to, any partner -- what DmInbox.tsx needs to
+ * list every conversation `me` is in. Scoped server-side via
+ * buildDmInvolvesExpr, so `limit` is a budget for `me`'s own DM traffic,
+ * not the whole tree's. groupDmConversations() below still does the
+ * per-partner bucketing this doesn't attempt. */
+export async function fetchMyDmPool(token: string, me: string, limit: number): Promise<QueryItem[]> {
+  return fetchDmPool(token, limit, buildDmInvolvesExpr(me));
 }
 
 export interface DmMessage {

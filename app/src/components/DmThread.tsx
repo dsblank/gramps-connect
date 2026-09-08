@@ -5,7 +5,7 @@ import { closeDmThread, getOpenPeer, subscribeDmUi } from "../store/dmUi";
 import {
   bumpDmActivity,
   createDm,
-  fetchDmPool,
+  fetchDmConversation,
   getDmActivityVersion,
   groupDmConversations,
   subscribeDmActivity,
@@ -44,7 +44,7 @@ export function DmThread() {
     setLoading(true);
     const token = await getToken();
     const me = getCurrentUsername() ?? "";
-    const pool = await fetchDmPool(token, 1000);
+    const pool = await fetchDmConversation(token, me, currentPeer, 1000);
     const conversations = groupDmConversations(me, pool);
     const messages = conversations.get(currentPeer) ?? [];
     setHistory(messages);

@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ActionIcon, Autocomplete, Divider, Group, Indicator, Popover, Stack, Text, UnstyledButton } from "@mantine/core";
 import { getToken, getCurrentUsername, hasPermissions } from "../auth/auth";
-import { fetchDmPool, getDmActivityVersion, groupDmConversations, subscribeDmActivity, type DmMessage } from "../store/dmApi";
+import { fetchMyDmPool, getDmActivityVersion, groupDmConversations, subscribeDmActivity, type DmMessage } from "../store/dmApi";
 import { getKnownUsers, loadKnownUsersFromDirectory, subscribeKnownUsers } from "../store/knownUsers";
 import { isUnread } from "../store/dmReadState";
 import { openDmThread } from "../store/dmUi";
@@ -16,7 +16,7 @@ interface Conversation {
   unread: boolean;
 }
 
-function toConversations(me: string, pool: Awaited<ReturnType<typeof fetchDmPool>>): Conversation[] {
+function toConversations(me: string, pool: Awaited<ReturnType<typeof fetchMyDmPool>>): Conversation[] {
   const byPartner = groupDmConversations(me, pool);
   const conversations: Conversation[] = [];
   for (const [partner, messages] of byPartner) {
@@ -47,7 +47,7 @@ export function DmInbox() {
     (async () => {
       const token = await getToken();
       const me = getCurrentUsername() ?? "";
-      const pool = await fetchDmPool(token, 1000);
+      const pool = await fetchMyDmPool(token, me, 1000);
       if (cancelled) return;
       setConversations(toConversations(me, pool));
     })().catch((err) => console.error("failed to load DM inbox", err));
