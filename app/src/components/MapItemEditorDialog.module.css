@@ -1,0 +1,19 @@
+/* The floating left toolbar sits, positioned absolutely, directly over the
+ * map -- including over whatever terra-draw shape or image-overlay handle
+ * happens to render underneath it. Its own background/padding/inter-button
+ * gaps have nothing to click, so they're made click-through here (`none` on
+ * the container, `auto` restored on each direct child) the same way
+ * maplibre's own `.maplibregl-ctrl-*` containers do for their nav controls
+ * -- otherwise a shape corner or overlay handle that ends up under this
+ * panel's empty space is silently unclickable. Found live: a selected
+ * rectangle's own corner vertices went dead exactly where this toolbar
+ * covers the map. A control's own real footprint (a button, an input) still
+ * intercepts clicks as normal -- only the toolbar's dead space passes them
+ * through to the map below. */
+.toolbar {
+  pointer-events: none;
+}
+
+.toolbar > * {
+  pointer-events: auto;
+}

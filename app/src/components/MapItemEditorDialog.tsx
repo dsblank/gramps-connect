@@ -43,6 +43,7 @@ import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import type { QueryItem } from "../store/api";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { t } from "../i18n/i18n";
+import styles from "./MapItemEditorDialog.module.css";
 
 // Registered once, module-level -- the same worker file MapCanvas.tsx
 // points at, and maplibregl.setWorkerUrl is idempotent (it just sets a
@@ -159,6 +160,16 @@ interface OverlayMount {
  * otherwise put it. */
 const OVERLAY_ANCHOR_LAYER = "image-overlay-anchor";
 
+/** terra-draw-maplibre-gl-adapter's own fixed layer ids (its default
+ * `prefixId` is "td", never overridden here -- see the `TerraDraw`
+ * constructor below) -- every one of these is always created by its
+ * `register()` (called via `draw.start()`), regardless of which drawing
+ * modes are actually used, so this list is safe to `queryRenderedFeatures`
+ * against unconditionally once `ready` is true. Used by the map's own
+ * mousedown handler to tell whether a click landed on an actual drawn
+ * shape before falling through to the image-overlay hit test below it. */
+const TERRA_DRAW_LAYERS = ["td-polygon", "td-polygon-outline", "td-linestring", "td-point", "td-point-marker"];
+
 /** terra-draw's own point mode has no text-label styling (see
  * refreshLabelPreview's own doc comment below), so a labeled point's text
  * is drawn by this separate, independent geojson source/layer stacked on
@@ -229,11 +240,19 @@ function imageOnlyExpr(term: string): string | null {
 // (other images, map features) is visible for positioning it precisely.
 const OVERLAY_DRAG_OPACITY = 0.5;
 
+// zIndex above the floating left toolbar's own 3 (see its `Stack` style
+// further down) -- that toolbar is positioned absolutely over the map
+// itself and grows taller once an overlay is selected (its "Edit Options"
+// section), so a handle whose current corner happens to land underneath
+// it would otherwise be unclickable: the toolbar, not the handle, receives
+// the click. Found live: rotating an overlay a little was enough to swing
+// its resize handle under that panel. Plain maplibre markers have no
+// z-index of their own (auto), so this alone is enough to always win.
 const OVERLAY_HANDLE_STYLE = {
   width: "20px", height: "20px", borderRadius: "50%", background: "white",
   border: "2px solid #333", display: "flex", alignItems: "center", justifyContent: "center",
   fontSize: "12px", fontWeight: "700", color: "#333", cursor: "pointer",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.4)", userSelect: "none",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.4)", userSelect: "none", zIndex: 4,
 } as const;
 
 function loadImageElement(src: string): Promise<HTMLImageElement> {
@@ -781,6 +800,20 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           ) return;
         }
       }
+      // A drawn shape (point/line/region) always renders above every image
+      // overlay in this editor (see OVERLAY_ANCHOR_LAYER's own doc
+      // comment), but the point-in-quad test below has no notion of that --
+      // it only asks "is this pixel inside some overlay's bounds", so a
+      // shape drawn on top of (or overlapping) an image used to have its
+      // clicks hijacked into moving that image out from under it instead of
+      // ever reaching terra-draw's own selection. Found live: a rectangle
+      // sitting over an image overlay was simply unclickable. Checking what
+      // maplibre actually rendered at this pixel first -- rather than
+      // reimplementing terra-draw's own per-geometry-type hit testing here
+      // -- defers to terra-draw whenever a shape is really the topmost
+      // thing at this point, same as a sighted user would expect from what
+      // they're looking at.
+      if (map.queryRenderedFeatures(e.point, { layers: TERRA_DRAW_LAYERS }).length > 0) return;
       const mounts = [...overlayMountsRef.current.entries()].reverse();
       for (const [id, mount] of mounts) {
         const corners = mount.box.corners.map((c) => map.project(c));
@@ -1668,6 +1701,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           <Stack
             gap={4}
             p={6}
+            className={styles.toolbar}
             style={{
               position: "absolute", top: 116, left: 12, zIndex: 3, borderRadius: 8,
               background: dark ? "rgba(20,20,20,0.75)" : "rgba(255,255,255,0.85)",
