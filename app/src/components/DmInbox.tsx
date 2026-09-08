@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { ActionIcon, Autocomplete, Divider, Group, Indicator, Popover, Stack, Text, UnstyledButton } from "@mantine/core";
 import { getToken, getCurrentUsername, hasPermissions } from "../auth/auth";
 import { fetchDmPool, getDmActivityVersion, groupDmConversations, subscribeDmActivity, type DmMessage } from "../store/dmApi";
-import { getKnownUsers, subscribeKnownUsers } from "../store/knownUsers";
+import { getKnownUsers, loadKnownUsersFromDirectory, subscribeKnownUsers } from "../store/knownUsers";
 import { isUnread } from "../store/dmReadState";
 import { openDmThread } from "../store/dmUi";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
@@ -56,6 +56,15 @@ export function DmInbox() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch on every live-sync-driven bump, not just mount
   }, [activityVersion]);
+
+  useEffect(() => {
+    // A user account created after this session's one-shot load in
+    // App.tsx (loadKnownUsersFromDirectory()) would otherwise stay
+    // invisible to the recipient picker below for the rest of the
+    // session -- force a refetch each time the popover opens, since
+    // that's the moment staleness would actually be noticed.
+    if (opened) loadKnownUsersFromDirectory(true);
+  }, [opened]);
 
   const unreadCount = conversations.filter((c) => c.unread).length;
   const canCompose = hasPermissions("AddObject");

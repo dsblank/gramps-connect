@@ -46,11 +46,15 @@ export function subscribeKnownUsers(listener: () => void): () => void {
 }
 
 /** Merges in the full user list when the signed-in role can see it --
- * mirrors userDirectory.ts's loadUserDirectory() shape exactly (own
- * getToken() call, at most one fetch per session, safe to call from every
- * mount). */
-export function loadKnownUsersFromDirectory(): void {
-  if (directoryLoadPromise) return;
+ * mirrors userDirectory.ts's loadUserDirectory() shape (own getToken()
+ * call, safe to call from every mount). By default fetches at most once
+ * per session; pass `force: true` to refetch regardless -- used by
+ * DmInbox.tsx when its "message a user" picker opens, since a session-long
+ * cache would otherwise hide a user account created after this session's
+ * one-shot load ran (a new account isn't a tree edit, so useLiveSync's
+ * transaction-history poll never notices it either). */
+export function loadKnownUsersFromDirectory(force = false): void {
+  if (directoryLoadPromise && !force) return;
   directoryLoadPromise = (async () => {
     if (!hasPermissions("ViewOtherUser") && !hasPermissions("ViewOtherTreeUser")) return;
     const token = await getToken();

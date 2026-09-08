@@ -90,4 +90,16 @@ describe("knownUsers", () => {
     await vi.waitFor(() => expect(getKnownUsers()).toEqual(["dave"]));
     expect(fetchAllUsers).toHaveBeenCalledTimes(1);
   });
+
+  it("re-fetches the directory when force is true, e.g. a user created since the first load", async () => {
+    hasPermissions.mockReturnValue(true);
+    fetchAllUsers.mockResolvedValueOnce([{ name: "dave", role: 1 }]);
+    loadKnownUsersFromDirectory();
+    await vi.waitFor(() => expect(getKnownUsers()).toEqual(["dave"]));
+
+    fetchAllUsers.mockResolvedValueOnce([{ name: "dave", role: 1 }, { name: "erin", role: 1 }]);
+    loadKnownUsersFromDirectory(true);
+    await vi.waitFor(() => expect(getKnownUsers()).toEqual(["dave", "erin"]));
+    expect(fetchAllUsers).toHaveBeenCalledTimes(2);
+  });
 });
