@@ -8,6 +8,11 @@ import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "..
 import { bubbleColorForUsername } from "../store/userAvatar";
 import { t } from "../i18n/i18n";
 
+// Mac uses Cmd (⌘) as its "submit" modifier convention, everyone else
+// Ctrl -- checked once at module load rather than per keystroke/render.
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+const sendShortcutLabel = isMac ? "⌘+Enter" : "Ctrl+Enter";
+
 export interface ChatMessage {
   author: string;
   text: string;
@@ -190,7 +195,7 @@ export function MessageComposer({
   return (
     <>
       {renderTrigger(() => setOpen(true))}
-      <Modal opened={open} onClose={close}>
+      <Modal opened={open} onClose={close} size="55rem" /* 2x Mantine's default md (27.5rem) */>
         {about && (
           <Text size="sm" c="dimmed" mb="xs">
             {about}
@@ -210,12 +215,22 @@ export function MessageComposer({
           minRows={4}
           value={text}
           onChange={(e) => setText(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            // Plain Enter stays a newline (this is a multi-line textarea);
+            // Ctrl/Cmd+Enter is the send shortcut, matching sendShortcutLabel.
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !saving) {
+              e.preventDefault();
+              save();
+            }
+          }}
           placeholder={t("Message for collaborators...")}
           disabled={saving}
         />
         {error && <Alert color="red" mt="sm">{error}</Alert>}
         <Group justify="flex-end" mt="md">
-          <Button onClick={save} loading={saving} disabled={!text.trim()}>{t("Send")}</Button>
+          <Button onClick={save} loading={saving} disabled={!text.trim()}>
+            {t("Send")} ({sendShortcutLabel})
+          </Button>
         </Group>
       </Modal>
     </>
