@@ -31,15 +31,14 @@ function kmlOnlyExpr(term: string): string | null {
 }
 
 /** A place's own map overlays -- its `media_list` filtered down to KML
- * files (see MapItemEditorDialog.tsx). A map overlay always belongs to
- * exactly one place (see MapItemEditorTarget's own doc comment); picking an
- * "existing" one already attached elsewhere in the "+ Add map overlay"
- * picker (AttachControl.tsx's `onPick` override) moves it here -- detaching
- * it there first -- rather than letting the same overlay end up on two
- * places at once. Editing an overlay's own shapes is left to the Details
- * Pane (RefRow's own click-through to the Media object's detail, where
- * MediaKmlEditButton.tsx already lives) rather than a second "Edit" trigger
- * duplicated here. */
+ * files (see MapItemEditorDialog.tsx). A map overlay can be attached to more
+ * than one place (e.g. a boundary that covers several nearby settlements),
+ * but not to the *same* place twice -- picking an "existing" one already on
+ * this place in the "+ Add map overlay" picker (AttachControl.tsx's `onPick`
+ * override) is a no-op rather than a duplicate ref. Editing an overlay's own
+ * shapes is left to the Details Pane (RefRow's own click-through to the
+ * Media object's detail, where MediaKmlEditButton.tsx already lives) rather
+ * than a second "Edit" trigger duplicated here. */
 export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionProps) {
   const rows = zipRefs<{ mime?: string; desc?: string; path?: string }>(detail.media_list, detail.extended?.media)
     .filter(({ target }) => target?.mime === KML_MIME);
@@ -58,25 +57,16 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
     onRefetch?.();
   }
 
-  /** AttachControl's own `onPick` override -- a map overlay belongs to
-   * exactly one place, so picking one that's currently on a *different*
-   * place moves it here (detach there, attach here) instead of duplicating
-   * it, after a confirmation since that's a real change somewhere else in
-   * the tree, not just an addition here. Already on this place, or on none
-   * at all, needs no confirmation. */
+  /** AttachControl's own `onPick` override -- a map overlay can be attached
+   * to several places at once, so picking one that's already attached
+   * *elsewhere* is fine and just adds this place as another owner. Picking
+   * one already attached to *this* place is a no-op rather than a duplicate
+   * `media_list` ref. */
   async function handlePickExisting(item: QueryItem) {
     const token = await getToken();
     const obj = await fetchObjectExtended(token, MEDIA_VIEW, item.handle);
-    // Single slot, same convention as MapItemEditorDialog.tsx's own `place`
-    // state -- an overlay is only ever treated as belonging to one place at
-    // a time, so only the first backlink matters here.
-    const attachedTo = (getBacklinks(obj).place as { handle: string; title?: string }[] | undefined)?.[0];
-    if (attachedTo?.handle === detail.handle) return; // already here
-    if (attachedTo) {
-      const label = attachedTo.title || t("another place");
-      if (!window.confirm(t(`This overlay is currently attached to ${label}. Move it here instead?`))) return;
-      await detachRefListEntry(token, PLACE_VIEW, attachedTo.handle, "media_list", item.handle);
-    }
+    const attachedPlaces = (getBacklinks(obj).place as { handle: string }[] | undefined) ?? [];
+    if (attachedPlaces.some((p) => p.handle === detail.handle)) return; // already here
     await attachRefListEntry(token, PLACE_VIEW, detail.handle, "media_list", { _class: "MediaRef", ref: item.handle });
     onRefetch?.();
   }

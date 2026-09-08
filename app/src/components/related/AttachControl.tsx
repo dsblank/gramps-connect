@@ -40,12 +40,11 @@ interface AttachControlProps {
    * files, which that view's default search expr has no notion of. */
   buildExpr?: (term: string) => string | null;
   /** Replaces the default "attachRefListEntry then onAttached" behavior for
-   * a picked item -- e.g. MapOverlaysSection.tsx needs to first detach the
-   * picked item from wherever else it's currently attached (a map overlay
-   * belongs to exactly one place, so picking one already on a different
-   * place moves it rather than duplicating it) before attaching it here.
-   * Must trigger its own caller-side refetch when done, same as the default
-   * path does via `onAttached`. */
+   * a picked item -- e.g. MapOverlaysSection.tsx needs to no-op when the
+   * picked item is already attached to this same target (a map overlay can
+   * be on several places at once, but shouldn't end up with a duplicate ref
+   * on the same one). Must trigger its own caller-side refetch when done,
+   * same as the default path does via `onAttached`. */
   onPick?: (item: QueryItem) => void | Promise<void>;
   /** When given, the picker also offers a "+ Create new <createLabel>…"
    * bridge inline in its results (RecordPicker.tsx's own `onCreateNew`) --
