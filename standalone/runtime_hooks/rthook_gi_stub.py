@@ -25,6 +25,38 @@ headless either way) but alarming console noise. `enumerate_versions()`
 returning empty makes the file take that same "not available" branch on
 its own, same end state, just without the error.
 
+gi.repository.{Gtk,Gdk,GObject,GdkPixbuf,Gio,Pango,PangoCairo,Atk} are also
+stubbed, for a reason distinct from the two above: gramps-web-api's
+"Check and Repair Database" tool (POST /trees/<id>/repair) lazily imports
+gramps.plugins.tool.check, which does `from gi.repository import Gtk` at
+module scope, and transitively (via `from gramps.gui.plug import tool`)
+pulls in gramps.gui.widgets and gramps.gui.editors -- large chunks of
+Gramps' actual GTK widget/editor toolkit, referencing dozens of GTK/GDK/
+GObject/Pango enum constants and dialog/widget base classes at *class
+definition* time (e.g. `class IconButton(Gtk.Button): def __init__(self,
+..., size=Gtk.IconSize.MENU)`). Enumerating each of those by name is
+impractical and would silently break again on any new gramps-core widget.
+Instead, each of these namespaces is a generic auto-vivifying module: any
+attribute access invents a fresh do-nothing class on first touch (usable
+as a plain value, an enum constant, a callable, or a base class to
+subclass) and remembers it, so class bodies and default-argument
+expressions across that whole import chain resolve without errors.
+
+This is safe specifically because none of the real widgets/dialogs it
+lets get *defined* are ever *instantiated* on gramps-web-api's actual
+call path: gramps.plugins.tool.check's CheckIntegrity is always
+constructed with `uistate=None` (see gramps_webapi/api/check.py), and
+every GTK-dialog call site in check.py (OkDialog, MissingMediaDialog,
+the module-level `ProgressMeter` swap in the GUI-only `Check` wrapper
+class, which check_database() never touches) is itself guarded by
+`if uistate:`. Verified end-to-end by running check_database() against
+a real in-memory db with this stub active -- it completes and returns
+a normal result, only auto-vivifying objects during the module imports,
+never at runtime. If a future gramps-core change removes one of those
+`if uistate:` guards, a real GTK method call would hit one of these
+auto-vivified no-ops and likely raise or behave wrong -- worth another
+look at that failure if Check and Repair ever throws again after this.
+
 This used to also try to import the host's real GTK3/WebKit2 stack first,
 for pywebview's Linux GTK backend to open a native window with. That's
 dead code now: launcher.py's main() always opens Linux in the tester's
@@ -54,6 +86,52 @@ import sys
 import types
 
 
+class _AutoMeta(type):
+    """Metaclass so class-level attribute access (e.g. `Gtk.IconSize.MENU`,
+    where `IconSize` is itself an auto-vivified class) also auto-vivifies,
+    not just instance access -- see module docstring."""
+
+    def __getattr__(cls, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        value = _AutoMeta(name, (_AutoObject,), {})
+        setattr(cls, name, value)
+        return value
+
+
+class _AutoObject(metaclass=_AutoMeta):
+    """Auto-vivifying stand-in for an unknown GTK/GDK/... name: usable as a
+    plain attribute, an enum constant, a callable, or a base class to
+    subclass -- whatever the importing code needs it to be."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        value = _AutoMeta(name, (_AutoObject,), {})
+        setattr(type(self), name, value)
+        return value
+
+    def __call__(self, *args, **kwargs):
+        return _AutoObject()
+
+
+class _AutoModule(types.ModuleType):
+    """A `gi.repository.<Namespace>` stand-in: any attribute pulled off it
+    (a class to subclass, a constant, a function to call) auto-vivifies via
+    `_AutoObject` on first access. See module docstring for why this exists
+    and why it's safe."""
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        value = _AutoMeta(name, (_AutoObject,), {})
+        setattr(self, name, value)
+        return value
+
+
 def _xdg(env_var, fallback_rel):
     value = os.environ.get(env_var)
     if value:
@@ -62,7 +140,7 @@ def _xdg(env_var, fallback_rel):
 
 
 def _install_fake_gi() -> None:
-    glib_module = types.ModuleType("gi.repository.GLib")
+    glib_module = _AutoModule("gi.repository.GLib")
 
     class GError(Exception):
         """Stand-in for GLib.GError -- only ever seen in `except GLib.GError`
@@ -94,9 +172,37 @@ def _install_fake_gi() -> None:
     glib_module.get_user_config_dir = get_user_config_dir
     glib_module.get_user_cache_dir = get_user_cache_dir
     glib_module.get_user_special_dir = get_user_special_dir
+    # gramps/gui/widgets/validatedmaskedentry.py does `GObject.PARAM_READWRITE
+    # if GLib.check_version(2, 42, 0) else GObject.ParamFlags.READWRITE` at
+    # module scope; real GLib.check_version() returns None (falsy) when the
+    # requirement is satisfied, so returning None takes the same
+    # "modern GLib" branch a real install would.
+    glib_module.check_version = lambda *args, **kwargs: None
+    # gramps/gui/widgets/styledtexteditor.py does
+    # `from gi.repository.GLib import Variant` at module scope.
+    glib_module.Variant = _AutoMeta("Variant", (_AutoObject,), {})
 
     repository_module = types.ModuleType("gi.repository")
     repository_module.GLib = glib_module
+
+    # See module docstring: these namespaces back Gramps' actual GTK
+    # widget/editor toolkit, reachable only via gramps-web-api's Check and
+    # Repair Database tool. Auto-vivifying covers arbitrarily many
+    # classes/constants across that whole import chain without enumerating
+    # them by name.
+    for _namespace in (
+        "Gtk",
+        "Gdk",
+        "GObject",
+        "GdkPixbuf",
+        "Gio",
+        "Pango",
+        "PangoCairo",
+        "Atk",
+    ):
+        _ns_module = _AutoModule(f"gi.repository.{_namespace}")
+        setattr(repository_module, _namespace, _ns_module)
+        sys.modules[f"gi.repository.{_namespace}"] = _ns_module
 
     class Repository:
         """Stand-in for gi.Repository -- only geography.gpr.py's module-scope
