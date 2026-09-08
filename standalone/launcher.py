@@ -219,6 +219,27 @@ def wait_for_server(server_thread: Thread, timeout: float = 30.0) -> None:
     raise RuntimeError(f"Server did not start within {timeout}s on {HOST}:{PORT}")
 
 
+def wait_for_shutdown(server_thread: Thread) -> None:
+    """Block until Ctrl+C, exiting quietly instead of via PyInstaller's
+    generic "unhandled exception" banner.
+
+    `server_thread` is a daemon thread with no browser-side signal telling
+    it a tab was closed (closing the tab only stops that tab's own polling
+    requests -- the server keeps listening indefinitely either way), so
+    the only normal way to stop it is Ctrl+C in this terminal. Plain
+    `server_thread.join()` lets the resulting KeyboardInterrupt propagate
+    all the way out of main() -- harmless (the process does exit), but a
+    frozen PyInstaller build logs any exception reaching that point as
+    "Failed to execute script 'launcher' due to unhandled exception!",
+    which reads as a crash even though it isn't one. Catching it here
+    turns an intentional Ctrl+C into a normal, quiet exit.
+    """
+    try:
+        server_thread.join()
+    except KeyboardInterrupt:
+        print("\nShutting down ...")
+
+
 def install_avif_transcoder(app) -> None:
     """Rewrite image/avif responses to JPEG before they reach the webview.
 
@@ -372,7 +393,7 @@ def main() -> None:
         print(f"{reason}: opening in your default browser instead of a native window ...")
         webbrowser.open(f"http://{HOST}:{PORT}")
         print("Press Control+C to quit")
-        server_thread.join()
+        wait_for_shutdown(server_thread)
         return
 
     # Only macOS (WKWebView) and Windows (WebView2) reach here now -- Linux
@@ -419,7 +440,7 @@ def main() -> None:
         print(f"Native webview backend unavailable ({exc}) -- opening in your browser instead.")
         webbrowser.open(f"http://{HOST}:{PORT}")
         print("Press Control+C to quit")
-        server_thread.join()
+        wait_for_shutdown(server_thread)
 
 
 if __name__ == "__main__":
