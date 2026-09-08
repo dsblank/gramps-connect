@@ -5,6 +5,7 @@
 // refresh tokens are long-lived, so getToken() proactively refreshes ahead
 // of expiry rather than waiting for a 401.
 import { login as apiLogin, refreshAccessToken as apiRefreshAccessToken } from "../store/api";
+import { fetchOwnUser } from "../store/usersApi";
 import { API_BASE } from "../config";
 
 const STORAGE_KEY = "gramps-connect.token";
@@ -64,6 +65,36 @@ export async function login(username: string, password: string): Promise<void> {
   writeStored(STORAGE_KEY, accessToken);
   writeStored(REFRESH_STORAGE_KEY, refreshToken);
   writeStored(USERNAME_STORAGE_KEY, username);
+  emit();
+}
+
+/** This session's refresh token, if logged in -- read-only accessor for
+ * windowHandoff.ts's postMessage handoff to a window this tab opens for
+ * itself. Prefer getToken() for making requests (it refreshes the access
+ * token itself); this is only for handing the credential to another window
+ * of the same app. */
+export function getRefreshToken(): string | null {
+  return cachedRefreshToken;
+}
+
+/** Logs in using an already-minted refresh token instead of a
+ * username/password -- windowHandoff.ts's receiving side of "Open another
+ * window" (UserMenu.tsx), so a tab opened from an already-logged-in one
+ * doesn't re-prompt for credentials. Mirrors login()'s bookkeeping, but
+ * recovers the username from the server (fetchOwnUser) since the caller
+ * only has a token, not a typed username. Nothing is written until both
+ * requests succeed, so a failed handoff (revoked token, offline) leaves the
+ * session exactly as unauthenticated as it started -- falling through to
+ * the normal LoginForm. */
+export async function loginWithRefreshToken(refreshToken: string): Promise<void> {
+  const accessToken = await apiRefreshAccessToken(refreshToken);
+  const user = await fetchOwnUser(accessToken);
+  cachedToken = accessToken;
+  cachedRefreshToken = refreshToken;
+  cachedUsername = user.name;
+  writeStored(STORAGE_KEY, accessToken);
+  writeStored(REFRESH_STORAGE_KEY, refreshToken);
+  writeStored(USERNAME_STORAGE_KEY, user.name);
   emit();
 }
 

@@ -11,6 +11,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getApiKey, getCurrentUsername, hasPermissions, logout } from "../auth/auth";
+import { openHandoffWindow } from "../auth/windowHandoff";
 import { ProfileDialog } from "./ProfileDialog";
 import { AdministrationDialog } from "./AdministrationDialog";
 import { OwnerAdministrationDialog } from "./OwnerAdministrationDialog";
@@ -207,6 +208,7 @@ export function UserMenu() {
             <Menu.Item onClick={() => setAdminOpened(true)}>{t("Administration")}</Menu.Item>
           )}
           {hasApiKey && <Menu.Item onClick={copyApiKey}>{t("Copy API key")}</Menu.Item>}
+          <Menu.Item onClick={openHandoffWindow}>{t("Open another window")}</Menu.Item>
           <Menu.Item onClick={logout}>{t("Sign out")}</Menu.Item>
         </Menu.Dropdown>
       </Menu>

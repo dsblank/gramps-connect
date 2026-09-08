@@ -5,13 +5,14 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AppShell, Box, Group, Image, Stack, Title } from "@mantine/core";
+import { AppShell, Box, Center, Group, Image, Loader, Stack, Title } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { EVENT_VIEW, PLACE_VIEW, VIEWS, type ViewConfig } from "./store/views";
 import { getViewStore } from "./store/registry";
 import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
 import { getAuthSnapshot, getCurrentUsername, getToken, subscribe as subscribeAuth } from "./auth/auth";
+import { isHandoffCandidate, tryHandoffLogin } from "./auth/windowHandoff";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "./i18n/i18n";
 import { LoginForm } from "./auth/LoginForm";
 import { Sidebar } from "./components/Sidebar";
@@ -51,6 +52,23 @@ import logo from "./assets/icons/gramps-connect-logo.svg";
 
 export function App() {
   const loggedIn = useSyncExternalStore(subscribeAuth, getAuthSnapshot);
+  // Only true on a tab another gramps-connect tab window.open()'d (see
+  // windowHandoff.ts) -- holds a brief loading state instead of flashing
+  // LoginForm while the postMessage handoff with the opener is in flight.
+  // Always settles (success or timeout), so this can't get stuck.
+  const [awaitingHandoff, setAwaitingHandoff] = useState(isHandoffCandidate);
+  useEffect(() => {
+    if (!awaitingHandoff) return;
+    tryHandoffLogin().finally(() => setAwaitingHandoff(false));
+  }, [awaitingHandoff]);
+
+  if (awaitingHandoff) {
+    return (
+      <Center mih="100vh">
+        <Loader size="sm" />
+      </Center>
+    );
+  }
   return loggedIn ? <AuthenticatedApp /> : <LoginForm />;
 }
 
