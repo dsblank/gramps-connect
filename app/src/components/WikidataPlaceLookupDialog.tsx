@@ -6,11 +6,11 @@
 // (an existing Place already carrying a given QID, via the urls-field
 // query_lang trick verified in the plan) and the actual create/patch step.
 import { useEffect, useState } from "react";
-import { Alert, Badge, Button, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage } from "../store/api";
 import { PLACE_VIEW } from "../store/views";
-import { createHandle, createObjects } from "../store/objectsApi";
+import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import { fetchWikidataChain, searchWikidata, type WikidataPlaceNode, type WikidataSearchResult } from "../store/wikidataApi";
 import { t } from "../i18n/i18n";
@@ -43,6 +43,23 @@ interface ChainRow {
    * creating a new one. Always null for the leaf (never dedup-checked). */
   existingHandle: string | null;
   existingTitle: string | null;
+  /** How existingHandle was found -- "qid" is the confident case (an exact
+   * QID already recorded on that Place), "name" is a same-name fallback
+   * used when no place has ever been QID-tagged yet (the common case for a
+   * hierarchy that predates this feature entirely -- see issue #14: every
+   * ancestor read "New" even though all but one already existed, because
+   * dedup only ever looked for a QID nothing had recorded yet). A "name"
+   * match is a guess, not a certainty (homonymous places exist), so the
+   * confirm screen surfaces it distinctly and lets the user reject it. */
+  matchedBy: "qid" | "name" | null;
+}
+
+/** Escapes a Wikidata label for splicing into a query_lang string literal
+ * (single-quoted, backslash-escaped -- see
+ * gramps-object-query-language/docs/where_expr.md). Labels can contain an
+ * apostrophe ("Côte d'Ivoire") that would otherwise end the literal early. */
+function escapeQueryLangString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 type Phase =
@@ -158,21 +175,39 @@ export function WikidataPlaceLookupDialog({
         const isLeaf = i === 0;
         let existingHandle: string | null = null;
         let existingTitle: string | null = null;
+        let matchedBy: "qid" | "name" | null = null;
         if (!isLeaf) {
           // Verified query (see the plan): urls isn't a registered
           // query_lang collection, so this resolves as a plain JSON-path
           // field -- like() forces a TEXT extraction regardless, and both
           // SQLite/PostgreSQL render the whole urls array as JSON text on
           // that path, so this substring-matches the QID inside it.
-          const whereExpr = `like(urls, '%wikidata.org/wiki/${node.qid}%')`;
-          const { page } = await fetchPage(PLACE_VIEW, token, null, false, whereExpr, PLACE_VIEW.orderBy, 1);
+          const qidWhereExpr = `like(urls, '%wikidata.org/wiki/${node.qid}%')`;
+          const { page } = await fetchPage(PLACE_VIEW, token, null, false, qidWhereExpr, PLACE_VIEW.orderBy, 1);
           const match = page.items[0];
           if (match) {
             existingHandle = match.handle;
             existingTitle = (match.title as string | undefined) ?? node.label;
+            matchedBy = "qid";
+          } else {
+            // Fallback for a hierarchy that predates this feature: nothing
+            // has ever been QID-tagged, so the query above always misses
+            // even when the place already exists (see issue #14). name.value
+            // holds just the place's own name (not the hierarchical title --
+            // see PLACE_VIEW's own title/name split in views.ts), matching
+            // what a Wikidata chain label looks like at every level. A guess,
+            // not a certainty, so it's surfaced as "possible", not "existing".
+            const nameWhereExpr = `name.value == '${escapeQueryLangString(node.label)}'`;
+            const { page: namePage } = await fetchPage(PLACE_VIEW, token, null, false, nameWhereExpr, PLACE_VIEW.orderBy, 1);
+            const nameMatch = namePage.items[0];
+            if (nameMatch) {
+              existingHandle = nameMatch.handle;
+              existingTitle = (nameMatch.title as string | undefined) ?? node.label;
+              matchedBy = "name";
+            }
           }
         }
-        rows.push({ node, isLeaf, typeOverride: node.placeType ?? "", existingHandle, existingTitle });
+        rows.push({ node, isLeaf, typeOverride: node.placeType ?? "", existingHandle, existingTitle, matchedBy });
       }
       setPhase({ name: "confirm", rows });
     } catch (err: any) {
@@ -195,6 +230,21 @@ export function WikidataPlaceLookupDialog({
       const objects: Record<string, unknown>[] = [];
       let parentHandle: string | null = null;
       let createdAny = false;
+      // What an existing/reused row needs patched once every newly created
+      // ancestor above it is guaranteed to exist server-side -- built
+      // during the walk below, applied afterward (see the patches loop),
+      // not in-line: a reparent patch may need to reference a handle
+      // that's still only a pending entry in `objects` at the point its
+      // row is visited.
+      const patches: { handle: string; addQid?: string; reparentFrom?: string; reparentTo?: string }[] = [];
+      // The most recent existing/reused row's own handle -- what an
+      // existing row *before* it was pointing at, and so what a later
+      // reparent needs to remove -- and whether a new row has been created
+      // since (i.e. whether the next existing row was inserted-below in
+      // this confirmed hierarchy, not directly under lastExistingHandle
+      // like it currently is).
+      let lastExistingHandle: string | null = null;
+      let pendingReparent = false;
       // Root-first order (see ChainRow's own doc comment) is exactly
       // creation order: each new row's placeref_list can point at the
       // previous row's handle -- reused or just-minted -- because that
@@ -205,7 +255,29 @@ export function WikidataPlaceLookupDialog({
       for (const row of rows) {
         if (row.isLeaf) break;
         if (row.existingHandle) {
+          const patch: (typeof patches)[number] = { handle: row.existingHandle };
+          if (row.matchedBy === "name") {
+            // Backfill the QID onto the reused place so the *next* lookup
+            // finds it via the confident "qid" match instead of falling
+            // back to this same name guess again (see ChainRow.matchedBy
+            // and issue #14) -- self-healing dedup, one confirmed row at a
+            // time.
+            patch.addQid = row.node.qid;
+          }
+          if (pendingReparent && lastExistingHandle) {
+            // A newly created row was just inserted between this place and
+            // the ancestor it currently points at ("New" sandwiched between
+            // two "Existing"/"Possible match" rows on the confirm screen,
+            // e.g. a Wikidata admin level -- Regierungsbezirk, say -- the
+            // existing Gramps hierarchy skips) -- repoint it at the new
+            // level instead of leaving it attached two levels up.
+            patch.reparentFrom = lastExistingHandle;
+            patch.reparentTo = parentHandle!;
+          }
+          if (patch.addQid || patch.reparentFrom) patches.push(patch);
           parentHandle = row.existingHandle;
+          lastExistingHandle = row.existingHandle;
+          pendingReparent = false;
           continue;
         }
         const handle = createHandle();
@@ -222,9 +294,37 @@ export function WikidataPlaceLookupDialog({
         });
         parentHandle = handle;
         createdAny = true;
+        pendingReparent = true;
       }
       if (objects.length > 0) {
         await createObjects(token, objects);
+      }
+      // Fetch-then-merge, not overwrite: each patched place's urls/
+      // placeref_list may already hold unrelated entries.
+      for (const patch of patches) {
+        const existing = await fetchPlainObject(token, PLACE_VIEW, patch.handle);
+        const update: Record<string, unknown> = { ...existing };
+        let changed = false;
+        if (patch.addQid) {
+          const wikidataUrl = `https://www.wikidata.org/wiki/${patch.addQid}`;
+          const existingUrls = (existing.urls as { path?: string }[] | undefined) ?? [];
+          if (!existingUrls.some((u) => u.path === wikidataUrl)) {
+            update.urls = [...existingUrls, { _class: "Url", path: wikidataUrl, desc: "", type: "Wikidata" }];
+            changed = true;
+          }
+        }
+        if (patch.reparentFrom && patch.reparentTo) {
+          const refs = (existing.placeref_list as { _class?: string; ref?: string }[] | undefined) ?? [];
+          const nextRefs = refs.filter((r) => r.ref !== patch.reparentFrom);
+          if (!nextRefs.some((r) => r.ref === patch.reparentTo)) {
+            nextRefs.push({ _class: "PlaceRef", ref: patch.reparentTo });
+          }
+          if (JSON.stringify(nextRefs) !== JSON.stringify(refs)) {
+            update.placeref_list = nextRefs;
+            changed = true;
+          }
+        }
+        if (changed) await updateObject(token, PLACE_VIEW, patch.handle, update);
       }
       if (createdAny) getViewStore("place").requeryDebounced();
 
@@ -306,7 +406,7 @@ export function WikidataPlaceLookupDialog({
         {(phase.name === "confirm" || phase.name === "applying") && (
           <>
             <Text size="xs" c="dimmed">
-              {t("This is the whole hierarchy Wikidata reports, root to leaf. Places marked \"Existing\" are reused, not duplicated; fix a type guess below before applying if it's wrong.")}
+              {t("This is the whole hierarchy Wikidata reports, root to leaf. Places marked \"Existing\" are reused, not duplicated; a \"Possible match\" is a same-name guess -- check it before applying. Fix a type guess below if it's wrong.")}
             </Text>
             <Stack gap="xs">
               {phase.rows.map((row, i) => (
@@ -318,14 +418,27 @@ export function WikidataPlaceLookupDialog({
                       </Text>
                       {row.isLeaf ? (
                         <Badge size="xs" color="blue" variant="light">{t("This place")}</Badge>
-                      ) : row.existingHandle ? (
+                      ) : row.matchedBy === "qid" ? (
                         <Badge size="xs" color="teal" variant="light">{t("Existing")}</Badge>
+                      ) : row.matchedBy === "name" ? (
+                        <Badge size="xs" color="yellow" variant="light">{t("Possible match")}</Badge>
                       ) : (
                         <Badge size="xs" color="green" variant="light">{t("New")}</Badge>
                       )}
                     </Group>
                     {row.existingHandle && row.existingTitle && row.existingTitle !== row.node.label && (
                       <Text size="xs" c="dimmed">{t("Matches existing place")}: {row.existingTitle}</Text>
+                    )}
+                    {row.matchedBy === "name" && (
+                      <Text size="xs" c="dimmed">
+                        {t("Same name already in your tree, but no confirmed Wikidata link -- ")}
+                        <Anchor
+                          size="xs"
+                          onClick={() => updateRow(i, { existingHandle: null, existingTitle: null, matchedBy: null })}
+                        >
+                          {t("not the same place, create new")}
+                        </Anchor>
+                      </Text>
                     )}
                   </Stack>
                   <TextInput
@@ -419,9 +532,15 @@ export function WikidataPlaceLookupButton({ stackId, zIndex, data, onChange }: W
             long: result.long != null ? String(result.long) : data.long,
             place_type: result.placeType ?? data.place_type,
             urls: [...existingUrls, { _class: "Url", path: wikidataUrl, desc: "", type: "Wikidata" }],
-            placeref_list: result.parentHandle
-              ? [...existingRefs, { _class: "PlaceRef", ref: result.parentHandle }]
-              : existingRefs,
+            // Deduped the same way existingUrls is above: re-running this
+            // lookup on a place that's already enclosed by parentHandle
+            // (the common case once a hierarchy's ancestors are QID-tagged
+            // -- see WikidataPlaceLookupDialog's self-healing backfill)
+            // must not pile up a second, redundant PlaceRef to it.
+            placeref_list:
+              result.parentHandle && !existingRefs.some((r) => r.ref === result.parentHandle)
+                ? [...existingRefs, { _class: "PlaceRef", ref: result.parentHandle }]
+                : existingRefs,
           });
         }}
       />
