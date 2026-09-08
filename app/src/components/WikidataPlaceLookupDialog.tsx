@@ -6,7 +6,7 @@
 // (an existing Place already carrying a given QID, via the urls-field
 // query_lang trick verified in the plan) and the actual create/patch step.
 import { useEffect, useState } from "react";
-import { Alert, Anchor, Badge, Button, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage } from "../store/api";
 import { PLACE_VIEW } from "../store/views";
@@ -52,6 +52,34 @@ interface ChainRow {
    * match is a guess, not a certainty (homonymous places exist), so the
    * confirm screen surfaces it distinctly and lets the user reject it. */
   matchedBy: "qid" | "name" | null;
+  /** User said a "name" match isn't actually the same place (see the
+   * confirm screen's "Incorrect match, create a new one" checkbox) --
+   * toggled, not destructive: existingHandle/existingTitle/matchedBy are left
+   * alone so the row can go right back to "Possible match" by toggling
+   * this off again, rather than the lookup having to be re-run from
+   * scratch to get back to that state. Every place that reads whether
+   * this row actually resolves to an existing Place should check
+   * `existingHandle && !nameMatchRejected` (see effectiveHandle below),
+   * never `existingHandle` alone -- this field is never set for a "qid"
+   * match, which is confident enough not to offer rejecting it. */
+  nameMatchRejected: boolean;
+  /** User opted this level out of the hierarchy entirely (see issue #14's
+   * follow-up: Wikidata's admin levels don't always match the granularity
+   * a Gramps tree actually uses -- a "Government Region" the user doesn't
+   * track, say). A skipped row is never created/patched and never linked
+   * to as a parent; its neighbors connect directly to each other instead,
+   * exactly as if this row weren't in the chain at all. Always false for
+   * the leaf -- there's nothing to skip *to* past the place being edited. */
+  skip: boolean;
+}
+
+/** The existing Place this row actually resolves to right now -- null once
+ * a "name" match has been rejected (see ChainRow.nameMatchRejected), even
+ * though existingHandle itself is left populated so rejecting can be
+ * undone. Every "is this row reusing an existing place" check goes through
+ * this, not existingHandle directly. */
+function effectiveHandle(row: ChainRow): string | null {
+  return row.nameMatchRejected ? null : row.existingHandle;
 }
 
 /** Escapes a Wikidata label for splicing into a query_lang string literal
@@ -207,7 +235,10 @@ export function WikidataPlaceLookupDialog({
             }
           }
         }
-        rows.push({ node, isLeaf, typeOverride: node.placeType ?? "", existingHandle, existingTitle, matchedBy });
+        rows.push({
+          node, isLeaf, typeOverride: node.placeType ?? "", existingHandle, existingTitle, matchedBy,
+          nameMatchRejected: false, skip: false,
+        });
       }
       setPhase({ name: "confirm", rows });
     } catch (err: any) {
@@ -230,21 +261,25 @@ export function WikidataPlaceLookupDialog({
       const objects: Record<string, unknown>[] = [];
       let parentHandle: string | null = null;
       let createdAny = false;
-      // What an existing/reused row needs patched once every newly created
-      // ancestor above it is guaranteed to exist server-side -- built
-      // during the walk below, applied afterward (see the patches loop),
-      // not in-line: a reparent patch may need to reference a handle
-      // that's still only a pending entry in `objects` at the point its
-      // row is visited.
-      const patches: { handle: string; addQid?: string; reparentFrom?: string; reparentTo?: string }[] = [];
-      // The most recent existing/reused row's own handle -- what an
-      // existing row *before* it was pointing at, and so what a later
-      // reparent needs to remove -- and whether a new row has been created
-      // since (i.e. whether the next existing row was inserted-below in
-      // this confirmed hierarchy, not directly under lastExistingHandle
-      // like it currently is).
-      let lastExistingHandle: string | null = null;
-      let pendingReparent = false;
+      // Every existing place actually resolved in this chain (whichever
+      // rows a skip didn't remove or a rejected name match didn't disown --
+      // see effectiveHandle) -- any PlaceRef among these still on a kept
+      // row once the walk below is done is necessarily a stale link to a
+      // level this confirmed hierarchy no longer routes through (skipped,
+      // or superseded by a newly inserted level), and gets swapped for the
+      // one it actually precedes now. A place's PlaceRef to something
+      // *outside* this chain is left alone -- it's none of this dialog's
+      // business.
+      const chainHandles = new Set(
+        rows.filter((r) => !r.isLeaf).map((r) => effectiveHandle(r)).filter((h): h is string => h != null)
+      );
+      // What each kept (non-skipped) existing row's placeref_list should
+      // resolve to, recorded during the same root-first walk that decides
+      // what to create -- applied in a second pass below, once every
+      // newly created ancestor is guaranteed to exist server-side (a
+      // patch may need to reference a handle that's still only a pending
+      // entry in `objects` at the point its own row is visited).
+      const reconcile: { handle: string; correctParent: string | null; addQid?: string }[] = [];
       // Root-first order (see ChainRow's own doc comment) is exactly
       // creation order: each new row's placeref_list can point at the
       // previous row's handle -- reused or just-minted -- because that
@@ -254,30 +289,20 @@ export function WikidataPlaceLookupDialog({
       // here, only patched via the result handed back below.
       for (const row of rows) {
         if (row.isLeaf) break;
-        if (row.existingHandle) {
-          const patch: (typeof patches)[number] = { handle: row.existingHandle };
+        if (row.skip) continue; // excluded entirely -- see ChainRow.skip
+        const reusedHandle = effectiveHandle(row);
+        if (reusedHandle) {
+          const entry: (typeof reconcile)[number] = { handle: reusedHandle, correctParent: parentHandle };
           if (row.matchedBy === "name") {
             // Backfill the QID onto the reused place so the *next* lookup
             // finds it via the confident "qid" match instead of falling
             // back to this same name guess again (see ChainRow.matchedBy
             // and issue #14) -- self-healing dedup, one confirmed row at a
             // time.
-            patch.addQid = row.node.qid;
+            entry.addQid = row.node.qid;
           }
-          if (pendingReparent && lastExistingHandle) {
-            // A newly created row was just inserted between this place and
-            // the ancestor it currently points at ("New" sandwiched between
-            // two "Existing"/"Possible match" rows on the confirm screen,
-            // e.g. a Wikidata admin level -- Regierungsbezirk, say -- the
-            // existing Gramps hierarchy skips) -- repoint it at the new
-            // level instead of leaving it attached two levels up.
-            patch.reparentFrom = lastExistingHandle;
-            patch.reparentTo = parentHandle!;
-          }
-          if (patch.addQid || patch.reparentFrom) patches.push(patch);
-          parentHandle = row.existingHandle;
-          lastExistingHandle = row.existingHandle;
-          pendingReparent = false;
+          reconcile.push(entry);
+          parentHandle = reusedHandle;
           continue;
         }
         const handle = createHandle();
@@ -294,45 +319,48 @@ export function WikidataPlaceLookupDialog({
         });
         parentHandle = handle;
         createdAny = true;
-        pendingReparent = true;
       }
       if (objects.length > 0) {
         await createObjects(token, objects);
       }
       // Fetch-then-merge, not overwrite: each patched place's urls/
       // placeref_list may already hold unrelated entries.
-      for (const patch of patches) {
-        const existing = await fetchPlainObject(token, PLACE_VIEW, patch.handle);
+      for (const entry of reconcile) {
+        const existing = await fetchPlainObject(token, PLACE_VIEW, entry.handle);
         const update: Record<string, unknown> = { ...existing };
         let changed = false;
-        if (patch.addQid) {
-          const wikidataUrl = `https://www.wikidata.org/wiki/${patch.addQid}`;
+        if (entry.addQid) {
+          const wikidataUrl = `https://www.wikidata.org/wiki/${entry.addQid}`;
           const existingUrls = (existing.urls as { path?: string }[] | undefined) ?? [];
           if (!existingUrls.some((u) => u.path === wikidataUrl)) {
             update.urls = [...existingUrls, { _class: "Url", path: wikidataUrl, desc: "", type: "Wikidata" }];
             changed = true;
           }
         }
-        if (patch.reparentFrom && patch.reparentTo) {
-          const refs = (existing.placeref_list as { _class?: string; ref?: string }[] | undefined) ?? [];
-          const nextRefs = refs.filter((r) => r.ref !== patch.reparentFrom);
-          if (!nextRefs.some((r) => r.ref === patch.reparentTo)) {
-            nextRefs.push({ _class: "PlaceRef", ref: patch.reparentTo });
-          }
-          if (JSON.stringify(nextRefs) !== JSON.stringify(refs)) {
-            update.placeref_list = nextRefs;
-            changed = true;
-          }
+        const refs = (existing.placeref_list as { _class?: string; ref?: string }[] | undefined) ?? [];
+        const nextRefs = refs.filter((r) => r.ref === entry.correctParent || !chainHandles.has(r.ref ?? ""));
+        if (entry.correctParent && !nextRefs.some((r) => r.ref === entry.correctParent)) {
+          nextRefs.push({ _class: "PlaceRef", ref: entry.correctParent });
         }
-        if (changed) await updateObject(token, PLACE_VIEW, patch.handle, update);
+        if (JSON.stringify(nextRefs) !== JSON.stringify(refs)) {
+          update.placeref_list = nextRefs;
+          changed = true;
+        }
+        if (changed) await updateObject(token, PLACE_VIEW, entry.handle, update);
       }
       if (createdAny) getViewStore("place").requeryDebounced();
 
       const leaf = rows.find((r) => r.isLeaf);
       if (leaf) {
         // rows is root-first (see ChainRow's doc comment); the hierarchy
-        // title reads leaf-to-root, so reverse it.
-        const hierarchyTitle = [...rows].reverse().map((r) => r.node.label).join(", ");
+        // title reads leaf-to-root, so reverse it. A skipped level isn't
+        // part of the confirmed hierarchy any more than it's part of the
+        // created/patched Place graph -- leave it out of the name too.
+        const hierarchyTitle = [...rows]
+          .reverse()
+          .filter((r) => r.isLeaf || !r.skip)
+          .map((r) => r.node.label)
+          .join(", ");
         onApply({
           qid: leaf.node.qid,
           label: leaf.node.label,
@@ -406,11 +434,11 @@ export function WikidataPlaceLookupDialog({
         {(phase.name === "confirm" || phase.name === "applying") && (
           <>
             <Text size="xs" c="dimmed">
-              {t("This is the whole hierarchy Wikidata reports, root to leaf. Places marked \"Existing\" are reused, not duplicated; a \"Possible match\" is a same-name guess -- check it before applying. Fix a type guess below if it's wrong.")}
+              {t("This is the whole hierarchy Wikidata reports, root to leaf. Places marked \"Existing\" are reused, not duplicated; a \"Possible match\" is a same-name guess -- check it before applying. Any level can be skipped -- the levels around it connect directly instead. Fix a type guess below if it's wrong.")}
             </Text>
             <Stack gap="xs">
               {phase.rows.map((row, i) => (
-                <Group key={row.node.qid} wrap="nowrap" gap="sm">
+                <Group key={row.node.qid} wrap="nowrap" gap="sm" style={row.skip ? { opacity: 0.5 } : undefined}>
                   <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
                     <Group gap={6} wrap="nowrap">
                       <Text size="sm" fw={row.isLeaf ? 700 : 500} style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -418,34 +446,56 @@ export function WikidataPlaceLookupDialog({
                       </Text>
                       {row.isLeaf ? (
                         <Badge size="xs" color="blue" variant="light">{t("This place")}</Badge>
+                      ) : row.skip ? (
+                        <Badge size="xs" color="gray" variant="light">{t("Skipped")}</Badge>
                       ) : row.matchedBy === "qid" ? (
                         <Badge size="xs" color="teal" variant="light">{t("Existing")}</Badge>
-                      ) : row.matchedBy === "name" ? (
+                      ) : row.matchedBy === "name" && !row.nameMatchRejected ? (
                         <Badge size="xs" color="yellow" variant="light">{t("Possible match")}</Badge>
                       ) : (
                         <Badge size="xs" color="green" variant="light">{t("New")}</Badge>
                       )}
                     </Group>
-                    {row.existingHandle && row.existingTitle && row.existingTitle !== row.node.label && (
+                    {!row.skip && effectiveHandle(row) && row.existingTitle && row.existingTitle !== row.node.label && (
                       <Text size="xs" c="dimmed">{t("Matches existing place")}: {row.existingTitle}</Text>
                     )}
-                    {row.matchedBy === "name" && (
-                      <Text size="xs" c="dimmed">
-                        {t("Same name already in your tree, but no confirmed Wikidata link -- ")}
-                        <Anchor
+                    {/* Two independent per-row choices -- reject a
+                     * name-only match, and skip a level entirely -- each
+                     * its own checkbox (not a sentence-embedded link) so
+                     * it reads as a toggle, not prose to parse, and indented
+                     * under the row it applies to so it's clearly not a
+                     * third badge state. */}
+                    <Stack gap={4} pl="sm" mt={4}>
+                      {row.matchedBy === "name" && (
+                        <Checkbox
                           size="xs"
-                          onClick={() => updateRow(i, { existingHandle: null, existingTitle: null, matchedBy: null })}
-                        >
-                          {t("not the same place, create new")}
-                        </Anchor>
-                      </Text>
-                    )}
+                          label={t("Incorrect match, create a new one")}
+                          checked={row.nameMatchRejected}
+                          onChange={(e) => updateRow(i, { nameMatchRejected: e.currentTarget.checked })}
+                        />
+                      )}
+                      {/* Independent of the match choice above -- skipping
+                       * works the same whether this row is New, a
+                       * confirmed Existing place, or a Possible match:
+                       * whatever it currently resolves to (see
+                       * effectiveHandle) is left completely untouched, and
+                       * its neighbors connect directly to each other (see
+                       * handleApply's chainHandles-based reconciliation). */}
+                      {!row.isLeaf && (
+                        <Checkbox
+                          size="xs"
+                          label={t("Skip this level -- connect around it")}
+                          checked={row.skip}
+                          onChange={(e) => updateRow(i, { skip: e.currentTarget.checked })}
+                        />
+                      )}
+                    </Stack>
                   </Stack>
                   <TextInput
                     size="xs"
                     placeholder={TYPE_HINT}
                     value={row.typeOverride}
-                    disabled={!row.isLeaf && Boolean(row.existingHandle)}
+                    disabled={row.skip || (!row.isLeaf && Boolean(effectiveHandle(row)))}
                     onChange={(e) => updateRow(i, { typeOverride: e.currentTarget.value })}
                     style={{ width: 160 }}
                   />
