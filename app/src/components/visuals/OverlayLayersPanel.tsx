@@ -36,34 +36,39 @@ interface OverlayRow {
    * `opacityOverrides`). */
   opacity: number;
   placeTitle: string;
-  /** [lng, lat] -- an image's 4 corners' average, or a region's ring
-   * vertices' average (dropping GeoJSON's closing repeat of the first
-   * point); either way, what a click here eases the map to. */
-  center: [number, number];
+  /** [west, south, east, north] -- the bounding box of an image's 4 corners,
+   * or of a region's ring vertices (dropping GeoJSON's closing repeat of the
+   * first point); either way, what a click here fits the map to. A bounding
+   * box (rather than just a centroid) lets MapCanvas zoom *out* when the
+   * overlay is bigger than the current view, not just ease sideways at
+   * whatever zoom the map already happened to be at. */
+  bounds: [number, number, number, number];
   /** Images only -- see KmlImageOverlay.order. Regions have no stacking
    * concept of their own yet, so they simply list after every image,
    * in whatever order fetchAllKmlRegions happened to return them. */
   order: number;
 }
 
+function boundsOf(coords: [number, number][]): [number, number, number, number] {
+  const lngs = coords.map((c) => c[0]);
+  const lats = coords.map((c) => c[1]);
+  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+}
+
 function imageToRow(overlay: KmlImageOverlay, placeTitle: string): OverlayRow {
-  const lng = overlay.corners.reduce((sum, c) => sum + c[0], 0) / overlay.corners.length;
-  const lat = overlay.corners.reduce((sum, c) => sum + c[1], 0) / overlay.corners.length;
   return {
     kind: "image", kmlHandle: overlay.kmlHandle, indexInFile: overlay.indexInFile, name: overlay.name,
-    opacity: overlay.opacity, placeTitle, center: [lng, lat], order: overlay.order,
+    opacity: overlay.opacity, placeTitle, bounds: boundsOf(overlay.corners), order: overlay.order,
   };
 }
 
 function regionToRow(region: KmlRegion, placeTitle: string): OverlayRow {
   // GeoJSON closes a ring by repeating its first point as its last --
-  // dropped here so it isn't double-counted in the average.
+  // dropped here so it isn't double-counted in the bounds.
   const verts = region.ring.slice(0, -1);
-  const lng = verts.reduce((sum, c) => sum + c[0], 0) / verts.length;
-  const lat = verts.reduce((sum, c) => sum + c[1], 0) / verts.length;
   return {
     kind: "region", kmlHandle: region.kmlHandle, indexInFile: region.indexInFile, name: region.name,
-    opacity: region.opacity, placeTitle, center: [lng, lat], order: Infinity,
+    opacity: region.opacity, placeTitle, bounds: boundsOf(verts), order: Infinity,
   };
 }
 
@@ -72,9 +77,10 @@ interface OverlayLayersPanelProps {
    * items actually visible (or hidden-by-date) on the map right now. */
   places: MapPlace[];
   ohmYear: number | null;
-  /** Fired when a row is clicked, so MapView can ease the map to that
-   * item's centroid the same way a search result or a scope does. */
-  onFlyTo: (center: [number, number]) => void;
+  /** Fired when a row is clicked, so MapView can fit the map to that item's
+   * bounding box -- zooming out as readily as in, unlike a plain centroid
+   * ease. */
+  onFlyTo: (bounds: [number, number, number, number]) => void;
   /** Which rows (by rowKey) are checked off the map for the rest of this
    * session -- owned by MapView (not persisted anywhere; a plain view
    * preference, not an edit to anyone's file) so MapCanvas can see it too
@@ -93,10 +99,11 @@ export function OverlayLayersPanel({
 }: OverlayLayersPanelProps) {
   const kmlKey = [...new Set(places.flatMap((place) => place.kmlMedia))].sort().join(",");
   const [rows, setRows] = useState<OverlayRow[]>([]);
-  // Collapsed by default -- the panel only appears at all once a place with
-  // an overlay is on screen, and most of the time there's nothing to do
-  // here beyond knowing overlays exist; opening it is a deliberate act.
-  const [opened, setOpened] = useState(false);
+  // Expanded by default -- the panel only appears at all once a place with
+  // an overlay is on screen, and selecting that place is already the
+  // deliberate act; the controls it exists to offer shouldn't need a second
+  // click to reveal.
+  const [opened, setOpened] = useState(true);
 
   useEffect(() => {
     if (kmlKey === "") {
@@ -165,7 +172,7 @@ export function OverlayLayersPanel({
                       aria-label={t("Show on map")}
                     />
                     <UnstyledButton
-                      onClick={() => onFlyTo(row.center)}
+                      onClick={() => onFlyTo(row.bounds)}
                       title={t("Go to overlay")}
                       disabled={!shown}
                       style={{ flex: 1, minWidth: 0, textAlign: "left" }}

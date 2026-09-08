@@ -120,13 +120,14 @@ interface MapCanvasProps {
    * this year (see MapModeControl / mapStyles.ts); null is the plain
    * OpenFreeMap basemap, unfiltered. */
   ohmYear: number | null;
-  /** Bumped by OverlayLayersPanel.tsx when a row is clicked, to ease the
-   * map to that overlay's centroid -- a counter rather than a boolean (same
+  /** Bumped by OverlayLayersPanel.tsx when a row is clicked, to fit the
+   * map to that overlay's bounds -- a counter rather than a boolean (same
    * reasoning as fitRequest) so clicking the same overlay twice in a row
    * still fires. */
   flyToRequest?: number;
-  /** The [lng, lat] to ease to when `flyToRequest` bumps. */
-  flyToTarget?: [number, number] | null;
+  /** The [west, south, east, north] bounds to fit to when `flyToRequest`
+   * bumps. */
+  flyToTarget?: [number, number, number, number] | null;
   /** OverlayLayersPanel.tsx's own unchecked rows (rowKey-keyed) -- a plain
    * view preference for this session, not persisted anywhere, that this
    * component honors by not drawing that image overlay/region at all.
@@ -786,18 +787,22 @@ export function MapCanvas({
     map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 600 });
   }, [fitRequest, ready, fitPlaces]);
 
-  // Ease to an overlay's centroid on request (see flyToRequest). Same
-  // already-applied guard as the fit effect above, for the same reason:
-  // `ready` flips false-then-true on a mode/theme swap without the request
-  // itself changing, and re-easing to the last click then would fight
-  // whatever the user has since panned to.
+  // Fit to an overlay's bounds on request (see flyToRequest). fitBounds
+  // (not easeTo with a floor on the current zoom) so this zooms *out* just
+  // as readily as in -- an easeTo that only ever raised the floor left a
+  // click on a bigger overlay stuck at whatever (tighter) zoom the map was
+  // already at. Same already-applied guard as the fit effect above, for the
+  // same reason: `ready` flips false-then-true on a mode/theme swap without
+  // the request itself changing, and refitting to the last click then would
+  // fight whatever the user has since panned to.
   const appliedFlyToRequestRef = useRef(0);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !flyToRequest || !flyToTarget) return;
     if (appliedFlyToRequestRef.current === flyToRequest) return;
     appliedFlyToRequestRef.current = flyToRequest;
-    map.easeTo({ center: flyToTarget, zoom: Math.max(map.getZoom(), 9), duration: 800 });
+    const [west, south, east, north] = flyToTarget;
+    map.fitBounds([[west, south], [east, north]], { padding: 60, maxZoom: 17, duration: 800 });
   }, [flyToRequest, flyToTarget, ready]);
 
   return (

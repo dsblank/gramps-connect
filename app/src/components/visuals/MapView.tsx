@@ -47,10 +47,10 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   // than which basemap tiles are shown.
   const [mapMode, setMapMode] = useState<MapMode>("standard");
   const [historicalYear, setHistoricalYear] = useState(() => new Date().getFullYear());
-  // Where to ease the map when a row in OverlayLayersPanel is clicked -- see
+  // Where to fit the map when a row in OverlayLayersPanel is clicked -- see
   // MapCanvas.tsx's own flyToRequest/flyToTarget doc comments.
   const [flyToRequest, setFlyToRequest] = useState(0);
-  const [flyToTarget, setFlyToTarget] = useState<[number, number] | null>(null);
+  const [flyToTarget, setFlyToTarget] = useState<[number, number, number, number] | null>(null);
   // Overlays/regions unchecked, or given a different opacity than their own
   // saved one, in OverlayLayersPanel -- plain view preferences for this
   // session (nothing is written to any file for either -- an image/region's
@@ -436,8 +436,8 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
         // itself now applies to drawing the overlay(s) on the map.
         places={selected ? [selected] : []}
         ohmYear={ohmYear}
-        onFlyTo={(center) => {
-          setFlyToTarget(center);
+        onFlyTo={(bounds) => {
+          setFlyToTarget(bounds);
           setFlyToRequest((n) => n + 1);
         }}
         hiddenKeys={hiddenOverlayKeys}
