@@ -258,7 +258,11 @@ export const PERSON_VIEW: ViewConfig = {
   label: "People",
   icon: iconPerson,
   endpoint: "/api/people/query/",
-  orderBy: [{ column: "surname", direction: "asc" }],
+  // given_name rides along as a tiebreak from the very first load, matching
+  // the "surname" column's own secondarySort (below) that setSort() applies
+  // on every later click -- without it, the default sort left same-surname
+  // rows in server-insertion order instead of alphabetized by given name.
+  orderBy: [{ column: "surname", direction: "asc" }, { column: "given_name", direction: "asc" }],
   opfsFilename: "app-cache-person.sqlite",
   wherePlaceholder: 'e.g. gender == 1 and surname == "Ancestor"',
   simpleSearch: {
