@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchWikidataChain, searchWikidata } from "../wikidataApi";
+import { fetchWikidataChain, fetchWikidataGeoshape, searchWikidata } from "../wikidataApi";
 
 function mockFetchSequence(responses: unknown[]) {
   let call = 0;
@@ -52,7 +52,7 @@ describe("searchWikidata", () => {
 function entity(
   qid: string,
   label: string,
-  opts: { lat?: number; long?: number; parents?: string[]; instanceOf?: string[] } = {}
+  opts: { lat?: number; long?: number; parents?: string[]; instanceOf?: string[]; geoshapeTitle?: string } = {}
 ) {
   const claims: Record<string, unknown[]> = {};
   if (opts.lat != null && opts.long != null) {
@@ -63,6 +63,9 @@ function entity(
   }
   if (opts.instanceOf) {
     claims.P31 = opts.instanceOf.map((id) => ({ mainsnak: { datavalue: { value: { id } } } }));
+  }
+  if (opts.geoshapeTitle) {
+    claims.P3896 = [{ mainsnak: { datavalue: { value: opts.geoshapeTitle } } }];
   }
   return { entities: { [qid]: { labels: { en: { value: label } }, claims } } };
 }
@@ -110,5 +113,80 @@ describe("fetchWikidataChain", () => {
     mockFetchSequence([entity("Qx", "No Coords")]);
     const chain = await fetchWikidataChain("Qx");
     expect(chain[0]).toMatchObject({ lat: null, long: null });
+  });
+
+  it("captures P3896's value as geoshapeTitle, null when absent", async () => {
+    mockFetchSequence([
+      entity("Q173", "Alabama", { parents: ["Q30"], geoshapeTitle: "Data:Alabama.map" }),
+      entity("Q30", "United States"),
+    ]);
+    const chain = await fetchWikidataChain("Q173");
+    expect(chain[0].geoshapeTitle).toBe("Data:Alabama.map");
+    expect(chain[1].geoshapeTitle).toBeNull();
+  });
+});
+
+describe("fetchWikidataGeoshape", () => {
+  /** A Commons `Data:*.map` page's action=query response, wrapping the
+   * given GeoJSON value the way Commons' own map-data envelope does (see
+   * fetchWikidataGeoshape's own doc comment). */
+  function commonsPage(data: unknown) {
+    return {
+      query: {
+        pages: {
+          "12345": {
+            revisions: [{ "*": JSON.stringify({ license: "CC0-1.0", data }) }],
+          },
+        },
+      },
+    };
+  }
+
+  it("sends titles and origin=* as expected query params", async () => {
+    const fetchMock = mockFetchSequence([commonsPage({ type: "FeatureCollection", features: [] })]);
+    await fetchWikidataGeoshape("Data:Alabama.map");
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.origin + url.pathname).toBe("https://commons.wikimedia.org/w/api.php");
+    expect(url.searchParams.get("action")).toBe("query");
+    expect(url.searchParams.get("titles")).toBe("Data:Alabama.map");
+    expect(url.searchParams.get("prop")).toBe("revisions");
+    expect(url.searchParams.get("origin")).toBe("*");
+  });
+
+  it("unwraps a FeatureCollection's features", async () => {
+    const feature = { type: "Feature", geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } };
+    mockFetchSequence([commonsPage({ type: "FeatureCollection", features: [feature] })]);
+    const features = await fetchWikidataGeoshape("Data:Alabama.map");
+    expect(features).toEqual([feature]);
+  });
+
+  it("wraps a bare Feature (not a FeatureCollection) into a single-element array", async () => {
+    const feature = { type: "Feature", geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } };
+    mockFetchSequence([commonsPage(feature)]);
+    const features = await fetchWikidataGeoshape("Data:Something.map");
+    expect(features).toEqual([feature]);
+  });
+
+  it("returns [] when the page has no revision content (page doesn't exist)", async () => {
+    mockFetchSequence([{ query: { pages: { "-1": { missing: "" } } } }]);
+    const features = await fetchWikidataGeoshape("Data:NoSuchPage.map");
+    expect(features).toEqual([]);
+  });
+
+  it("returns [] on a non-ok response, without throwing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500 }) as unknown as Response));
+    await expect(fetchWikidataGeoshape("Data:Alabama.map")).resolves.toEqual([]);
+  });
+
+  it("returns [] when the revision content isn't valid JSON, without throwing", async () => {
+    mockFetchSequence([
+      { query: { pages: { "1": { revisions: [{ "*": "not json" }] } } } },
+    ]);
+    await expect(fetchWikidataGeoshape("Data:Alabama.map")).resolves.toEqual([]);
+  });
+
+  it("returns [] when fetch itself rejects, without throwing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network down"); }));
+    await expect(fetchWikidataGeoshape("Data:Alabama.map")).resolves.toEqual([]);
   });
 });

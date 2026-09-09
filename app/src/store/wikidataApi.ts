@@ -14,9 +14,17 @@
 // treats User-Agent as a forbidden header a page can't override, so the
 // browser's own default is sent instead. Nothing about the read-only,
 // unauthenticated endpoints used here requires more than that.
+//
+// fetchWikidataGeoshape below is the third call, added 2026-09-09 (see the
+// plan's geoshape follow-up): a P3896 claim, when present, names a Commons
+// `Data:*.map` page holding this level's boundary as GeoJSON -- also called
+// directly from the browser, also `access-control-allow-origin: *` when the
+// same `origin=*` param is used.
+import type { Feature } from "geojson";
 
 const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 const WIKIDATA_ENTITY_DATA = "https://www.wikidata.org/wiki/Special:EntityData";
+const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
 
 /** Max P131 hops to walk before giving up -- guards a malformed/cyclic
  * chain from hanging the lookup. Matches the plan's "~8" cap; every real
@@ -51,6 +59,11 @@ export interface WikidataPlaceNode {
    * should fall back to a free-text custom type using `label` in that case,
    * and let the user correct a wrong guess before anything is created. */
   placeType: string | null;
+  /** P3896 ("geoshape")'s value, when present -- the title of a `Data:*.map`
+   * page on Wikimedia Commons holding this level's boundary as GeoJSON (see
+   * fetchWikidataGeoshape). Most levels have none; that's normal, not an
+   * error -- see WIKIDATA_PLACE_LOOKUP_PLAN.md's geoshape follow-up. */
+  geoshapeTitle: string | null;
 }
 
 /** `P31` (instance of) QID -> Gramps PlaceType label. Deliberately small
@@ -141,6 +154,11 @@ function readQidList(entity: WikidataEntity, property: string): string[] {
     .filter((id): id is string => Boolean(id));
 }
 
+function readGeoshapeTitle(entity: WikidataEntity): string | null {
+  const value = entity.claims?.P3896?.[0]?.mainsnak?.datavalue?.value;
+  return typeof value === "string" ? value : null;
+}
+
 /** Walks P131 ("located in the administrative territorial entity") from
  * `startQid` up to the root, one entity fetch per level. Returns the chain
  * leaf-first (`[0]` is `startQid` itself, last is the root -- a country, or
@@ -172,8 +190,68 @@ export async function fetchWikidataChain(
       long: coords?.long ?? null,
       instanceOf,
       placeType: guessPlaceType(instanceOf),
+      geoshapeTitle: readGeoshapeTitle(entity),
     });
     qid = readQidList(entity, "P131")[0];
   }
   return chain;
+}
+
+/** Minimum gap between successive fetchWikidataGeoshape calls -- Wikidata/
+ * Commons throttles unauthenticated callers after roughly 8 rapid
+ * sequential requests (found empirically). A single lookup's chain is only
+ * ever a handful of levels, so this keeps a chain-walk's geoshape fetches
+ * safely under that without needing a queue or backoff/retry logic. Module-
+ * level and shared across every call (not per-caller) so this holds even if
+ * two lookups happen to overlap. */
+const GEOSHAPE_THROTTLE_MS = 300;
+let lastGeoshapeCallAt = 0;
+
+async function throttleGeoshapeCall(): Promise<void> {
+  const wait = lastGeoshapeCallAt + GEOSHAPE_THROTTLE_MS - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  lastGeoshapeCallAt = Date.now();
+}
+
+/** Fetches a Commons `Data:*.map` page (a P3896 geoshape value, e.g.
+ * "Data:Alabama.map") and returns its boundary as GeoJSON features, `[]` on
+ * any failure -- a missing/malformed page contributes nothing rather than
+ * failing the caller (same "one bad attachment shouldn't blank out
+ * everything else" philosophy as kmlMedia.ts's fetchKmlFeatures). Verified
+ * live (2026-09-09): `action=query&prop=revisions&rvprop=content` with
+ * `origin=*` returns `Access-Control-Allow-Origin: *`, so this is a plain
+ * client-side fetch, no proxy/API key -- same pattern as this module's
+ * other two calls. Self-throttled (see throttleGeoshapeCall) since this is
+ * the one call in this module known to hit Wikimedia's anonymous-use rate
+ * limit when called several times in quick succession. */
+export async function fetchWikidataGeoshape(dataTitle: string, signal?: AbortSignal): Promise<Feature[]> {
+  await throttleGeoshapeCall();
+  try {
+    const params = new URLSearchParams({
+      action: "query",
+      titles: dataTitle,
+      prop: "revisions",
+      rvprop: "content",
+      format: "json",
+      origin: "*",
+    });
+    const res = await fetch(`${COMMONS_API}?${params}`, { signal });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      query?: { pages?: Record<string, { revisions?: { "*"?: string }[] }> };
+    };
+    const page = Object.values(data.query?.pages ?? {})[0];
+    const content = page?.revisions?.[0]?.["*"];
+    if (!content) return [];
+    // Commons wraps the GeoJSON in its own map-data envelope
+    // ({license, description, sources, data: <GeoJSON>, ...}) -- `.data` is
+    // the actual FeatureCollection/Feature.
+    const geo = (JSON.parse(content) as { data?: { type?: string; features?: Feature[] } | Feature }).data;
+    if (!geo || typeof geo !== "object") return [];
+    if (geo.type === "FeatureCollection") return (geo as { features?: Feature[] }).features ?? [];
+    if (geo.type === "Feature") return [geo as Feature];
+    return [];
+  } catch {
+    return [];
+  }
 }

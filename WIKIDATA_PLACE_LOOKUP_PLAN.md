@@ -236,15 +236,121 @@ accepted pattern in this ecosystem, which is what we'll do for Wikidata too.
    the running dev app — hasn't been exercised in a browser yet, only
    type-checked and unit-tested.
 
+## Follow-up: optional place-outline fetch (geoshape) — implemented 2026-09-09
+
+Discussed 2026-09-09: Wikidata's `P3896` ("geoshape") claim, when present on
+an entity, points to a `Data:*.map` page on Wikimedia Commons holding a
+simplified GeoJSON `FeatureCollection` (one Polygon/MultiPolygon feature),
+public-domain (`CC0-1.0` — Commons' `Data:` namespace requires this by site
+policy). Verified live and end-to-end during this session, not just recalled:
+
+- Real QIDs (resolved via `wbsearchentities`, not guessed) all had a
+  `P3896` claim: Alabama, Bavaria, Ontario, New South Wales, Île-de-France,
+  Osaka Prefecture, Bahia — good signal across very different countries,
+  though coverage isn't exhaustive (a level with no claim just yields no
+  outline, silently — same "one bad/missing attachment contributes nothing"
+  philosophy `kmlMedia.ts` already uses).
+- Fetch: `https://commons.wikimedia.org/w/api.php?action=query&titles=<Data:title>&prop=revisions&rvprop=content&format=json&origin=*`
+  — the `origin=*` param returns `Access-Control-Allow-Origin: *`, so this
+  is a plain client-side `fetch()`, no backend proxy, no API key (same
+  direct-from-browser pattern this repo already uses for the two Wikidata
+  calls above, and the one gramps-web's Nominatim precedent established).
+  Response body's `query.pages[*].revisions[0]['*']` is a JSON string;
+  parse it and take `.data` for the `FeatureCollection`.
+- Rejected a **bundled static dataset** alternative (evaluated in detail:
+  US-only datahub.io — 108 KB but US-only; Natural Earth 1:50m admin-1 —
+  only 9 countries, not actually worldwide; Natural Earth 1:10m admin-1 —
+  genuinely worldwide, 4,596 regions/253 countries, 94% carry a `wikidataid`
+  property, simplifies to ~460 KB gzipped, public domain — the strongest
+  bundle candidate found). Live per-QID lookup won out because it reuses
+  the exact QID this feature already resolves (no separate join/match
+  step), needs zero bundle size, and matches this project's default of
+  live client-side API composition over shipping/maintaining a static
+  mirror. Trade-off accepted: no outlines in the standalone offline build
+  without a network connection — same limitation the base Wikidata lookup
+  itself already has, not a new category of gap.
+- Rate limit found empirically: unauthenticated Wikidata/Commons calls
+  throttle ("too many requests") after roughly 8 rapid sequential calls.
+  Non-issue for a single chain (2-4 levels) with the throttle below, but
+  means no separate bulk/tree-wide backfill action should reuse this
+  without its own pacing design (out of scope here, see below).
+
+**Design:**
+
+- **UI**: a checkbox on `WikidataPlaceLookupDialog.tsx`'s existing
+  confirmation screen, e.g. "Fetch place outlines from Wikidata (when
+  available)", **default checked**. Unchecking it skips this whole
+  feature — the rest of Apply behaves exactly as it does today.
+- **Scope**: every level the chain walk creates, **including country** —
+  not just state/province. Only for rows marked **"new"**; a "reuse
+  existing"/dedup row is left untouched in v1 (see Out of scope).
+- **When**: at Apply time (not during search/preview) — only fetch for
+  rows the user actually confirmed, not every candidate shown.
+- **Steps**, inserted into the existing Apply handler before its single
+  `createObjects()` call:
+  1. `wikidataApi.ts`'s chain walk already visits each QID's claims —
+     extend it to also capture `P3896`'s value (the `Data:*.map` title
+     string) per level, when present.
+  2. New `fetchWikidataGeoshape(dataTitle)` in `wikidataApi.ts`: the
+     Commons fetch above, returns the `FeatureCollection` or `null` (any
+     failure — missing claim, fetch error, malformed content — swallowed,
+     not surfaced as an Apply-blocking error).
+  3. For each **new** row with a geoshape, sequentially (fixed ~300ms
+     delay between Commons calls only — the throttle doesn't need to cover
+     the subsequent gramps-web-api upload call):
+     `featuresToKml([feature])` (`kmlWrite.ts`, unchanged) → `Blob` →
+     `uploadMedia(token, blob, KML_MIME)` (`jobsApi.ts`, unchanged) →
+     media handle → `setMediaDesc(token, mediaHandle, row.node.label)`
+     (`jobsApi.ts`, unchanged), best-effort/non-fatal same as
+     `MapItemEditorDialog.tsx`'s own desc set — names the Media object
+     after the place ("Alabama"), which is what the Media view's list and
+     `MediaThumbnail`'s hover text show, added 2026-09-09 on request.
+  4. Set that row's Place object dict's `media_list: [{_class: "MediaRef",
+     ref: <media handle>}]` before it goes into the batch — no separate
+     `attachRefListEntry` call needed, since these are brand-new objects in
+     the same `createObjects` array, not existing ones being patched.
+- **Nothing else changes.** `MapCanvas.tsx`'s Polygon fill/outline layer
+  and the lat/long centroid backfill (commit 537f7a7) already work off any
+  Place with a Polygon-carrying KML attachment — a Wikidata-sourced outline
+  is indistinguishable to them from a hand-drawn one.
+- **Built as designed**, one implementation detail worth noting: the
+  ~300ms throttle lives inside `wikidataApi.ts`'s `fetchWikidataGeoshape`
+  itself (a module-level "don't call again within N ms" guard), not as
+  loop bookkeeping in the dialog — so it's shared across every caller
+  automatically rather than something each call site has to remember to
+  do. Tests added: `store/__tests__/wikidataApi.test.ts` covers
+  `geoshapeTitle` capture and `fetchWikidataGeoshape`'s
+  FeatureCollection/bare-Feature parsing plus every failure path (non-ok,
+  missing page, malformed JSON, network error) returning `[]` rather than
+  throwing. No dialog-level test was added — `WikidataPlaceLookupDialog.tsx`
+  has none at all yet (see step 5 above, still only manually-untested);
+  the new logic there is thin glue over already-tested functions
+  (`fetchWikidataGeoshape`, `featuresToKml`, `uploadMedia`), consistent
+  with the rest of `handleApply`.
+- **Wiki updated** (`../gramps-connect.wiki/Overview.md`'s feature list and
+  `Data-Model-and-Editing.md`'s Place row) alongside this change, per this
+  repo's `CLAUDE.md` rule — a user will notice both the new checkbox and
+  (for state/country places especially) an actual shape appearing on the
+  map instead of a pin.
+
 ## Out of scope / follow-ups
 
 - No batch/bulk "clean up all my weak places" tool — this is a per-place,
-  user-initiated lookup only.
+  user-initiated lookup only. Applies to the geoshape fetch above too: no
+  bulk/tree-wide outline backfill action, and none of its own separate
+  rate-limit pacing design, until/unless that's actually requested.
 - No offline/cached Wikidata mirror — live API calls only, same as
-  gramps-web's Nominatim usage.
+  gramps-web's Nominatim usage. Deliberately re-evaluated for the geoshape
+  feature above (a bundled worldwide dataset was a real, tested
+  alternative) and the live-lookup decision was reaffirmed, not just
+  carried over by default.
 - No plan to ask for a gramps-web-api change to add a proper external-ID
   field to `Place` — the `urls`-based dedup query works as-is (verified
   above), per this project's default of not modifying gramps-web-api.
+- Geoshape backfill for "reuse existing" (deduped) rows — v1 only fetches
+  outlines for places newly created by this dialog. Retrofitting outlines
+  onto a user's pre-existing Place records is a bigger, separate decision
+  (silently modifying existing data) better left to its own discussion.
 
 ## Appendix: verified example & prototype
 

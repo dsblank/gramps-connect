@@ -12,7 +12,13 @@ import { fetchPage } from "../store/api";
 import { PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
-import { fetchWikidataChain, searchWikidata, type WikidataPlaceNode, type WikidataSearchResult } from "../store/wikidataApi";
+import {
+  fetchWikidataChain, fetchWikidataGeoshape, searchWikidata,
+  type WikidataPlaceNode, type WikidataSearchResult,
+} from "../store/wikidataApi";
+import { featuresToKml } from "../store/kmlWrite";
+import { setMediaDesc, uploadMedia } from "../store/jobsApi";
+import { KML_MIME } from "../store/visualData";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
@@ -152,6 +158,11 @@ export function WikidataPlaceLookupDialog({
   const [results, setResults] = useState<WikidataSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [phase, setPhase] = useState<Phase>({ name: "search" });
+  // Default on (see the plan's geoshape follow-up: most people adding a
+  // place from Wikidata will want its outline too) -- applies to every
+  // newly-created row in the confirmed chain, not reused/"Existing" ones
+  // (see handleApply).
+  const [fetchOutlines, setFetchOutlines] = useState(true);
 
   // Every open starts fresh -- resuming mid-resolve or on an already-
   // decided confirm screen from a previous open would be confusing, and
@@ -163,6 +174,7 @@ export function WikidataPlaceLookupDialog({
       setQuery(initialQuery);
       setResults([]);
       setPhase({ name: "search" });
+      setFetchOutlines(true);
     }
   }, [opened, initialQuery]);
 
@@ -306,6 +318,27 @@ export function WikidataPlaceLookupDialog({
           continue;
         }
         const handle = createHandle();
+        // Best-effort, v1-scoped to newly-created rows only (see the plan's
+        // geoshape follow-up: retrofitting outlines onto a reused/existing
+        // place is a bigger, separate decision) -- a missing P3896 claim or
+        // a failed Commons fetch just means no media_list entry, same as
+        // any other "contributes nothing" fallback in this dialog.
+        let mediaList: Record<string, unknown>[] | undefined;
+        if (fetchOutlines && row.node.geoshapeTitle) {
+          const features = await fetchWikidataGeoshape(row.node.geoshapeTitle);
+          if (features.length > 0) {
+            const blob = new Blob([featuresToKml(features)], { type: KML_MIME });
+            const mediaHandle = await uploadMedia(token, blob, KML_MIME);
+            // Best-effort, same as MapItemEditorDialog.tsx's own desc set --
+            // the outline itself is already saved either way, so a failed
+            // desc PUT shouldn't surface as an Apply error. Named after the
+            // place (not e.g. "Alabama outline"): this is what the Media
+            // view's list and MediaThumbnail's hover text show, and it
+            // should read the same way any other place-named attachment does.
+            await setMediaDesc(token, mediaHandle, row.node.label).catch(() => {});
+            mediaList = [{ _class: "MediaRef", ref: mediaHandle }];
+          }
+        }
         objects.push({
           _class: "Place",
           handle,
@@ -316,6 +349,7 @@ export function WikidataPlaceLookupDialog({
           place_type: row.typeOverride || undefined,
           urls: [{ _class: "Url", path: `https://www.wikidata.org/wiki/${row.node.qid}`, desc: "", type: "Wikidata" }],
           placeref_list: parentHandle ? [{ _class: "PlaceRef", ref: parentHandle }] : undefined,
+          media_list: mediaList,
         });
         parentHandle = handle;
         createdAny = true;
@@ -502,6 +536,12 @@ export function WikidataPlaceLookupDialog({
                 </Group>
               ))}
             </Stack>
+            <Checkbox
+              label={t("Fetch place outlines from Wikidata (when available)")}
+              checked={fetchOutlines}
+              onChange={(e) => setFetchOutlines(e.currentTarget.checked)}
+              disabled={phase.name === "applying"}
+            />
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setPhase({ name: "search" })} disabled={phase.name === "applying"}>
                 {t("Back")}
