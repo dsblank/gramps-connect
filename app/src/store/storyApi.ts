@@ -12,7 +12,7 @@ import { parseErrorMessage } from "./api";
 import { attachNoteToObject } from "./notesApi";
 import type { ObjectDetail } from "./objectDetail";
 import { getViewStore } from "./registry";
-import { buildFamilyStory, buildPersonStory, type StorySpec } from "./storyBuilder";
+import { buildFamilyStory, buildPersonStory, type StoryOptions, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
 import type { ViewConfig } from "./views";
 
@@ -52,6 +52,11 @@ export async function createStoryNote(token: string, spec: StorySpec): Promise<s
  * because store/ modules stay free of that import direction -- see
  * draftStack.ts's SavedDraft doc comment for the same convention.
  *
+ * `options` (StoryOptionsDialog.tsx's collected StoryOptions) is forwarded
+ * as-is to whichever seeding rule runs -- each rule ignores the fields it
+ * has no use for (buildFamilyStory has no `includeFamilyEvents`, since a
+ * family's own members are already its subject).
+ *
  * Throws if there's nothing to build a story from (message meant for
  * direct display) -- callers don't need to separately check for a null
  * StorySpec. Calls getViewStore("story").requeryDebounced() so the new
@@ -62,12 +67,13 @@ export async function generateStory(
   token: string,
   view: ViewConfig,
   detail: ObjectDetail,
-  subjectLabel: string
+  subjectLabel: string,
+  options?: StoryOptions
 ): Promise<StorySpec> {
   const visualData = await loadVisualData();
   const built = view.key === "family"
-    ? await buildFamilyStory(token, detail, visualData)
-    : await buildPersonStory(token, detail, subjectLabel, visualData);
+    ? await buildFamilyStory(token, detail, visualData, options)
+    : await buildPersonStory(token, detail, subjectLabel, visualData, options);
   if (!built) {
     throw new Error(view.key === "family"
       ? "This family has no events to build a story from -- not on the family itself, and no births or deaths recorded for its members."

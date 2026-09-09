@@ -42,6 +42,22 @@ export interface StorySpec {
   points: StoryPoint[];
 }
 
+/** What StoryOptionsDialog.tsx collects before generating. Both fields are
+ * opt-in extensions of each seeding rule's own default (see buildPersonStory
+ * and buildFamilyStory) -- an absent/undefined StoryOptions produces exactly
+ * what generateStory did before this existed. */
+export interface StoryOptions {
+  /** Person only: also draft vital moments from every family this person
+   * belongs to, as a parent (family_list -- spouse, children) or as a child
+   * (parent_family_list -- parents, siblings), plus each such family's own
+   * events (marriage, divorce, ...). The person's own vital events are
+   * already covered by their event_ref_list and never duplicated here. */
+  includeFamilyEvents?: boolean;
+  /** Family only: handles of members (father/mother/children) to leave out
+   * of draftMemberMoments -- everyone is included when absent/empty. */
+  excludedMemberHandles?: Set<string>;
+}
+
 interface MediaRefLike {
   ref: string;
 }
@@ -65,6 +81,39 @@ function personDisplayName(person: RawPerson | undefined): string {
   const given = person?.primary_name?.first_name ?? "";
   const surname = person?.primary_name?.surname_list?.[0]?.surname ?? "";
   return [given, surname].filter(Boolean).join(" ");
+}
+
+/** A raw Family, extend=all'd -- resolves father/mother/children one hop
+ * out, which is what both buildFamilyStory and buildPersonStory's
+ * includeFamilyEvents option need. Person.family_list/parent_family_list
+ * only resolve to bare Family objects at that same one-hop depth (see
+ * ParentsSection.tsx's doc comment), so a person's own families are
+ * refetched individually here rather than read off `detail.extended`. */
+async function fetchFamilyDetail(token: string, handle: string): Promise<any | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/families/${encodeURIComponent(handle)}?extend=all`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/** A Family's father/mother (present) and children, off its own extend=all
+ * shape -- shared by buildFamilyStory and buildPersonStory's
+ * includeFamilyEvents option so both read father_handle/mother_handle's
+ * "{}" -when-unset convention (see PlaceSection's doc comment on the same
+ * gramps-web-api quirk) the same way. */
+function extractFamilyMembers(familyRaw: any): { spouses: RawPerson[]; children: RawPerson[] } {
+  const isPerson = (p: RawPerson | undefined): p is RawPerson => Boolean(p?.handle);
+  const father = familyRaw?.extended?.father as RawPerson | undefined;
+  const mother = familyRaw?.extended?.mother as RawPerson | undefined;
+  const children = zipRefs<RawPerson>(familyRaw?.child_ref_list, familyRaw?.extended?.children)
+    .map((row) => row.target)
+    .filter(isPerson);
+  return { spouses: [father, mother].filter(isPerson), children };
 }
 
 /** Exported for storyHydration.ts, which resolves a mediaRef's mime type
@@ -226,15 +275,53 @@ export async function buildPersonStory(
   detail: ObjectDetail,
   personName: string,
   visualData: VisualData,
+  options?: StoryOptions,
 ): Promise<StorySpec | null> {
+  const seen = new Set<string>();
   const rows = zipRefs<{ media_list?: MediaRefLike[] }>(detail.event_ref_list, detail.extended?.events);
   const drafts: Draft[] = [];
   for (const { ref, target } of rows) {
     const draft = draftFromEvent(ref.ref, ref.role, [personName], visualData, {
       event: target?.media_list ?? [],
     });
-    if (draft) drafts.push(draft);
+    if (draft) {
+      seen.add(ref.ref);
+      drafts.push(draft);
+    }
   }
+
+  // "Include families": every family this person is a parent in
+  // (family_list -- spouse, children) or a child in (parent_family_list --
+  // parents, siblings), each family's own events plus its members' vital
+  // moments -- the same rule buildFamilyStory applies to a Family, just run
+  // once per family this person belongs to rather than once for the family
+  // itself. This person's own vital events are already drafted above and
+  // never redrawn here (`seen`, and the `!== detail.handle` filter below).
+  if (options?.includeFamilyEvents) {
+    const familyHandles = [
+      ...((detail.family_list as string[] | undefined) ?? []),
+      ...((detail.parent_family_list as string[] | undefined) ?? []),
+    ];
+    const families = await Promise.all(familyHandles.map((h) => fetchFamilyDetail(token, h)));
+    for (const familyRaw of families) {
+      if (!familyRaw) continue;
+      const { spouses, children } = extractFamilyMembers(familyRaw);
+      const spouseNames = spouses.map(personDisplayName).filter(Boolean);
+      const familyEvents = zipRefs<{ media_list?: MediaRefLike[] }>(familyRaw.event_ref_list, familyRaw.extended?.events);
+      for (const { ref, target } of familyEvents) {
+        if (seen.has(ref.ref)) continue;
+        const draft = draftFromEvent(ref.ref, ref.role, spouseNames, visualData, {
+          event: target?.media_list ?? [],
+        });
+        if (!draft) continue;
+        seen.add(ref.ref);
+        drafts.push(draft);
+      }
+      const others = [...spouses, ...children].filter((p) => p.handle !== detail.handle);
+      drafts.push(...draftMemberMoments(others, visualData, seen));
+    }
+  }
+
   if (drafts.length === 0) return null;
   const points = await assemblePoints(token, drafts);
 
@@ -313,19 +400,14 @@ export async function buildFamilyStory(
   token: string,
   detail: ObjectDetail,
   visualData: VisualData,
+  options?: StoryOptions,
 ): Promise<StorySpec | null> {
   // gramps-web-api answers an unset father_handle (and a broken child ref)
   // with an empty object rather than null -- see its util.py's
   // get_person_by_handle/catch_handle_error -- so "is this a real person"
-  // has to be a handle check, not a truthiness one.
-  const isPerson = (p: RawPerson | undefined): p is RawPerson => Boolean(p?.handle);
-  const father = detail.extended?.father as RawPerson | undefined;
-  const mother = detail.extended?.mother as RawPerson | undefined;
-  const children = zipRefs<RawPerson>(detail.child_ref_list, detail.extended?.children)
-    .map((row) => row.target)
-    .filter(isPerson);
-
-  const spouses = [father, mother].filter(isPerson);
+  // has to be a handle check, not a truthiness one; extractFamilyMembers
+  // applies the same check.
+  const { spouses, children } = extractFamilyMembers(detail);
   const spouseNames = spouses.map(personDisplayName).filter(Boolean);
   // "(this family)" rather than "(unnamed)": a Family with neither parent
   // set still has children whose story this is.
@@ -347,7 +429,11 @@ export async function buildFamilyStory(
     seen.add(ref.ref);
     drafts.push(draft);
   }
-  drafts.push(...draftMemberMoments([...spouses, ...children], visualData, seen));
+  const excluded = options?.excludedMemberHandles;
+  const included = excluded && excluded.size > 0
+    ? [...spouses, ...children].filter((p) => !excluded.has(p.handle!))
+    : [...spouses, ...children];
+  drafts.push(...draftMemberMoments(included, visualData, seen));
 
   if (drafts.length === 0) return null;
   const points = await assemblePoints(token, drafts);

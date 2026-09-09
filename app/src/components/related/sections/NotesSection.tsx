@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { Alert, Text } from "@mantine/core";
+import { Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { getTagHandleCached, MESSAGE_TYPE, TODO_DONE_TAG } from "../../../store/notesApi";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { generateStory, STORY_SOURCE_VIEWS, STORY_TYPE } from "../../../store/storyApi";
-import type { StorySpec } from "../../../store/storyBuilder";
+import type { StoryOptions, StorySpec } from "../../../store/storyBuilder";
 import { NOTE_VIEW } from "../../../store/views";
 import { StoryView } from "../../StoryView";
 import { AttachControl } from "../AttachControl";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
+import { StoryOptionsDialog } from "../StoryOptionsDialog";
 import { summaryLine } from "../summary";
 import { SectionShell, RefRow, zipHandles } from "./shared";
 import type { SectionProps } from "../types";
@@ -64,18 +65,26 @@ function useDoneTagHandle(): string | null {
  * Offered on the types storyApi.ts has a seeding rule for
  * (STORY_SOURCE_VIEWS: a person's own events, or a family's events merged
  * with its members' births and deaths), with the same permission gate the
- * header icon used to have. Preserves that button's own behavior of
- * opening the presentation immediately once the note's written, rather
- * than requiring a second click into the new row. */
+ * header icon used to have. A click opens StoryOptionsDialog.tsx first
+ * rather than generating straight away -- its own Generate then runs the
+ * same immediate-presentation behavior the old header button had, just one
+ * step later. */
 function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["view"]; detail: SectionProps["detail"]; onAttached: () => void }) {
   const [spec, setSpec] = useState<StorySpec | null>(null);
   const [opened, setOpened] = useState(false);
+  const [dialogOpened, setDialogOpened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!STORY_SOURCE_VIEWS.has(view.key) || !hasPermissions("AddObject", "EditObject")) return null;
 
-  async function handleClick() {
+  // Named after which seeding rule this view uses (STORY_SOURCE_VIEWS is
+  // just "person"/"family" today), so the button and StoryOptionsDialog.tsx's
+  // title say which kind of story a click builds rather than the generic
+  // "Add a story".
+  const addStoryLabel = view.key === "family" ? t("Add a family's story") : t("Add a person's story");
+
+  async function handleGenerate(options: StoryOptions) {
     setBusy(true);
     setError(null);
     try {
@@ -83,9 +92,10 @@ function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["vie
       // its own resolved father/mother (storyBuilder.ts's buildFamilyStory).
       const personName = summaryLine("person", detail) || "this person";
       const token = await getToken();
-      const built = await generateStory(token, view, detail, personName);
+      const built = await generateStory(token, view, detail, personName, options);
       onAttached();
       setSpec(built);
+      setDialogOpened(false);
       setOpened(true);
     } catch (err: any) {
       setError(err.message ?? String(err));
@@ -98,12 +108,23 @@ function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["vie
     <>
       <CircleGlyphButton
         glyph="+"
-        label={t("Add a story")}
-        textLabel={t("Add a story")}
-        onClick={handleClick}
-        disabled={busy}
+        label={addStoryLabel}
+        textLabel={addStoryLabel}
+        onClick={() => {
+          setError(null);
+          setDialogOpened(true);
+        }}
       />
-      {error && <Alert color="red">{error}</Alert>}
+      <StoryOptionsDialog
+        opened={dialogOpened}
+        title={addStoryLabel}
+        view={view}
+        detail={detail}
+        busy={busy}
+        error={error}
+        onClose={() => setDialogOpened(false)}
+        onGenerate={handleGenerate}
+      />
       <StoryView spec={spec} opened={opened} onClose={() => setOpened(false)} />
     </>
   );
