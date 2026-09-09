@@ -204,6 +204,26 @@ def _install_fake_gi() -> None:
         setattr(repository_module, _namespace, _ns_module)
         sys.modules[f"gi.repository.{_namespace}"] = _ns_module
 
+    # gramps.gen.constfunc.has_display() computes
+    # `Gtk.init_check(temp) and Gdk.Display.get_default()` to detect a real
+    # GTK display. Left auto-vivifying, Gtk.init_check(temp) would return a
+    # truthy _AutoObject like any other untouched attribute, making
+    # has_display() wrongly report True in this headless build (Linux never
+    # opens a native GTK window here either -- see this file's own
+    # docstring). That's more than cosmetic: gramps/plugins/gramplet/
+    # gramplet.gpr.py's GExiv2-missing-module warning is gated on
+    # `if has_display():` and, when true, imports gramps.gui.dialog ->
+    # gramps.gui.glade, which loads a .glade file by a path relative to the
+    # *installed* gramps package -- not bundled here (the .spec only bundles
+    # gramps/plugins and gramps' data/ dir as loose data, not gramps/gui's
+    # own resource files) -- raising FileNotFoundError. scan_dir()'s bare
+    # except catches that, but rolls back and drops *every* Gramplet the
+    # whole file registers, plus prints a scary traceback on every launch.
+    # Forcing init_check() False short-circuits the `and` before
+    # Gdk.Display.get_default() is even reached, so has_display() correctly
+    # reports "no real display".
+    repository_module.Gtk.init_check = lambda *args, **kwargs: False
+
     class Repository:
         """Stand-in for gi.Repository -- only geography.gpr.py's module-scope
         `Repository.get_default().enumerate_versions("OsmGpsMap")` probe
