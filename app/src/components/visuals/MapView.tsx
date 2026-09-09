@@ -215,6 +215,23 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
     if (selected && !places.some((p) => p.handle === selected.handle)) setSelected(null);
   }, [places, selected]);
 
+  // The selected place's own KML overlay(s), plus its direct children's (see
+  // VisualData.childPlaces) -- so opening a state shows its own overlay
+  // alongside its counties', not just its own, without fanning out to every
+  // place the state transitively encloses (which for a country could be
+  // thousands). Children only, never the selected place's parent: clicking a
+  // county directly shows that county (and its own children, if any), not
+  // the state it happens to sit inside. Selected place first in the array --
+  // both of MapCanvas's overlay effects rely on that order to stack a
+  // child's shape/image above its parent's rather than the other way round.
+  const overlayPlaces = useMemo(() => {
+    if (!selected) return [];
+    const childHandles = data.childPlaces.get(selected.handle);
+    if (!childHandles || childHandles.length === 0) return [selected];
+    const children = new Set(childHandles);
+    return [selected, ...data.places.filter((place) => children.has(place.handle))];
+  }, [selected, data.childPlaces, data.places]);
+
   // Arriving with a scope frames it, in either mode -- that's the whole
   // point of following a Map button, and in context mode the scoped markers
   // would otherwise be invisible needles in the whole-tree haystack.
@@ -440,6 +457,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
             : undefined}
           fitTo={scopeActive && mode === "context" ? scopedPlaces! : undefined}
           selectedHandle={selected?.handle ?? null}
+          overlayPlaces={overlayPlaces}
           onSelectPlace={setSelected}
           ohmYear={ohmYear}
           flyToRequest={flyToRequest}
@@ -449,13 +467,15 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
         />
       </Suspense>
       <OverlayLayersPanel
-        // Only the currently-opened place, not every plotted marker -- with
-        // the whole tree (or a whole scope) on screen there's no single
-        // place to attach the panel's controls to, so it stays hidden (see
+        // The currently-opened place and its direct children (see
+        // `overlayPlaces` above), not every plotted marker -- with the whole
+        // tree (or a whole scope) on screen there's no single place to
+        // attach the panel's controls to, so it stays hidden (see
         // OverlayLayersPanel's own empty-`places` -> null return) until a
-        // marker is selected, the same "a place is shown" gate MapCanvas
-        // itself now applies to drawing the overlay(s) on the map.
-        places={selected ? [selected] : []}
+        // marker is selected, the same "a place (and what's directly inside
+        // it) is shown" gate MapCanvas itself now applies to drawing the
+        // overlay(s) on the map.
+        places={overlayPlaces}
         ohmYear={ohmYear}
         onFlyTo={(bounds) => {
           setFlyToTarget(bounds);

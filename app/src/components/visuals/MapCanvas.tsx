@@ -127,6 +127,16 @@ interface MapCanvasProps {
    * describing stays findable -- the timeline rings its selected dot for
    * the same reason. */
   selectedHandle?: string | null;
+  /** Which places' KML attachment(s) (see MapPlace.kmlMedia) actually draw,
+   * as vector shapes and image overlays alike -- the selected place itself
+   * plus its direct enclosed children (MapView builds this from
+   * VisualData.childPlaces), so opening a state or county shows its own
+   * overlay alongside the ones directly inside it, not just its own.
+   * Ordered selected-place-first: both overlay effects below preserve that
+   * order rather than re-sorting, so a child's shape/image ends up stacked
+   * above its parent's rather than in arbitrary handle order. Defaults to
+   * empty -- no overlay -- when omitted. */
+  overlayPlaces?: MapPlace[];
   onSelectPlace: (place: MapPlace | null) => void;
   /** Non-null switches the basemap to OpenHistoricalMap tiles filtered to
    * this year (see MapModeControl / mapStyles.ts); null is the plain
@@ -187,7 +197,7 @@ const DIM_OPACITY = 0.15;
  * lazily -- maplibre-gl is by far the heaviest thing in this app, and a
  * session that never opens View > Map should never download it. */
 export function MapCanvas({
-  places, fitRequest, highlighted, fitTo, selectedHandle, onSelectPlace, ohmYear,
+  places, fitRequest, highlighted, fitTo, selectedHandle, overlayPlaces = [], onSelectPlace, ohmYear,
   flyToRequest, flyToTarget, hiddenOverlayKeys, opacityOverrides,
 }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -625,14 +635,16 @@ export function MapCanvas({
     source?.setData(toGeoJson(places, highlighted, selectedHandle));
   }, [places, highlighted, selectedHandle, ready]);
 
-  // The selected place's own KML attachment(s) (see MapPlace.kmlMedia),
-  // overlaid via KML_SOURCE above -- gated on selection (see selectedPlace
-  // below) so a shape only appears once its place is opened, matching the
-  // image-overlay gating a few lines down. Keyed on the deduplicated handles
-  // themselves rather than on `selectedPlace` directly, so fetchAllKmlFeatures's
-  // own per-handle cache is reused whenever the same handles recur.
-  const selectedPlace = selectedHandle ? places.find((p) => p.handle === selectedHandle) ?? null : null;
-  const kmlKey = selectedPlace ? [...new Set(selectedPlace.kmlMedia)].sort().join(",") : "";
+  // `overlayPlaces`' own KML attachment(s) (see MapPlace.kmlMedia), overlaid
+  // via KML_SOURCE above -- gated on selection (a place, and its direct
+  // children, only once it's opened), matching the image-overlay gating a
+  // few lines down. Keyed on the deduplicated handles themselves rather than
+  // on `overlayPlaces` directly, so fetchAllKmlFeatures's own per-handle
+  // cache is reused whenever the same handles recur. `new Set` preserves
+  // first-seen order (not sorted) so the selected place's own shape(s) stay
+  // first in `handles` below and a child's paints on top of it, not the
+  // other way around.
+  const kmlKey = [...new Set(overlayPlaces.flatMap((place) => place.kmlMedia))].join(",");
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -694,10 +706,12 @@ export function MapCanvas({
   // Like the shapes above, image overlays are gated on selection: with the
   // whole tree (or a whole scope) on screen there could be dozens of them
   // stacked across unrelated places, cluttering a view that's supposed to
-  // read as a plain map of markers -- so only the one place currently opened
-  // in the detail card (see MapView's `selected`) shows its own overlay(s),
-  // the same place OverlayLayersPanel.tsx now restricts its list to.
-  const overlayKmlKey = selectedPlace ? [...selectedPlace.kmlMedia].sort().join(",") : "";
+  // read as a plain map of markers -- so only `overlayPlaces` (the place
+  // currently opened in the detail card, plus its direct children -- see
+  // MapView's `selected`/`overlayPlaces`) show their own overlay(s), the
+  // same places OverlayLayersPanel.tsx now restricts its list to. Order
+  // preserved (not sorted) for the same stacking reason as `kmlKey` above.
+  const overlayKmlKey = [...new Set(overlayPlaces.flatMap((place) => place.kmlMedia))].join(",");
 
   // handle (a KML media object, i.e. what a MapPlace.kmlMedia entry is) ->
   // that place's own name.date -- what gates an overlay parsed out of that
@@ -706,9 +720,7 @@ export function MapCanvas({
   // one KML is always attached to exactly one place -- but this stays a
   // plain last-write-wins map rather than assuming that).
   const nameDateByKmlHandle = new Map(
-    (selectedPlace ? [selectedPlace] : []).flatMap(
-      (place) => place.kmlMedia.map((handle) => [handle, place.nameDate] as const)
-    )
+    overlayPlaces.flatMap((place) => place.kmlMedia.map((handle) => [handle, place.nameDate] as const))
   );
 
   // Image overlays (KML GroundOverlay -- see MapItemEditorDialog.tsx's own
@@ -719,11 +731,16 @@ export function MapCanvas({
   // wholesale on every `overlayKmlKey` change (add-then-remove rather than a
   // finer diff) -- this only runs when the selected place's own KML
   // attachment(s) change, so it's not a hot path.
-  // Sorted by `order` ascending before insertion: each addLayer(..., beforeId)
-  // call inserts its layer immediately below `beforeId`, pushing whatever was
-  // already there further down -- so inserting lowest-order first means the
-  // highest-order overlay ends up added last, landing closest to (and so
-  // rendering just below) KML_FILL_LAYER, i.e. on top of the others.
+  // Sorted ascending before insertion -- primarily by each overlay's place's
+  // position in `overlayKmlKey` (selected place first, its children after,
+  // per `overlayPlaces`' own order), then by that place's own `order` for
+  // ties -- before insertion: each addLayer(..., beforeId) call inserts its
+  // layer immediately below `beforeId`, pushing whatever was already there
+  // further down. So inserting the selected place's own overlay(s) first and
+  // a child's after means the child ends up added last, landing closest to
+  // (and so rendering just below) KML_FILL_LAYER, i.e. on top of its parent's
+  // -- the same "smaller shape shouldn't hide under the bigger one" reasoning
+  // the vector effect's own ordering above follows.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -736,9 +753,14 @@ export function MapCanvas({
     // effect's own cleanup below, once maplibre no longer needs it.
     const objectUrls: string[] = [];
     (async () => {
-      const overlays = overlayKmlKey === "" ? [] : await fetchAllKmlImageOverlays(overlayKmlKey.split(","));
+      const handles = overlayKmlKey === "" ? [] : overlayKmlKey.split(",");
+      const overlays = handles.length === 0 ? [] : await fetchAllKmlImageOverlays(handles);
       if (cancelled || overlays.length === 0) return;
-      overlays.sort((a, b) => a.order - b.order);
+      const handlePosition = new Map(handles.map((handle, index) => [handle, index]));
+      overlays.sort((a, b) => {
+        const byPlace = (handlePosition.get(a.kmlHandle) ?? 0) - (handlePosition.get(b.kmlHandle) ?? 0);
+        return byPlace !== 0 ? byPlace : a.order - b.order;
+      });
       const token = await getToken();
       if (cancelled) return;
       const hidden = hiddenOverlayKeysRef.current ?? EMPTY_HIDDEN_KEYS;
@@ -777,7 +799,7 @@ export function MapCanvas({
       }
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-    // nameDateByKmlHandle is derived fresh from `selectedPlace` every render
+    // nameDateByKmlHandle is derived fresh from `overlayPlaces` every render
     // -- deliberately not a dependency (it'd fire this whole rebuild on
     // every place-store tick); `overlayKmlKey` already captures every case
     // that changes which KML file (and so which overlays/dates) are in play.
