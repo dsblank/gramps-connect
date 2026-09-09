@@ -1508,18 +1508,39 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           const center = bounds.getCenter();
           const obj = await fetchObjectExtended(token, MEDIA_VIEW, handle);
           const attachedPlaces = (getBacklinks(obj).place ?? []) as { handle: string }[];
-          let backfilled = false;
+          const toBackfill: { handle: string; placeObj: any }[] = [];
           for (const p of attachedPlaces) {
             const placeObj = await fetchPlainObject(token, PLACE_VIEW, p.handle);
             const hasLat = typeof placeObj.lat === "string" && placeObj.lat.trim() !== "";
             const hasLong = typeof placeObj.long === "string" && placeObj.long.trim() !== "";
             if (hasLat || hasLong) continue;
-            await updateObject(token, PLACE_VIEW, p.handle, {
-              ...placeObj, lat: String(center.lat), long: String(center.lng),
-            });
-            backfilled = true;
+            toBackfill.push({ handle: p.handle, placeObj });
           }
-          if (backfilled) getViewStore("place").requeryDebounced();
+          if (toBackfill.length > 0) {
+            // Spread multiple places sharing this overlay around its centroid
+            // rather than stacking them all on one identical point: coincident
+            // places sit 0px apart at every zoom, so the map's clustering can
+            // never split them apart -- clicking their "N" badge just zooms in
+            // and the badge vanishes into a single indistinguishable dot
+            // instead of separating into individual pins.
+            const MIN_SPREAD_DEGREES = 0.0005;
+            const radiusLat = Math.max((bounds.getNorth() - bounds.getSouth()) * 0.15, MIN_SPREAD_DEGREES);
+            const radiusLng = Math.max((bounds.getEast() - bounds.getWest()) * 0.15, MIN_SPREAD_DEGREES);
+            for (let i = 0; i < toBackfill.length; i++) {
+              const { handle: placeHandle, placeObj } = toBackfill[i];
+              let lat = center.lat;
+              let lng = center.lng;
+              if (toBackfill.length > 1) {
+                const angle = (2 * Math.PI * i) / toBackfill.length;
+                lat += Math.sin(angle) * radiusLat;
+                lng += Math.cos(angle) * radiusLng;
+              }
+              await updateObject(token, PLACE_VIEW, placeHandle, {
+                ...placeObj, lat: String(lat), long: String(lng),
+              });
+            }
+            getViewStore("place").requeryDebounced();
+          }
         }
       } catch {
         // Coordinates are a nice-to-have backfill, not essential to what

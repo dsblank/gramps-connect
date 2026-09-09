@@ -77,6 +77,16 @@ const CLUSTER_LAYER = "place-clusters";
 const CLUSTER_COUNT_LAYER = "place-cluster-count";
 const POINT_LAYER = "place-points";
 const LABEL_LAYER = "place-labels";
+// Must match the `clusterMaxZoom` passed to addSource(SOURCE, ...) below --
+// read by the cluster click handler to recognise a cluster supercluster can
+// never split apart (its leaves sit at the same, or near-identical, pixel
+// position at every zoom, e.g. several places backfilled from one overlay's
+// centroid). getClusterExpansionZoom() answers such a cluster with
+// CLUSTER_MAX_ZOOM + 1 -- one past the last zoom the index actually built a
+// tree for -- and naively easing there just strands the user past the point
+// where clustering stops, looking at a single dot with no "N" badge and no
+// visible way to tell the places apart.
+const CLUSTER_MAX_ZOOM = 13;
 
 // Every currently-plotted place's attached KML file(s) (see
 // MapPlace.kmlMedia), overlaid underneath the place markers so a field
@@ -181,6 +191,11 @@ export function MapCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  // A second, click-driven popup (list-of-places, closeButton: true) rather
+  // than reusing popupRef -- that one is a hover tooltip that's rebuilt and
+  // torn down on every mousemove/mouseleave over POINT_LAYER, which would
+  // fight with this one staying open after the pointer moves off the marker.
+  const clusterPopupRef = useRef<maplibregl.Popup | null>(null);
   const [ready, setReady] = useState(false);
   const [tileError, setTileError] = useState(false);
   const dark = useComputedColorScheme("light") === "dark";
@@ -263,9 +278,58 @@ export function MapCanvas({
       const feature = e.features?.[0];
       if (!feature) return;
       const clusterId = feature.properties?.cluster_id as number;
+      const coordinates = (feature.geometry as GeoJsonPoint).coordinates as [number, number];
       const source = map.getSource(SOURCE) as GeoJSONSource | undefined;
-      source?.getClusterExpansionZoom(clusterId).then((zoom) => {
-        map.easeTo({ center: (feature.geometry as GeoJsonPoint).coordinates as [number, number], zoom });
+      if (!source) return;
+      source.getClusterExpansionZoom(clusterId).then((zoom) => {
+        if (zoom <= CLUSTER_MAX_ZOOM) {
+          clusterPopupRef.current?.remove();
+          map.easeTo({ center: coordinates, zoom });
+          return;
+        }
+        // supercluster can never split this cluster apart (see
+        // CLUSTER_MAX_ZOOM's doc comment) -- list its leaves in a popup
+        // instead of easing to the dead zoom past clustering, where they'd
+        // render as one unlabeled dot with no way to tell them apart.
+        source.getClusterLeaves(clusterId, Infinity, 0).then((leaves) => {
+          const stacked = leaves
+            .map((leaf) => placesRef.current.find((p) => p.handle === leaf.properties?.handle))
+            .filter((p): p is MapPlace => p != null);
+          if (stacked.length === 0) return;
+          map.easeTo({ center: coordinates, zoom: CLUSTER_MAX_ZOOM });
+          if (stacked.length === 1) {
+            onSelectRef.current(stacked[0]);
+            return;
+          }
+          // Inline styles rather than a stylesheet class -- this popup has no
+          // existing CSS to hook into (gramps-place-popup above is untouched
+          // by any rule either; hover text relies entirely on maplibre's own
+          // default popup styling, which has nothing to say about a list of
+          // buttons).
+          const list = document.createElement("div");
+          list.style.display = "flex";
+          list.style.flexDirection = "column";
+          list.style.gap = "2px";
+          for (const place of stacked) {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.textContent = place.title;
+            item.style.cssText =
+              "all: unset; cursor: pointer; padding: 2px 4px; border-radius: 4px; white-space: nowrap;";
+            item.onmouseenter = () => { item.style.background = "var(--mantine-color-gray-2, #e9ecef)"; };
+            item.onmouseleave = () => { item.style.background = "transparent"; };
+            item.onclick = () => {
+              onSelectRef.current(place);
+              clusterPopupRef.current?.remove();
+            };
+            list.appendChild(item);
+          }
+          clusterPopupRef.current?.remove();
+          clusterPopupRef.current = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 12 })
+            .setLngLat(coordinates)
+            .setDOMContent(list)
+            .addTo(map);
+        }).catch(() => {});
       }).catch(() => {});
     });
     map.on("click", POINT_LAYER, (e) => {
@@ -284,7 +348,10 @@ export function MapCanvas({
         // queryRenderedFeatures throws on a layer that doesn't exist yet, and
         // returns nothing useful mid-style-swap.
         .filter(Boolean);
-      if (hits.length === 0) onSelectRef.current(null);
+      if (hits.length === 0) {
+        onSelectRef.current(null);
+        clusterPopupRef.current?.remove();
+      }
     });
     for (const layer of [CLUSTER_LAYER, POINT_LAYER]) {
       map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
@@ -421,7 +488,7 @@ export function MapCanvas({
         // otherwise be an unreadable mat of overlapping markers at low zoom.
         cluster: true,
         clusterRadius: 44,
-        clusterMaxZoom: 13,
+        clusterMaxZoom: CLUSTER_MAX_ZOOM,
         // Cluster markers are sized by how many *events* they cover, not just
         // how many places -- summed here so the size encoding means the same
         // thing whether or not a group happens to be clustered.
@@ -513,6 +580,7 @@ export function MapCanvas({
 
   useEffect(() => () => {
     popupRef.current?.remove();
+    clusterPopupRef.current?.remove();
   }, []);
 
   // Colour-scheme flip, or a mode switch into/out of the OHM historical
