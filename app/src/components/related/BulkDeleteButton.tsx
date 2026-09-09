@@ -3,6 +3,7 @@ import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
 import { deleteObjectsBulk } from "../../store/mergeApi";
+import { reconnectPlaceChildren } from "../../store/placeReconnect";
 import type { ViewConfig } from "../../store/views";
 import { t } from "../../i18n/i18n";
 
@@ -22,6 +23,14 @@ export function BulkDeleteButton({ view, handles }: { view: ViewConfig; handles:
     setError(null);
     try {
       const token = await getToken();
+      if (view.key === "place") {
+        // See DeleteButton.tsx's own call to this -- passing every
+        // selected handle at once lets it correctly walk past a place
+        // *and* its own parent both being deleted together, reattaching
+        // to whichever ancestor actually survives instead of the
+        // immediate (also-deleted) one.
+        await reconnectPlaceChildren(token, handles);
+      }
       await deleteObjectsBulk(token, view, handles);
       getViewStore(view.key).requeryDebounced();
       getViewStore(view.key).clearSelection();
@@ -41,7 +50,11 @@ export function BulkDeleteButton({ view, handles }: { view: ViewConfig; handles:
       <Modal opened={confirmOpen} onClose={() => setConfirmOpen(false)} title={`${t("Delete")} ${handles.length} ${t("objects")}?`}>
         <Stack gap="md">
           <Text size="sm">
-            {t("This permanently deletes every selected object. Every other reference to them is cleaned up automatically. There is no undo.")}
+            {t("This permanently deletes every selected object. Every other reference to them is cleaned up automatically.")}
+            {view.key === "place" && (
+              <> {t("Any place enclosed by one of these is reattached to its surviving parent instead of being left orphaned.")}</>
+            )}{" "}
+            {t("There is no undo.")}
           </Text>
           {error && (
             <Alert color="red" title={t("Could not delete")}>

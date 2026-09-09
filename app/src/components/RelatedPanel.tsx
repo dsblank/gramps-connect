@@ -4,6 +4,7 @@ import { getToken } from "../auth/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, zipRefs } from "../store/objectDetail";
 import type { ObjectDetail } from "../store/objectDetail";
+import { fetchPlainObject } from "../store/objectsApi";
 import type { ViewConfig } from "../store/views";
 import { RELATED_CONFIG } from "./related/config";
 import { DetailFields } from "./related/DetailFields";
@@ -72,7 +73,15 @@ interface RelatedPanelProps {
 
 type LoadState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  // `plain` is a best-effort fallback fetch (see the effect below) -- null
+  // only when even that failed (the record is genuinely gone, not merely
+  // un-extendable). Carrying it lets the error view still offer Edit/
+  // Delete instead of leaving the user with nothing but a red box and no
+  // way to act on the very record causing the failure (e.g. a Place whose
+  // own placeref_list points at a since-deleted parent -- extend/profile
+  // trips over that dangling reference server-side, but the plain GET and
+  // a PUT that fixes or removes it don't need to resolve it at all).
+  | { status: "error"; message: string; plain: ObjectDetail | null }
   | { status: "ready"; detail: ObjectDetail };
 
 // Discussion #4, F7: `handle` changes on every row DataTable's arrow-key
@@ -376,15 +385,33 @@ export function RelatedPanel({
       (async () => {
         try {
           const token = await getToken();
-          const detail = await fetchObjectExtended(token, view, handle, controller.signal);
-          if (!cancelled) {
-            loadedForRef.current = key;
-            setState({ status: "ready", detail });
+          try {
+            const detail = await fetchObjectExtended(token, view, handle, controller.signal);
+            if (!cancelled) {
+              loadedForRef.current = key;
+              setState({ status: "ready", detail });
+            }
+          } catch (err: any) {
+            // AbortError means a later effect run superseded this one --
+            // that run's own catch (or success) already owns `state`, not
+            // this one.
+            if (cancelled || err.name === "AbortError") return;
+            // The extended fetch failed (often a broken reference
+            // elsewhere in the tree -- see LoadState's own doc comment) --
+            // fall back to the plain object so the error view below can
+            // still offer Edit/Delete. A `null` here means this record
+            // itself is gone, not merely un-extendable; either way
+            // there's nothing more to try.
+            let plain: ObjectDetail | null = null;
+            try {
+              plain = (await fetchPlainObject(token, view, handle)) as ObjectDetail;
+            } catch {
+              // leave plain as null
+            }
+            if (!cancelled) setState({ status: "error", message: err.message ?? String(err), plain });
           }
         } catch (err: any) {
-          // AbortError means a later effect run superseded this one -- that
-          // run's own catch (or success) already owns `state`, not this one.
-          if (!cancelled && err.name !== "AbortError") setState({ status: "error", message: err.message ?? String(err) });
+          if (!cancelled && err.name !== "AbortError") setState({ status: "error", message: err.message ?? String(err), plain: null });
         }
       })();
     }, SELECTION_FETCH_DEBOUNCE_MS);
@@ -404,9 +431,28 @@ export function RelatedPanel({
   }
   if (state.status === "error") {
     return (
-      <Alert color="red" m="md" title={`${t("Failed to load")} ${t(view.label)}`}>
-        {state.message}
-      </Alert>
+      <Stack gap="md" p="md">
+        <Alert color="red" title={`${t("Failed to load")} ${t(view.label)}`}>
+          {state.message}
+        </Alert>
+        {/* Best-effort recovery, not a second attempt at the full view:
+            the plain fetch that succeeded here is the same one Edit's own
+            dialog and Delete's own confirm already use, so both work
+            without ever needing the extended data that failed above --
+            e.g. fixing (or removing) a Place whose own enclosing-place
+            link is broken, which is exactly what commonly causes this. */}
+        {state.plain && (
+          <>
+            <Text size="sm" c="dimmed">
+              {t("The record itself can still be edited or deleted -- that's often what fixes a broken reference like this.")}
+            </Text>
+            <Group gap="xs">
+              {draftStack && <EditButton view={view} detail={state.plain} draftStack={draftStack} />}
+              <DeleteButton view={view} detail={state.plain} />
+            </Group>
+          </>
+        )}
+      </Stack>
     );
   }
 

@@ -3,6 +3,7 @@ import { Alert, Button, Checkbox, Group, Modal, Stack, Text } from "@mantine/cor
 import { getToken, hasPermissions } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
 import { deleteObject } from "../../store/objectsApi";
+import { reconnectPlaceChildren } from "../../store/placeReconnect";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
 import { summaryLine } from "./summary";
@@ -62,6 +63,15 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
     setError(null);
     try {
       const token = await getToken();
+      if (view.key === "place") {
+        // Not something the server does on its own (delete_place strips
+        // this place from Person/Family/Event references, but never looks
+        // at other *Places* -- see placeReconnect.ts's own doc comment):
+        // run it first, so a child place that had this one as its
+        // enclosing place is repointed at this place's own parent instead
+        // of being left with a dangling reference once it's gone.
+        await reconnectPlaceChildren(token, [detail.handle]);
+      }
       await deleteObject(token, view, detail.handle);
       // Immediate feedback rather than waiting on historyPoll's next tick
       // (same reasoning as draftStack.ts's saveAll) -- ViewStore's own
@@ -86,7 +96,11 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
           <Text size="sm">
             This permanently deletes <b>{summary}</b>. Every other reference to it is cleaned up
             automatically -- but a record that <i>{t("requires")}</i> this one (e.g. a Citation's Source) is
-            deleted right along with it, not just un-linked. There is no undo.
+            deleted right along with it, not just un-linked.
+            {view.key === "place" && (
+              <> {t("Any place enclosed by this one is reattached to its parent instead of being left orphaned.")}</>
+            )}{" "}
+            There is no undo.
           </Text>
           <Checkbox
             checked={false}
