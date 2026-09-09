@@ -24,6 +24,17 @@ interface ScopeChipProps {
   matched: number;
   /** What `matched` counts, singular: "event", "place". */
   noun: string;
+  /** MapView only: whether the subject's own marker is the one currently
+   * selected (detail card open, overlay drawn). Omitted by every other
+   * visual, where the chip's label is inert text -- a scope there doesn't
+   * correspond to one drawn mark that can be toggled on and off. */
+  active?: boolean;
+  /** MapView only: clicking the label (not the ✕, not the mode toggle)
+   * re-selects the subject's own marker, or deselects it if already
+   * selected. Answers "I clicked empty map and lost the overlay" without
+   * a dedicated new control -- the chip already names the record, so it's
+   * also where getting back to it belongs. */
+  onToggleActive?: () => void;
 }
 
 /** The "showing one record's slice of the tree" indicator, in the visual's
@@ -37,7 +48,7 @@ interface ScopeChipProps {
  * scope rather than part of what's being looked at, the same call the
  * search and category filters here already make. */
 export function ScopeChip({
-  visual, scope, loading, unresolved, mode, onModeChange, matched, noun,
+  visual, scope, loading, unresolved, mode, onModeChange, matched, noun, active, onToggleActive,
 }: ScopeChipProps) {
   if (loading) {
     return (
@@ -70,7 +81,7 @@ export function ScopeChip({
     <Group gap="xs" wrap="nowrap">
       <Badge
         size="sm"
-        variant="light"
+        variant={active ? "filled" : "light"}
         color={empty ? "yellow" : "blue"}
         style={{ textTransform: "none", maxWidth: 320 }}
         rightSection={
@@ -87,7 +98,22 @@ export function ScopeChip({
           </Tooltip>
         }
       >
-        {scope.label}
+        {onToggleActive ? (
+          <Tooltip
+            label={active ? t("Hide this place's details and overlays") : t("Show this place's details and overlays")}
+            withArrow
+          >
+            <button
+              type="button"
+              onClick={onToggleActive}
+              style={{
+                all: "unset", cursor: "pointer", font: "inherit", color: "inherit",
+              }}
+            >
+              {scope.label}
+            </button>
+          </Tooltip>
+        ) : scope.label}
       </Badge>
       {/* Shown even when the scope matched nothing. The empty scope used to
           drop this control and fall back to the whole tree, which left the

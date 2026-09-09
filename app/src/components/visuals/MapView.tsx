@@ -245,6 +245,14 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
     }
   }, [scopeActive, scopedPlaces, subject?.type, subject?.handle]);
 
+  // The subject's own marker, when the subject is a place -- what the scope
+  // chip's label toggles selection of (see its own onToggleActive doc
+  // comment). Undefined/loading scopedPlaces reads as "nothing to toggle
+  // yet", same as the arrival effect above.
+  const subjectPlace = subject?.type === "place"
+    ? scopedPlaces?.find((p) => p.handle === subject.handle) ?? null
+    : null;
+
   // The scoped events at the clicked place -- the answer to "why is this
   // marker here?", which a count alone can't give. Null when unscoped,
   // where the card keeps to its summary: a busy place can hold hundreds of
@@ -319,6 +327,19 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
           onModeChange={setMode}
           matched={scopedPlaces?.length ?? 0}
           noun="place"
+          active={subjectPlace != null && selected?.handle === subjectPlace.handle}
+          onToggleActive={subjectPlace ? () => {
+            if (selected?.handle === subjectPlace.handle) {
+              setSelected(null);
+              return;
+            }
+            setSelected(subjectPlace);
+            // Same refit the map does on first arriving with this subject
+            // (see the fittedFor effect above) -- clicking back to the chip
+            // after panning away should land the same place the subject's
+            // own "Map" link did, not just draw the overlay off-screen.
+            setFitRequest((n) => n + 1);
+          } : undefined}
         />
       )}
       loading={loading}
