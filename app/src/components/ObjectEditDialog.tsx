@@ -18,7 +18,7 @@ import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
 import { StoryEditor } from "./story/StoryEditor";
-import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
+import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -280,6 +280,13 @@ export function ObjectEditDialog({
 }: ObjectEditDialogProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [pickedLabels, setPickedLabels] = useState<Record<string, string>>({});
+  // Whether a brand-new Place draft has moved past the "how do you want to
+  // add this place?" choice (see showPlaceChoice below) by picking "Add
+  // manually" -- a successful Wikidata Apply also counts (it patches the
+  // draft's own title, so placeTitleBlank goes false on its own without
+  // needing this flag). Irrelevant for every other DraftType and for an
+  // "edit" Place, both of which never show the choice screen to begin with.
+  const [manualChosen, setManualChosen] = useState(false);
 
   // This dialog stays mounted (same `key={draft.handle}`) across a Cancel
   // and a later re-Edit of the *same* object -- draftStack.ts's
@@ -293,6 +300,7 @@ export function ObjectEditDialog({
     sessionRef.current = draft.session;
     setShowDetails(false);
     setPickedLabels({});
+    setManualChosen(false);
   }, [draft.session]);
 
   const typeLabel = DRAFT_TYPE_LABELS[draft.type];
@@ -416,6 +424,35 @@ export function ObjectEditDialog({
     return stack.find((d) => d.active && d.openedFrom?.handle === draft.handle && d.openedFrom.field === field);
   }
 
+  // A brand-new Place, never yet given a title either way -- ask "how do
+  // you want to add this?" before showing any field at all, rather than
+  // burying "Look up on Wikidata…" as just the first of many manual-entry
+  // fields (see the wikidataLookup case above). Reopening the *same* still-
+  // pending draft after a Cancel (placeTitleBlank still true) shows this
+  // again unless manualChosen already flipped it -- a Wikidata Apply flips
+  // placeTitleBlank itself, by patching the title.
+  if (draft.type === "place" && draft.mode === "new" && !manualChosen) {
+    const placeName = (draft.data.name ?? {}) as Record<string, unknown>;
+    const placeTitleBlank =
+      !(placeName.value as string | undefined)?.trim() && !(draft.data.title as string | undefined)?.trim();
+    if (placeTitleBlank) {
+      return (
+        <Modal opened={opened} onClose={onCancel} title={title} stackId={draft.handle} size={modalSize}>
+          <Stack gap="md">
+            <NewPlaceChoice
+              stackId={`${draft.handle}-wikidata`}
+              onChange={onChange}
+              onResolved={() => setManualChosen(true)}
+            />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={onCancel}>{t("Cancel")}</Button>
+            </Group>
+          </Stack>
+        </Modal>
+      );
+    }
+  }
+
   if (!spec) {
     // Never actually reachable from EditDialogs.tsx (it only routes
     // person/family elsewhere and every other DraftType has a spec here),
@@ -525,6 +562,14 @@ export function ObjectEditDialog({
         );
       }
       case "wikidataLookup":
+        // A brand-new place resolves this up front instead (see
+        // showPlaceChoice) -- offering it again here would put "fill in
+        // manually" and "look up on Wikidata" side by side as if they were
+        // both meant to be used, the exact mixed signal that choice screen
+        // replaces. An already-saved place being edited has no such
+        // up-front step (it was already added, somehow), so it keeps this
+        // as a plain enrichment action.
+        if (draft.mode === "new") return null;
         return (
           <WikidataPlaceLookupButton
             key="wikidataLookup"

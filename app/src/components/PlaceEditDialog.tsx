@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { Button, Group, Modal, Stack, Switch, TextInput } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { UrlListField, type Url } from "./EmbeddedListFields";
-import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
+import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { DateInput } from "./DateInput";
 import { t } from "../i18n/i18n";
 
@@ -14,6 +15,13 @@ interface PlaceEditDialogProps {
   data: Record<string, unknown>;
   onChange: (patch: Record<string, unknown>) => void;
   onDone: () => void;
+  /** True for a still-blank "+ New Place" draft -- shows NewPlaceChoice's
+   * "how do you want to add this?" screen up front instead of the plain
+   * field form (see WikidataPlaceLookupButton's own doc comment on why).
+   * False (the default) for an already-saved place being re-edited, which
+   * has no such choice to make and keeps the inline "Look up on
+   * Wikidata…" button as a plain enrichment action. */
+  isNew?: boolean;
 }
 
 /** Full editor for one Place struct -- reusable the same way NameEditDialog.tsx
@@ -33,14 +41,34 @@ interface PlaceEditDialogProps {
  * directly, same as the top-level dialog; ParentPlacesSection.tsx
  * (RelatedPanel) is the only place enclosing-place hierarchy is ever
  * displayed, and only once this place is actually saved. */
-export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone }: PlaceEditDialogProps) {
+export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone, isNew = false }: PlaceEditDialogProps) {
   const name = (data.name ?? {}) as Record<string, unknown>;
   const titleValue = (name.value as string | undefined) ?? (data.title as string | undefined) ?? "";
+  const [manualChosen, setManualChosen] = useState(false);
+  // A fresh handle means a genuinely new draft (see EventPlaceField's own
+  // "+ New Place" handler) -- reset back to the choice screen for it, same
+  // reasoning as ObjectEditDialog.tsx's own session-reset effect.
+  useEffect(() => {
+    setManualChosen(false);
+  }, [data.handle]);
+  const showChoice = isNew && !manualChosen && !titleValue.trim();
 
   return (
     <Modal opened={opened} onClose={onDone} title={title} size="md" stackId={stackId}>
+      {showChoice ? (
+        <Stack gap="md">
+          <NewPlaceChoice
+            stackId={`${stackId}-wikidata`}
+            onChange={onChange}
+            onResolved={() => setManualChosen(true)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onDone}>{t("Cancel")}</Button>
+          </Group>
+        </Stack>
+      ) : (
       <Stack gap="md">
-        <WikidataPlaceLookupButton stackId={`${stackId}-wikidata`} data={data} onChange={onChange} />
+        {!isNew && <WikidataPlaceLookupButton stackId={`${stackId}-wikidata`} data={data} onChange={onChange} />}
         <TextInput
           label={t("Name")}
           value={titleValue}
@@ -91,6 +119,7 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           <Button onClick={onDone}>{t("Done")}</Button>
         </Group>
       </Stack>
+      )}
     </Modal>
   );
 }

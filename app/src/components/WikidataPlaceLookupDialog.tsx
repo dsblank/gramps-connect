@@ -13,7 +13,7 @@ import { PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import {
-  fetchWikidataChain, fetchWikidataGeoshape, searchWikidata,
+  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, searchWikidata,
   type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
 import { featuresToKml } from "../store/kmlWrite";
@@ -88,6 +88,41 @@ function effectiveHandle(row: ChainRow): string | null {
   return row.nameMatchRejected ? null : row.existingHandle;
 }
 
+/** Fetches `node`'s Wikidata geoshape (if any), uploads it as a KML Media
+ * object, and returns a MediaRef for it -- `undefined` when there's no
+ * P3896 claim or the Commons fetch/parse came back empty, same "contributes
+ * nothing" fallback as fetchWikidataGeoshape itself. Shared by the ancestor-
+ * row loop and the leaf place in handleApply below, so a place gets the
+ * same outline/color treatment regardless of which side of the chain it's
+ * on. */
+async function fetchOutlineMedia(
+  token: string,
+  node: WikidataPlaceNode,
+  typeOverride: string
+): Promise<Record<string, unknown> | undefined> {
+  if (!node.geoshapeTitle) return undefined;
+  const features = await fetchWikidataGeoshape(node.geoshapeTitle);
+  if (features.length === 0) return undefined;
+  // Same name as the media desc set below -- fetchAllKmlRegions reads a
+  // Polygon's `properties.name` as its label (see kmlMedia.ts), and
+  // Commons' geoshape data carries no name of its own, so without this the
+  // outline shows up unlabeled.
+  const color = geoshapeColorFor(typeOverride || node.placeType, node.qid);
+  for (const feature of features) {
+    feature.properties = { ...feature.properties, name: node.label, color };
+  }
+  const blob = new Blob([featuresToKml(features)], { type: KML_MIME });
+  const mediaHandle = await uploadMedia(token, blob, KML_MIME);
+  // Best-effort, same as MapItemEditorDialog.tsx's own desc set -- the
+  // outline itself is already saved either way, so a failed desc PUT
+  // shouldn't surface as an Apply error. Named after the place (not e.g.
+  // "Alabama outline"): this is what the Media view's list and
+  // MediaThumbnail's hover text show, and it should read the same way any
+  // other place-named attachment does.
+  await setMediaDesc(token, mediaHandle, node.label).catch(() => {});
+  return { _class: "MediaRef", ref: mediaHandle };
+}
+
 /** Escapes a Wikidata label for splicing into a query_lang string literal
  * (single-quoted, backslash-escaped -- see
  * gramps-object-query-language/docs/where_expr.md). Labels can contain an
@@ -128,6 +163,15 @@ export interface WikidataLookupResult {
   long: number | null;
   placeType: string | null;
   parentHandle: string | null;
+  /** A just-uploaded MediaRef for the leaf's own Wikidata outline, or null
+   * when it has none (no P3896 claim, a failed/empty Commons fetch, or the
+   * "Fetch place outlines" checkbox was off). Unlike an ancestor's own
+   * outline (attached inline above, since that place is created right
+   * here), the leaf isn't created/patched by this dialog at all -- see
+   * ChainRow.isLeaf -- so the caller (WikidataPlaceLookupButton) has to
+   * merge this into the place's own media_list itself, once that place's
+   * handle actually exists. */
+  mediaRef: Record<string, unknown> | null;
 }
 
 interface WikidataPlaceLookupDialogProps {
@@ -323,29 +367,8 @@ export function WikidataPlaceLookupDialog({
         // place is a bigger, separate decision) -- a missing P3896 claim or
         // a failed Commons fetch just means no media_list entry, same as
         // any other "contributes nothing" fallback in this dialog.
-        let mediaList: Record<string, unknown>[] | undefined;
-        if (fetchOutlines && row.node.geoshapeTitle) {
-          const features = await fetchWikidataGeoshape(row.node.geoshapeTitle);
-          if (features.length > 0) {
-            // Same name as the media desc set below -- fetchAllKmlRegions
-            // reads a Polygon's `properties.name` as its label (see
-            // kmlMedia.ts), and Commons' geoshape data carries no name of
-            // its own, so without this the outline shows up unlabeled.
-            for (const feature of features) {
-              feature.properties = { ...feature.properties, name: row.node.label };
-            }
-            const blob = new Blob([featuresToKml(features)], { type: KML_MIME });
-            const mediaHandle = await uploadMedia(token, blob, KML_MIME);
-            // Best-effort, same as MapItemEditorDialog.tsx's own desc set --
-            // the outline itself is already saved either way, so a failed
-            // desc PUT shouldn't surface as an Apply error. Named after the
-            // place (not e.g. "Alabama outline"): this is what the Media
-            // view's list and MediaThumbnail's hover text show, and it
-            // should read the same way any other place-named attachment does.
-            await setMediaDesc(token, mediaHandle, row.node.label).catch(() => {});
-            mediaList = [{ _class: "MediaRef", ref: mediaHandle }];
-          }
-        }
+        const outlineMedia = fetchOutlines ? await fetchOutlineMedia(token, row.node, row.typeOverride) : undefined;
+        const mediaList = outlineMedia ? [outlineMedia] : undefined;
         objects.push({
           _class: "Place",
           handle,
@@ -402,6 +425,12 @@ export function WikidataPlaceLookupDialog({
           .filter((r) => r.isLeaf || !r.skip)
           .map((r) => r.node.label)
           .join(", ");
+        // The leaf itself is never created/patched above (see ChainRow.isLeaf's
+        // own doc comment -- it's the caller's own draft/existing place), so
+        // its own outline -- if it has one -- has to be fetched here instead
+        // and handed back for the caller to attach once that place's handle
+        // actually exists (see WikidataLookupResult.mediaRef).
+        const mediaRef = fetchOutlines ? (await fetchOutlineMedia(token, leaf.node, leaf.typeOverride)) ?? null : null;
         onApply({
           qid: leaf.node.qid,
           label: leaf.node.label,
@@ -410,6 +439,7 @@ export function WikidataPlaceLookupDialog({
           long: leaf.node.long,
           placeType: leaf.typeOverride || null,
           parentHandle,
+          mediaRef,
         });
       }
       onClose();
@@ -573,6 +603,63 @@ export function WikidataPlaceLookupDialog({
   );
 }
 
+/** Merges a completed Wikidata lookup into a Place draft's own `data`,
+ * folding in whatever it already has (an existing title is kept, not
+ * overwritten; urls/placeref_list/media_list are appended-to and deduped,
+ * not replaced) -- shared by WikidataPlaceLookupButton (enriching a place
+ * that already has its own data) and NewPlaceChoice (a still-blank one, so
+ * every dedup check below is a no-op there, but it's the same merge either
+ * way). See WikidataLookupResult's own doc comments for what each field
+ * means. */
+export function applyWikidataLookupResult(
+  data: Record<string, unknown>,
+  result: WikidataLookupResult
+): Record<string, unknown> {
+  const name = (data.name ?? {}) as Record<string, unknown>;
+  const currentTitle = (name.value as string | undefined) ?? (data.title as string | undefined) ?? "";
+  const wikidataUrl = `https://www.wikidata.org/wiki/${result.qid}`;
+  const existingUrls = ((data.urls as { path?: string }[] | undefined) ?? []).filter(
+    (u) => u.path !== wikidataUrl
+  );
+  const existingRefs = (data.placeref_list as { ref?: string }[] | undefined) ?? [];
+  const existingMedia = (data.media_list as { ref?: string }[] | undefined) ?? [];
+  return {
+    // Only filled in when there's no title yet -- the common case this
+    // bug report came from (a brand-new place, blank title, searched
+    // straight from "Look up on Wikidata…"). A place that already has its
+    // own title (possibly deliberately different from Wikidata's own label
+    // -- "Grandma's farm near Indianapolis") keeps it; this feature only
+    // ever adds lat/long/hierarchy on top of an existing title, never
+    // overwrites one.
+    ...(currentTitle.trim()
+      ? {}
+      : {
+          title: result.hierarchyTitle,
+          name: { _class: "PlaceName", ...name, value: result.hierarchyTitle },
+        }),
+    lat: result.lat != null ? String(result.lat) : data.lat,
+    long: result.long != null ? String(result.long) : data.long,
+    place_type: result.placeType ?? data.place_type,
+    urls: [...existingUrls, { _class: "Url", path: wikidataUrl, desc: "", type: "Wikidata" }],
+    // Deduped the same way existingUrls is above: re-running this lookup
+    // on a place that's already enclosed by parentHandle (the common case
+    // once a hierarchy's ancestors are QID-tagged -- see
+    // WikidataPlaceLookupDialog's self-healing backfill) must not pile up
+    // a second, redundant PlaceRef to it.
+    placeref_list:
+      result.parentHandle && !existingRefs.some((r) => r.ref === result.parentHandle)
+        ? [...existingRefs, { _class: "PlaceRef", ref: result.parentHandle }]
+        : existingRefs,
+    // Same dedup reasoning as urls/placeref_list above -- re-running the
+    // lookup on a place that already got its outline attached must not
+    // pile up a second copy of it.
+    media_list:
+      result.mediaRef && !existingMedia.some((m) => m.ref === (result.mediaRef as { ref?: string }).ref)
+        ? [...existingMedia, result.mediaRef]
+        : data.media_list,
+  };
+}
+
 interface WikidataPlaceLookupButtonProps {
   stackId: string;
   /** See WikidataPlaceLookupDialogProps.zIndex's own doc comment -- only
@@ -583,11 +670,16 @@ interface WikidataPlaceLookupButtonProps {
 }
 
 /** Drop-in "Look up on Wikidata…" button + dialog, wired to a Place
- * draft's own `data`/`onChange` -- the shared integration point
- * ObjectEditDialog.tsx's `wikidataLookup` field kind, PlaceEditDialog.tsx,
- * and MapItemEditorDialog.tsx's own "Create a new place" dialog all use
- * (see the plan), so the merge-into-existing-urls/placeref_list logic
- * below is written once. */
+ * draft's own `data`/`onChange` -- for *enriching* a place that already has
+ * its own data (an already-saved place being re-edited, or MapItemEditorDialog's
+ * "Create a new place" mini form, which never shows NewPlaceChoice's
+ * up-front choice since it's a single-purpose dialog to begin with). A
+ * brand-new Place created via ObjectEditDialog.tsx/PlaceEditDialog.tsx
+ * instead starts at NewPlaceChoice below, which shares this same dialog and
+ * merge logic (applyWikidataLookupResult) but offers "Add manually" as its
+ * other option -- see feedback the button being just the first of several
+ * manual-entry fields made "look up on Wikidata" read as one more field to
+ * fill in, not an alternative to filling them in by hand. */
 export function WikidataPlaceLookupButton({ stackId, zIndex, data, onChange }: WikidataPlaceLookupButtonProps) {
   const [opened, setOpened] = useState(false);
   const name = (data.name ?? {}) as Record<string, unknown>;
@@ -604,43 +696,53 @@ export function WikidataPlaceLookupButton({ stackId, zIndex, data, onChange }: W
         stackId={stackId}
         zIndex={zIndex}
         initialQuery={currentTitle}
-        onApply={(result) => {
-          const wikidataUrl = `https://www.wikidata.org/wiki/${result.qid}`;
-          const existingUrls = ((data.urls as { path?: string }[] | undefined) ?? []).filter(
-            (u) => u.path !== wikidataUrl
-          );
-          const existingRefs = (data.placeref_list as { ref?: string }[] | undefined) ?? [];
-          onChange({
-            // Only filled in when there's no title yet -- the common case
-            // this bug report came from (a brand-new place, blank title,
-            // searched straight from "Look up on Wikidata…"). A place that
-            // already has its own title (possibly deliberately different
-            // from Wikidata's own label -- "Grandma's farm near
-            // Indianapolis") keeps it; this feature only ever adds
-            // lat/long/hierarchy on top of an existing title, never
-            // overwrites one.
-            ...(currentTitle.trim()
-              ? {}
-              : {
-                  title: result.hierarchyTitle,
-                  name: { _class: "PlaceName", ...name, value: result.hierarchyTitle },
-                }),
-            lat: result.lat != null ? String(result.lat) : data.lat,
-            long: result.long != null ? String(result.long) : data.long,
-            place_type: result.placeType ?? data.place_type,
-            urls: [...existingUrls, { _class: "Url", path: wikidataUrl, desc: "", type: "Wikidata" }],
-            // Deduped the same way existingUrls is above: re-running this
-            // lookup on a place that's already enclosed by parentHandle
-            // (the common case once a hierarchy's ancestors are QID-tagged
-            // -- see WikidataPlaceLookupDialog's self-healing backfill)
-            // must not pile up a second, redundant PlaceRef to it.
-            placeref_list:
-              result.parentHandle && !existingRefs.some((r) => r.ref === result.parentHandle)
-                ? [...existingRefs, { _class: "PlaceRef", ref: result.parentHandle }]
-                : existingRefs,
-          });
-        }}
+        onApply={(result) => onChange(applyWikidataLookupResult(data, result))}
       />
     </>
+  );
+}
+
+interface NewPlaceChoiceProps {
+  stackId: string;
+  /** See WikidataPlaceLookupDialogProps.zIndex's own doc comment -- only
+   * needed by a caller outside the app's Modal.Stack. */
+  zIndex?: number;
+  onChange: (patch: Record<string, unknown>) => void;
+  /** Fired once the choice is made -- "Add manually" fires it immediately
+   * (there's nothing left for this component to do), a Wikidata Apply
+   * fires it right after the onChange patch above so the caller can drop
+   * back to its normal field form already showing the resolved data. Not
+   * fired on a plain dialog close with no Apply -- the caller stays on
+   * this same choice screen so the user can pick the other option instead
+   * of the dialog just silently vanishing. */
+  onResolved: () => void;
+}
+
+/** The "how do you want to add this place?" screen a brand-new Place
+ * starts on, replacing WikidataPlaceLookupButton's plain button for that
+ * one case -- see its own doc comment for why. Always for a still-blank
+ * draft, so applyWikidataLookupResult is always called against `{}`: there
+ * is nothing yet to keep/dedupe against. */
+export function NewPlaceChoice({ stackId, zIndex, onChange, onResolved }: NewPlaceChoiceProps) {
+  const [opened, setOpened] = useState(false);
+  return (
+    <Stack gap="xs">
+      <Text size="sm" c="dimmed">{t("How do you want to add this place?")}</Text>
+      <Group gap="xs">
+        <Button variant="default" onClick={onResolved}>{t("Add manually")}</Button>
+        <Button onClick={() => setOpened(true)}>{t("Add from Wikidata…")}</Button>
+      </Group>
+      <WikidataPlaceLookupDialog
+        opened={opened}
+        onClose={() => setOpened(false)}
+        stackId={stackId}
+        zIndex={zIndex}
+        initialQuery=""
+        onApply={(result) => {
+          onChange(applyWikidataLookupResult({}, result));
+          onResolved();
+        }}
+      />
+    </Stack>
   );
 }

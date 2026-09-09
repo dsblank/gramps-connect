@@ -149,6 +149,7 @@ export function EventPlaceField({ label, id, value, onChange }: EventPlaceFieldP
         stackId={id}
         opened={dialogOpen && Boolean(value)}
         title={value?.pendingData ? "New Place" : "Edit Place"}
+        isNew={Boolean(value?.pendingData)}
         data={value?.pendingData ?? existingData ?? {}}
         onChange={(patch) => {
           if (value?.pendingData) {

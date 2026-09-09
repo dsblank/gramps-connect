@@ -92,6 +92,59 @@ function guessPlaceType(instanceOf: string[]): string | null {
   return null;
 }
 
+/** Hue (degrees) per Gramps PlaceType, for geoshapeColorFor below -- every
+ * county-family outline reads as the same hue next to a state's, so the map
+ * still groups by administrative level at a glance. Town/Village fold into
+ * City's hue (all "settlement"-scale); an unmapped/custom type gets
+ * DEFAULT_HUE's neutral grey rather than joining a bucket it doesn't belong
+ * in. */
+const HUE_BY_PLACE_TYPE: Record<string, number> = {
+  Country: 265, // violet
+  State: 210, // blue
+  County: 35, // orange
+  City: 150, // green
+  Town: 150,
+  Village: 150,
+};
+const DEFAULT_HUE = 0;
+
+/** Deterministic [0,1) hash (FNV-1a) -- stable across sessions/browsers
+ * (unlike Math.random), so re-importing the same place always gets the same
+ * shade. */
+function hashUnit(value: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) / 0xffffffff;
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sat = s / 100;
+  const light = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = sat * Math.min(light, 1 - light);
+  const f = (n: number) => light - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, "0");
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+}
+
+/** A geoshape overlay's fill: hue from the place's Gramps type (so every
+ * county reads as the same family next to a state's outline), lightness/
+ * saturation varied by a hash of its QID (so sibling counties are still
+ * distinguishable from each other) -- replaces the single fixed default
+ * fill every imported outline used to get. QID rather than label/lat-long:
+ * it's already fetched, unique, and stable across a later rename (unlike a
+ * label) or a coordinate correction (unlike lat/long). */
+export function geoshapeColorFor(placeType: string | null, qid: string): string {
+  const hue = (placeType ? HUE_BY_PLACE_TYPE[placeType] : undefined) ?? DEFAULT_HUE;
+  const unit = hashUnit(qid);
+  const saturation = 45 + unit * 25; // 45-70%
+  const lightness = 40 + ((unit * 7) % 1) * 20; // 40-60%, decorrelated from saturation
+  return hslToHex(hue, saturation, lightness);
+}
+
 /** name -> candidate QIDs, via Wikidata's own search endpoint (no API key). */
 export async function searchWikidata(
   term: string,
