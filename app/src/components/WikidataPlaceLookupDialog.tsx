@@ -327,6 +327,13 @@ export function WikidataPlaceLookupDialog({
         if (fetchOutlines && row.node.geoshapeTitle) {
           const features = await fetchWikidataGeoshape(row.node.geoshapeTitle);
           if (features.length > 0) {
+            // Same name as the media desc set below -- fetchAllKmlRegions
+            // reads a Polygon's `properties.name` as its label (see
+            // kmlMedia.ts), and Commons' geoshape data carries no name of
+            // its own, so without this the outline shows up unlabeled.
+            for (const feature of features) {
+              feature.properties = { ...feature.properties, name: row.node.label };
+            }
             const blob = new Blob([featuresToKml(features)], { type: KML_MIME });
             const mediaHandle = await uploadMedia(token, blob, KML_MIME);
             // Best-effort, same as MapItemEditorDialog.tsx's own desc set --
