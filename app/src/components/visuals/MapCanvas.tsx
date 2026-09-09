@@ -6,7 +6,9 @@ import type { Feature, FeatureCollection, Point as GeoJsonPoint } from "geojson"
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
-import { fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds } from "../../store/kmlMedia";
+import {
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds, kmlOverlayBounds, unionBounds,
+} from "../../store/kmlMedia";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { readVisualColors } from "./cssVar";
@@ -824,35 +826,63 @@ export function MapCanvas({
     if (!map || !ready || fitRequest === 0 || fitPlaces.length === 0) return;
     if (appliedFitRequestRef.current === fitRequest) return;
     appliedFitRequestRef.current = fitRequest;
-    if (fitPlaces.length === 1) {
-      const place = fitPlaces[0];
-      map.easeTo({ center: [place.long, place.lat], zoom: Math.max(map.getZoom(), 9) });
-      if (place.kmlMedia.length === 0) return;
-      // A KML attachment is typically a field boundary or a short route,
-      // far tighter than the flat zoom just picked above -- there's no way
-      // to know how tight without the file's own coordinates, which the
-      // overlay effect above is fetching but may not have resolved yet
-      // (fetchAllKmlFeatures's cache makes this call free once it has).
-      // Refines the camera a second time once they're in, rather than
-      // waiting on them for the first move.
-      let cancelled = false;
-      fetchAllKmlFeatures(place.kmlMedia).then((features) => {
+    const single = fitPlaces.length === 1;
+    if (single) {
+      map.easeTo({ center: [fitPlaces[0].long, fitPlaces[0].lat], zoom: Math.max(map.getZoom(), 9) });
+    } else {
+      const bounds = new maplibregl.LngLatBounds(
+        [fitPlaces[0].long, fitPlaces[0].lat],
+        [fitPlaces[0].long, fitPlaces[0].lat],
+      );
+      for (const place of fitPlaces) bounds.extend([place.long, place.lat]);
+      map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 600 });
+    }
+
+    // A KML attachment is typically a field boundary, a short route, or an
+    // image overlay -- far tighter (or, for an overlay anchored off to one
+    // side of its place, differently centered) than the flat point-fit just
+    // done above, and there's no way to know how tight without the file's
+    // own coordinates. There's one collective refinement across every
+    // fitPlaces place's attachment(s), not just the subject's own -- a
+    // context-mode fit (e.g. arriving on a State via its "Map" link) frames
+    // that state plus whatever it encloses, and clipping the state's own
+    // outline to just the point-bbox of its markers (as the multi-place
+    // branch above does on its own) would defeat the entire reason someone
+    // followed that link. Fetched from every place at once so a single
+    // fitBounds call frames the union rather than one call per place
+    // fighting over the last word.
+    //
+    // Deduplicated: two places sharing a KML attachment (or a place
+    // appearing in `fitPlaces` more than once, which doesn't currently
+    // happen but costs nothing to guard) would otherwise fetch/parse the
+    // same file twice -- free either way since fetchAllKmlFeatures/
+    // fetchAllKmlImageOverlays cache per handle, but there's no reason to
+    // even ask twice.
+    const kmlMedia = [...new Set(fitPlaces.flatMap((place) => place.kmlMedia))];
+    if (kmlMedia.length === 0) return;
+    let cancelled = false;
+    Promise.all([fetchAllKmlFeatures(kmlMedia), fetchAllKmlImageOverlays(kmlMedia)])
+      .then(([features, overlays]) => {
         if (cancelled) return;
-        const bounds = kmlBounds(features);
+        let bounds = unionBounds(kmlBounds(features), kmlOverlayBounds(overlays));
+        // In the multi-place case, folded in with every plotted marker's own
+        // point too -- an attachment shouldn't shrink the frame past a
+        // marker that has no attachment of its own to contribute.
+        if (!single) {
+          for (const place of fitPlaces) {
+            bounds = unionBounds(bounds, [place.long, place.lat, place.long, place.lat]);
+          }
+        }
         if (bounds) {
-          map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { maxZoom: 17, duration: 600 });
+          map.fitBounds(
+            [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
+            { padding: single ? 0 : 60, maxZoom: single ? 17 : 12, duration: 600 },
+          );
         }
       });
-      return () => {
-        cancelled = true;
-      };
-    }
-    const bounds = new maplibregl.LngLatBounds(
-      [fitPlaces[0].long, fitPlaces[0].lat],
-      [fitPlaces[0].long, fitPlaces[0].lat],
-    );
-    for (const place of fitPlaces) bounds.extend([place.long, place.lat]);
-    map.fitBounds(bounds, { padding: 60, maxZoom: 12, duration: 600 });
+    return () => {
+      cancelled = true;
+    };
   }, [fitRequest, ready, fitPlaces]);
 
   // Fit to an overlay's bounds on request (see flyToRequest). fitBounds

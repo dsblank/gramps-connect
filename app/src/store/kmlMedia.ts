@@ -390,16 +390,14 @@ export function kmlCenter(features: Feature[]): [lat: number, long: number] | nu
   return [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2];
 }
 
-/** Same bbox-center guess as kmlCenter, but over a set of image overlays'
- * corners instead of vector features -- useVisualData.ts's fallback for a
- * PendingKmlPlace whose only KML attachment is a GroundOverlay (an
- * overlay-only file: no Point/LineString/Polygon placemark for kmlCenter to
- * find anything in, since fetchAllKmlFeatures excludes GroundOverlay
- * placemarks entirely). Without this, a place with only an image overlay
- * attached and no lat/long of its own never gets a derived position and so
- * never renders on the map until someone sets its coordinates by hand
- * (found live). */
-export function kmlOverlayCenter(overlays: KmlImageOverlay[]): [lat: number, long: number] | null {
+/** Same bbox as kmlBounds, but over a set of image overlays' corners instead
+ * of vector features -- overlays (GroundOverlay/region placemarks) carry no
+ * Point/LineString/Polygon geometry for kmlBounds to find anything in, since
+ * fetchAllKmlFeatures excludes them entirely. Lets a caller fit the camera to
+ * an overlay-only KML attachment the same way it would a vector one. */
+export function kmlOverlayBounds(
+  overlays: KmlImageOverlay[],
+): [west: number, south: number, east: number, north: number] | null {
   if (overlays.length === 0) return null;
   const bounds: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const overlay of overlays) {
@@ -410,5 +408,35 @@ export function kmlOverlayCenter(overlays: KmlImageOverlay[]): [lat: number, lon
       if (lat > bounds[3]) bounds[3] = lat;
     }
   }
+  return bounds;
+}
+
+/** Combines two nullable bboxes (as returned by kmlBounds/kmlOverlayBounds)
+ * into the box that encloses both -- a place's KML attachment(s) can carry
+ * vector shapes and image overlays side by side, and framing the camera to
+ * just one kind would clip whichever the caller didn't ask for. Either side
+ * missing (no shapes, or no overlays) just passes the other through; both
+ * missing is null, same as either input alone would be. */
+export function unionBounds(
+  a: [west: number, south: number, east: number, north: number] | null,
+  b: [west: number, south: number, east: number, north: number] | null,
+): [west: number, south: number, east: number, north: number] | null {
+  if (!a) return b;
+  if (!b) return a;
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
+}
+
+/** Same bbox-center guess as kmlCenter, but over a set of image overlays'
+ * corners instead of vector features -- useVisualData.ts's fallback for a
+ * PendingKmlPlace whose only KML attachment is a GroundOverlay (an
+ * overlay-only file: no Point/LineString/Polygon placemark for kmlCenter to
+ * find anything in, since fetchAllKmlFeatures excludes GroundOverlay
+ * placemarks entirely). Without this, a place with only an image overlay
+ * attached and no lat/long of its own never gets a derived position and so
+ * never renders on the map until someone sets its coordinates by hand
+ * (found live). */
+export function kmlOverlayCenter(overlays: KmlImageOverlay[]): [lat: number, long: number] | null {
+  const bounds = kmlOverlayBounds(overlays);
+  if (!bounds) return null;
   return [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2];
 }

@@ -221,9 +221,13 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
   // KML-attached place should never pay for that parser.
   //
   // Once the shape is in, the camera refines to frame it -- a KML file is
-  // typically a field boundary or a short route, far tighter than the flat
-  // zoom 9 the flyTo effect below picks for an ordinary located point, and
-  // there's no way to know how tight without the file's own coordinates. A
+  // typically a field boundary, a short route, or an image overlay, far
+  // tighter than the flat zoom 9 the flyTo effect below picks for an
+  // ordinary located point, and there's no way to know how tight without the
+  // file's own coordinates. Vector shapes and image overlays are combined
+  // into one box (see MapCanvas.tsx's identical unionBounds use) --
+  // fetchAllKmlFeatures excludes GroundOverlay placemarks entirely, so an
+  // overlay-only attachment needs its own corners folded in separately. A
   // second camera move right after the first (that effect's flyTo already
   // got the map to roughly the right place) rather than replacing it: the
   // fetch is asynchronous and the plain point case still needs its own
@@ -250,9 +254,13 @@ export function StoryMapBackground({ initialCenter, currentPoint, dark, opened, 
     }
     let cancelled = false;
     import("../../store/kmlMedia")
-      .then(async ({ fetchAllKmlFeatures, kmlBounds }) => {
-        const features = await fetchAllKmlFeatures(kmlKey.split(","));
-        return { features, bounds: kmlBounds(features) };
+      .then(async ({ fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds, kmlOverlayBounds, unionBounds }) => {
+        const handles = kmlKey.split(",");
+        const [features, overlays] = await Promise.all([
+          fetchAllKmlFeatures(handles),
+          fetchAllKmlImageOverlays(handles),
+        ]);
+        return { features, bounds: unionBounds(kmlBounds(features), kmlOverlayBounds(overlays)) };
       })
       .then(({ features, bounds }) => {
         if (cancelled) return;
