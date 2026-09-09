@@ -25,7 +25,7 @@ import {
 } from "../store/kmlMedia";
 import { featuresToKml, type ImageOverlay } from "../store/kmlWrite";
 import { uploadMedia, updateMediaFile, setMediaDesc } from "../store/jobsApi";
-import { createHandle, createObjects, fetchPlainObject } from "../store/objectsApi";
+import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
@@ -431,14 +431,19 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // from the existing object for an edit (see the effect below). Optional,
   // like every other field a bare Media object starts without.
   const [desc, setDesc] = useState("");
-  // The one place this item is attached to -- required (see
-  // MapItemEditorTarget's own doc comment): a map overlay's date visibility
-  // is entirely the attached place's own doing, so an overlay with no place
-  // at all would have no way to ever be date-gated, and no home for
-  // MediaMapButton's "Map" link either. A single slot, not a list: this
-  // editor treats "which place is this item's" as one choice, matching how
-  // a map item is actually used even though gramps-web-api's media_list
-  // would technically allow attaching it to several. Seeded from
+  // This overlay's primary place -- required (see MapItemEditorTarget's own
+  // doc comment): a map overlay's date visibility is entirely the attached
+  // place's own doing, so an overlay with no place at all would have no way
+  // to ever be date-gated, and no home for MediaMapButton's "Map" link
+  // either. A single slot here, not a list -- even though a map overlay can
+  // legitimately also be attached to other places (MapOverlaysSection.tsx's
+  // own "+ Add map overlay" picker allows that; see its doc comment), this
+  // dialog treats whichever one it's editing as the overlay's primary
+  // place, the same first-backlink slot used elsewhere (e.g. the coordinate
+  // backfill in handleSave loops every attached place, but MediaMapButton's
+  // "Map" link and this dialog's own picker both only ever look at this
+  // one). Any other places stay attached and untouched by this dialog --
+  // only the primary one is surfaced/diffed here. Seeded from
   // `target.place` for a new item (always present); null only ever appears
   // in edit mode, for an overlay saved before a place was required (see the
   // no-place branch in the render below) -- otherwise the same as
@@ -506,8 +511,8 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // view makes -- getBacklinks(...).place is exactly what
   // MediaMapButton.tsx already reads to decide whether to show its own
   // "Map" link, reused here rather than a second, narrower backlinks-only
-  // request. Only the first backlink is taken (see `place`'s own doc
-  // comment on why this is a single slot).
+  // request. Only the first backlink is taken as the primary place -- see
+  // `place`'s own doc comment.
   useEffect(() => {
     if (target.kind !== "edit") return;
     let cancelled = false;
@@ -1482,6 +1487,43 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         // just changed server-side and would otherwise sit stale in the
         // local cache until historyPoll's next tick.
         getViewStore("place").requeryDebounced();
+      }
+      // Best-effort, same reasoning as desc/attach above: a place created
+      // without ever picking a location (the common case for a brand-new
+      // "just draw the boundary" place -- see handleCreatePlace) shouldn't
+      // stay stranded off the map forever just because this dialog is how
+      // someone happened to give it a shape. Re-fetches this overlay's own
+      // backlinks rather than using just the primary `place` slot above --
+      // MapOverlaysSection.tsx allows the same overlay to be attached to
+      // several places (see its own doc comment), and every one of them
+      // that has no coordinates of its own yet gets backfilled here, not
+      // only the primary one this dialog's own picker manages.
+      // Never overwrites a location someone set deliberately, on this save
+      // or any later edit of the same overlay. Uses the same bounds-center-
+      // of-everything-drawn as handleCreatePlace's own `center`, not an
+      // area-weighted centroid.
+      try {
+        const bounds = currentDrawnBounds();
+        if (bounds) {
+          const center = bounds.getCenter();
+          const obj = await fetchObjectExtended(token, MEDIA_VIEW, handle);
+          const attachedPlaces = (getBacklinks(obj).place ?? []) as { handle: string }[];
+          let backfilled = false;
+          for (const p of attachedPlaces) {
+            const placeObj = await fetchPlainObject(token, PLACE_VIEW, p.handle);
+            const hasLat = typeof placeObj.lat === "string" && placeObj.lat.trim() !== "";
+            const hasLong = typeof placeObj.long === "string" && placeObj.long.trim() !== "";
+            if (hasLat || hasLong) continue;
+            await updateObject(token, PLACE_VIEW, p.handle, {
+              ...placeObj, lat: String(center.lat), long: String(center.lng),
+            });
+            backfilled = true;
+          }
+          if (backfilled) getViewStore("place").requeryDebounced();
+        }
+      } catch {
+        // Coordinates are a nice-to-have backfill, not essential to what
+        // was just saved -- same as the desc/attach failures above.
       }
       onClose();
     } catch (err: any) {
