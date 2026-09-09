@@ -132,6 +132,16 @@ export class ViewStore {
   private rangeAnchorIndex: number | null = null;
   private selectionIsDefault = false;
   private selectedRevision = 0;
+  /** Whatever was selected right before the currently-active filter
+   * started (captured in runQuery() on the null -> non-null whereExpr
+   * transition) -- clearFilter() falls back to this when the selection it
+   * would otherwise restore is only the filtered set's own auto-picked
+   * default (see selectionIsDefault), not something the user actually
+   * clicked while filtered. Without it, clearing a filter the user never
+   * clicked into (e.g. a GOQL query that doesn't happen to include the
+   * pre-filter record) lands on that unrelated default row instead of
+   * back where the user started. */
+  private preFilterHandle: string | null = null;
   /** See navigateToHandle()'s doc comment -- true only while it's using
    * runQuery() purely to drop whereExpr, not as a real filter change. */
   private suppressSelectionClear = false;
@@ -375,10 +385,21 @@ export class ViewStore {
    * authoritative position server-side) -- and falls back to the ordinary
    * runQuery()-driven default selection when nothing was selected, or the
    * selected record no longer resolves (e.g. deleted while the box was
-   * being cleared). */
+   * being cleared).
+   *
+   * Prefers preFilterHandle over the current selectedHandle whenever the
+   * current selection is still just the filtered set's own auto-picked
+   * default (selectionIsDefault) rather than something the user actually
+   * clicked while filtered -- otherwise clearing a filter the user never
+   * clicked into (typical for a quick look, or a GOQL query that doesn't
+   * happen to include the pre-filter record) would "restore" that
+   * unrelated default row instead of back where the user started. An
+   * explicit click while filtered always wins, though: that's a real
+   * choice, not something to override. */
   async clearFilter(): Promise<void> {
     if (this.whereExpr === null) return; // nothing active to clear
-    const handle = this.selectedHandle;
+    const handle = this.selectionIsDefault ? (this.preFilterHandle ?? this.selectedHandle) : this.selectedHandle;
+    this.preFilterHandle = null;
     if (handle === null || !(await this.navigateToHandle(handle))) {
       await this.runQuery(null, false);
     }
@@ -708,6 +729,13 @@ export class ViewStore {
     // this call to drop whereExpr on its way to re-selecting -- see its own
     // doc comment on suppressSelectionClear.
     if (!this.suppressSelectionClear) {
+      // Only on the transition into filtering, not on every refinement of
+      // an already-active filter -- clearFilter() should undo the whole
+      // filtering excursion back to where it started, not just the last
+      // query typed during it.
+      if (this.whereExpr === null && whereExpr !== null) {
+        this.preFilterHandle = this.selectedHandle;
+      }
       this.selectedIndex = null;
       this.selectedHandle = null;
       this.selectedHandles = [];

@@ -244,6 +244,36 @@ describe("ViewStore.clearFilter", () => {
     expect(store.getSnapshot().selectionIsDefault).toBe(true);
   });
 
+  it("restores the pre-filter selection, not the filtered set's own default, when the filter is cleared without an explicit click into it (regression: a GOQL query whose results didn't include the original record left the default-selected row behind after clearing)", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+    store.select(2); // explicitly on H3 before any filter is applied
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H2")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+    // Filtering away from H3 leaves only H2, auto-selected as the new
+    // default -- the user never clicked it.
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+    expect(store.getSnapshot().selectionIsDefault).toBe(true);
+
+    // navigateToHandle()'s internal runQuery(null, false), dropping the filter:
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H2"), tagRow("H3")], next_after: null },
+      totalCount: 3,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H3"));
+    mockRank(2); // H3's rank in the unfiltered set
+
+    await store.clearFilter();
+
+    expect(store.getSnapshot().whereExpr).toBeNull();
+    expect(store.getSnapshot().selectedHandle).toBe("H3");
+    expect(store.getSnapshot().selectedIndex).toBe(2);
+    expect(store.getSnapshot().selectionIsDefault).toBe(false);
+  });
+
   it("still tie-breaks by ascending handle when the active sort is descending (regression: clearing a search under a descending sort could land the highlight on a different row than selectedHandle, whenever ties existed in the sort column)", async () => {
     const store = new ViewStore(TAG_VIEW, getSql);
     vi.mocked(fetchPage).mockResolvedValueOnce({
