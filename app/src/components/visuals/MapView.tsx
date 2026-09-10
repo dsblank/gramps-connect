@@ -5,7 +5,7 @@ import {
 import { useVisualData } from "../../hooks/useVisualData";
 import { useVisualScope } from "../../hooks/useVisualScope";
 import { formatHash, type VisualSubject } from "../../hash";
-import type { EventRecord, MapPlace } from "../../store/visualData";
+import type { EventRecord, MapPlace, VisualData } from "../../store/visualData";
 import { MapModeControl } from "./MapModeControl";
 import type { MapMode } from "./mapStyles";
 import { NoMatches } from "./NoMatches";
@@ -18,6 +18,65 @@ import { t } from "../../i18n/i18n";
 // than anything else here -- so it's split out and only fetched when someone
 // actually opens View > Map.
 const MapCanvas = lazy(() => import("./MapCanvas").then((m) => ({ default: m.MapCanvas })));
+
+// How many overlay-bearing places is enough to stop descending for -- a cap
+// on *count*, not depth. France's own départements/régions (its direct
+// children) commonly carry no Wikidata outline of their own, but their
+// children two levels down do -- a fixed one-level walk (the original
+// design) missed those entirely, while walking every level unconditionally
+// risks the exact "thousands of places" blowup that one-level walk existed
+// to avoid. Same "bounded top-N, not a hard product limit" tradeoff
+// SearchView.tsx's own RESULTS_LIMIT makes. Rough, not exact: an
+// overlay-bearing place can carry more than one shape, unknowable here
+// without actually fetching its KML file(s) (see overlayPlacesFor).
+export const OVERLAY_PLACES_CAP = 20;
+
+// A hard stop on total places *visited* during that walk (overlay-bearing or
+// not), independent of OVERLAY_PLACES_CAP -- without this, a branch with no
+// overlay anywhere below it (most of a typical tree) would walk every place
+// it transitively encloses chasing a count it'll never reach.
+export const OVERLAY_WALK_VISITED_CAP = 500;
+
+/** The selected place's own KML overlay(s), plus enough of what it
+ * transitively encloses (see VisualData.childPlaces) to actually find some,
+ * without fanning out to everything (which for a country could be
+ * thousands) -- see OVERLAY_PLACES_CAP/OVERLAY_WALK_VISITED_CAP above.
+ * Breadth-first so a shallow overlay is preferred over a deeper one once
+ * the cap is hit, and so the result stays in ancestor-before-descendant
+ * order -- both of MapCanvas's overlay effects rely on that order to stack
+ * a child's shape/image above its parent's rather than the other way
+ * round. Descendants only, never the selected place's own parent/siblings:
+ * clicking a county directly shows that county (and what's inside it), not
+ * the state it happens to sit inside. */
+export function overlayPlacesFor(selected: MapPlace | null, data: VisualData): MapPlace[] {
+  if (!selected) return [];
+  const byHandle = new Map(data.places.map((place) => [place.handle, place]));
+  const result: MapPlace[] = [selected];
+  const visited = new Set<string>([selected.handle]);
+  let overlayCount = selected.kmlMedia.length > 0 ? 1 : 0;
+  let frontier = [selected.handle];
+  while (frontier.length > 0 && overlayCount < OVERLAY_PLACES_CAP && result.length < OVERLAY_WALK_VISITED_CAP) {
+    const nextFrontier: string[] = [];
+    outer: for (const handle of frontier) {
+      for (const childHandle of data.childPlaces.get(handle) ?? []) {
+        if (visited.has(childHandle)) continue;
+        visited.add(childHandle);
+        const child = byHandle.get(childHandle);
+        if (!child) continue;
+        result.push(child);
+        if (child.kmlMedia.length > 0) overlayCount++;
+        nextFrontier.push(childHandle);
+        // Checked per child, not just per parent -- a single place with
+        // hundreds of direct children (plausible at a country's own level)
+        // would otherwise blow well past the cap before this loop next got
+        // a chance to check it.
+        if (result.length >= OVERLAY_WALK_VISITED_CAP) break outer;
+      }
+    }
+    frontier = nextFrontier;
+  }
+  return result;
+}
 
 /** View > Map: every place in the tree that has coordinates, plotted from the
  * local Places cache.
@@ -215,22 +274,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
     if (selected && !places.some((p) => p.handle === selected.handle)) setSelected(null);
   }, [places, selected]);
 
-  // The selected place's own KML overlay(s), plus its direct children's (see
-  // VisualData.childPlaces) -- so opening a state shows its own overlay
-  // alongside its counties', not just its own, without fanning out to every
-  // place the state transitively encloses (which for a country could be
-  // thousands). Children only, never the selected place's parent: clicking a
-  // county directly shows that county (and its own children, if any), not
-  // the state it happens to sit inside. Selected place first in the array --
-  // both of MapCanvas's overlay effects rely on that order to stack a
-  // child's shape/image above its parent's rather than the other way round.
-  const overlayPlaces = useMemo(() => {
-    if (!selected) return [];
-    const childHandles = data.childPlaces.get(selected.handle);
-    if (!childHandles || childHandles.length === 0) return [selected];
-    const children = new Set(childHandles);
-    return [selected, ...data.places.filter((place) => children.has(place.handle))];
-  }, [selected, data.childPlaces, data.places]);
+  const overlayPlaces = useMemo(() => overlayPlacesFor(selected, data), [selected, data.childPlaces, data.places]);
 
   // Arriving with a scope frames it, in either mode -- that's the whole
   // point of following a Map button, and in context mode the scoped markers

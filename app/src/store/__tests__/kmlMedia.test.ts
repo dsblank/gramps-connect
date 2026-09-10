@@ -11,8 +11,12 @@ import { isKmlRegion } from "../kmlMedia";
 // drew on the map but never appeared in OverlayLayersPanel.tsx's controls,
 // because only the panel's own Polygon-only check excluded it.
 describe("isKmlRegion", () => {
-  function feature(geometry: Feature["geometry"]): Feature {
-    return { type: "Feature", properties: {}, geometry };
+  // Real features here never carry a null geometry (fetchKmlFeatures
+  // filters those out before isKmlRegion ever sees one -- see kmlMedia.ts),
+  // hence the cast: this helper builds one anyway, to prove isKmlRegion's
+  // own `feature.geometry?.type` optional chaining is more than decoration.
+  function feature(geometry: Feature["geometry"] | null): Feature {
+    return { type: "Feature", properties: {}, geometry } as Feature;
   }
 
   it("accepts a plain Polygon", () => {
