@@ -109,6 +109,12 @@ describe("fetchWikidataChain", () => {
     expect(chain[0].placeType).toBeNull();
   });
 
+  it("guesses a non-U.S. administrative division from the generated table (a French commune)", async () => {
+    mockFetchSequence([entity("Q90", "Paris", { instanceOf: ["Q484170"] })]);
+    const chain = await fetchWikidataChain("Q90");
+    expect(chain[0].placeType).toBe("Municipality");
+  });
+
   it("leaves lat/long null when there's no P625 claim at all", async () => {
     mockFetchSequence([entity("Qx", "No Coords")]);
     const chain = await fetchWikidataChain("Qx");

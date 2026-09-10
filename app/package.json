@@ -11,7 +11,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:gramplet-catalog": "node scripts/build-gramplet-catalog.mjs"
+    "build:gramplet-catalog": "node scripts/build-gramplet-catalog.mjs",
+    "update:wikidata-place-types": "node scripts/update-wikidata-place-types.mjs"
   },
   "dependencies": {
     "@gramps-connect/gramps-date": "*",

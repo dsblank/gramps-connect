@@ -21,6 +21,7 @@
 // directly from the browser, also `access-control-allow-origin: *` when the
 // same `origin=*` param is used.
 import type { Feature } from "geojson";
+import wikidataPlaceTypes from "../data/wikidataPlaceTypes.json";
 
 const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 const WIKIDATA_ENTITY_DATA = "https://www.wikidata.org/wiki/Special:EntityData";
@@ -66,23 +67,16 @@ export interface WikidataPlaceNode {
   geoshapeTitle: string | null;
 }
 
-/** `P31` (instance of) QID -> Gramps PlaceType label. Deliberately small
- * and best-effort: no single Wikidata property cleanly encodes "admin
- * level" consistently across every country's administrative system, so
- * this only covers the common cases the plan's own worked example hit
- * (country/state/county/city) plus a few frequent siblings. Unmapped QIDs
- * fall through to `placeType: null` (see WikidataPlaceNode). */
-const PLACE_TYPE_BY_QID: Record<string, string> = {
-  Q6256: "Country",
-  Q3624078: "Country", // sovereign state
-  Q35657: "State", // U.S. state (and the general "state" concept)
-  Q10864048: "State", // administrative territorial entity of a country
-  Q28575: "County",
-  Q515: "City",
-  Q1549591: "City", // big city
-  Q3957: "Town",
-  Q532: "Village",
-};
+/** `P31` (instance of) QID -> Gramps PlaceType label, generated from
+ * Wikidata's own ontology by scripts/update-wikidata-place-types.mjs (run
+ * that script by hand to refresh as Wikidata's classes grow) -- see that
+ * script's header for how the ~2700 entries are derived and its
+ * wikidataPlaceTypeOverrides.json for hand-curated exceptions. Still
+ * best-effort: no single Wikidata property cleanly encodes "admin level"
+ * consistently across every country's administrative system, so an
+ * unrecognized QID still falls through to `placeType: null` (see
+ * WikidataPlaceNode) rather than getting a wrong guess. */
+const PLACE_TYPE_BY_QID: Record<string, string> = wikidataPlaceTypes.byQid;
 
 function guessPlaceType(instanceOf: string[]): string | null {
   for (const qid of instanceOf) {
@@ -94,17 +88,28 @@ function guessPlaceType(instanceOf: string[]): string | null {
 
 /** Hue (degrees) per Gramps PlaceType, for geoshapeColorFor below -- every
  * county-family outline reads as the same hue next to a state's, so the map
- * still groups by administrative level at a glance. Town/Village fold into
- * City's hue (all "settlement"-scale); an unmapped/custom type gets
- * DEFAULT_HUE's neutral grey rather than joining a bucket it doesn't belong
- * in. */
+ * still groups by administrative level at a glance. Folded into four
+ * families (country / state-scale / county-scale / settlement-scale) now
+ * that the expanded guess table (see PLACE_TYPE_BY_QID) can produce many
+ * more Gramps types than the original nine-QID table did; an unmapped/
+ * custom type gets DEFAULT_HUE's neutral grey rather than joining a bucket
+ * it doesn't belong in. */
 const HUE_BY_PLACE_TYPE: Record<string, number> = {
   Country: 265, // violet
   State: 210, // blue
+  Province: 210,
+  Region: 210,
+  Department: 210,
   County: 35, // orange
+  District: 35,
+  Municipality: 35,
+  Borough: 35,
   City: 150, // green
   Town: 150,
   Village: 150,
+  Hamlet: 150,
+  Parish: 150,
+  Neighborhood: 150,
 };
 const DEFAULT_HUE = 0;
 
