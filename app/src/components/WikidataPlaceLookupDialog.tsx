@@ -88,6 +88,25 @@ function effectiveHandle(row: ChainRow): string | null {
   return row.nameMatchRejected ? null : row.existingHandle;
 }
 
+/** Builds `rows[index]`'s own descriptive title -- its label plus every
+ * confirmed (non-skipped) ancestor's, leaf-to-root ("Marion County,
+ * Indiana, United States") -- the same "own name isn't enough to tell
+ * apart from a same-named place elsewhere" reasoning that already drove
+ * the leaf's `hierarchyTitle` (see WikidataLookupResult's own doc comment),
+ * just applied to every newly-created ancestor row too, not only the leaf.
+ * `rows` is root-first (see ChainRow's own doc comment), so this reverses
+ * the `[0, index]` slice; `index` itself is always kept regardless of its
+ * own `skip` (a skipped row is never created, so this is never called for
+ * one), only its ancestors are filtered by it. */
+function hierarchyTitleUpTo(rows: ChainRow[], index: number): string {
+  return rows
+    .slice(0, index + 1)
+    .filter((r, i) => i === index || !r.skip)
+    .reverse()
+    .map((r) => r.node.label)
+    .join(", ");
+}
+
 /** Fetches `node`'s Wikidata geoshape (if any), uploads it as a KML Media
  * object, and returns a MediaRef for it -- `undefined` when there's no
  * P3896 claim or the Commons fetch/parse came back empty, same "contributes
@@ -343,7 +362,8 @@ export function WikidataPlaceLookupDialog({
       // time this row is built. Stops before the leaf: that place already
       // exists (or is still an in-progress draft) and is never created
       // here, only patched via the result handed back below.
-      for (const row of rows) {
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        const row = rows[rowIndex];
         if (row.isLeaf) break;
         if (row.skip) continue; // excluded entirely -- see ChainRow.skip
         const reusedHandle = effectiveHandle(row);
@@ -372,7 +392,12 @@ export function WikidataPlaceLookupDialog({
         objects.push({
           _class: "Place",
           handle,
-          title: row.node.label,
+          // The descriptive title includes this row's confirmed ancestors
+          // (e.g. "Marion County, Indiana, United States"), same as the
+          // leaf's own hierarchyTitle below -- name.value stays the bare
+          // label alone, matching what the name-match dedup query above
+          // (`name.value == node.label`) expects a future lookup to find.
+          title: hierarchyTitleUpTo(rows, rowIndex),
           name: { _class: "PlaceName", value: row.node.label },
           lat: row.node.lat != null ? String(row.node.lat) : undefined,
           long: row.node.long != null ? String(row.node.long) : undefined,
@@ -416,15 +441,7 @@ export function WikidataPlaceLookupDialog({
 
       const leaf = rows.find((r) => r.isLeaf);
       if (leaf) {
-        // rows is root-first (see ChainRow's doc comment); the hierarchy
-        // title reads leaf-to-root, so reverse it. A skipped level isn't
-        // part of the confirmed hierarchy any more than it's part of the
-        // created/patched Place graph -- leave it out of the name too.
-        const hierarchyTitle = [...rows]
-          .reverse()
-          .filter((r) => r.isLeaf || !r.skip)
-          .map((r) => r.node.label)
-          .join(", ");
+        const hierarchyTitle = hierarchyTitleUpTo(rows, rows.length - 1);
         // The leaf itself is never created/patched above (see ChainRow.isLeaf's
         // own doc comment -- it's the caller's own draft/existing place), so
         // its own outline -- if it has one -- has to be fetched here instead
