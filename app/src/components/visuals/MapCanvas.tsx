@@ -7,7 +7,7 @@ import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
 import {
-  fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlBounds, kmlOverlayBounds, unionBounds,
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, isKmlRegion, kmlBounds, kmlOverlayBounds, unionBounds,
 } from "../../store/kmlMedia";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
@@ -669,7 +669,14 @@ export function MapCanvas({
       collections.forEach((handleFeatures, hIdx) => {
         const kmlHandle = handles[hIdx];
         handleFeatures.forEach((feature, indexInFile) => {
-          if (feature.geometry?.type !== "Polygon") {
+          // kmlMedia.ts's own isKmlRegion -- shared rather than duplicated
+          // here, so a disjoint (GeometryCollection) outline like a
+          // country's is recognized identically to how fetchAllKmlRegions
+          // recognizes it for OverlayLayersPanel.tsx's list; two independent
+          // copies of this test drifting apart is exactly how this feature's
+          // key stopped lining up with that list's row for it in the first
+          // place.
+          if (!isKmlRegion(feature)) {
             features.push(feature);
             return;
           }

@@ -306,6 +306,42 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
   return overlays;
 }
 
+/** Every Polygon ring inside `feature` -- itself (a plain Polygon), or each
+ * Polygon sub-geometry of a GeometryCollection. A country-level Wikidata/
+ * Commons outline (e.g. the United States) is often a disjoint shape --
+ * islands/territories a single Polygon ring can't express -- unlike a
+ * state's simpler single-ring Polygon. kmlWrite.ts's featuresToKml
+ * round-trips a GeoJSON MultiPolygon through tokml as a KML <MultiGeometry>
+ * of several <Polygon>s, and @tmcw/togeojson reads *any* multi-child
+ * Placemark geometry back as a GeometryCollection (never reconstituting
+ * MultiPolygon) -- so that's the shape that actually reaches here, not
+ * "MultiPolygon" itself (confirmed live, 2026-09-09, round-tripping a
+ * synthetic MultiPolygon through both libraries). A non-Polygon sub-geometry
+ * (there shouldn't be one -- this app never writes anything else into a
+ * region's own Placemark) is simply skipped rather than failing the whole
+ * feature. `[]` for anything else (a Point, a bare LineString route, ...),
+ * meaning "not a region" to every caller below. */
+function polygonRingsOf(feature: Feature): Position[][] {
+  if (feature.geometry?.type === "Polygon") return [feature.geometry.coordinates[0]];
+  if (feature.geometry?.type === "GeometryCollection") {
+    return feature.geometry.geometries.filter((g) => g.type === "Polygon").map((g) => g.coordinates[0]);
+  }
+  return [];
+}
+
+/** True for a feature fetchAllKmlRegions/MapCanvas.tsx's own shapes effect
+ * both treat as one drawable/controllable region -- see polygonRingsOf.
+ * Exported so MapCanvas.tsx's key/hidden/opacity stamping can use the exact
+ * same test fetchAllKmlRegions does: the two must never drift, or a row's
+ * key stops matching the feature it's meant to control -- found live as a
+ * place whose outline drew on the map (MapLibre's GeoJSON source splits a
+ * GeometryCollection into one sub-feature per geometry before rendering,
+ * each individually typed "Polygon") but never showed up in
+ * OverlayLayersPanel.tsx's list. */
+export function isKmlRegion(feature: Feature): boolean {
+  return polygonRingsOf(feature).length > 0;
+}
+
 /** Every drawn region (Polygon/Rectangle shape) across a place's KML
  * attachment(s) -- the counterpart to fetchAllKmlImageOverlays for
  * OverlayLayersPanel.tsx's own list, which shows both kinds of overlay
@@ -328,11 +364,17 @@ export async function fetchAllKmlRegions(handles: string[]): Promise<KmlRegion[]
     let indexInFile = 0;
     for (const feature of collections[h]) {
       if (feature.properties?.["@geometry-type"] === "groundoverlay") { indexInFile++; continue; }
-      if (feature.geometry?.type !== "Polygon") { indexInFile++; continue; }
+      const rings = polygonRingsOf(feature);
+      if (rings.length === 0) { indexInFile++; continue; }
       const name = (feature.properties?.name as string | undefined) || undefined;
       const opacityRaw = Number(feature.properties?.opacity);
       const opacity = Number.isFinite(opacityRaw) && opacityRaw >= 0 && opacityRaw <= 1 ? opacityRaw : 0.25;
-      const ring = feature.geometry.coordinates[0] as [number, number][];
+      // A disjoint outline's rings are concatenated into one point list --
+      // not a real ring, but boundsOf (the only thing regionToRow's own
+      // ring.slice(0,-1) feeds it) only ever needs the full vertex set to
+      // take a min/max over, so a disconnected piece (Hawaii, say) still
+      // counts toward the fly-to bounding box.
+      const ring = rings.flat() as [number, number][];
       regions.push({ kmlHandle, indexInFile: indexInFile++, name, opacity, ring });
     }
   }
