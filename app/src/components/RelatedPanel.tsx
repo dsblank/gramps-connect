@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Box, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { fetchObjectExtended, zipRefs } from "../store/objectDetail";
+import { fetchObjectExtended, getCachedObjectDetail, setCachedObjectDetail, zipRefs } from "../store/objectDetail";
 import type { ObjectDetail } from "../store/objectDetail";
 import { fetchPlainObject } from "../store/objectsApi";
 import type { ViewConfig } from "../store/views";
@@ -379,7 +379,16 @@ export function RelatedPanel({
     let cancelled = false;
     const key = `${view.key}:${handle}`;
     const isNewRecord = loadedForRef.current !== key;
-    if (isNewRecord) setState({ status: "loading" });
+    if (isNewRecord) {
+      // Stale-while-revalidate: if this record was fetched before (e.g. the
+      // user navigated away and back), repaint that last-known detail right
+      // away instead of the loading spinner -- the fetch below still runs
+      // regardless and silently replaces it once fresh data lands, so this
+      // only changes what's on screen for the gap between mount and fetch,
+      // never the final result.
+      const cached = getCachedObjectDetail(view, handle);
+      setState(cached ? { status: "ready", detail: cached } : { status: "loading" });
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => {
       (async () => {
@@ -389,6 +398,7 @@ export function RelatedPanel({
             const detail = await fetchObjectExtended(token, view, handle, controller.signal);
             if (!cancelled) {
               loadedForRef.current = key;
+              setCachedObjectDetail(view, handle, detail);
               setState({ status: "ready", detail });
             }
           } catch (err: any) {

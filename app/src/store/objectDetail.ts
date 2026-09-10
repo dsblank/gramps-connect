@@ -81,6 +81,43 @@ export async function fetchObjectExtended(
   return (await res.json()) as ObjectDetail;
 }
 
+/** Stale-while-revalidate cache for fetchObjectExtended, so RelatedPanel can
+ * repaint a record it already showed once (e.g. navigating away and back)
+ * instantly instead of flashing back to a loading spinner. This is *not* a
+ * substitute for fetching -- RelatedPanel still calls fetchObjectExtended
+ * and writes the result back here every single mount/revision/refetchNonce
+ * change, exactly as before; the cache only supplies the *first* paint, so
+ * a stale entry (e.g. this record's summaryLine, or an embedded forward-ref
+ * like a Family's cached father, going stale because *that other* record
+ * was edited elsewhere -- nothing bumps *this* record's own revision for
+ * that) self-heals as soon as the always-happening background fetch lands,
+ * same as it would have without any cache at all. Module-level like
+ * store/registry.ts's ViewStore map, and likewise not cleared on
+ * logout/tree-switch -- consistent with that existing tradeoff, and bounded
+ * by DETAIL_CACHE_LIMIT below rather than by any user/tree scoping. */
+const DETAIL_CACHE_LIMIT = 50;
+const detailCache = new Map<string, ObjectDetail>();
+
+function detailCacheKey(view: ViewConfig, handle: string): string {
+  return `${view.key}:${handle}`;
+}
+
+export function getCachedObjectDetail(view: ViewConfig, handle: string): ObjectDetail | undefined {
+  return detailCache.get(detailCacheKey(view, handle));
+}
+
+export function setCachedObjectDetail(view: ViewConfig, handle: string, detail: ObjectDetail): void {
+  const key = detailCacheKey(view, handle);
+  // Delete-then-set moves an existing key to the end too, so this doubles
+  // as LRU-by-last-fetch ordering, not just insertion order.
+  detailCache.delete(key);
+  detailCache.set(key, detail);
+  if (detailCache.size > DETAIL_CACHE_LIMIT) {
+    const oldest = detailCache.keys().next().value;
+    if (oldest !== undefined) detailCache.delete(oldest);
+  }
+}
+
 /** A raw ref-list field (e.g. `child_ref_list`) paired positionally with its
  * resolved `extended` counterpart (e.g. `extended.children`) -- every
  * *ReferenceSchema's `ref` is a bare handle, extend=all resolves it to a
