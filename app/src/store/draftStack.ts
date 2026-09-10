@@ -159,6 +159,15 @@ const CLASS_NAME: Record<DraftType, string> = {
   citation: "Citation", note: "Note", tag: "Tag", story: "Note",
 };
 
+// Reverse of CLASS_NAME, for reading an extraCreate entry's own `_class`
+// back into a DraftType (see saveAll's touchedTypes) -- "story"/"note" both
+// map to "Note" forward, but extraCreate never carries a bare Note (only
+// PersonEditDialog's birth/death Place/Event today), so the collision never
+// matters here.
+const TYPE_BY_CLASS: Record<string, DraftType> = Object.fromEntries(
+  (Object.entries(CLASS_NAME) as [DraftType, string][]).map(([type, cls]) => [cls, type])
+);
+
 function defaultDataFor(type: DraftType, handle: string): Record<string, unknown> {
   if (type === "person") {
     return {
@@ -455,11 +464,21 @@ export function useDraftStack(): UseDraftStack {
 
       // Immediate feedback for the author, rather than waiting on
       // historyPoll's next tick (same reasoning as MessageComposer.tsx).
+      // extraCreate is a bare-dict array (no DraftType of its own -- see
+      // DraftEntry.extraCreate) that today can hold a birth/death Event *or*
+      // Place (EventPlaceField's "+ New Place"), so its own `_class` is
+      // read back through TYPE_BY_CLASS rather than assuming every extra
+      // object is an Event -- otherwise a Place created this way never gets
+      // requeried and stays invisible in the Place list until the next
+      // useLiveSync poll.
       const touchedTypes = new Set([...newDrafts.map((d) => d.type), ...editDrafts.map((d) => d.type)]);
-      const touchedEvents = [...newDrafts, ...editDrafts].some(
-        (d) => d.extraCreate.length > 0 || d.extraUpdate.length > 0
-      );
-      if (touchedEvents) touchedTypes.add("event");
+      for (const draft of [...newDrafts, ...editDrafts]) {
+        for (const extra of draft.extraCreate) {
+          const type = TYPE_BY_CLASS[extra._class as string];
+          if (type) touchedTypes.add(type);
+        }
+        for (const upd of draft.extraUpdate) touchedTypes.add(upd.type);
+      }
       for (const type of touchedTypes) getViewStore(type).requeryDebounced();
       const saved = [...newDrafts, ...editDrafts].map((d) => ({
         type: d.type, mode: d.mode, handle: d.handle, data: d.data,
