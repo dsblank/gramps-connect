@@ -742,6 +742,43 @@ interface NewPlaceChoiceProps {
  * is nothing yet to keep/dedupe against. */
 export function NewPlaceChoice({ stackId, zIndex, onChange, onResolved }: NewPlaceChoiceProps) {
   const [opened, setOpened] = useState(false);
+  // An Apply used to call onChange()/onResolved() in the very same tick as
+  // closing this dialog (setOpened(false)). That's two independent problems
+  // batched into one commit:
+  //  1. onChange() patches the *parent* draft's title/name -- which flips
+  //     ObjectEditDialog's own placeTitleBlank to false immediately, and
+  //     placeTitleBlank alone (regardless of manualChosen) is what decides
+  //     whether ObjectEditDialog still renders this component at all.
+  //  2. onResolved() sets manualChosen, the *other* thing that can also stop
+  //     ObjectEditDialog from rendering this component.
+  // Either one, fired in the same tick as setOpened(false), means React
+  // never commits an intermediate render where the nested
+  // WikidataPlaceLookupDialog's Modal (stackId={stackId}) is still mounted
+  // with opened=false -- it goes straight from mounted-and-open to removed
+  // in one step, so Mantine's Modal.Stack registration effect (which only
+  // unregisters a stackId when it *re-runs* with opened=false, not on
+  // unmount -- it has no cleanup function) never fires. That stackId stays
+  // stuck as Mantine's internal `currentId` forever, so every modal in the
+  // app -- including the very "New Place" dialog this Apply was supposed
+  // to reveal -- renders permanently hidden behind it (confirmed live via
+  // a DOM inspection: the modal was there, fully populated, with
+  // data-hidden="true").
+  //
+  // Fix: hold the result and defer *both* onChange and onResolved to an
+  // effect that only fires once `opened` has actually committed to false
+  // on its own, with nothing else changing in that same commit -- giving
+  // Mantine's registration effect its own render to run and unregister
+  // stackId before anything causes this component to stop being rendered.
+  const [pendingResult, setPendingResult] = useState<WikidataLookupResult | null>(null);
+  useEffect(() => {
+    if (!pendingResult || opened) return;
+    onChange(applyWikidataLookupResult({}, pendingResult));
+    onResolved();
+    // onChange/onResolved excluded -- this must fire at most once per
+    // pendingResult, not on every identity change of these callbacks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingResult, opened]);
+
   return (
     <Stack gap="xs">
       <Text size="sm" c="dimmed">{t("How do you want to add this place?")}</Text>
@@ -756,8 +793,8 @@ export function NewPlaceChoice({ stackId, zIndex, onChange, onResolved }: NewPla
         zIndex={zIndex}
         initialQuery=""
         onApply={(result) => {
-          onChange(applyWikidataLookupResult({}, result));
-          onResolved();
+          setPendingResult(result);
+          setOpened(false);
         }}
       />
     </Stack>
