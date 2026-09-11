@@ -558,8 +558,8 @@ export function RelatedPanel({
           control plus the linked-objects list those links produce. */}
       {view.key === "topics" && (
         <>
-          <Button variant="light" onClick={() => openTopicWindow(detail.handle)}>
-            {t("Open discussion")}
+          <Button variant="light" size="xs" onClick={() => openTopicWindow(detail.handle)}>
+            {t("View")}
           </Button>
           <LinkObjectControl topicHandle={detail.handle} onLinked={() => setRefetchNonce((n) => n + 1)} />
           <TopicLinksSection detail={detail} onNavigate={onNavigate} onRefetch={() => setRefetchNonce((n) => n + 1)} />
