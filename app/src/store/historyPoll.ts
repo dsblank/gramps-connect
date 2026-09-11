@@ -115,6 +115,15 @@ export function pollHistory(
   // mean "from the beginning", replaying the whole history).
   let afterId = 0;
   let bootstrapped = false;
+  // The server computes this from a single cheap aggregate query (max_id,
+  // count) and checks it against If-None-Match before doing any change-log
+  // work -- see gramps-web-api's transactions_etag/ObjectHistoryResource.
+  // Echoed back verbatim (quotes included, per HTTP's quoted-string ETag
+  // syntax); the server's normalize_etag() strips them on its side anyway.
+  // Since the query args (afterId, sort, pagesize) don't change between
+  // ticks until new data actually arrives, an idle steady-state poll gets a
+  // bodyless 304 instead of the full change-log fetch + serialize.
+  let etag: string | null = null;
 
   async function poll() {
     if (stopped) return;
@@ -132,9 +141,19 @@ export function pollHistory(
       }
       const res = await fetch(
         `${API_BASE}/api/transactions/history/?after_id=${afterId}&sort=id&page=1&pagesize=${POLL_PAGESIZE}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(etag ? { "If-None-Match": etag } : {}),
+          },
+        }
       );
+      if (res.status === 304) {
+        onStatus?.("connected");
+        return;
+      }
       if (!res.ok) throw new Error(`history poll failed: ${res.status}`);
+      etag = res.headers.get("ETag");
       const transactions: HistoryTransaction[] = await res.json();
       onStatus?.("connected");
 
