@@ -37,6 +37,7 @@ import { loadUserDirectory } from "./store/userDirectory";
 import { loadKnownUsersFromDirectory } from "./store/knownUsers";
 import { bumpTopicActivity } from "./store/topicWindows";
 import { fetchNoteRaw } from "./store/notesApi";
+import { fetchMetadata } from "./store/metadataApi";
 import { classifyRemoteNoteChange } from "./store/topicInvite";
 import { FloatingTopicWindows } from "./components/FloatingTopicWindows";
 import { ConfirmDialogHost } from "./components/ConfirmDialogHost";
@@ -231,6 +232,24 @@ function AuthenticatedApp() {
   }, []);
   const { activeKey, setActiveKey, visualSubject } = useHistorySync();
   const liveSyncStatus = useLiveSync(onRemoteNoteChange);
+  // The active tree's own name (gramps-web-api's metadata.database.name),
+  // shown alongside the wordmark below so a user signed into more than one
+  // tree can tell them apart at a glance. Fetched once per mount rather
+  // than kept in some shared store -- logout() now reloads the page (see
+  // auth.ts), so a fresh mount is the only time this can actually change.
+  const [treeName, setTreeName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const metadata = await fetchMetadata(await getToken());
+      if (!cancelled) setTreeName(metadata.database?.name ?? null);
+    })().catch(() => {
+      // Best-effort -- the header just falls back to the plain wordmark.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Lifted above MenuBar (rather than MenuBar calling this itself) because
   // the header below swaps between two MenuBar instances on resize --
   // stacked vs. side-by-side -- and only one is ever mounted at a time.
@@ -349,7 +368,15 @@ function AuthenticatedApp() {
   const wordmark = (
     <Group gap="xs" wrap="nowrap">
       <Image src={logo} alt="" w={32} h={32} />
-      <Title order={4} fw={600}>{t("Gramps Connect")}</Title>
+      <Title order={4} fw={600}>
+        {t("Gramps Connect")}
+        {treeName && (
+          <>
+            {": "}
+            <span style={{ fontWeight: 400 }}>{treeName}</span>
+          </>
+        )}
+      </Title>
     </Group>
   );
 

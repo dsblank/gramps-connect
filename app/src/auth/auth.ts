@@ -98,6 +98,14 @@ export async function loginWithRefreshToken(refreshToken: string): Promise<void>
   emit();
 }
 
+/** Signs out and reloads the page -- every ViewStore (registry.ts) is a
+ * module-level singleton that lives for the whole page session and never
+ * re-validates itself once loaded (viewStore.ts's ensureLoaded() is a no-op
+ * as soon as `this.db` is set), so without a reload, signing in as a
+ * different user/tree right after would keep showing whichever rows were
+ * already in memory from the old session -- same class of staleness
+ * ManageTreesDialog.tsx/UserManagementPanel.tsx/ImportDialog.tsx etc.
+ * already reload for after a tree-affecting change. */
 export function logout(): void {
   cachedToken = null;
   cachedRefreshToken = null;
@@ -110,6 +118,7 @@ export function logout(): void {
     // nothing to clear
   }
   emit();
+  window.location.reload();
 }
 
 /** The username entered at login, for comparing against a live-sync
