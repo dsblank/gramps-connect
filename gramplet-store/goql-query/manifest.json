@@ -1,0 +1,12 @@
+{
+  "id": "goql-query",
+  "name": "GOQL Query",
+  "description": "Type a raw GOQL where clause, and name exactly which field expressions come back as columns.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "example",
+  "views": [
+    "person"
+  ],
+  "listensToFilter": true
+}
