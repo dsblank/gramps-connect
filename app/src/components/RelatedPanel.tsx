@@ -559,7 +559,13 @@ export function RelatedPanel({
           control plus the linked-objects list those links produce. */}
       {view.key === "topics" && (
         <>
-          <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} />
+          {/* Group, not a bare ViewButton -- this Stack's default
+              align="stretch" would otherwise stretch a direct button child
+              to the full pane width the way VisualButtons' own Group
+              (a row, which doesn't stretch its children's width) doesn't. */}
+          <Group gap="xs">
+            <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} />
+          </Group>
           <LinkObjectControl topicHandle={detail.handle} onLinked={() => setRefetchNonce((n) => n + 1)} />
           <TopicLinksSection detail={detail} onNavigate={onNavigate} onRefetch={() => setRefetchNonce((n) => n + 1)} />
         </>
