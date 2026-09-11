@@ -184,17 +184,17 @@ const bridge = {
     };
     const endpoint = OBJECT_QUERY_ENDPOINTS[objectType];
     if (!endpoint) throw new Error(`filter(): unknown object type ${JSON.stringify(objectType)}`);
-    // A dotted entry ("birth.date", "father.gramps_id") means "cross a
-    // relationship" -- gramps-web-api's /query/ endpoint only recognizes
-    // that as a {"json_path": [...]} select entry, never a plain dotted
-    // string (a bare string is always a literal flat-column lookup there,
-    // confirmed live: passing "birth.date" straight through raised
-    // "unknown or disallowed column: 'birth.date'"). Splitting on "." only
-    // -- not the fuller {json_path: [...]} bracket-index syntax
-    // object_query.py also supports (e.g. "surname_list[0].surname") --
-    // covers what a Gramplet actually needs a cross-relationship field
-    // for (birth/death/father/mother/place/... one hop, plain field).
-    const select = ["handle", ...(args.what ?? []).map((entry) => (entry.includes(".") ? { json_path: entry.split(".") } : entry))];
+    // A `what` entry is passed straight through as a plain select-entry
+    // string -- gramps-object-query-language's "almost Python" expression
+    // grammar (gramps-web-api's /query/ `select`, pinned to
+    // gramps-object-query-language>=0.5.0,<0.6) resolves a dotted/bracketed
+    // path ("birth.date", "primary_name.surname_list[0].surname") itself,
+    // the same as it does for `where_expr`, so there's no need to
+    // pre-split it into a {"json_path": [...]} entry here. (An older
+    // version of that grammar only accepted a bare flat column as a
+    // string, which is what the {json_path: entry.split(".")} workaround
+    // this replaced was for.)
+    const select = ["handle", ...(args.what ?? [])];
     // Keyset pagination (gramps-web-api's `after`, echoing its own
     // `next_after` back on the following request) rather than an offset --
     // `where_expr`/`order_by`/`select` stay identical across every page
