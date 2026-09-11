@@ -1,7 +1,8 @@
-import { Button, Group, Tooltip } from "@mantine/core";
+import { Group } from "@mantine/core";
 import { formatHash, isSubjectKey, VISUAL_KEYS, type VisualKey } from "../../hash";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
+import { ViewButton } from "./ViewButton";
 
 /** What each button promises for the type it's shown on. The wording is
  * deliberately different per type: for a person or a family the visual
@@ -73,19 +74,12 @@ export function VisualButtons({ view, detail }: { view: ViewConfig; detail: Obje
   return (
     <Group gap="xs" wrap="wrap">
       {VISUAL_KEYS.filter((visual) => hints[visual]).map((visual) => (
-        <Tooltip key={visual} label={hints[visual]} withArrow>
-          <Button
-            component="a"
-            href={formatHash({ viewKey: visual, subject: { type: view.key, handle: detail.handle } })}
-            size="xs"
-            // Tinted rather than the header icons' bare treatment -- these
-            // sit in the body's own reading order, where an outline button
-            // reads as disabled next to real text.
-            variant="light"
-          >
-            {LABELS[visual]}
-          </Button>
-        </Tooltip>
+        <ViewButton
+          key={visual}
+          label={LABELS[visual]}
+          hint={hints[visual]}
+          href={formatHash({ viewKey: visual, subject: { type: view.key, handle: detail.handle } })}
+        />
       ))}
     </Group>
   );

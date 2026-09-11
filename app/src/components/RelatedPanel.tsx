@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Alert, Box, Button, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { Alert, Box, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, getCachedObjectDetail, setCachedObjectDetail, zipRefs } from "../store/objectDetail";
@@ -23,6 +23,7 @@ import { EditButton } from "./related/EditButton";
 import { EditTopicButton } from "./related/EditTopicButton";
 import { DeleteButton } from "./related/DeleteButton";
 import { VisualButtons } from "./related/VisualButtons";
+import { ViewButton } from "./related/ViewButton";
 import { TopicLinksSection } from "./related/TopicLinksSection";
 import { LinkObjectControl } from "./related/LinkObjectControl";
 import { parseTopicSpec } from "../store/topicsApi";
@@ -558,9 +559,7 @@ export function RelatedPanel({
           control plus the linked-objects list those links produce. */}
       {view.key === "topics" && (
         <>
-          <Button variant="light" size="xs" onClick={() => openTopicWindow(detail.handle)}>
-            {t("View")}
-          </Button>
+          <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} />
           <LinkObjectControl topicHandle={detail.handle} onLinked={() => setRefetchNonce((n) => n + 1)} />
           <TopicLinksSection detail={detail} onNavigate={onNavigate} onRefetch={() => setRefetchNonce((n) => n + 1)} />
         </>
