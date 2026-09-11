@@ -65,6 +65,10 @@ export function TopicThread({ topicHandle, historyHeight = 400 }: { topicHandle:
     });
   }, [messages?.length]);
 
+  // Textarea is disabled while saving, which blurs it -- refocus once it's
+  // re-enabled so the Ctrl/Cmd+Enter shortcut can be used again immediately.
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   async function send() {
     if (!text.trim()) return;
     setSaving(true);
@@ -78,6 +82,7 @@ export function TopicThread({ topicHandle, historyHeight = 400 }: { topicHandle:
       setError(err.message ?? String(err));
     } finally {
       setSaving(false);
+      requestAnimationFrame(() => textareaRef.current?.focus());
     }
   }
 
@@ -120,6 +125,7 @@ export function TopicThread({ topicHandle, historyHeight = 400 }: { topicHandle:
         </Stack>
       </ScrollArea.Autosize>
       <Textarea
+        ref={textareaRef}
         autosize
         minRows={3}
         value={text}
