@@ -27,28 +27,84 @@ worth every commit).
 
 - **Presence layer** (who's viewing/editing what) — deliberately ephemeral,
   in-memory/Redis, kept separate from the durable transaction-history sync
-  path.
+  path. `activeUsers.ts` already ships a client-only stopgap (who's
+  recently *edited*, inferred from `historyPoll.ts`'s changed-by field,
+  aged out after 5 minutes) — it can't see who's only reading, since
+  gramps-web-api has no session/heartbeat/presence concept at all. A real
+  presence layer is still open work, not just this approximation.
 - **Auth/permissions**: `app/` has a minimal login form (real credentials,
   no hardcoding) but no refresh-token rotation or expiry handling yet.
   gramps-web's own `Auth` class (`~/gramps/gramps-web/src/api.js`) is the
-  reference to build against.
+  reference to build against. (Being addressed at the `gramps-web-api`
+  level, not `app/`.)
 - **Merge/conflict UX** for genuinely concurrent edits to the same object —
-  open design question, not yet resolved.
+  open design question, not yet resolved. (Not the same thing as
+  duplicate-record merging, which is fully shipped — see "Editing gaps"
+  below.)
 - **gramps-web-api filter pushdown**: `GrampsObjectsResource.get()`
   (`gramps_webapi/api/resources/base.py:589-615`) still unconditionally
   loads every object via `iter_objects_method()` before applying
   `filter`/`rules`/`gql`/`oql` — the same discourse-thread perf bug as
   originally documented (104s for a filtered query on 100k people).
-  Note: a newer `ObjectQueryResource` endpoint (gramps-web-api commit
-  `699d045`) added real SQL pushdown via a different code path — check
-  whether `app/` switching to that endpoint already supersedes fixing
-  `GrampsObjectsResource.get()` before doing more work here.
+  Confirmed 2026-09-11: **not** superseded by switching to
+  `ObjectQueryResource` — `app/` still hits this exact vulnerable endpoint
+  today, via `treeData.ts`'s `GET /api/people/?rules=...`
+  (`IsLessThanNthGenerationAncestorOf`/`DescendantOf`), which backs the
+  Tree/fan chart's ancestor/descendant loading and per-node lazy-expand.
+  Every other view already reads through `/query/`'s real SQL pushdown —
+  this rules-based endpoint is the one path left that doesn't.
 - Full object-model UI redesign, design system, search-as-navigation — not
   scoped yet.
 
 ## Feature ideas / backlog
 
-- Design and write `st.columns()` (Pyodide addon Gramplet API layout helper).
+Found via a 2026-09-11 sweep across three angles (unused `gramps-web-api`
+endpoints, feature-parity vs. `../gramps-web`, unused `/api/metadata/`
+fields) — ranked roughly by value, most first:
+
+- **DNA support** — `/people/<handle>/dna/matches`, `/ydna`,
+  `/parsers/dna-match` on the API side; `gramps-web` has a match list,
+  Y-DNA/lineage view, and chromosome browser (`GrampsjsViewDnaMatches`,
+  `GrampsjsViewYDna`, `ChromosomeBrowser.js`). Entirely unexposed in this
+  app today — a large, mostly self-contained feature area, not a small add.
+- **Relationship-path chart** — "how are these two specific people
+  related" (shortest path between them), distinct from `TreeView.tsx`'s
+  existing ancestor/descendant tree. `gramps-web`'s
+  `GrampsjsViewRelationshipChart`/`charts/RelationshipChart.js` is the
+  reference.
+- **Photo face-detection / OCR** — `/media/<handle>/face_detection` and
+  `/media/<handle>/ocr` are real server-side capabilities with no UI at
+  all; would be a differentiating feature for the Media view.
+- **Bookmarks** — `/bookmarks/` is a ready-built per-type bookmark list,
+  unused. Simpler and faster to ship than "add recently visited items"
+  (below), which it's adjacent to but not a replacement for.
+- **Anniversaries / upcoming dates** — `/anniversaries.ics` gives an iCal
+  feed of upcoming birthdays/anniversaries for free; `gramps-web`'s
+  `GrampsjsViewAnniversaries` is the equivalent view. `HomeView.tsx`'s
+  stats only cover *recently* changed, not *upcoming* dates.
+- **Researcher / tree-owner info** — `/api/metadata/researcher/` (name,
+  address, email, phone) has full GET+PUT support server-side and zero UI.
+  This is the info GEDCOM export headers (SOUR/SUBM) conventionally carry —
+  a "Tree info" settings panel is a plausible small, real feature.
+- **Tree summary stats on Home/About** — `object_counts` (people/families/
+  events/... counts) is already fetched and typed in `metadataApi.ts` but
+  never rendered anywhere. Side finding: that file's own comment claims
+  `cacheMeta.ts` reads `object_counts` for staleness detection — it
+  doesn't (no match on grep) — fix the stale comment regardless of whether
+  the stats UI gets built.
+- **Stale-search-index nudge** — `search.sifts.semantic_index_stale` is
+  fetched but `ReindexDialog.tsx` only checks the boolean
+  `server.semantic_search` flag to decide whether to show a reindex
+  checkbox; it never uses the staleness flag to proactively suggest
+  reindexing.
+- **Research Tasks** — `gramps-web` has a to-do-list feature built as a
+  specialized Source subtype with task notes (`GrampsjsViewTask(s)`/
+  `NewTask`). No equivalent here beyond plain code comments.
+- **Personal API tokens** — `/users/-/access-tokens/<scope>/` is unused;
+  relevant if bot/script integrations in the `scripts/echo_bot.py` style
+  are a direction worth leaning into (auth without sharing a real user's
+  password).
+
 - Allow gramplets to edit/create objects (currently read-only via
   `filter()`/`get_object()`).
 - Allow more types of addons: tools, reports.
@@ -103,8 +159,6 @@ Partially editable, by type:
   for recording a place's older name and the era it applied — the map
   overlay feature's date gating currently only reads the *primary* name's
   date for exactly this reason), historical locations, code.
-- **Source** — missing: repository links (can't attach a Source to where
-  it's held).
 - **Note** — missing: text formatting/links (plain text only), format
   (Flowed/Formatted).
 
@@ -112,4 +166,6 @@ Cross-cutting:
 - GrampsType fields are free text, not dropdowns (Family's relationship
   type, and Attribute/Url's own `type`, are the exceptions with a real
   dropdown) — functionally editable, just no autocomplete/validation
-  against the known list.
+  against the known list. The fix is sitting unused: gramps-web-api's
+  `/types/` endpoint (custom + default type lists) is never called from
+  `app/` anywhere.
