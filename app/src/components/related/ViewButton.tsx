@@ -5,9 +5,19 @@ interface ViewButtonProps {
   /** Tooltip copy -- omitted entirely (no Tooltip wrapper) when absent. */
   hint?: string;
   /** A plain link (VisualButtons' Map/Timeline/Graphs) when set; otherwise
-   * an onClick button (RelatedPanel's Topic "View"). */
+   * an onClick button (RelatedPanel's Topic "View", HistoryButton's
+   * "History"). */
   href?: string;
   onClick?: () => void;
+  /** Mantine color name -- omitted keeps the theme's default (VisualButtons'
+   * Map/Timeline/Graphs: "look at this record a different way, right now").
+   * A muted override (RelatedPanel's Topic "View", HistoryButton's
+   * "History") sets these apart as a subtly different kind of thing --
+   * stepping outside the record's current state, into a live conversation
+   * about it or a look back at its past -- without a second row or a
+   * competing accent color loud enough to read as a distinct control
+   * family. */
+  color?: string;
 }
 
 /** Shared size="xs" variant="light" styling for every "look at this record
@@ -21,13 +31,13 @@ interface ViewButtonProps {
  * Tinted rather than the header icons' bare treatment -- these sit in the
  * body's own reading order, where an outline button reads as disabled next
  * to real text. */
-export function ViewButton({ label, hint, href, onClick }: ViewButtonProps) {
+export function ViewButton({ label, hint, href, onClick, color }: ViewButtonProps) {
   const button = href ? (
-    <Button component="a" href={href} size="xs" variant="light">
+    <Button component="a" href={href} size="xs" variant="light" color={color}>
       {label}
     </Button>
   ) : (
-    <Button size="xs" variant="light" onClick={onClick}>
+    <Button size="xs" variant="light" onClick={onClick} color={color}>
       {label}
     </Button>
   );

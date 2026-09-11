@@ -22,6 +22,7 @@ import { DiscussButton } from "./related/DiscussButton";
 import { EditButton } from "./related/EditButton";
 import { EditTopicButton } from "./related/EditTopicButton";
 import { DeleteButton } from "./related/DeleteButton";
+import { HistoryButton } from "./related/HistoryButton";
 import { VisualButtons } from "./related/VisualButtons";
 import { ViewButton } from "./related/ViewButton";
 import { TopicLinksSection } from "./related/TopicLinksSection";
@@ -546,6 +547,7 @@ export function RelatedPanel({
           compact icon tucked into a corner shared with the record's own
           controls did not. */}
       <VisualButtons view={view} detail={detail} />
+      <HistoryButton view={view} detail={detail} />
       {view.key === "media" && <MediaMapButton detail={detail} />}
       <DetailFields type={view.key} detail={detail} />
       {/* A Topic's body is bespoke, not SECTION_COMPONENTS-driven (see
@@ -564,7 +566,7 @@ export function RelatedPanel({
               to the full pane width the way VisualButtons' own Group
               (a row, which doesn't stretch its children's width) doesn't. */}
           <Group gap="xs">
-            <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} />
+            <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} color="gray" />
           </Group>
           <LinkObjectControl topicHandle={detail.handle} onLinked={() => setRefetchNonce((n) => n + 1)} />
           <TopicLinksSection detail={detail} onNavigate={onNavigate} onRefetch={() => setRefetchNonce((n) => n + 1)} />

@@ -157,7 +157,7 @@ export function OverviewDialog({ opened, onClose }: OverviewDialogProps) {
 
         <Section title={t("What to expect")}>
           <Text size="sm">
-            {t("Treat this as something to try, not somewhere to keep the only copy of your research. Keep your tree backed up, as you would anyway. Two gaps worth knowing about: there's no tool yet for finding and merging duplicate records, and no user-facing view of a record's edit history — the live updates work, but you can't browse \"who changed what, when\" after the fact.")}
+            {t("Treat this as something to try, not somewhere to keep the only copy of your research. Keep your tree backed up, as you would anyway. One gap worth knowing about: there's no tool yet for finding and merging duplicate records.")}
           </Text>
           <Text size="sm">
             Questions, complaints and ideas are all genuinely useful right now — the{" "}
