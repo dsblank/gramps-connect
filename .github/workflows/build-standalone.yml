@@ -21,7 +21,29 @@ on:
         default: ""
 
 jobs:
+  # Looked up once here (rather than separately in `build` and
+  # `build-linux`, which would mean up to four redundant API calls, one per
+  # matrix leg plus build-linux) and threaded through as a job output --
+  # self-updating on every run, so the checkout steps below never need a
+  # hand-bumped version number that goes stale the next time gramps-web-api
+  # cuts a release (see deploy/webapi-requirements.py's own comment on
+  # exactly that failure mode for a hand-copied list).
+  resolve-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      gramps_web_api_tag: ${{ steps.latest.outputs.tag }}
+    steps:
+      - name: Resolve gramps-web-api's latest release tag
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo gramps-project/gramps-web-api --json tagName -q .tagName)
+          echo "Latest gramps-web-api release: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: resolve-versions
     strategy:
       fail-fast: false
       matrix:
@@ -64,16 +86,20 @@ jobs:
           ref: maintenance/gramps60
           path: gramps
 
-      # The ten /api/<type>/query/ endpoints this project's client is built
-      # on (https://github.com/gramps-project/gramps-web-api/pull/913) are
-      # merged upstream now, so this tracks gramps-project master rather
-      # than the dsblank/gramps-web-api feat/object-query-endpoints branch
-      # it used to (matches deploy/Dockerfile's own switch).
-      - name: Check out gramps-web-api (master)
+      # Pinned to gramps-web-api's latest release tag (resolved once in the
+      # resolve-versions job above), not master -- matches deploy/Dockerfile,
+      # which tracks dmstraub/gramps-webapi:latest (itself built from each
+      # upstream release, not master). This used to track master directly
+      # (back when it needed unreleased fixes from
+      # https://github.com/gramps-project/gramps-web-api/pull/913, before
+      # those endpoints had shipped in a release), but there's no reason to
+      # build the desktop app against unreleased/pre-release code now that
+      # they have.
+      - name: Check out gramps-web-api (${{ needs.resolve-versions.outputs.gramps_web_api_tag }})
         uses: actions/checkout@v7
         with:
           repository: gramps-project/gramps-web-api
-          ref: master
+          ref: ${{ needs.resolve-versions.outputs.gramps_web_api_tag }}
           path: gramps-web-api
 
       - name: Set up Python
@@ -303,6 +329,7 @@ jobs:
   # would just make apt install libraries this build can't actually reach.
   # Falls back to a browser tab there, same as the raw binary would.
   build-linux:
+    needs: resolve-versions
     runs-on: ubuntu-latest
     # AlmaLinux 8 base -- glibc 2.28, forward-compatible with essentially
     # every non-EOL glibc-based distro (Ubuntu 20.04+, Debian 10+, RHEL/
@@ -325,11 +352,11 @@ jobs:
           ref: maintenance/gramps60
           path: gramps
 
-      - name: Check out gramps-web-api (master)
+      - name: Check out gramps-web-api (${{ needs.resolve-versions.outputs.gramps_web_api_tag }})
         uses: actions/checkout@v7
         with:
           repository: gramps-project/gramps-web-api
-          ref: master
+          ref: ${{ needs.resolve-versions.outputs.gramps_web_api_tag }}
           path: gramps-web-api
 
       # No actions/setup-python or actions/setup-node here (unlike the
