@@ -112,6 +112,53 @@ describe("topicWindows", () => {
     expect(n2After).toEqual({ handle: "N2", minimized: true });
   });
 
+  describe("MAX_OPEN_WINDOWS cap", () => {
+    it("closes the single oldest window once a 6th is opened, keeping the newest 5", () => {
+      openTopicWindow("N1");
+      openTopicWindow("N2");
+      openTopicWindow("N3");
+      openTopicWindow("N4");
+      openTopicWindow("N5");
+
+      openTopicWindow("N6");
+
+      expect(getTopicWindows().map((w) => w.handle)).toEqual(["N2", "N3", "N4", "N5", "N6"]);
+    });
+
+    it("evicts at most one per open, even opening several past the cap in a row", () => {
+      for (const handle of ["N1", "N2", "N3", "N4", "N5", "N6", "N7"]) openTopicWindow(handle);
+
+      expect(getTopicWindows().map((w) => w.handle)).toEqual(["N3", "N4", "N5", "N6", "N7"]);
+    });
+
+    it("un-minimizing an already-open window never evicts anything -- the open count doesn't change", () => {
+      for (const handle of ["N1", "N2", "N3", "N4", "N5"]) openTopicWindow(handle);
+      toggleMinimizeTopicWindow("N1");
+
+      openTopicWindow("N1");
+
+      // Order is untouched too -- un-minimizing patches N1 in place (see
+      // openTopicWindow's own `.map()`), it doesn't move it to the end the
+      // way a genuinely new open does.
+      expect(getTopicWindows()).toEqual([
+        { handle: "N1", minimized: false },
+        { handle: "N2", minimized: false },
+        { handle: "N3", minimized: false },
+        { handle: "N4", minimized: false },
+        { handle: "N5", minimized: false },
+      ]);
+    });
+
+    it("closing a window frees a slot for a new one without evicting anything else", () => {
+      for (const handle of ["N1", "N2", "N3", "N4", "N5"]) openTopicWindow(handle);
+      closeTopicWindow("N3");
+
+      openTopicWindow("N6");
+
+      expect(getTopicWindows().map((w) => w.handle)).toEqual(["N1", "N2", "N4", "N5", "N6"]);
+    });
+  });
+
   it("closing a window that isn't open is a no-op -- no notification", () => {
     openTopicWindow("N1");
     const listener = vi.fn();

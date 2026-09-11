@@ -8,11 +8,12 @@ import { getTopicWindows, subscribeTopicWindows } from "../store/topicWindows";
  * `rightOffset` (see that component's own doc comment for why each card is
  * independently `position: fixed` rather than a child in a shared flex
  * row) -- newest-opened first, so the most recently opened/reopened window
- * sits closest to the corner. Windows past the right edge of the screen
- * are simply left off-canvas for now rather than wrapped onto a second
- * row or capped -- acceptable for the handful anyone would realistically
- * have open at once; worth revisiting once there's real usage data on how
- * many that actually is. */
+ * sits closest to the corner. No wrapping onto a second row here: with
+ * `windows` capped at topicWindows.ts's own MAX_OPEN_WINDOWS (5), five
+ * fixed 320px-wide slots plus margins/gaps comfortably fits inside any
+ * realistic viewport width, so a window running off the left edge of the
+ * screen shouldn't happen in practice any more (it did before the cap
+ * existed, with no way back short of closing newer ones in front of it). */
 export function FloatingTopicWindows() {
   const windows = useSyncExternalStore(subscribeTopicWindows, getTopicWindows);
   if (windows.length === 0) return null;

@@ -14,6 +14,17 @@ export interface TopicWindow {
 let windows: TopicWindow[] = [];
 const listeners = new Set<() => void>();
 
+// FloatingTopicWindows.tsx gives every window the same fixed width
+// regardless of minimized/expanded state and always slots the
+// newest-opened one into the prime corner spot, pushing each older one
+// further left -- with no cap, opening enough discussions at once pushes
+// the oldest ones off the edge of the screen entirely, with no scrollbar
+// and no way back short of closing the newer ones in front of them
+// (confirmed live). Closing (not minimizing) the oldest is what actually
+// prevents that: a minimized window still occupies its own full-width
+// slot, so minimizing alone wouldn't free anything up.
+const MAX_OPEN_WINDOWS = 5;
+
 function notify(): void {
   for (const listener of listeners) listener();
 }
@@ -22,22 +33,27 @@ function notify(): void {
  * is already open -- called from DiscussButton.tsx (both the "already
  * linked" and "just created" cases) and NotesSection.tsx's own Topics
  * sub-list row, neither of which should ever end up with two windows for
- * the same topic. Every branch below reassigns `windows` to a fresh array
- * (and, for an existing entry, a fresh object) rather than mutating in
- * place -- useSyncExternalStore's snapshot comparison is `Object.is` on
- * whatever getTopicWindows() returns, so mutating an existing TopicWindow
- * or array element without changing either reference is invisible to it:
- * the click "worked" (the module state did change) but nothing re-rendered
- * until some unrelated re-render happened to read the now-stale-looking
- * snapshot fresh (confirmed live: switching views was enough to make a
- * minimize/expand click that had done nothing suddenly "catch up"). */
+ * the same topic. Opening a genuinely new one beyond MAX_OPEN_WINDOWS
+ * silently closes the single oldest (least-recently-opened) window to
+ * make room -- un-minimizing an already-open window never evicts anything,
+ * since the total open count doesn't change. Every branch below reassigns
+ * `windows` to a fresh array (and, for an existing entry, a fresh object)
+ * rather than mutating in place -- useSyncExternalStore's snapshot
+ * comparison is `Object.is` on whatever getTopicWindows() returns, so
+ * mutating an existing TopicWindow or array element without changing
+ * either reference is invisible to it: the click "worked" (the module
+ * state did change) but nothing re-rendered until some unrelated
+ * re-render happened to read the now-stale-looking snapshot fresh
+ * (confirmed live: switching views was enough to make a minimize/expand
+ * click that had done nothing suddenly "catch up"). */
 export function openTopicWindow(handle: string): void {
   const existing = windows.find((w) => w.handle === handle);
   if (existing) {
     if (!existing.minimized) return;
     windows = windows.map((w) => (w.handle === handle ? { ...w, minimized: false } : w));
   } else {
-    windows = [...windows, { handle, minimized: false }];
+    const next = [...windows, { handle, minimized: false }];
+    windows = next.length > MAX_OPEN_WINDOWS ? next.slice(next.length - MAX_OPEN_WINDOWS) : next;
   }
   notify();
 }
