@@ -1,0 +1,44 @@
+name: CI
+
+# Runs on every push and pull request -- unlike build-docker.yml/
+# build-standalone.yml (workflow_dispatch-only: they need a Docker registry
+# push or platform-specific runners not worth spending on every commit),
+# these are the fast, no-external-dependency checks (Vitest, tsc, the
+# gramps-date package's own test runner, a production build) that catch a
+# broken commit before it lands on main. Local timings for the four steps
+# below (warm node_modules): ~3s + ~1s + <1s + ~5s -- npm ci is the actual
+# bottleneck, not the checks themselves, hence actions/setup-node's built-in
+# npm cache.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out gramps-connect
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test app/ (Vitest -- store/sync logic)
+        run: npm run test -w app
+
+      - name: Typecheck app/
+        run: npm run typecheck -w app
+
+      - name: Test packages/gramps-date
+        working-directory: packages/gramps-date
+        run: npm run test
+
+      - name: Build app/
+        run: npm run build -w app

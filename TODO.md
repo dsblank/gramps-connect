@@ -7,15 +7,12 @@ see git history for the record if needed.
 
 ## CI / build gating
 
-The only workflows today (`build-docker.yml`, `build-standalone.yml`) are
-`workflow_dispatch`-only — nothing runs on push/PR, so a broken commit merges
-to `main` with nothing catching it.
+`.github/workflows/ci.yml` now runs on every `push`/`pull_request`: Vitest
+(`app/`), `tsc --noEmit`, `packages/gramps-date`'s own test script, and
+`npm run build -w app`. `build-docker.yml`/`build-standalone.yml` stay
+`workflow_dispatch`-only (registry push / platform-specific runners, not
+worth every commit).
 
-- Add a workflow triggered on `push`/`pull_request` that runs at minimum:
-  - `npm run test -w app` (Vitest — store/sync logic)
-  - `npm run typecheck -w app` (`tsc --noEmit`)
-  - `packages/gramps-date`'s own test script (`tsx --test src/__tests__/*.test.ts`)
-  - `npm run build -w app` (catches build-only failures typecheck/tests miss)
 - No ESLint/Prettier config exists anywhere in the repo — either add one
   (and lint in CI) or explicitly decide linting is out of scope; don't
   silently skip it.
@@ -90,12 +87,11 @@ to `main` with nothing catching it.
 
 ## Editing gaps
 
-Not editable at all:
-- **Media** — no edit dialog exists at all; desc/tags only change via the
-  narrow internal report-promotion path (`jobsApi.ts`'s
-  `tagAndDescribeMedia`), not a user-facing Edit button.
-
 Partially editable, by type:
+- **Media** — description/date/private editable via `MediaEditButton.tsx`
+  (added 2026-09-03); attributes/citations/notes/tags already covered by
+  RelatedPanel's own sections. path/mime/checksum stay server-derived from
+  the upload, as expected.
 - **Person / Family** — LDS ordinances: fully read-only, no edit/add/detach.
 - **Place** — enclosing/parent hierarchy (`placeref_list`) can now be set,
   but only indirectly via Wikidata lookup's Apply (`PlaceEditDialog.tsx`);
@@ -113,8 +109,6 @@ Partially editable, by type:
   (Flowed/Formatted).
 
 Cross-cutting:
-- No merge tooling for duplicate records — the single biggest remaining
-  structural gap.
 - GrampsType fields are free text, not dropdowns (Family's relationship
   type, and Attribute/Url's own `type`, are the exceptions with a real
   dropdown) — functionally editable, just no autocomplete/validation
