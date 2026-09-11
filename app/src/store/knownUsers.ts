@@ -1,15 +1,11 @@
 // Every username this session has ever seen -- unlike activeUsers.ts's
-// trailing 5-minute window, this never decays, so it can back a "who do I
-// send a DM to" picker with everyone this browser has ever noticed, not
-// just who's currently active. Fed for free off the same useLiveSync poll
+// trailing 5-minute window, this never decays, so it can back a "who else
+// is around" picker with everyone this browser has ever noticed, not just
+// who's currently active. Fed for free off the same useLiveSync poll
 // activeUsers.ts already piggybacks on (see useLiveSync.ts's
 // recordKnownUser(notification.changedBy) call), plus -- for a role that
 // can see it -- the real user list, same ViewOtherUser/ViewOtherTreeUser
-// guard userDirectory.ts's loadUserDirectory() already uses. A username a
-// Contributor/Editor has never seen edit anything and never DMed with still
-// isn't discoverable this way; the DM composer's recipient field keeps a
-// free-text fallback for that case rather than pretending this list is
-// exhaustive.
+// guard userDirectory.ts's loadUserDirectory() already uses.
 import { getToken, hasPermissions } from "../auth/auth";
 import { fetchAllUsers } from "./adminApi";
 
@@ -28,8 +24,7 @@ function notify(): void {
 }
 
 /** Records `username` as known -- called from useLiveSync.ts for every
- * table's changedBy (not just Notes), and from dmApi.ts's conversation
- * fetches for every author/recipient seen in a DM. */
+ * table's changedBy (not just Notes). */
 export function recordKnownUser(username: string): void {
   if (known.has(username)) return;
   known.add(username);
@@ -48,11 +43,10 @@ export function subscribeKnownUsers(listener: () => void): () => void {
 /** Merges in the full user list when the signed-in role can see it --
  * mirrors userDirectory.ts's loadUserDirectory() shape (own getToken()
  * call, safe to call from every mount). By default fetches at most once
- * per session; pass `force: true` to refetch regardless -- used by
- * DmInbox.tsx when its "message a user" picker opens, since a session-long
- * cache would otherwise hide a user account created after this session's
- * one-shot load ran (a new account isn't a tree edit, so useLiveSync's
- * transaction-history poll never notices it either). */
+ * per session; `force: true` refetches regardless, for a caller that needs
+ * to pick up a user account created after this session's one-shot load ran
+ * (a new account isn't a tree edit, so useLiveSync's transaction-history
+ * poll never notices it either). */
 export function loadKnownUsersFromDirectory(force = false): void {
   if (directoryLoadPromise && !force) return;
   directoryLoadPromise = (async () => {

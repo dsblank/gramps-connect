@@ -49,7 +49,19 @@ export default defineConfig({
     ],
   },
   test: {
+    // Plain store/logic tests (*.test.ts) stay on this default "node" --
+    // cheaper, and the vast majority of this suite. A component-rendering
+    // test (*.test.tsx) opts into a real DOM itself, via a leading
+    // `// @vitest-environment jsdom` comment (Vitest's own per-file
+    // override) rather than flipping the default here: a global jsdom
+    // environment would slow down every one of the *.test.ts files for no
+    // benefit, since none of them touch the DOM. (Vitest 2.x has no
+    // `environmentMatchGlobs` config option -- confirmed against the
+    // installed version's own type declarations -- so this is the only
+    // per-file mechanism available; requires no config of its own beyond
+    // the "jsdom" package being installed.)
     environment: "node",
-    include: ["src/**/__tests__/*.test.ts"],
+    setupFiles: ["./src/testSetup.ts"],
+    include: ["src/**/__tests__/*.test.{ts,tsx}"],
   },
 });

@@ -1,21 +1,17 @@
 // Data for the Home page (App.tsx's "home" route): per-type object counts,
-// the most recently changed records across every type, the newest Gramps
-// Connect conversations (fetchMessageBoards' `messages`, one row per
-// object rather than per note) and open ToDos (that same call's `todos`),
-// and the newest stories. Independent, lightweight reads -- none of them
-// touch a ViewStore or its OPFS cache, since the point of a dashboard is a
-// cheap glance at the whole tree, not loading all ten of it locally.
+// the most recently changed records across every type, the newest Topics
+// (fetchRecentTopics), and the newest stories. Independent, lightweight
+// reads -- none of them touch a ViewStore or its OPFS cache, since the
+// point of a dashboard is a cheap glance at the whole tree, not loading all
+// ten of it locally.
 import { fetchPage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
-import { fetchObjectExtended, getBacklinks } from "./objectDetail";
-import { getTagHandleCached, TODO_DONE_TAG } from "./notesApi";
-import { VIEWS, MESSAGES_VIEW, STORY_VIEW, formatChange, type ViewConfig } from "./views";
-import { summaryLine } from "../components/related/summary";
+import { VIEWS, TOPICS_VIEW, STORY_VIEW, formatChange, type ViewConfig } from "./views";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
  * fixed-filter window onto another one's table (GENERATED_VIEW/
- * MESSAGES_VIEW both set `table` to something other than their own `key`;
+ * TOPICS_VIEW both set `table` to something other than their own `key`;
  * see ViewConfig.table's doc comment). Counting or "recently changed"-ing
  * those two would double up rows already reachable through Media/Notes. */
 export const STAT_VIEWS: ViewConfig[] = VIEWS.filter((v) => (v.table ?? v.key) === v.key);
@@ -63,11 +59,11 @@ const RECENT_LABEL: Record<string, (view: ViewConfig, item: QueryItem) => string
  * `view.baseFilter`, if it has one. Needed here because these fetches call
  * api.ts's fetchPage() directly rather than going through a ViewStore --
  * fetchPage sends exactly the where_expr it's given, with no idea that a
- * view like MESSAGES_VIEW/STORY_VIEW/NOTE_VIEW carries a baseFilter of its
+ * view like TOPICS_VIEW/STORY_VIEW/NOTE_VIEW carries a baseFilter of its
  * own (that combining is normally viewStore.ts's combinedFilter());
- * skipping it here silently turned "Latest messages" into "latest notes of
+ * skipping it here silently turned "Latest topics" into "latest notes of
  * any kind", and (before NOTE_VIEW's own baseFilter excluded them) let
- * messages/stories double up in Recently Changed under NOTE_VIEW's plain,
+ * topics/stories double up in Recently Changed under NOTE_VIEW's plain,
  * convention-blind `text` column. */
 function combinedFilter(view: ViewConfig): string | null {
   return view.baseFilter ?? null;
@@ -120,131 +116,33 @@ export async function fetchRecentlyChanged(token: string, limit: number): Promis
     .slice(0, limit);
 }
 
-/** Which object (if any) a message note is about -- the resolved target of
- * its *first* backlink (a message attached via MessageButton.tsx's
- * attachNoteToObject has exactly one; a hand-attached one with more than
- * one just shows whichever the backlinks map lists first). `label` is
- * built the same way every other reference row in the app is
- * (summary.ts's summaryLine -- "[I0288] Fred Blank"). */
-export interface MessageTarget {
-  viewKey: string;
-  handle: string;
-  label: string;
-}
-
-export interface MessageItem {
+export interface TopicItem {
   handle: string;
   grampsId: string;
-  author: string;
-  message: string;
-  changeUnix: number;
-  about: MessageTarget;
-}
-
-/** A message with no backlink at all -- created via ListHeader's own "Add
- * ToDo" trigger (MessageComposer with no `about`), never attached to any
- * object's note_list, so there's nothing to hold a conversation "about".
- * Same shape as MessageItem minus `about`. */
-export interface TodoItem {
-  handle: string;
-  grampsId: string;
-  author: string;
-  message: string;
+  title: string;
   changeUnix: number;
 }
 
-interface ResolvedMessage {
-  handle: string;
-  grampsId: string;
-  author: string;
-  message: string;
-  changeUnix: number;
-  about: MessageTarget | null;
-  done: boolean;
-}
-
-/** Candidate pool size, relative to the bigger of the two panels' own
- * limits -- a heuristic, not exhaustive pagination: enough headroom that a
- * handful of messages piled onto the same object (collapsed to one row
- * below) or already marked done (dropped from the ToDo panel) still leave
- * `limit` rows in the common case, without walking the whole Messages
- * table on every Home page load. */
-const CANDIDATE_MULTIPLIER = 6;
-
-/** Resolves one query-projected message row into everything both Home
- * panels need to decide where it belongs: its target object (via a full
- * GET with backlinks=1 -- the bulk /query/ endpoint this candidate came
- * from can't resolve backlinks itself, see objectDetail.ts) and its
- * done/open state (that same GET's plain `tag_list`, compared against the
- * resolved "todo-done" tag handle -- cheaper to piggyback here than a
- * second per-row request). */
-async function resolveMessage(token: string, item: QueryItem, doneTagHandle: string | null): Promise<ResolvedMessage> {
-  const detail = await fetchObjectExtended(token, MESSAGES_VIEW, item.handle);
-  const backlinks = getBacklinks(detail);
-  let about: MessageTarget | null = null;
-  for (const [viewKey, items] of Object.entries(backlinks)) {
-    const target = items[0] as { handle?: string } | undefined;
-    if (target?.handle) {
-      about = { viewKey, handle: target.handle, label: summaryLine(viewKey, target) || viewKey };
-      break;
-    }
-  }
-  const tagList = (detail.tag_list as string[] | undefined) ?? [];
-  return {
+/** The `limit` newest Topics -- same shape/query as fetchLatestStories
+ * below, just for TOPICS_VIEW's own baseFilter (its "title" column's own
+ * toDisplay already extracts TopicSpec's title out of the raw JSON, same
+ * storyTitle() helper STORY_VIEW's "title" column uses -- see views.ts).
+ * Simpler than the old fetchMessageBoards this replaces: a Topic already
+ * carries its own title, so there's no per-row backlink GET needed to
+ * resolve "what is this about" the way an untitled board message needed,
+ * and no done/open state left to filter on (that concept was dropped along
+ * with board messages -- see the Topics plan). */
+export async function fetchRecentTopics(token: string, limit: number): Promise<TopicItem[]> {
+  const { page } = await fetchPage(
+    TOPICS_VIEW, token, null, false, combinedFilter(TOPICS_VIEW),
+    [{ column: "change", direction: "desc" }], limit
+  );
+  return page.items.map((item) => ({
     handle: item.handle,
     grampsId: typeof item.gramps_id === "string" ? item.gramps_id : "",
-    author: cellText(MESSAGES_VIEW, item, "author"),
-    message: cellText(MESSAGES_VIEW, item, "text"),
+    title: cellText(TOPICS_VIEW, item, "title"),
     changeUnix: Number(item.change ?? 0),
-    about,
-    done: Boolean(doneTagHandle && tagList.includes(doneTagHandle)),
-  };
-}
-
-/** Home's Messages and ToDo panels, resolved together in one pass (both
- * need the same per-candidate backlink/tag_list lookup, so splitting this
- * into two exported fetches would just look up most rows twice). Reads
- * the `Math.max(messageLimit, todoLimit) * CANDIDATE_MULTIPLIER` newest
- * messages, newest first, then:
- * - Messages: the ones with a resolved target, deduped down to each
- *   object's own single newest message -- a "conversation" is everything
- *   said about one record, so a glance at Home should show where the
- *   activity is, not `messageLimit` rows that might all be the same
- *   back-and-forth on one person.
- * - ToDos: the ones with no target at all (nothing to hold a conversation
- *   "about" -- see TodoItem) and not yet marked done. */
-export async function fetchMessageBoards(
-  token: string,
-  messageLimit: number,
-  todoLimit: number
-): Promise<{ messages: MessageItem[]; todos: TodoItem[] }> {
-  const poolSize = Math.max(messageLimit, todoLimit) * CANDIDATE_MULTIPLIER;
-  const [{ page }, doneTagHandle] = await Promise.all([
-    fetchPage(
-      MESSAGES_VIEW, token, null, false, combinedFilter(MESSAGES_VIEW),
-      [{ column: "change", direction: "desc" }], poolSize
-    ),
-    getTagHandleCached(token, TODO_DONE_TAG).catch(() => null),
-  ]);
-  const resolved = await Promise.all(page.items.map((item) => resolveMessage(token, item, doneTagHandle)));
-
-  const messages: MessageItem[] = [];
-  const seenObjects = new Set<string>();
-  for (const r of resolved) {
-    if (!r.about) continue;
-    const key = `${r.about.viewKey}:${r.about.handle}`;
-    if (seenObjects.has(key)) continue;
-    seenObjects.add(key);
-    messages.push({ handle: r.handle, grampsId: r.grampsId, author: r.author, message: r.message, changeUnix: r.changeUnix, about: r.about });
-    if (messages.length === messageLimit) break;
-  }
-
-  const todos: TodoItem[] = resolved
-    .filter((r) => !r.about && !r.done)
-    .slice(0, todoLimit)
-    .map(({ handle, grampsId, author, message, changeUnix }) => ({ handle, grampsId, author, message, changeUnix }));
-
-  return { messages, todos };
+  }));
 }
 
 export interface StoryItem {
@@ -256,10 +154,8 @@ export interface StoryItem {
 
 /** The `limit` newest Gramps Connect stories -- same query STORY_VIEW's own
  * table sends (its baseFilter, "tagged story", still applies -- see
- * combinedFilter above), just capped and unfiltered by search. Simpler
- * than fetchMessageBoards above -- no target object to resolve, no done
- * state, just the author/message split a story's single `title` column
- * has no equivalent of. */
+ * combinedFilter above), just capped and unfiltered by search. Same shape
+ * as fetchRecentTopics above, just STORY_VIEW instead of TOPICS_VIEW. */
 export async function fetchLatestStories(token: string, limit: number): Promise<StoryItem[]> {
   const { page } = await fetchPage(
     STORY_VIEW, token, null, false, combinedFilter(STORY_VIEW),

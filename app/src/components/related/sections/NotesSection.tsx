@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
-import { Text } from "@mantine/core";
+import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
-import { getTagHandleCached, MESSAGE_TYPE, TODO_DONE_TAG } from "../../../store/notesApi";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { generateStory, STORY_SOURCE_VIEWS, STORY_TYPE } from "../../../store/storyApi";
 import type { StoryOptions, StorySpec } from "../../../store/storyBuilder";
+import { TOPIC_TYPE } from "../../../store/topicsApi";
+import { openTopicWindow } from "../../../store/topicWindows";
 import { NOTE_VIEW } from "../../../store/views";
 import { StoryView } from "../../StoryView";
 import { AttachControl } from "../AttachControl";
@@ -18,46 +18,14 @@ import { t } from "../../../i18n/i18n";
 interface RawNote {
   tag_list?: string[];
   // gramps-web-api flattens Note.type to a plain string in its REST JSON
-  // responses ("story", or a standard type's name like "General") rather
-  // than the {_class, value, string} shape the query endpoint's json_data
-  // uses internally (see views.ts's MESSAGES_VIEW/STORY_VIEW baseFilter,
-  // which target .string against that internal shape instead) -- confirmed
-  // by fetching a person with extend=all and inspecting extended.notes.
+  // responses ("story", "topic", or a standard type's name like "General")
+  // rather than the {_class, value, string} shape the query endpoint's
+  // json_data uses internally (see views.ts's TOPICS_VIEW/STORY_VIEW
+  // baseFilter, which target .string against that internal shape instead)
+  // -- confirmed by fetching a person with extend=all and inspecting
+  // extended.notes.
   type?: string;
-}
-
-/** The "todo-done" tag's own handle (resolved once, cached -- see
- * getTagHandleCached's doc comment), needed to tell a done message from an
- * open one: a note's raw tag_list entries are unresolved handles (extend=all
- * doesn't resolve tag names on a note nested inside another object's
- * note_list), so there's nothing to compare against until this resolves.
- * Message/story identity has no such lookup -- Note.type is an embedded
- * field, read straight off `target.type.string` below. Starts `null` before
- * the lookup resolves, so a message briefly renders without its done
- * indicator on first paint rather than blocking the whole section on a
- * network round trip. */
-function useDoneTagHandle(): string | null {
-  const [done, setDone] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        const doneHandle = await getTagHandleCached(token, TODO_DONE_TAG);
-        if (!cancelled) setDone(doneHandle);
-      } catch {
-        // Not fatal -- rows just render without a done indicator until this
-        // resolves (the tag always exists once any message has ever been
-        // marked done, so this only matters on a transient failure).
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return done;
+  text?: { string?: string };
 }
 
 /** "+ Add a story" -- the Stories section's own generate-and-attach
@@ -131,29 +99,22 @@ function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["vie
 }
 
 /** NoteBase.note_list -- a plain handle list, present on nearly every type.
- * A listed note might itself be a Gramps Connect message (MessageButton.tsx
- * attaches new messages here rather than putting any reference in the
- * message text) or a story rather than an ordinary Note -- told apart by
- * `target.type`, an embedded field on each resolved Note that needs no
- * further lookup (see RawNote's own doc comment for the string-vs-object
- * shape gotcha). Its `tag_list` is a different story: extend=all only
- * resolves names for the *top-level* fetched object's own forward refs, not
- * a second level deep, so a nested note's tag_list here is still raw
- * handles -- which is why the "done" indicator needs useDoneTagHandle's
- * resolved handle to compare against. Split into two SectionShells (mirrors
- * Notes/Messages already being separate top-level sidebar views) rather
- * than one mixed list; message rows route through onNavigate as "messages"
- * rather than "note" -- otherwise a click lands on the general Notes view
- * instead of Messages and loses MessageActions (Mark done/Reopen/Delete) --
- * and get a "done" indicator ordinary notes have no equivalent of. */
+ * A listed note might itself be a linked Topic (DiscussButton.tsx/
+ * LinkObjectControl.tsx attach a topic note's handle here rather than
+ * putting any reference in the topic's own text) or a story rather than an
+ * ordinary Note -- told apart by `target.type`, an embedded field on each
+ * resolved Note that needs no further lookup (see RawNote's own doc comment
+ * for the string-vs-object shape gotcha). Split into separate SectionShells
+ * (mirrors Notes/Topics/Stories already being separate top-level sidebar
+ * views) rather than one mixed list; topic rows route through onNavigate as
+ * "topics" rather than "note" -- otherwise a click lands on the general
+ * Notes view instead of that Topic's own chat page. */
 export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
-  const doneTag = useDoneTagHandle();
-
   const rows = zipHandles<RawNote>(detail.note_list, detail.extended?.notes);
-  const isMessage = (target: RawNote) => target?.type === MESSAGE_TYPE;
+  const isTopic = (target: RawNote) => target?.type === TOPIC_TYPE;
   const isStory = (target: RawNote) => target?.type === STORY_TYPE;
-  const noteRows = rows.filter(({ target }) => !isMessage(target) && !isStory(target));
-  const messageRows = rows.filter(({ target }) => isMessage(target));
+  const noteRows = rows.filter(({ target }) => !isTopic(target) && !isStory(target));
+  const topicRows = rows.filter(({ target }) => isTopic(target));
   const storyRows = rows.filter(({ target }) => isStory(target));
   // "+ Add a story" only offered where there's a seeding rule -- same
   // reasoning AddStoryControl's own internal gate has, kept here too so the
@@ -165,13 +126,16 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   // the same note_list, not the only one, so no type is excluded here.
   const canAttach = hasPermissions("EditObject");
 
-  // Shared by both Notes and Stories rows below -- a story is still just a
-  // note_list entry (a tagged Note), so unlinking it is the exact same
+  // Shared by every row below -- a story or topic is still just a note_list
+  // entry (a tagged/typed Note), so unlinking it is the exact same
   // detachRefListEntry call, just with `kind` swapped in so the confirm
-  // copy reads as "story"/its own title rather than "note"/raw note text.
-  async function handleRemove(handle: string, target: RawNote, kind: "note" | "story") {
+  // copy reads as "story"/"topic"/its own title rather than "note"/raw note
+  // text. `kind` doubles as summaryLine's own type key, hence "topics" (not
+  // the singular English word used in the confirm copy itself).
+  async function handleRemove(handle: string, target: RawNote, kind: "note" | "story" | "topics") {
     const summary = summaryLine(kind, target) || `this ${kind}`;
-    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the ${kind} itself.`)) return;
+    const englishKind = kind === "topics" ? "discussion" : kind;
+    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the ${englishKind} itself.`)) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "note_list", handle);
     onRefetch?.();
@@ -203,13 +167,24 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
           )}
         </SectionShell>
       )}
-      {messageRows.length > 0 && (
-        <SectionShell label={t("Messages")}>
-          {messageRows.map(({ handle, target }) => {
-            const isDone = Boolean(doneTag && target.tag_list?.includes(doneTag));
-            const label = `${isDone ? "✓ " : ""}${summaryLine("messages", target)}`;
-            return <RefRow key={handle} type="messages" handle={handle} obj={target} label={label} onNavigate={onNavigate} />;
-          })}
+      {topicRows.length > 0 && (
+        <SectionShell label={t("Discussions")}>
+          {topicRows.map(({ handle, target }) => (
+            <RefRow
+              key={handle}
+              type="topics"
+              handle={handle}
+              obj={target}
+              label={summaryLine("topics", target)}
+              onNavigate={onNavigate}
+              // Opens a FloatingTopicWindow instead of navigating/sub-
+              // selecting -- a topic is a live conversation you want to
+              // keep chatting in without losing this record off screen,
+              // not a page to drill into.
+              onClick={() => openTopicWindow(handle)}
+              onRemove={canAttach ? () => handleRemove(handle, target, "topics") : undefined}
+            />
+          ))}
         </SectionShell>
       )}
       {(storyRows.length > 0 || canAddStory) && (

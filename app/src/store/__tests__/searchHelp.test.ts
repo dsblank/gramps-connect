@@ -31,7 +31,7 @@ describe("search help", () => {
     }
   });
 
-  // Both Messages and Output are a fixed filter over a table another view
+  // Both Topics and Output are a fixed filter over a table another view
   // also shows in full (see ViewConfig.baseFilter) -- a search there is
   // AND-ed onto that filter, not a search of the whole table, and the help
   // has to say so or the results look arbitrarily short.

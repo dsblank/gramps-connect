@@ -1,12 +1,10 @@
 // Write path for "story" notes -- a standalone Note whose Note.type
 // identifies it as "story" (a custom NoteType, set the same way
-// notesApi.ts's MESSAGE_TYPE is -- see its doc comment) and whose text is a
-// JSON-stringified StorySpec (storyBuilder.ts), attached to the person it
-// was generated from via the normal note_list mechanism (same two-step
-// create-then-attach as MessageButton.tsx). Same generic-object shape as
-// notesApi.ts's createMessage; kept in its own module since a story note
-// isn't a message and shouldn't show up in NotesSection's ordinary-Notes
-// split.
+// topicsApi.ts's TOPIC_TYPE is) and whose text is a JSON-stringified
+// StorySpec (storyBuilder.ts), attached to the person it was generated from
+// via the normal note_list mechanism (same two-step create-then-attach as
+// DiscussButton.tsx). Kept in its own module since a story note isn't a
+// topic and shouldn't show up in NotesSection's ordinary-Notes split.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { attachNoteToObject } from "./notesApi";

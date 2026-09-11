@@ -33,7 +33,7 @@ export type OnViewGallery = (items: GalleryItem[], label: string) => void;
  * is `type`'s own ViewConfig (needed for refListApi.ts's GET/PUT, which
  * `type` alone as a bare string can't provide), and `onRefetch` lets a
  * section trigger RelatedPanel's own refetch after an attach/detach, the
- * same mechanism MessageButton's `onAttached` already uses. */
+ * same mechanism DiscussButton's `onAttached` already uses. */
 export interface SectionProps {
   type: string;
   view: ViewConfig;

@@ -5,7 +5,7 @@ import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
 import { t } from "../../i18n/i18n";
 
-/** Top-right button on a RelatedPanel (next to MessageButton, in the same
+/** Top-right button on a RelatedPanel (next to DiscussButton, in the same
  * "act on the record itself" header slot) that opens this object in the
  * stacked edit-dialog flow (PersonEditDialog.tsx/FamilyEditDialog.tsx/
  * ObjectEditDialog.tsx via draftStack.ts's openEditDraft) -- the same
@@ -14,7 +14,7 @@ import { t } from "../../i18n/i18n";
  *
  * Only offered for a type with an edit dialog (EDITABLE_TYPES --
  * everything except Media, which wraps an uploaded file rather than a
- * blank form, and the synthetic Output/Messages views), and only to a
+ * blank form, and the synthetic Output/Topics views), and only to a
  * user who actually holds EditObject (what the PUT this eventually
  * triggers requires server-side, base.py's GrampsObjectProtectedResource.put).
  *

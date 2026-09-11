@@ -5,7 +5,7 @@
 // ActiveUsers' avatars so the same person always looks the same everywhere.
 
 /** Deterministic 0-359 hue for `username`, shared by colorForUsername below
- * and MessageComposer.tsx's bubble backgrounds -- the one hash both derive
+ * and ChatBubble.tsx's bubble backgrounds -- the one hash both derive
  * from, so "this user's color" means the same thing everywhere instead of
  * each caller hashing its own way and landing on unrelated colors for the
  * same person. */
@@ -68,7 +68,7 @@ function circularHueDistance(a: number, b: number): number {
 
 /** Same per-user hue as colorForUsername, snapped to the nearest Mantine
  * theme color name -- unlike colorForUsername's raw hsl() (fine for an
- * Avatar's solid `color` prop), MessageComposer.tsx's chat bubbles use
+ * Avatar's solid `color` prop), ChatBubble.tsx's chat bubbles use
  * Mantine's `--mantine-color-<name>-light` CSS variable for their
  * background so it stays theme-aware (a paler tint in light mode, a
  * desaturated dark tint in dark mode) -- that variable only exists for

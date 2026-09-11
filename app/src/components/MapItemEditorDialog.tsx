@@ -269,7 +269,7 @@ interface MapItemEditorDialogProps {
   onClose: () => void;
   /** Fired after a successful edit-save (not a new one, which has nowhere
    * existing to refresh) -- lets RelatedPanel re-fetch the media object's
-   * own detail, the same refresh MessageButton's onAttached already
+   * own detail, the same refresh DiscussButton's onAttached already
    * triggers after attaching something to it. */
   onSaved?: () => void;
 }

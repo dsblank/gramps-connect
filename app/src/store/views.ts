@@ -7,7 +7,6 @@
 // git history) -- this is the production copy now; see PLAN.md.
 import { createElement, type ReactNode } from "react";
 import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
-import { splitAuthorMessage } from "./authoredText";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
 import { gtkColorToCss } from "../components/related/color";
@@ -668,7 +667,12 @@ export const GENERATED_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "desc"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    // hidden: true -- still selected/cached/searchable (this view's own
+    // simpleSearch above still matches against it), just not worth a
+    // column of its own: a generated report/export is identified by its
+    // description, not a Gramps ID no one assigned it for any reason of
+    // their own.
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", hidden: true },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
     { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT" },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
@@ -687,7 +691,7 @@ function truncate(text: string, max: number): string {
 // StorySpec is deliberately stored as JSON there -- see storyBuilder.ts),
 // but any Note/message whose free-typed content happens to parse as JSON
 // would too. Every column below that selects a StyledText's `.string` --
-// MESSAGES_VIEW's "author"/"text", STORY_VIEW's "title", NOTE_VIEW's own
+// TOPICS_VIEW's "title", STORY_VIEW's "title", NOTE_VIEW's own
 // "text" -- needs this: without it, an already-decoded object reaches
 // toRowValues() (sql.ts) with no toSql to flatten it back to a string, and
 // a local TEXT column can't bind an object (this is what broke Home's
@@ -701,69 +705,69 @@ function styledTextToSql(raw: unknown): string | null {
   return null;
 }
 
-// Gramps Connect messages: standalone Notes (never attached to another
-// object's note_list) whose Note.type is set to "message" at creation (see
-// notesApi.ts's MESSAGE_TYPE) -- a singular embedded field, unlike
-// GENERATED_VIEW's report/export split, which still has to use a tag
-// (Media has no equivalent typed field to repurpose). Completion state is
-// still a tag pair ("todo-open"/"todo-done", see notesApi.ts) rather than
-// its own column: cheaper than resolving tag names into the local SQLite
-// cache just for one derived field -- confirmed empirically (see
-// authoredText.ts) that a *collection* relationship like "tags" can't back
-// a select column at all, only a singular one (a Person's "father"/"birth",
-// or now a Note's own "type") can. `table: "note"` (key differs) puts this
-// store in the same live-sync bucket as NOTE_VIEW, so both get notified off
-// one getViewStoresForTable("note") lookup.
-export const MESSAGES_VIEW: ViewConfig = {
-  // The key is both the URL segment (#/messages/<handle>, see hash.ts) and,
+// A topic note's text.string is a JSON-stringified TopicSpec
+// ({title, description?} -- see topicsApi.ts's TopicSpec/parseTopicSpec).
+// Its title column reads out just the spec's own title via storyTitle()
+// below (defined before use -- function declarations hoist -- same helper
+// STORY_VIEW's own "title" column and NOTE_VIEW's fallback display use, for
+// the same reason: an older/foreign note that happens to carry the "topic"
+// type but isn't valid JSON shouldn't break the row, just fall back to its
+// raw truncated text).
+//
+// Gramps Connect topics: standalone Notes (never attached to another
+// object's note_list themselves -- see topicsApi.ts's module doc comment)
+// whose Note.type is set to "topic" at creation. One Topic replaces the old
+// board-messages/per-object-messages/direct-messages trio: a chat with a
+// title anyone can post in and optionally link to research objects (Person,
+// Source, Citation, ...) via the ordinary note_list/backlinks mechanism
+// (see RelatedPanel.tsx's "topics" branch). `table: "note"` puts this store
+// in the same live-sync bucket as NOTE_VIEW/STORY_VIEW, so all three get
+// notified off one getViewStoresForTable("note") lookup.
+export const TOPICS_VIEW: ViewConfig = {
+  // The key is both the URL segment (#/topics/<handle>, see hash.ts) and,
   // spliced unquoted into raw SQL by viewStore.ts (`SELECT ... FROM
   // ${this.view.key}`), the local cache's table name -- so it has to stay a
-  // bare identifier: a hyphenated key would parse there as a subtraction
-  // of two column names rather than a table name.
-  key: "messages",
-  label: "Messages",
+  // bare identifier.
+  key: "topics",
+  label: "Discussions",
   icon: iconChat,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "type.string == 'message'",
+  baseFilter: "type.string == 'topic'",
   // No separator of its own -- GENERATED_VIEW's divider already opens this
-  // "not an ordinary object type" group in the sidebar; Messages just
+  // "not an ordinary object type" group in the sidebar; Topics just
   // continues it rather than starting a second one.
   orderBy: [{ column: "change", direction: "desc" }],
-  opfsFilename: "app-cache-messages.sqlite",
-  wherePlaceholder: 'e.g. "urgent" in text.string',
+  opfsFilename: "app-cache-topics.sqlite",
+  wherePlaceholder: 'e.g. "Smith family" in text.string',
   simpleSearch: {
-    placeholder: "Enter a Gramps ID, or message text…",
+    placeholder: "Enter a Gramps ID, or a discussion title…",
     buildExpr: buildSimpleSearchExpr(["gramps_id", "text.string"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
-    // "By" and "Message" both read the exact same text.string json_path --
-    // sent to the server twice under two aliases (a short string, trivial
-    // cost) rather than once, since a ColumnConfig's toDisplay only ever
-    // transforms its own single stored value, and each needs a different
-    // half of the "author: message" split (see authoredText.ts).
+    // hidden: true -- still selected/cached/searchable (this view's own
+    // simpleSearch above still matches against it), just not worth a
+    // column of its own: a discussion is identified by its title, not a
+    // Gramps ID no one assigned it for any reason of their own.
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", hidden: true },
     {
-      key: "author", label: "By", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
-      toSql: styledTextToSql, toDisplay: (v) => splitAuthorMessage((v as string | null) ?? "").author ?? "",
-    },
-    {
-      key: "text", label: "Message", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
-      toSql: styledTextToSql, toDisplay: (v) => truncate(splitAuthorMessage((v as string | null) ?? "").message, 80),
+      key: "title", label: "Title", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
+      toSql: styledTextToSql, toDisplay: storyTitle,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
 };
 
-// A story note's text.string is a JSON-stringified StorySpec
-// (storyBuilder.ts), not free text -- unlike MESSAGES_VIEW's "By"/"Message"
-// columns, which run splitAuthorMessage() over the same field, this reads
-// out just the spec's own title. Falls back to the raw (truncated) text on
-// parse failure -- summary.ts's "story" case does the same, for the same
-// reason: an older/foreign note that happens to carry the "story" tag but
+// A story (or topic) note's text.string is a JSON-stringified spec object
+// (StorySpec/TopicSpec), not free text -- this reads out just the spec's
+// own title. Falls back to the raw (truncated) text on parse failure --
+// summary.ts's "story"/"topics" cases do the same, for the same reason: an
+// older/foreign note that happens to carry the "story"/"topic" type but
 // isn't valid JSON shouldn't break the row, just look like a plain note.
-// Its own toSql is styledTextToSql (see above truncate()) -- the same
-// query-endpoint quirk that function exists for.
+// Also reused by NOTE_VIEW's own "text" column below (a defensive fallback
+// there, not the common case) and by TOPICS_VIEW above. Its own toSql is
+// styledTextToSql (see above truncate()) -- the same query-endpoint quirk
+// that function exists for.
 function storyTitle(json: unknown): string {
   const raw = (json as string | null) ?? "";
   try {
@@ -776,13 +780,12 @@ function storyTitle(json: unknown): string {
 }
 
 // Gramps Connect stories: standalone Notes (attached to the person they
-// were generated from via the normal note_list mechanism, same as
-// MESSAGES_VIEW's "message" Notes) whose Note.type is set to "story" at
-// creation (see storyApi.ts's STORY_TYPE/createStoryNote). Same
-// fixed-type-filter trick as MESSAGES_VIEW, applied to "story" instead of
-// "message" -- but with its own columns (see storyTitle above) and its own
-// opfsFilename: sharing MESSAGES_VIEW's local cache table would corrupt
-// both.
+// were generated from via the normal note_list mechanism, same as a
+// Topic-link Note) whose Note.type is set to "story" at creation (see
+// storyApi.ts's STORY_TYPE/createStoryNote). Same fixed-type-filter trick
+// as TOPICS_VIEW, applied to "story" instead of "topic" -- but with its own
+// columns (see storyTitle above) and its own opfsFilename: sharing
+// TOPICS_VIEW's local cache table would corrupt both.
 export const STORY_VIEW: ViewConfig = {
   key: "story",
   label: "Stories",
@@ -791,7 +794,7 @@ export const STORY_VIEW: ViewConfig = {
   endpoint: "/api/notes/query/",
   baseFilter: "type.string == 'story'",
   // Continues the same "not an ordinary object type" sidebar group
-  // GENERATED_VIEW/MESSAGES_VIEW opened -- no separator of its own.
+  // GENERATED_VIEW/TOPICS_VIEW opened -- no separator of its own.
   orderBy: [{ column: "change", direction: "desc" }],
   opfsFilename: "app-cache-story.sqlite",
   wherePlaceholder: 'e.g. "wedding" in text.string',
@@ -800,7 +803,11 @@ export const STORY_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "text.string"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    // hidden: true -- still selected/cached/searchable (this view's own
+    // simpleSearch above still matches against it), just not worth a
+    // column of its own: a story is identified by its title, not a Gramps
+    // ID no one assigned it for any reason of their own.
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", hidden: true },
     {
       key: "title", label: "Title", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
       toSql: styledTextToSql, toDisplay: storyTitle,
@@ -809,33 +816,34 @@ export const STORY_VIEW: ViewConfig = {
   ],
 };
 
-// Gramps Connect direct messages: standalone Notes (never attached to any
-// object's note_list, and -- unlike MESSAGES_VIEW/STORY_VIEW -- never added
-// to the VIEWS array below) whose Note.type is set to "DirectMessage" at
-// creation (see dmApi.ts's DM_TYPE). Deliberately kept out of VIEWS:
-// registry.ts only wires a ViewConfig into the sidebar/OPFS cache/live-sync
-// fanout/RefListField's "attach an existing note" picker when it appears
-// there, and a DM has no business surfacing in any of those -- dmApi.ts
-// reads this view with fetchPage() directly (same ad hoc, no-ViewStore
-// shape homeStats.ts's fetchMessageBoards already uses for MESSAGES_VIEW),
-// which works on any ViewConfig value whether or not it's registered.
-// Recipient is encoded on Note.text's own first line (dmText.ts) rather
-// than a tag, both to avoid a new to:<user> Tag per recipient cluttering
-// the shared Tags view, and because it rides along in the same text.string
-// json_path column MESSAGES_VIEW's "By"/"Message" columns already select --
-// no per-row detail GET needed to resolve it, unlike a tag would.
-export const DM_VIEW: ViewConfig = {
-  key: "direct-message",
-  label: "Direct messages",
+// One topic's chat posts: standalone Notes (never attached to any object's
+// note_list, and -- unlike TOPICS_VIEW/STORY_VIEW -- never added to the
+// VIEWS array below) whose Note.type is set to "topic-message" at creation
+// (see topicsApi.ts's TOPIC_MESSAGE_TYPE). Deliberately kept out of VIEWS,
+// same reasoning the old DM_VIEW had: registry.ts only wires a ViewConfig
+// into the sidebar/OPFS cache/live-sync fanout/RefListField's "attach an
+// existing note" picker when it appears there, and a topic-message has no
+// business surfacing in any of those -- topicsApi.ts reads this view with
+// fetchPage() directly (same ad hoc, no-ViewStore shape this used to use
+// for DM_VIEW), which works on any ViewConfig value whether or not it's
+// registered. The topic it's addressed to is encoded on Note.text's own
+// first line (topicText.ts) rather than a tag, both to avoid a new Tag per
+// topic cluttering the shared Tags view, and because it rides along in the
+// same text.string json_path column this view's own "Message" column
+// already selects -- no per-row detail GET needed to resolve it, unlike a
+// tag would.
+export const TOPIC_MESSAGES_VIEW: ViewConfig = {
+  key: "topic-message",
+  label: "Discussion messages",
   icon: iconChat,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "type.string == 'DirectMessage'",
+  baseFilter: "type.string == 'topic-message'",
   orderBy: [{ column: "change", direction: "desc" }],
-  opfsFilename: "app-cache-direct-message.sqlite",
-  // Never actually shown -- DM_VIEW has no FilterBar (it's never in VIEWS,
-  // so no sidebar list ever mounts one) -- set only because ViewConfig
-  // requires it.
+  opfsFilename: "app-cache-topic-message.sqlite",
+  // Never actually shown -- TOPIC_MESSAGES_VIEW has no FilterBar (it's
+  // never in VIEWS, so no sidebar list ever mounts one) -- set only because
+  // ViewConfig requires it.
   wherePlaceholder: "",
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
@@ -852,17 +860,18 @@ export const NOTE_VIEW: ViewConfig = {
   label: "Notes",
   icon: iconNotes,
   endpoint: "/api/notes/query/",
-  // Messages and stories are each their own typed-Note-under-a-fixed-filter
-  // view (MESSAGES_VIEW/STORY_VIEW above), with their own icon, listing,
+  // Topics and stories are each their own typed-Note-under-a-fixed-filter
+  // view (TOPICS_VIEW/STORY_VIEW above), with their own icon, listing,
   // and RelatedPanel treatment -- excluded here so they don't *also* show
   // up a second time in the plain Notes list (or its "Add a note" picker,
   // RefListField.tsx, which shares this same ViewConfig), unlabeled and
   // unstyled as generic notes. homeStats.ts's fetchRecentlyChanged/
-  // fetchMessageBoards both read this same baseFilter through
+  // fetchRecentTopics both read this same baseFilter through
   // combinedFilter(), so this one exclusion covers Home's own lists too.
-  // DirectMessage notes (DM_VIEW above) are excluded the same way, even
-  // though DM_VIEW itself is never in VIEWS -- this NOTE_VIEW is.
-  baseFilter: "type.string != 'message' and type.string != 'story' and type.string != 'DirectMessage'",
+  // Topic-message notes (TOPIC_MESSAGES_VIEW above) are excluded the same
+  // way, even though that ViewConfig itself is never in VIEWS -- this
+  // NOTE_VIEW is.
+  baseFilter: "type.string != 'topic' and type.string != 'story' and type.string != 'topic-message'",
   // Notes have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-note.sqlite",
@@ -941,5 +950,5 @@ export const TAG_VIEW: ViewConfig = {
 export const VIEWS: ViewConfig[] = [
   PERSON_VIEW, FAMILY_VIEW, EVENT_VIEW, PLACE_VIEW, REPOSITORY_VIEW,
   SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW, GENERATED_VIEW,
-  MESSAGES_VIEW, STORY_VIEW,
+  TOPICS_VIEW, STORY_VIEW,
 ];

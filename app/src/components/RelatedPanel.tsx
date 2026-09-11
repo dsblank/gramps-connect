@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, Box, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Alert, Box, Button, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, getCachedObjectDetail, setCachedObjectDetail, zipRefs } from "../store/objectDetail";
@@ -18,11 +18,15 @@ import { MediaMapButton } from "./related/MediaMapButton";
 import { MediaKmlEditButton } from "./related/MediaKmlEditButton";
 import { MediaGrampletEditButton } from "./related/MediaGrampletEditButton";
 import { MediaEditButton } from "./related/MediaEditButton";
-import { MessageButton } from "./related/MessageButton";
+import { DiscussButton } from "./related/DiscussButton";
 import { EditButton } from "./related/EditButton";
+import { EditTopicButton } from "./related/EditTopicButton";
 import { DeleteButton } from "./related/DeleteButton";
 import { VisualButtons } from "./related/VisualButtons";
-import { MessageActions } from "./related/MessageActions";
+import { TopicLinksSection } from "./related/TopicLinksSection";
+import { LinkObjectControl } from "./related/LinkObjectControl";
+import { parseTopicSpec } from "../store/topicsApi";
+import { getTopicActivityVersion, openTopicWindow, subscribeTopicActivity } from "../store/topicWindows";
 import { StoryActions } from "./related/StoryActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
@@ -221,9 +225,30 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     );
   }
 
+  if (view.key === "topics") {
+    // A topic note's text.string is a JSON-stringified TopicSpec
+    // (topicsApi.ts), not free text -- the plain-note branch below would
+    // otherwise dump raw JSON here. Same ClickableTitle shape as the story
+    // branch just below, for the same reason (a spec's title/description
+    // are plain text, no NoteText gramps://... link handling needed).
+    const spec = parseTopicSpec((detail.text as { string?: string } | undefined)?.string);
+    return (
+      <div>
+        <Text size="sm" c="dimmed" fw={600}>
+          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t(view.label)} <PrivateIndicator detail={detail} />
+        </Text>
+        <ClickableTitle onClick={navigateToSelf}>{spec.title}</ClickableTitle>
+        {spec.description && <Text c="dimmed">{spec.description}</Text>}
+        {spec.participants && spec.participants.length > 0 && (
+          <Text size="sm" c="dimmed">{t("With")}: {spec.participants.join(", ")}</Text>
+        )}
+      </div>
+    );
+  }
+
   if (view.key === "story") {
     // A story note's text.string is a JSON-stringified StorySpec
-    // (storyBuilder.ts), not free text -- the note/messages branch below
+    // (storyBuilder.ts), not free text -- the plain-note branch below
     // would otherwise dump raw JSON here. NoteText's embedded gramps://...
     // link handling doesn't apply (a spec's title and point text are plain
     // text),
@@ -247,7 +272,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     );
   }
 
-  if (view.key === "note" || view.key === "messages") {
+  if (view.key === "note") {
     const text = (detail.text as { string: string; tags?: { name: string; ranges: [number, number][]; value: string }[] } | undefined) ?? { string: "" };
     return (
       <div>
@@ -326,20 +351,34 @@ export function RelatedPanel({
   view, handle, draftStack, revision, onNavigate, onViewGallery, updateDocumentTitle, flow, actions = true,
 }: RelatedPanelProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  // Bumped by MessageActions after a Mark done/Reopen toggle -- that write
-  // goes through notesApi.ts directly, not through anything that changes
-  // `handle` or waits on `revision` (only bumped by a *live-sync*
-  // notification matching this handle, which could be up to
-  // POLL_INTERVAL_MS away), so without this, the just-toggled tag stays
-  // stale in both this panel's title/button and the Tags section below it.
+  // Bumped by EditTopicButton/LinkObjectControl/TopicLinksSection after a
+  // write that goes through topicsApi.ts/refListApi.ts directly, not
+  // through anything that changes `handle` or waits on `revision` (only
+  // bumped by a *live-sync* notification matching this handle, which could
+  // be up to POLL_INTERVAL_MS away), so without this, the just-made change
+  // stays stale in this panel's own display until that next poll tick.
   const [refetchNonce, setRefetchNonce] = useState(0);
+  // topicWindows.ts's activity counter, global across every discussion --
+  // a Topic can be edited/linked/unlinked from here (this panel, the
+  // "topics" management page) *or* from its own FloatingTopicWindow, two
+  // independent component instances neither of whose own local refetch
+  // reaches the other. Scoped to `null` for every view.key besides
+  // "topics" (via topicsActivitySignal below) so an unrelated note change
+  // anywhere else in the tree doesn't trigger a wasted refetch on every
+  // other panel mounted for a Person/Event/... at the same time -- the
+  // counter itself is unconditionally bumped for any note change (see
+  // App.tsx's onRemoteNoteChange), same "just refetch, don't try to be
+  // precise" tradeoff as the draftStack effect below, just narrowed to
+  // where it can actually matter.
+  const activityVersion = useSyncExternalStore(subscribeTopicActivity, getTopicActivityVersion);
+  const topicsActivitySignal = view.key === "topics" ? activityVersion : null;
 
   // EditButton opens a draft into `draftStack` but has no way to tell this
   // panel when the resulting save actually lands -- saveAll() isn't called
   // from here, it's wired at App.tsx's dialog-shell level, covering every
   // open draft at once, not just this handle's. So: catch the
-  // saving-true -> saving-false transition instead, and refetch (same as
-  // MessageActions' own refetchNonce bump above) whenever it resolves
+  // saving-true -> saving-false transition instead, and refetch (same
+  // refetchNonce bump the topic-editing controls above use) whenever it resolves
   // without error. Fires for every panel currently mounted regardless of
   // which handle was actually saved -- an extra fetchObjectExtended for an
   // unrelated record is cheap, and it's the same "just refetch, don't try
@@ -430,7 +469,7 @@ export function RelatedPanel({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [view, handle, revision, refetchNonce]);
+  }, [view, handle, revision, refetchNonce, topicsActivitySignal]);
 
   if (state.status === "loading") {
     return (
@@ -483,8 +522,8 @@ export function RelatedPanel({
       {actions && (
         <Group gap="xs" wrap="wrap" justify="flex-end">
           {view.key === "generated" && <GeneratedItemActions detail={detail} />}
-          {view.key === "messages" && (
-            <MessageActions detail={detail} onToggled={() => setRefetchNonce((n) => n + 1)} />
+          {view.key === "topics" && (
+            <EditTopicButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
           )}
           {view.key === "story" && <StoryActions detail={detail} />}
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
@@ -496,7 +535,7 @@ export function RelatedPanel({
             </>
           )}
           <DeleteButton view={view} detail={detail} />
-          <MessageButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
+          <DiscussButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
       )}
       <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
@@ -508,6 +547,24 @@ export function RelatedPanel({
       <VisualButtons view={view} detail={detail} />
       {view.key === "media" && <MediaMapButton detail={detail} />}
       <DetailFields type={view.key} detail={detail} />
+      {/* A Topic's body is bespoke, not SECTION_COMPONENTS-driven (see
+          RELATED_CONFIG.topics' own doc comment): the actual chat thread
+          lives in a FloatingTopicWindow instead (opened from here, or from
+          DiscussButton/NotesSection elsewhere) rather than inline in this
+          shared pane -- a live conversation wants to stay open across
+          navigation, which this pane's own selection-driven lifetime can't
+          offer. This page is for managing the topic itself: its title/
+          description (the header above), and the "+ link an object"
+          control plus the linked-objects list those links produce. */}
+      {view.key === "topics" && (
+        <>
+          <Button variant="light" onClick={() => openTopicWindow(detail.handle)}>
+            {t("Open discussion")}
+          </Button>
+          <LinkObjectControl topicHandle={detail.handle} onLinked={() => setRefetchNonce((n) => n + 1)} />
+          <TopicLinksSection detail={detail} onNavigate={onNavigate} onRefetch={() => setRefetchNonce((n) => n + 1)} />
+        </>
+      )}
       {sections.map((section) => {
         const Section = SECTION_COMPONENTS[section];
         return (

@@ -33,7 +33,7 @@ export interface SearchHelp {
    * also what its docs are indexed by. Shown so a reader can carry a
    * doc example over to the right list. */
   typeName: string;
-  /** For a view that isn't the whole table -- Messages and Output are both
+  /** For a view that isn't the whole table -- Topics and Output are both
    * a fixed filter over one (see ViewConfig.baseFilter) -- what the search
    * is narrowing down, since the user's expression is AND-ed onto that
    * filter rather than replacing it. */
@@ -76,7 +76,7 @@ const MEDIA_FIELDS: HelpEntry[] = [
   CHANGE,
 ];
 
-// Likewise for Note, shared by the Notes, Messages, and Stories views.
+// Likewise for Note, shared by the Notes, Topics, and Stories views.
 const NOTE_FIELDS: HelpEntry[] = [
   GRAMPS_ID,
   { name: "text.string", description: "The note's text -- the Text column" },
@@ -287,9 +287,9 @@ const MEDIA_HELP: SearchHelp = {
 const NOTE_HELP: SearchHelp = {
   typeName: "Note",
   scopeNote:
-    "This list already leaves out the messages people have left and the stories generated " +
-    "for people on this tree -- both are stored as notes too, but have their own views (and " +
-    "their own search) rather than showing up a second time here.",
+    "This list already leaves out the discussions people have started and the stories " +
+    "generated for people on this tree -- both are stored as notes too, but have their own " +
+    "views (and their own search) rather than showing up a second time here.",
   examples: [
     { expr: "'TODO' in text.string", description: "Notes mentioning TODO anywhere" },
     { expr: "like(text.string, 'Check %')", description: "Notes starting with 'Check '" },
@@ -316,8 +316,8 @@ const TAG_HELP: SearchHelp = {
 };
 
 // Media and Note under a fixed filter (see GENERATED_VIEW's baseFilter,
-// still a tag; MESSAGES_VIEW/STORY_VIEW's, now Note.type -- see
-// notesApi.ts's MESSAGE_TYPE doc comment for why) -- same fields as the
+// still a tag; TOPICS_VIEW/STORY_VIEW's, now Note.type -- see
+// topicsApi.ts's TOPIC_TYPE doc comment for why) -- same fields as the
 // tables they come from, so those lists are reused verbatim; only the
 // scope note and the examples are their own.
 const GENERATED_HELP: SearchHelp = {
@@ -336,22 +336,20 @@ const GENERATED_HELP: SearchHelp = {
   collections: [NOTES, CITATIONS, TAGS],
 };
 
-const MESSAGES_HELP: SearchHelp = {
+const TOPICS_HELP: SearchHelp = {
   typeName: "Note",
   scopeNote:
-    "This list already shows only the messages people have left on this tree -- they are " +
-    "stored as notes, so a search here searches those notes, and is narrowed down further " +
-    "within the list rather than reaching the rest of your notes.",
+    "This list already shows only the discussions people have started on this tree -- they " +
+    "are stored as notes (the text a JSON blob carrying the discussion's title and " +
+    "description, not free text), so a search here searches those notes, and is narrowed " +
+    "down further within the list rather than reaching the rest of your notes. A " +
+    "discussion's own chat messages are a separate kind of note, not searchable from this " +
+    "list.",
   examples: [
-    { expr: "'urgent' in text.string", description: "Messages mentioning something urgent" },
-    { expr: "like(text.string, 'owner:%')", description: "Messages written by one person -- their name comes first, before the colon" },
-    { expr: "exists(tags, name == 'todo-done')", description: "Messages that have been marked done" },
-    { expr: "not exists(tags, name == 'todo-done')", description: "Messages still outstanding" },
+    { expr: "'Smith' in text.string", description: "Discussions whose title or description mentions Smith" },
+    { expr: "like(text.string, '%\"title\":\"About:%')", description: "Discussions still using the auto-generated \"About: ...\" title" },
+    { expr: "exists(tags)", description: "Discussions you've tagged yourself" },
   ],
-  // The By and Message columns are two halves of one stored string (see
-  // authoredText.ts), so there is no separate author field to search --
-  // text.string holds "author: message" and matching either half means
-  // matching that one field.
   fields: NOTE_FIELDS,
   collections: [TAGS],
 };
@@ -373,7 +371,7 @@ const STORY_HELP: SearchHelp = {
 };
 
 /** Keyed by ViewConfig.key -- by view rather than by object type, since two
- * views over the same table (Media/Output, Notes/Messages) hold different
+ * views over the same table (Media/Output, Notes/Topics) hold different
  * rows and want different examples. A view with no entry simply gets no
  * help button, so adding a view isn't blocked on writing its help first. */
 const SEARCH_HELP: Record<string, SearchHelp> = {
@@ -388,7 +386,7 @@ const SEARCH_HELP: Record<string, SearchHelp> = {
   note: NOTE_HELP,
   tag: TAG_HELP,
   generated: GENERATED_HELP,
-  messages: MESSAGES_HELP,
+  topics: TOPICS_HELP,
   story: STORY_HELP,
 };
 

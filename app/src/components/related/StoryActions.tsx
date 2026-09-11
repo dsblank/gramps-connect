@@ -23,7 +23,7 @@ function parseSpec(detail: ObjectDetail): StorySpec | null {
 }
 
 /** RelatedPanel's `view.key === "story"` action slot -- same spot
- * MessageActions.tsx occupies for `view.key === "messages"`. Just a
+ * EditTopicButton.tsx occupies for `view.key === "topics"`. Just a
  * "Present" trigger for the fullscreen StoryView, since Edit (the JSON
  * dialog) and Delete are already generic across every editable type once
  * "story" is a DraftType (see draftStack.ts) -- this component only needs

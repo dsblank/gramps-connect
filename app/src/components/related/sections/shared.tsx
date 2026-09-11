@@ -62,15 +62,24 @@ function TypeIcon({ type }: { type: string }) {
 /** One clickable reference row: a summary line for the target object plus
  * (when this ref carries its own metadata) the frel/mrel/role/private/
  * note-and-citation-count badges. Clicking never navigates directly --
- * always through the `onNavigate` callback RelatedPanel was given, so the
- * same row works whether it's mounted in the top pane (sets sub-selection)
- * or the bottom pane (promotes to a real view switch). */
-export function RefRow({ type, handle, obj, refMeta, onNavigate, label, thumbnail, extra, onEdit, onEditRegion, onRemove }: {
+ * always through the `onNavigate` callback RelatedPanel was given (or, for
+ * a row whose target isn't really "a page to go to" -- NotesSection.tsx's
+ * own Topics sub-list, which opens a FloatingTopicWindow instead --
+ * `onClick`), so the same row works whether it's mounted in the top pane
+ * (sets sub-selection), the bottom pane (promotes to a real view switch),
+ * or bypasses navigation entirely. */
+export function RefRow({ type, handle, obj, refMeta, onNavigate, onClick, label, thumbnail, extra, onEdit, onEditRegion, onRemove }: {
   type: string;
   handle: string;
   obj: unknown;
   refMeta?: RefMeta;
   onNavigate: OnNavigate;
+  /** Overrides the default `onNavigate(type, handle, refMeta)` click
+   * behavior entirely -- only NotesSection.tsx's Topics sub-list uses this,
+   * to open a FloatingTopicWindow instead of navigating/sub-selecting.
+   * `onNavigate` is still required (RefRow's other callers all rely on it),
+   * it's simply not called for a row that sets this instead. */
+  onClick?: () => void;
   /** Overrides summaryLine(type, obj) -- for the rare row that needs to
    * show something other than the target's own default summary (e.g.
    * FamiliesSection showing just the *other* spouse's name rather than
@@ -125,7 +134,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, label, thumbnai
             size="md"
             underline="hover"
             style={LINK_STYLE}
-            onClick={() => onNavigate(type, handle, refMeta)}
+            onClick={onClick ?? (() => onNavigate(type, handle, refMeta))}
           >
             {text}
           </Anchor>

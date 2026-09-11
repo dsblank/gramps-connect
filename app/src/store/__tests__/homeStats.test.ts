@@ -7,20 +7,10 @@ vi.mock("../api", async () => {
 vi.mock("../cacheMeta", () => ({
   fetchServerState: vi.fn(),
 }));
-vi.mock("../objectDetail", async () => {
-  const actual = await vi.importActual<typeof import("../objectDetail")>("../objectDetail");
-  return { ...actual, fetchObjectExtended: vi.fn() };
-});
-vi.mock("../notesApi", async () => {
-  const actual = await vi.importActual<typeof import("../notesApi")>("../notesApi");
-  return { ...actual, getTagHandleCached: vi.fn() };
-});
 
 import { fetchPage, type QueryItem } from "../api";
 import { fetchServerState } from "../cacheMeta";
-import { fetchObjectExtended } from "../objectDetail";
-import { getTagHandleCached } from "../notesApi";
-import { fetchHomeCounts, fetchMessageBoards, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo } from "../homeStats";
+import { fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo } from "../homeStats";
 
 function page(items: QueryItem[]) {
   return { page: { items, next_after: null }, totalCount: items.length };
@@ -89,94 +79,38 @@ describe("fetchRecentlyChanged", () => {
     expect(result).toEqual([{ viewKey: "tag", handle: "T1", grampsId: "", label: "Ancestors", changeUnix: 100 }]);
   });
 
-  it("excludes message-, story- and DirectMessage-typed notes -- the Messages/Story panels and DMs already cover those", async () => {
+  it("excludes topic-, topic-message- and story-typed notes -- the Topics/Story panels already cover those", async () => {
     vi.mocked(fetchPage).mockImplementation(async () => page([]));
 
     await fetchRecentlyChanged("tok", 5);
 
     const noteCall = vi.mocked(fetchPage).mock.calls.find(([view]) => view.key === "note")!;
-    expect(noteCall[4]).toBe("type.string != 'message' and type.string != 'story' and type.string != 'DirectMessage'");
+    expect(noteCall[4]).toBe("type.string != 'topic' and type.string != 'story' and type.string != 'topic-message'");
   });
 });
 
-describe("fetchMessageBoards", () => {
-  beforeEach(() => {
+describe("fetchRecentTopics", () => {
+  it("reads each note's title out of its JSON-stringified TopicSpec", async () => {
     vi.mocked(fetchPage).mockReset();
-    vi.mocked(fetchObjectExtended).mockReset();
-    vi.mocked(getTagHandleCached).mockReset();
-    vi.mocked(getTagHandleCached).mockResolvedValue("TAG-DONE");
-  });
+    vi.mocked(fetchPage).mockResolvedValueOnce(
+      page([{ handle: "N2", gramps_id: "N0002", title: JSON.stringify({ title: "Smith family origins" }), change: 900 }])
+    );
 
-  const fredBacklink = {
-    person: [{ handle: "P1", gramps_id: "I0001", primary_name: { first_name: "Fred", surname_list: [{ surname: "Blank" }] } }],
-  };
-  const adaBacklink = {
-    person: [{ handle: "P2", gramps_id: "I0002", primary_name: { first_name: "Ada", surname_list: [{ surname: "Lovelace" }] } }],
-  };
+    const result = await fetchRecentTopics("tok", 5);
 
-  it("collapses every object's own messages down to just its newest", async () => {
-    vi.mocked(fetchPage).mockResolvedValueOnce(page([
-      { handle: "N3", gramps_id: "N0003", author: "alice: latest on Fred", text: "alice: latest on Fred", change: 900 },
-      { handle: "N2", gramps_id: "N0002", author: "bob: older on Fred", text: "bob: older on Fred", change: 800 },
-      { handle: "N1", gramps_id: "N0001", author: "alice: about Ada", text: "alice: about Ada", change: 700 },
-    ]));
-    vi.mocked(fetchObjectExtended).mockImplementation(async (_token, _view, handle) => {
-      const backlinks: Record<string, unknown> = { N3: fredBacklink, N2: fredBacklink, N1: adaBacklink };
-      return { handle, tag_list: [], extended: { backlinks: backlinks[handle as string] } } as any;
-    });
-
-    const result = await fetchMessageBoards("tok", 5, 5);
-
-    expect(result.messages).toEqual([
-      {
-        handle: "N3", grampsId: "N0003", author: "alice", message: "latest on Fred", changeUnix: 900,
-        about: { viewKey: "person", handle: "P1", label: "[I0001] Fred Blank" },
-      },
-      {
-        handle: "N1", grampsId: "N0001", author: "alice", message: "about Ada", changeUnix: 700,
-        about: { viewKey: "person", handle: "P2", label: "[I0002] Ada Lovelace" },
-      },
-    ]);
-    expect(result.todos).toEqual([]);
-  });
-
-  it("treats a message with no resolved backlink as an open ToDo, not a conversation", async () => {
-    vi.mocked(fetchPage).mockResolvedValueOnce(page([
-      { handle: "N4", gramps_id: "N0004", author: "carol: standalone note", text: "carol: standalone note", change: 950 },
-    ]));
-    vi.mocked(fetchObjectExtended).mockResolvedValueOnce({ handle: "N4", tag_list: [], extended: { backlinks: {} } } as any);
-
-    const result = await fetchMessageBoards("tok", 5, 5);
-
-    expect(result.messages).toEqual([]);
-    expect(result.todos).toEqual([
-      { handle: "N4", grampsId: "N0004", author: "carol", message: "standalone note", changeUnix: 950 },
+    expect(result).toEqual([
+      { handle: "N2", grampsId: "N0002", title: "Smith family origins", changeUnix: 900 },
     ]);
   });
 
-  it("drops an already-done standalone message from the ToDo panel", async () => {
-    vi.mocked(fetchPage).mockResolvedValueOnce(page([
-      { handle: "N5", gramps_id: "N0005", author: "carol: done already", text: "carol: done already", change: 950 },
-    ]));
-    vi.mocked(fetchObjectExtended).mockResolvedValueOnce({ handle: "N5", tag_list: ["TAG-DONE"], extended: { backlinks: {} } } as any);
-
-    const result = await fetchMessageBoards("tok", 5, 5);
-
-    expect(result.todos).toEqual([]);
-  });
-
-  it("sends MESSAGES_VIEW's own baseFilter, sized off the larger of the two panel limits", async () => {
-    // Regression coverage carried over from the old fetchLatestMessages
-    // test -- fetchPage() sends exactly the where_expr it's given, with no
-    // idea MESSAGES_VIEW carries a fixed baseFilter the way a ViewStore's
-    // combinedFilter() would apply automatically.
+  it("sends TOPICS_VIEW's own baseFilter -- fetchPage() sends exactly the where_expr it's given, with no idea TOPICS_VIEW carries a fixed baseFilter the way a ViewStore's combinedFilter() would apply automatically", async () => {
+    vi.mocked(fetchPage).mockReset();
     vi.mocked(fetchPage).mockResolvedValueOnce(page([]));
 
-    await fetchMessageBoards("tok", 5, 8);
+    await fetchRecentTopics("tok", 5);
 
     const call = vi.mocked(fetchPage).mock.calls[0];
-    expect(call[4]).toBe("type.string == 'message'");
-    expect(call[6]).toBe(48); // Math.max(5, 8) * CANDIDATE_MULTIPLIER (6)
+    expect(call[4]).toBe("type.string == 'topic'");
   });
 });
 
@@ -194,7 +128,7 @@ describe("fetchLatestStories", () => {
     ]);
   });
 
-  it("sends STORY_VIEW's own baseFilter -- same regression this function's fetchLatestMessages counterpart guards against", async () => {
+  it("sends STORY_VIEW's own baseFilter -- same regression this function's fetchRecentTopics counterpart guards against", async () => {
     vi.mocked(fetchPage).mockReset();
     vi.mocked(fetchPage).mockResolvedValueOnce(page([]));
 

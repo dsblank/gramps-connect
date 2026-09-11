@@ -7,7 +7,7 @@
 // server call -- there is no backend endpoint for this anywhere in
 // gramps-web-api. Matches that same "per-browser, tree-scoped" shape here,
 // same localStorage convention as columnWidths.ts, keyed by handle rather
-// than gramps_id since every other Home-page item (RecentItem, MessageItem,
+// than gramps_id since every other Home-page item (RecentItem, TopicItem,
 // StoryItem) is already handle-keyed.
 import { getTreeId } from "../auth/auth";
 

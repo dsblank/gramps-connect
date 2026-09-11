@@ -65,7 +65,13 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   // candidates are).
   generated: ["tags", "notes", "attributes", "citations", "backlinks"],
   note: ["tags", "backlinks"],
-  messages: ["tags", "backlinks"],
+  // Topics render their linked-objects panel directly (RelatedPanel.tsx's
+  // own "topics" branch: TopicThread + LinkObjectControl +
+  // TopicLinksSection), not through SECTION_COMPONENTS -- an empty list
+  // here still keeps RELATED_CONFIG the source of truth for "this type
+  // exists" checks elsewhere (e.g. DiscussButton.tsx's own eligibility
+  // gate on *other* types' "notes" entry).
+  topics: [],
   story: ["tags", "backlinks"],
   tag: ["backlinks"],
 };

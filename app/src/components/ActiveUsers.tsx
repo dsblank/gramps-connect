@@ -1,11 +1,30 @@
 import { useSyncExternalStore } from "react";
 import { Avatar, Tooltip, UnstyledButton } from "@mantine/core";
-import { hasPermissions } from "../auth/auth";
+import { getCurrentUsername, getToken, hasPermissions } from "../auth/auth";
 import { getActiveUsers, subscribeActiveUsers } from "../store/activeUsers";
-import { openDmThread } from "../store/dmUi";
+import { openOrCreateUserTopic } from "../store/topicsApi";
+import { openTopicWindow } from "../store/topicWindows";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
 import { colorForUsername, initialsFor } from "../store/userAvatar";
 import { t } from "../i18n/i18n";
+
+/** Opens (or starts) the 1:1 topic with `peer` as a floating chat window --
+ * replaces the old dmUi.ts's openDmThread()/DmThread.tsx modal now that a
+ * DM is just an ordinary, unlisted Topic (topicsApi.ts's
+ * openOrCreateUserTopic). Deliberately doesn't navigate anywhere, same
+ * reasoning as DiscussButton.tsx: clicking someone's avatar shouldn't
+ * knock you off whatever record or list you're currently looking at. */
+async function messageUser(peer: string) {
+  try {
+    const token = await getToken();
+    const me = getCurrentUsername();
+    if (!me) return;
+    const handle = await openOrCreateUserTopic(token, me, peer);
+    openTopicWindow(handle);
+  } catch (err) {
+    console.error("failed to open or create topic with", peer, err);
+  }
+}
 
 // Avatars beyond this many collapse into a single "+N" one, same idea as
 // Mantine's own Avatar.Group truncation but driven manually so the overflow
@@ -28,8 +47,8 @@ export function ActiveUsers() {
 
   const visible = usernames.slice(0, MAX_VISIBLE);
   const overflow = usernames.slice(MAX_VISIBLE);
-  // Only offer "click an avatar to DM them" when the signed-in user could
-  // actually send one -- same AddObject gate MessageButton.tsx/
+  // Only offer "click an avatar to message them" when the signed-in user
+  // could actually post one -- same AddObject gate DiscussButton.tsx/
   // ListHeader.tsx already check before letting someone compose a message.
   const canMessage = hasPermissions("AddObject");
 
@@ -43,7 +62,7 @@ export function ActiveUsers() {
               is why this used to render low-contrast grey text on every
               color. See userAvatar.ts's doc comment. */}
           <UnstyledButton
-            onClick={canMessage ? () => openDmThread(username) : undefined}
+            onClick={canMessage ? () => messageUser(username) : undefined}
             style={{ cursor: canMessage ? "pointer" : "default" }}
             aria-label={canMessage ? `${t("Message")} ${displayName(username)}` : undefined}
           >

@@ -56,10 +56,12 @@ export function OverviewDialog({ opened, onClose }: OverviewDialogProps) {
               working from a copy of the tree that went stale while you read it.
             </List.Item>
             <List.Item>
-              <b>{t("You can leave messages for each other.")}</b> The Messages list is a
-              conversation attached to the tree itself, not a separate chat program.
+              <b>{t("You can discuss things right in the tree.")}</b> Discussions are
+              conversations attached to the tree itself, not a separate chat program --
+              start one from any record's Discuss button, or from scratch in the
+              Discussions list, and it floats alongside whatever else you are doing.
               Everyone who can see the tree can see it, including whoever joins next
-              year, and you get a notification when a new one arrives.
+              year, and you get a notification when a new message arrives.
             </List.Item>
             <List.Item>
               <b>{t("What you produce is shared.")}</b> When you run a report or export the

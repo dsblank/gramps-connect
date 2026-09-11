@@ -1,7 +1,7 @@
 // Best-effort username -> full_name lookup for chat-like message display
-// (MessageComposer.tsx's bubbles) -- Note.text has no author field of its
-// own, so notesApi.ts's createMessage stamps the signed-in username in as
-// plain text (authoredText.ts), and that's what MessageBubble has to work
+// (ChatBubble.tsx) -- Note.text has no author field of its own, so
+// topicsApi.ts's postTopicMessage stamps the signed-in username in as
+// plain text (authoredText.ts), and that's what ChatBubble has to work
 // with. Resolving it to a real name needs a directory of every user's
 // full_name, but gramps-web-api only exposes that in bulk behind
 // ViewOtherUser (Owner+, adminApi.ts's fetchAllUsers) -- a Contributor or

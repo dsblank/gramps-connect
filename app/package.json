@@ -41,6 +41,9 @@
     "tokml": "^0.4.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/d3-array": "^3.2.1",
     "@types/d3-hierarchy": "^3.1.7",
     "@types/d3-selection": "^3.0.11",
@@ -53,6 +56,7 @@
     "@types/react-dom": "^18.3.1",
     "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^29.1.1",
     "ts-morph": "^28.0.0",
     "typescript": "^7.0.2",
     "vite": "^5.4.11",

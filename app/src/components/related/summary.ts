@@ -81,20 +81,21 @@ function summaryText(type: string, obj: any): string {
     case "generated":
       return obj.desc || obj.path || "(media)";
     case "note":
-    case "messages":
       return truncate(obj.text?.string ?? "", 80) || "(note)";
-    case "story": {
-      // A story note's text.string is a JSON-stringified StorySpec, not
-      // free text -- show its own title rather than raw JSON. Falls back
-      // to "(story)" on parse failure, same reasoning as views.ts's
-      // storyTitle() for the sidebar table's own Title column.
+    case "story":
+    case "topics": {
+      // A story/topic note's text.string is a JSON-stringified spec object,
+      // not free text -- show its own title rather than raw JSON. Falls
+      // back to "(story)"/"(discussion)" on parse failure, same reasoning
+      // as views.ts's storyTitle() for the sidebar table's own Title
+      // column.
       try {
         const spec = JSON.parse(obj.text?.string ?? "");
         if (spec?.title) return spec.title;
       } catch {
         // fall through
       }
-      return "(story)";
+      return type === "story" ? "(story)" : "(discussion)";
     }
     case "tag":
       return obj.name || "(tag)";

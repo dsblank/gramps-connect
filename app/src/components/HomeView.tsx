@@ -5,8 +5,8 @@ import { fetchByHandle, type QueryItem } from "../store/api";
 import { formatHash } from "../hash";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
-  fetchHomeCounts, fetchMessageBoards, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo,
-  type MessageItem, type RecentItem, type StoryItem, type TodoItem,
+  fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo,
+  type RecentItem, type StoryItem, type TopicItem,
 } from "../store/homeStats";
 import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
 import { PERSON_VIEW } from "../store/views";
@@ -18,8 +18,7 @@ import iconStory from "../assets/icons/story-book.svg";
 import { t } from "../i18n/i18n";
 
 const RECENT_LIMIT = 8;
-const MESSAGE_LIMIT = 5;
-const TODO_LIMIT = 5;
+const TOPIC_LIMIT = 5;
 const STORY_LIMIT = 5;
 
 type Stage = "loading" | "ready" | "error";
@@ -36,8 +35,7 @@ export function HomeView() {
   const [error, setError] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [recent, setRecent] = useState<RecentItem[]>([]);
-  const [messages, setMessages] = useState<MessageItem[]>([]);
-  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [topics, setTopics] = useState<TopicItem[]>([]);
   const [stories, setStories] = useState<StoryItem[]>([]);
   const [homePerson, setHomePerson] = useState<QueryItem | null>(null);
 
@@ -46,18 +44,17 @@ export function HomeView() {
     (async () => {
       const token = await getToken();
       const homeHandle = getHomePersonHandle();
-      const [countsResult, recentResult, boardsResult, storiesResult, homePersonResult] = await Promise.all([
+      const [countsResult, recentResult, topicsResult, storiesResult, homePersonResult] = await Promise.all([
         fetchHomeCounts(),
         fetchRecentlyChanged(token, RECENT_LIMIT),
-        fetchMessageBoards(token, MESSAGE_LIMIT, TODO_LIMIT),
+        fetchRecentTopics(token, TOPIC_LIMIT),
         fetchLatestStories(token, STORY_LIMIT),
         homeHandle ? fetchByHandle(PERSON_VIEW, token, homeHandle) : Promise.resolve(null),
       ]);
       if (cancelled) return;
       setCounts(countsResult);
       setRecent(recentResult);
-      setMessages(boardsResult.messages);
-      setTodos(boardsResult.todos);
+      setTopics(topicsResult);
       setStories(storiesResult);
       setHomePerson(homePersonResult);
       setStage("ready");
@@ -96,32 +93,23 @@ export function HomeView() {
               />
             </Panel>
 
-            <Panel title={t("Messages")}>
-              {messages.length === 0 ? (
-                <Text c="dimmed">{t("No conversations yet.")}</Text>
+            <Panel title={t("Discussions")}>
+              {topics.length === 0 ? (
+                <Text c="dimmed">{t("No discussions yet.")}</Text>
               ) : (
                 <Stack gap="sm">
-                  {messages.map((m) => (
-                    // Latest activity per object -- links to the object
-                    // itself (where MessageButton.tsx's history shows the
-                    // whole conversation), not this one note's own page.
+                  {topics.map((topic) => (
                     <Anchor
-                      key={m.handle}
+                      key={topic.handle}
                       component="a"
-                      href={formatHash({ viewKey: m.about.viewKey, handle: m.about.handle })}
+                      href={formatHash({ viewKey: "topics", handle: topic.handle })}
                       underline="never"
                       c="inherit"
                     >
                       <Group gap="xs" wrap="nowrap" align="flex-start">
                         <Image src={iconChat} alt="" w={20} h={20} mt={2} />
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                          <Group gap={6} wrap="nowrap">
-                            <Text fw={600} truncate>{m.author || "Someone"}</Text>
-                            <Text c="dimmed" size="sm" truncate>{t("on")} {m.about.label}</Text>
-                          </Group>
-                          <Text c="dimmed" truncate>{m.message}</Text>
-                        </Box>
-                        <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(m.changeUnix)}</Text>
+                        <Text truncate style={{ flex: 1, minWidth: 0 }}>{topic.title}</Text>
+                        <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(topic.changeUnix)}</Text>
                       </Group>
                     </Anchor>
                   ))}
@@ -129,46 +117,11 @@ export function HomeView() {
               )}
               <Anchor
                 component="a"
-                href={formatHash({ viewKey: "messages" })}
+                href={formatHash({ viewKey: "topics" })}
                 mt="sm"
                 display="inline-block"
               >
-                {t("See all messages")}
-              </Anchor>
-            </Panel>
-
-            <Panel title={t("ToDo")}>
-              {todos.length === 0 ? (
-                <Text c="dimmed">{t("Nothing open.")}</Text>
-              ) : (
-                <Stack gap="sm">
-                  {todos.map((item) => (
-                    <Anchor
-                      key={item.handle}
-                      component="a"
-                      href={formatHash({ viewKey: "messages", handle: item.handle })}
-                      underline="never"
-                      c="inherit"
-                    >
-                      <Group gap="xs" wrap="nowrap" align="flex-start">
-                        <Image src={iconChat} alt="" w={20} h={20} mt={2} />
-                        <Box style={{ flex: 1, minWidth: 0 }}>
-                          <Text fw={600} truncate>{item.author || "Someone"}</Text>
-                          <Text c="dimmed" truncate>{item.message}</Text>
-                        </Box>
-                        <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(item.changeUnix)}</Text>
-                      </Group>
-                    </Anchor>
-                  ))}
-                </Stack>
-              )}
-              <Anchor
-                component="a"
-                href={formatHash({ viewKey: "messages" })}
-                mt="sm"
-                display="inline-block"
-              >
-                {t("See all messages")}
+                {t("See all discussions")}
               </Anchor>
             </Panel>
 

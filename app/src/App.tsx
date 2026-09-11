@@ -20,8 +20,6 @@ import { HomeView } from "./components/HomeView";
 import { MenuBar } from "./components/MenuBar";
 import { UserMenu } from "./components/UserMenu";
 import { ActiveUsers } from "./components/ActiveUsers";
-import { DmInbox } from "./components/DmInbox";
-import { DmThread } from "./components/DmThread";
 import { FilterBar } from "./components/FilterBar";
 import { ListHeader } from "./components/ListHeader";
 import { DataTable } from "./components/DataTable";
@@ -37,9 +35,10 @@ import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep } from "./store/jobsPoll";
 import { loadUserDirectory } from "./store/userDirectory";
 import { loadKnownUsersFromDirectory } from "./store/knownUsers";
-import { bumpDmActivity, DM_TYPE } from "./store/dmApi";
-import { parseDmText } from "./store/dmText";
+import { bumpTopicActivity } from "./store/topicWindows";
 import { fetchNoteRaw } from "./store/notesApi";
+import { classifyRemoteNoteChange } from "./store/topicInvite";
+import { FloatingTopicWindows } from "./components/FloatingTopicWindows";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
@@ -89,24 +88,38 @@ function genericNoteToast(notification: TreeChangeNotification) {
   notifyBrowser(title, message);
 }
 
-/** A DirectMessage note's own toast -- "New message from <name>" rather
- * than the generic "made a message" one, and bumps dmApi.ts's activity
- * counter so a mounted DmInbox picks up the unread count without waiting on
- * this poll's next tick to be noticed some other way. */
-function directMessageToast(author: string) {
-  const title = t("Gramps Connect direct message");
-  const message = `${t("New message from")} ${author}`;
-  notifications.show({ color: "grape", title, message });
-  notifyBrowser(title, message);
-  bumpDmActivity();
+/** A Topic note's own toast, distinct from the generic one -- shown once
+ * per discussion the first time a live-synced change reveals the
+ * signed-in user on its participants list, INSERT (just started, naming
+ * you from the start) or UPDATE (added to an existing one later via
+ * EditTopicButton.tsx) alike. */
+function inviteToast(title: string) {
+  const toastTitle = t("You've been invited to a discussion");
+  notifications.show({ color: "grape", title: toastTitle, message: title });
+  notifyBrowser(toastTitle, title);
 }
+
+// Handles already toasted for -- so an *unrelated* later edit to a
+// discussion you're already known to be on (a description tweak, someone
+// else posting) doesn't re-fire the invite toast every time, only genuinely
+// new information does. Module-level and session-only (not persisted): a
+// page reload re-derives "known" from scratch by the same
+// already-a-participant check, which just silently skips the toast rather
+// than wrongly re-announcing an invite from before the reload.
+const notifiedInviteHandles = new Set<string>();
 
 /** Fires for every Notes-table change by someone else (useLiveSync's own
  * guard already filters to that). A DELETE can't be resolved -- the note is
  * gone by the time this runs -- so it falls through to the generic toast,
- * same as a plain/message/story note would; only a live (INSERT/UPDATE)
- * DirectMessage note addressed to me gets the distinct one. */
+ * same as a plain/story/topic-message note would; only a live (INSERT/
+ * UPDATE) Topic note that names the signed-in user as a participant gets
+ * the distinct one. Also bumps topicWindows.ts's activity counter
+ * unconditionally (cheaper than resolving each note's own type first just
+ * to filter -- a FloatingTopicWindow only actually refetches while
+ * mounted, so a bump from an unrelated note change costs at most one
+ * wasted request). */
 function onRemoteNoteChange(notification: TreeChangeNotification) {
+  bumpTopicActivity();
   if (notification.op === "DELETE") {
     genericNoteToast(notification);
     return;
@@ -114,22 +127,15 @@ function onRemoteNoteChange(notification: TreeChangeNotification) {
   (async () => {
     const token = await getToken();
     const note = await fetchNoteRaw(token, notification.handle);
-    const type = (note.type as { string?: string } | string | null) ?? null;
-    const typeString = typeof type === "string" ? type : type?.string;
-    if (typeString !== DM_TYPE) {
-      genericNoteToast(notification);
+    const classification = classifyRemoteNoteChange(
+      note, getCurrentUsername(), notifiedInviteHandles.has(notification.handle)
+    );
+    if (classification.kind === "invite") {
+      notifiedInviteHandles.add(notification.handle);
+      inviteToast(classification.title);
       return;
     }
-    const rawText = (note.text as { string?: string } | string | null) ?? "";
-    const text = typeof rawText === "string" ? rawText : (rawText.string ?? "");
-    const { recipient, author } = parseDmText(text);
-    const me = getCurrentUsername();
-    if (recipient === me && author !== me) {
-      directMessageToast(author ?? notification.changedBy ?? t("someone"));
-    }
-    // A DirectMessage not addressed to me (someone else's conversation) --
-    // no toast at all, since "any note-view holder can technically read
-    // it" doesn't mean every DM should interrupt every other user.
+    genericNoteToast(notification);
   })().catch((err) => {
     console.error("failed to resolve remote note change", err);
     genericNoteToast(notification);
@@ -366,10 +372,10 @@ function AuthenticatedApp() {
     return startCatchupSweep(jobsPollCallbacks);
   }, []);
 
-  // Background username -> full_name resolution for the message chat view
-  // (MessageComposer.tsx) -- fire-and-forget so it's already warm by the
-  // time a user opens a message thread, same lifetime as useLiveSync()
-  // above. See userDirectory.ts for why this can't always resolve everyone.
+  // Background username -> full_name resolution for the chat views
+  // (ChatBubble.tsx) -- fire-and-forget so it's already warm by the time a
+  // user opens a topic's thread, same lifetime as useLiveSync() above. See
+  // userDirectory.ts for why this can't always resolve everyone.
   useEffect(() => {
     loadUserDirectory();
     loadKnownUsersFromDirectory();
@@ -413,7 +419,6 @@ function AuthenticatedApp() {
                 {wordmark}
                 <Group gap="xs" wrap="nowrap">
                   <ActiveUsers />
-                  <DmInbox />
                   <UserMenu />
                 </Group>
               </Group>
@@ -434,7 +439,6 @@ function AuthenticatedApp() {
               </Group>
               <Group gap="xs" wrap="nowrap">
                 <ActiveUsers />
-                <DmInbox />
                 <UserMenu />
               </Group>
             </Group>
@@ -593,10 +597,11 @@ function AuthenticatedApp() {
           see draftStack's doc comment above for why. */}
       <EditDialogs draftStack={draftStack} />
       <MediaDropOverlay {...mediaDrop} />
-      {/* One thread modal for the whole app -- both header ActiveUsers
-          avatars and DmInbox's conversation rows just call dmUi.ts's
-          openDmThread() rather than each mounting their own. */}
-      <DmThread />
+      {/* Floating chat windows, outside AppShell for the same reason
+          EditDialogs is -- they need to stay open and visible across any
+          navigation underneath them, not just within whichever view opened
+          one. */}
+      <FloatingTopicWindows />
     </>
   );
 }

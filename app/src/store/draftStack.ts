@@ -62,7 +62,7 @@ export const DRAFT_TYPE_LABELS: Record<DraftType, string> = {
 };
 
 // "story" has no ViewConfig of its own to fetch/PUT against -- a story is a
-// Note (STORY_VIEW is a fixed-tag-filter listing, same as MESSAGES_VIEW),
+// Note (STORY_VIEW is a fixed-tag-filter listing, same as TOPICS_VIEW),
 // so its edit draft reads/writes through NOTE_VIEW's plain /api/notes/
 // endpoint exactly like an ordinary Note draft would.
 const VIEW_BY_TYPE: Record<DraftType, ViewConfig> = {
@@ -463,7 +463,7 @@ export function useDraftStack(): UseDraftStack {
       }
 
       // Immediate feedback for the author, rather than waiting on
-      // historyPoll's next tick (same reasoning as MessageComposer.tsx).
+      // historyPoll's next tick (same reasoning as TopicThread.tsx's own send()).
       // extraCreate is a bare-dict array (no DraftType of its own -- see
       // DraftEntry.extraCreate) that today can hold a birth/death Event *or*
       // Place (EventPlaceField's "+ New Place"), so its own `_class` is
