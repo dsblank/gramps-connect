@@ -171,6 +171,54 @@ describe("ViewStore.runQuery preserveDisplayUntilCaughtUp (requeryDebounced)", (
     // wait for a background fill that isn't coming.
     expect(store.getSnapshot().loadedCount).toBe(3);
   });
+
+  it("queues a live-sync trigger that arrives while a background fill is still walking, instead of restarting it", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new ViewStore(TAG_VIEW, getSql);
+
+      // Held open deliberately -- simulates the fill's second page still
+      // being in flight (e.g. a slow Postgres table scan) when the next
+      // live-sync notification arrives.
+      let resolvePage2!: (value: Awaited<ReturnType<typeof fetchPage>>) => void;
+      const page2 = new Promise<Awaited<ReturnType<typeof fetchPage>>>((resolve) => {
+        resolvePage2 = resolve;
+      });
+
+      vi.mocked(fetchPage)
+        .mockResolvedValueOnce({ page: { items: [tagRow("H1")], next_after: "H1" }, totalCount: 2 })
+        .mockReturnValueOnce(page2)
+        .mockResolvedValueOnce({ page: { items: [tagRow("H3")], next_after: null }, totalCount: 1 });
+
+      store.requeryDebounced(1);
+      await vi.advanceTimersByTimeAsync(300); // fires the debounce, starts the requery
+
+      // Page one landed and the background fill moved on to page two --
+      // that's the second fetchPage() call, still unresolved.
+      expect(fetchPage).toHaveBeenCalledTimes(2);
+
+      // A second live-sync trigger arrives while that fill is still
+      // walking. If it restarted the query (the old behavior), this would
+      // bump queryGeneration and abort the in-flight page-two fetch.
+      store.requeryDebounced(2);
+      await vi.advanceTimersByTimeAsync(300);
+
+      // Queued, not restarted: still only the two calls from the original
+      // fill -- no new runQuery() was started out from under it.
+      expect(fetchPage).toHaveBeenCalledTimes(2);
+
+      // The original fill finishes...
+      resolvePage2({ page: { items: [tagRow("H2")], next_after: null }, totalCount: 2 });
+      await vi.waitFor(() => expect(store.getSnapshot().totalCount).toBe(2), { timeout: 5000 });
+
+      // ...which runs the queued requery right away rather than dropping
+      // it, landing the coalesced cursor's data.
+      await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(3), { timeout: 5000 });
+      await vi.waitFor(() => expect(store.getSnapshot().totalCount).toBe(1), { timeout: 5000 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("ViewStore.clearFilter", () => {

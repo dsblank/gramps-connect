@@ -147,6 +147,18 @@ export class ViewStore {
   private suppressSelectionClear = false;
   /** See requeryDebounced()'s doc comment. */
   private requeryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True from just before a runQuery()'s background fill starts walking
+   * pages until it finishes (or errors out) -- spans past runQuery()'s own
+   * returned promise, which resolves once page one is visible. See
+   * requeryDebounced()'s doc comment on why this gates queuing instead of
+   * superseding. */
+  private backgroundFillActive = false;
+  /** Set by requeryDebounced() when a trigger arrives while
+   * backgroundFillActive -- consumed by settleBackgroundFill() once the
+   * in-flight fill finishes. Only ever holds the latest cursor: several
+   * triggers during one fill coalesce into a single follow-up requery. */
+  private hasPendingRequery = false;
+  private pendingRequeryCursor: number | undefined;
   private listeners = new Set<() => void>();
   private snapshot: ViewSnapshot;
 
@@ -819,6 +831,7 @@ export class ViewStore {
       this.emit();
     }
 
+    this.backgroundFillActive = true;
     (async () => {
       while (after !== null) {
         const { page } = await fetchPage(this.view, await getToken(), after, false, this.combinedFilter(whereExpr), orderBy);
@@ -829,6 +842,9 @@ export class ViewStore {
           // "previous" db) when its own swapIn() runs. Otherwise nothing
           // else references newDb -- close it here or it leaks.
           if (!swapped) newDb.close();
+          // Leaves backgroundFillActive as-is: the query that superseded
+          // this one already owns it (set true at the top of its own
+          // runQuery() before this one could ever observe it going false).
           return;
         }
         this.insertPage(newDb, stmt, page.items);
@@ -855,11 +871,26 @@ export class ViewStore {
           await saveToOpfs(this.view.opfsFilename, newDb.export());
         }
       }
+      if (myGeneration === this.queryGeneration) this.settleBackgroundFill();
     })().catch((err) => {
       // Background-fill failure only gets logged -- by this point the
       // caller (runQuery's own awaiters) has already moved on.
       console.error(`[${this.view.label}] background fill error`, err);
+      if (myGeneration === this.queryGeneration) this.settleBackgroundFill();
     });
+  }
+
+  /** Clears backgroundFillActive and, if a requeryDebounced() trigger
+   * arrived while this fill was walking, runs the queued follow-up now --
+   * see requeryDebounced()'s doc comment. */
+  private settleBackgroundFill(): void {
+    this.backgroundFillActive = false;
+    if (this.hasPendingRequery) {
+      this.hasPendingRequery = false;
+      const cursor = this.pendingRequeryCursor;
+      this.pendingRequeryCursor = undefined;
+      this.startRequery(cursor);
+    }
   }
 
   /** Sorts by `column` (a plain-column ColumnConfig.select value -- see
@@ -927,20 +958,42 @@ export class ViewStore {
     if (this.requeryTimer) return; // already scheduled
     this.requeryTimer = setTimeout(() => {
       this.requeryTimer = null;
-      this.suppressSelectionClear = true;
-      this.runQuery(this.whereExpr, false, { preserveDisplayUntilCaughtUp: true })
-        .then(() => {
-          this.reconcileSelection();
-          if (cursor !== undefined) this.persistLiveState(cursor);
-        })
-        .catch((err) => {
-          console.error(`[${this.view.label}] live-sync requery failed`, err);
-        })
-        .finally(() => {
-          this.suppressSelectionClear = false;
-          this.emit();
-        });
+      // A previous requery's background fill is still walking pages --
+      // starting a new runQuery() here would bump queryGeneration and abort
+      // it at its next page boundary (see queryGeneration's doc comment).
+      // Under a sustained burst of writes (more than REQUERY_THRESHOLD
+      // changes to one table every poll tick -- e.g. a sync script) that
+      // abort-and-restart would repeat forever: the fill would never reach
+      // the last page, loadedCount would never catch totalCount, and the
+      // persist branch (only reached on a clean finish) would never run
+      // (discussion #4, F3's sustained-write follow-up). Queue this trigger
+      // instead -- settleBackgroundFill() runs it once the current fill
+      // finishes -- so the walk is only ever a full cycle behind the latest
+      // write, never restarted mid-flight. Several triggers that arrive
+      // before the fill finishes coalesce into this one follow-up cursor.
+      if (this.backgroundFillActive) {
+        this.hasPendingRequery = true;
+        this.pendingRequeryCursor = cursor;
+        return;
+      }
+      this.startRequery(cursor);
     }, 300);
+  }
+
+  private startRequery(cursor?: number): void {
+    this.suppressSelectionClear = true;
+    this.runQuery(this.whereExpr, false, { preserveDisplayUntilCaughtUp: true })
+      .then(() => {
+        this.reconcileSelection();
+        if (cursor !== undefined) this.persistLiveState(cursor);
+      })
+      .catch((err) => {
+        console.error(`[${this.view.label}] live-sync requery failed`, err);
+      })
+      .finally(() => {
+        this.suppressSelectionClear = false;
+        this.emit();
+      });
   }
 
   private insertPage(db: Database, stmt: ReturnType<Database["prepare"]>, items: Parameters<typeof toRowValues>[1][]) {
