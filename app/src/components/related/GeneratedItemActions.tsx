@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Button } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
+import { confirmDialog } from "../../store/confirmDialog";
 import { deleteMedia, FILE_NAME_ATTRIBUTE } from "../../store/jobsApi";
 import { clickDownloadLink } from "../../store/downloadFile";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
@@ -74,7 +75,7 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
 
       if (
         hasPermissions("DeleteObject") &&
-        window.confirm(`Delete this ${kind} "${fileName ?? detail.handle}"? There is no undo.`)
+        (await confirmDialog(`Delete this ${kind} "${fileName ?? detail.handle}"? There is no undo.`, "Delete"))
       ) {
         await deleteMedia(token, detail.handle);
         setDeleted(true);

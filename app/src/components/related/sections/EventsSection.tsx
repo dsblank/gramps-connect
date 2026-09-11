@@ -1,4 +1,5 @@
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs } from "../../../store/objectDetail";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { EVENT_VIEW } from "../../../store/views";
@@ -25,7 +26,7 @@ export function EventsSection({ view, detail, onNavigate, onRefetch }: SectionPr
 
   async function handleRemove(handle: string, target: unknown) {
     const summary = summaryLine("event", target) || "this event";
-    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the event itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} from this ${view.key}? This does not delete the event itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "event_ref_list", handle);
     onRefetch?.();

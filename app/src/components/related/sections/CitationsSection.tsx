@@ -1,4 +1,5 @@
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { CITATION_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
@@ -19,7 +20,7 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
 
   async function handleRemove(handle: string, target: unknown) {
     const summary = summaryLine("citation", target) || "this citation";
-    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the citation itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} from this ${view.key}? This does not delete the citation itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "citation_list", handle);
     onRefetch?.();

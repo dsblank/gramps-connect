@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs, type RawRef } from "../../../store/objectDetail";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { REPOSITORY_VIEW } from "../../../store/views";
@@ -23,7 +24,7 @@ export function RepositoriesSection({ view, detail, onNavigate, onRefetch }: Sec
 
   async function handleRemove(handle: string, target: unknown) {
     const summary = summaryLine("repository", target) || "this repository";
-    if (!window.confirm(`Remove ${summary} from this source? This does not delete the repository itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} from this source? This does not delete the repository itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "reporef_list", handle);
     onRefetch?.();

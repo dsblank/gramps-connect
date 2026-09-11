@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { generateStory, STORY_SOURCE_VIEWS, STORY_TYPE } from "../../../store/storyApi";
 import type { StoryOptions, StorySpec } from "../../../store/storyBuilder";
@@ -135,7 +136,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   async function handleRemove(handle: string, target: RawNote, kind: "note" | "story" | "topics") {
     const summary = summaryLine(kind, target) || `this ${kind}`;
     const englishKind = kind === "topics" ? "discussion" : kind;
-    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the ${englishKind} itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} from this ${view.key}? This does not delete the ${englishKind} itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "note_list", handle);
     onRefetch?.();

@@ -1,5 +1,6 @@
 import { Badge, Group } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { TAG_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
@@ -23,7 +24,7 @@ export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProp
   if (rows.length === 0 && !canAttach) return null;
 
   async function handleRemove(handle: string, name: string) {
-    if (!window.confirm(`Remove the tag "${name}" from this ${view.key}? This does not delete the tag itself.`)) return;
+    if (!(await confirmDialog(`Remove the tag "${name}" from this ${view.key}? This does not delete the tag itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "tag_list", handle);
     onRefetch?.();

@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, Collapse, Group, Loader, Modal, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import { canAuthorGramplets, fetchGramplets } from "./grampletMedia";
+import { confirmDialog } from "../store/confirmDialog";
 import {
   DEFAULT_CATALOG_URL,
   fetchCatalog,
@@ -108,9 +109,10 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
     if (!canAuthorGramplets()) return;
     if (
       wasEditedSinceInstall(gramplet) &&
-      !window.confirm(
-        `Update "${gramplet.label}"? You've customized this Gramplet's code since installing it -- updating will overwrite your changes with the Store's current version. There is no undo.`
-      )
+      !(await confirmDialog(
+        `Update "${gramplet.label}"? You've customized this Gramplet's code since installing it -- updating will overwrite your changes with the Store's current version. There is no undo.`,
+        "Update"
+      ))
     ) {
       return;
     }
@@ -128,7 +130,7 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
 
   async function handleRemove(entry: CatalogEntry, gramplet: Gramplet) {
     if (!canAuthorGramplets() || !gramplet.handle) return;
-    if (!window.confirm(`Delete "${gramplet.label}"? This removes it from the tree entirely. There is no undo.`)) return;
+    if (!(await confirmDialog(`Delete "${gramplet.label}"? This removes it from the tree entirely. There is no undo.`, "Delete"))) return;
     setBusyId(entry.id);
     setActionError(null);
     try {
@@ -173,13 +175,14 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
     const editedCount = updatableVisible.filter(({ gramplet }) => wasEditedSinceInstall(gramplet)).length;
     if (
       editedCount > 0 &&
-      !window.confirm(
+      !(await confirmDialog(
         `Update all ${updatableVisible.length} Gramplet(s)? ${editedCount} of them ${
           editedCount === 1 ? "has" : "have"
         } been customized since installing -- updating will overwrite ${
           editedCount === 1 ? "its" : "their"
-        } changes with the Store's current version. There is no undo.`
-      )
+        } changes with the Store's current version. There is no undo.`,
+        "Update"
+      ))
     ) {
       return;
     }
@@ -201,9 +204,9 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
   async function handleRemoveAll() {
     if (!canAuthorGramplets() || installedVisible.length === 0) return;
     if (
-      !window.confirm(
+      !(await confirmDialog(
         `Remove all ${installedVisible.length} installed Gramplet(s)? This removes them from the tree entirely, including any you've customized since installing. There is no undo.`
-      )
+      ))
     ) {
       return;
     }

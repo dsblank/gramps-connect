@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal, Stack, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { fetchPlainObject } from "../../../store/objectsApi";
 import { setRefField } from "../../../store/refListApi";
 import { FAMILY_VIEW } from "../../../store/views";
@@ -98,7 +99,7 @@ export function FamiliesSection({ type, detail, onNavigate, onRefetch }: Section
     const isFather = fam.father?.handle === detail.handle;
     const field = isFather ? "father_handle" : "mother_handle";
     const roleLabel = isFather ? "father" : "mother";
-    if (!window.confirm(`Remove this person as ${roleLabel} of this family? This does not delete the family itself.`)) return;
+    if (!(await confirmDialog(`Remove this person as ${roleLabel} of this family? This does not delete the family itself.`))) return;
     const token = await getToken();
     await setRefField(token, FAMILY_VIEW, fam.handle, field, "");
     onRefetch?.();

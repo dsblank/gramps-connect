@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Group, Modal, PasswordInput, Select, Stack, Table, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getCurrentUsername, getToken, hasPermissions, refreshTokenNow, setCurrentUsername } from "../auth/auth";
+import { confirmDialog } from "../store/confirmDialog";
 import {
   ROLE_LABELS, type AdminUser, type Tree,
   createUser, deleteUser, fetchAllUsers, fetchTrees, triggerPasswordReset, updateUser,
@@ -142,7 +143,7 @@ export function UserManagementPanel({ active }: { active: boolean }) {
   }
 
   async function handleDelete(user: AdminUser) {
-    if (!window.confirm(`Delete user "${user.name}"? There is no undo.`)) return;
+    if (!(await confirmDialog(`Delete user "${user.name}"? There is no undo.`, "Delete"))) return;
     setBusyName(user.name);
     setError(null);
     try {

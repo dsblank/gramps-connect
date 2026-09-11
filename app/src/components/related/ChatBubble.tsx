@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Box, Button, Group, Stack, Text, Textarea } from "@mantine/core";
+import { confirmDialog } from "../../store/confirmDialog";
 import { formatChange, formatChangeTitle } from "../../store/views";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../../store/userDirectory";
 import { bubbleColorForUsername } from "../../store/userAvatar";
@@ -73,7 +74,7 @@ export function ChatBubble({
 
   async function handleDelete() {
     if (!onDelete) return;
-    if (!window.confirm(t("Delete this message? There is no undo."))) return;
+    if (!(await confirmDialog(t("Delete this message? There is no undo."), "Delete"))) return;
     setBusy(true);
     setError(null);
     try {

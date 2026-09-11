@@ -1,4 +1,5 @@
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { setRefField } from "../../../store/refListApi";
 import { PLACE_VIEW } from "../../../store/views";
 import { SetFieldControl } from "../AttachControl";
@@ -27,7 +28,7 @@ export function PlaceSection({ view, detail, onNavigate, onRefetch }: SectionPro
 
   async function handleClear() {
     const summary = summaryLine("place", place) || "this place";
-    if (!window.confirm(`Remove ${summary} as this event's place? This does not delete the place itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} as this event's place? This does not delete the place itself.`))) return;
     const token = await getToken();
     await setRefField(token, view, detail.handle, "place", "");
     onRefetch?.();

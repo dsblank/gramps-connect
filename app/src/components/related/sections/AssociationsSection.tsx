@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs, type RawRef } from "../../../store/objectDetail";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { PERSON_VIEW } from "../../../store/views";
@@ -26,7 +27,7 @@ export function AssociationsSection({ view, detail, onNavigate, onRefetch }: Sec
 
   async function handleRemove(handle: string, target: unknown) {
     const summary = summaryLine("person", target) || "this person";
-    if (!window.confirm(`Remove the association with ${summary}? This does not delete the person themselves.`)) return;
+    if (!(await confirmDialog(`Remove the association with ${summary}? This does not delete the person themselves.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "person_ref_list", handle);
     onRefetch?.();

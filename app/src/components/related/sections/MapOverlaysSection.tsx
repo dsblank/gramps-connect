@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { Box, Loader } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { fetchObjectExtended, getBacklinks, zipRefs } from "../../../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../../../store/refListApi";
 import { buildSimpleSearchExpr } from "../../../store/simpleSearch";
@@ -51,7 +52,7 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
 
   async function handleRemove(handle: string, target: { desc?: string; path?: string } | undefined) {
     const summary = summaryLine("media", target) || "this map overlay";
-    if (!window.confirm(`Remove ${summary} from this place? This does not delete the overlay file itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} from this place? This does not delete the overlay file itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, PLACE_VIEW, detail.handle, "media_list", handle);
     onRefetch?.();

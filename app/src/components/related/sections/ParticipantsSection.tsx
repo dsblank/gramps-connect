@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { attachRefListEntry, detachRefListEntry } from "../../../store/refListApi";
 import { FAMILY_VIEW, PERSON_VIEW, type ViewConfig } from "../../../store/views";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
@@ -89,7 +90,7 @@ export function ParticipantsSection({ detail, onNavigate, onRefetch }: SectionPr
 
   async function handleRemove(view: ViewConfig, participantHandle: string, obj: unknown) {
     const summary = summaryLine(view.key, obj) || `this ${view.key}`;
-    if (!window.confirm(`Remove ${summary} from this event? This does not delete the ${view.key} itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} from this event? This does not delete the ${view.key} itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, participantHandle, "event_ref_list", detail.handle);
     onRefetch?.();

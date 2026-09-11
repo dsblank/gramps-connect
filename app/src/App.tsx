@@ -39,6 +39,7 @@ import { bumpTopicActivity } from "./store/topicWindows";
 import { fetchNoteRaw } from "./store/notesApi";
 import { classifyRemoteNoteChange } from "./store/topicInvite";
 import { FloatingTopicWindows } from "./components/FloatingTopicWindows";
+import { ConfirmDialogHost } from "./components/ConfirmDialogHost";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
@@ -602,6 +603,9 @@ function AuthenticatedApp() {
           navigation underneath them, not just within whichever view opened
           one. */}
       <FloatingTopicWindows />
+      {/* Single shared modal answering every confirmDialog() call across
+          the app -- see ConfirmDialogHost.tsx's own doc comment. */}
+      <ConfirmDialogHost />
     </>
   );
 }

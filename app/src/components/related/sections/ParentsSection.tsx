@@ -1,5 +1,6 @@
 import { Stack, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import type { RawRef } from "../../../store/objectDetail";
 import { setRefField } from "../../../store/refListApi";
 import { PERSON_VIEW } from "../../../store/views";
@@ -86,7 +87,7 @@ export function ParentsSection({ type, view, detail, onNavigate, onRefetch }: Se
 
     async function handleClear(field: "father_handle" | "mother_handle", roleLabel: string, target: { handle?: string } | undefined) {
       const summary = summaryLine("person", target) || roleLabel;
-      if (!window.confirm(`Remove ${summary} as ${roleLabel.toLowerCase()} of this family? This does not delete the person themselves.`)) return;
+      if (!(await confirmDialog(`Remove ${summary} as ${roleLabel.toLowerCase()} of this family? This does not delete the person themselves.`))) return;
       const token = await getToken();
       await setRefField(token, view, detail.handle, field, "");
       onRefetch?.();

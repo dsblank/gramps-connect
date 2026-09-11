@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs, type RawRef } from "../../../store/objectDetail";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { PERSON_VIEW } from "../../../store/views";
@@ -24,7 +25,7 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
 
   async function handleRemove(handle: string, target: unknown) {
     const summary = summaryLine("person", target) || "this person";
-    if (!window.confirm(`Remove ${summary} as a child from this family? This does not delete the person themselves.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} as a child from this family? This does not delete the person themselves.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "child_ref_list", handle);
     onRefetch?.();

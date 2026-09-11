@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs } from "../../../store/objectDetail";
 import { detachRefListEntry, patchRefListEntry } from "../../../store/refListApi";
 import { MEDIA_VIEW } from "../../../store/views";
@@ -42,7 +43,7 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
 
   async function handleRemove(handle: string, target: { mime?: string } | undefined) {
     const summary = summaryLine("media", target) || "this media item";
-    if (!window.confirm(`Remove ${summary} from this ${view.key}? This does not delete the media item itself.`)) return;
+    if (!(await confirmDialog(`Remove ${summary} from this ${view.key}? This does not delete the media item itself.`))) return;
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "media_list", handle);
     onRefetch?.();

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button, Modal } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
+import { confirmDialog } from "../../../store/confirmDialog";
 import { fetchPlainObject } from "../../../store/objectsApi";
 import { buildSimpleSearchExpr } from "../../../store/simpleSearch";
 import { MEDIA_VIEW } from "../../../store/views";
@@ -92,7 +93,7 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
   }
 
   async function handleRemove(targetHandle: string) {
-    if (!window.confirm("Remove this comparison? This does not delete either media item.")) return;
+    if (!(await confirmDialog("Remove this comparison? This does not delete either media item."))) return;
     const token = await getToken();
     await detachComparison(token, detail.handle, targetHandle);
     onRefetch?.();
