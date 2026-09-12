@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminUser } from "../adminApi";
 import type {
   getKnownUsers as GetKnownUsers,
+  isGuestUser as IsGuestUser,
   loadKnownUsersFromDirectory as LoadKnownUsersFromDirectory,
   recordKnownUser as RecordKnownUser,
   subscribeKnownUsers as SubscribeKnownUsers,
@@ -14,7 +15,7 @@ vi.mock("../../auth/auth", () => ({
   hasPermissions: (...perms: string[]) => hasPermissions(...perms),
   getToken: vi.fn(async () => "tok"),
 }));
-vi.mock("../adminApi", () => ({ fetchAllUsers: (token: string) => fetchAllUsers(token) }));
+vi.mock("../adminApi", () => ({ fetchAllUsers: (token: string) => fetchAllUsers(token), ROLE_GUEST: 0 }));
 
 // knownUsers.ts's Set/directoryLoadPromise are module-level singleton
 // state, same reasoning activeUsers.test.ts already documents -- fresh
@@ -23,13 +24,14 @@ let getKnownUsers: typeof GetKnownUsers;
 let recordKnownUser: typeof RecordKnownUser;
 let subscribeKnownUsers: typeof SubscribeKnownUsers;
 let loadKnownUsersFromDirectory: typeof LoadKnownUsersFromDirectory;
+let isGuestUser: typeof IsGuestUser;
 
 describe("knownUsers", () => {
   beforeEach(async () => {
     vi.resetModules();
     hasPermissions.mockReset().mockReturnValue(false);
     fetchAllUsers.mockReset();
-    ({ getKnownUsers, recordKnownUser, subscribeKnownUsers, loadKnownUsersFromDirectory } = await import("../knownUsers"));
+    ({ getKnownUsers, recordKnownUser, subscribeKnownUsers, loadKnownUsersFromDirectory, isGuestUser } = await import("../knownUsers"));
   });
 
   it("starts empty", () => {
@@ -101,5 +103,34 @@ describe("knownUsers", () => {
     loadKnownUsersFromDirectory(true);
     await vi.waitFor(() => expect(getKnownUsers()).toEqual(["dave", "erin"]));
     expect(fetchAllUsers).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a guest out of getKnownUsers() -- they can't be messaged", async () => {
+    hasPermissions.mockReturnValue(true);
+    fetchAllUsers.mockResolvedValue([{ name: "dave", role: 1 }, { name: "gale", role: 0 }]);
+
+    loadKnownUsersFromDirectory();
+    await vi.waitFor(() => expect(getKnownUsers()).toEqual(["dave"]));
+    expect(isGuestUser("gale")).toBe(true);
+    expect(isGuestUser("dave")).toBe(false);
+  });
+
+  it("doesn't assume a live-sync-recorded username (no role info) is a guest", () => {
+    recordKnownUser("bob");
+    expect(isGuestUser("bob")).toBe(false);
+    expect(getKnownUsers()).toEqual(["bob"]);
+  });
+
+  it("drops a user from the snapshot if the directory later reports them promoted out of guest, and vice versa", async () => {
+    hasPermissions.mockReturnValue(true);
+    fetchAllUsers.mockResolvedValueOnce([{ name: "gale", role: 0 }]);
+    loadKnownUsersFromDirectory();
+    await vi.waitFor(() => expect(isGuestUser("gale")).toBe(true));
+    expect(getKnownUsers()).toEqual([]);
+
+    fetchAllUsers.mockResolvedValueOnce([{ name: "gale", role: 1 }]);
+    loadKnownUsersFromDirectory(true);
+    await vi.waitFor(() => expect(getKnownUsers()).toEqual(["gale"]));
+    expect(isGuestUser("gale")).toBe(false);
   });
 });

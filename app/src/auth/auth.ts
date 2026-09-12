@@ -220,6 +220,17 @@ export function hasPermissions(...perms: string[]): boolean {
   return perms.every((perm) => granted.includes(perm));
 }
 
+/** Whether the signed-in user's role is Guest -- the JWT carries no `role`
+ * claim (only `permissions`, see hasPermissions() above), but ROLE_GUEST is
+ * the only role gramps-web-api's PERMISSIONS table (auth/const.py) doesn't
+ * grant ViewPrivate: every role from Member up inherits it. So "lacks
+ * ViewPrivate" is exactly "is a guest" for any already-authenticated user.
+ * Used to keep guests -- who can't be messaged and shouldn't message anyone
+ * -- out of the Discussions UI; see Sidebar.tsx and knownUsers.ts. */
+export function isGuest(): boolean {
+  return !!cachedToken && !hasPermissions("ViewPrivate");
+}
+
 /** Whether the current access token is "fresh" -- minted directly by
  * login(), as opposed to reissued by the silent refresh in getToken()
  * (gramps-web-api's token.py sets `fresh=True` only on the former). Some

@@ -122,6 +122,11 @@ export interface AdminUser {
   tree?: string | null;
 }
 
+// gramps-web-api's auth/const.py ROLE_GUEST -- knownUsers.ts uses this to
+// keep guests (who can't be messaged, see auth.ts's isGuest()) out of the
+// message-participant picker.
+export const ROLE_GUEST = 0;
+
 // gramps-web's own role picker order (GrampsjsFormUser.js) -- Unconfirmed
 // and Disabled included so an admin can approve a pending registration or
 // disable an account from the same Select, not just assign working roles.

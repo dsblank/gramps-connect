@@ -1,6 +1,7 @@
 import { Divider, ScrollArea, Stack, Tooltip, UnstyledButton, Image } from "@mantine/core";
 import { HOME_KEY } from "../hash";
 import { VIEWS } from "../store/views";
+import { isGuest } from "../auth/auth";
 import iconHome from "../assets/icons/gramps-home.svg";
 import classes from "./Sidebar.module.css";
 import { t } from "../i18n/i18n";
@@ -21,6 +22,10 @@ interface SidebarProps {
  * status bar. Overlay scrollbar (Mantine's own, not a native one), so it
  * costs the 68px rail no width. */
 export function Sidebar({ activeKey, onSelect }: SidebarProps) {
+  // Guests can't be messaged and can't message anyone (see auth.ts's
+  // isGuest() and knownUsers.ts), so the Discussions entry point isn't
+  // useful to them -- hide it rather than let them in to find that out.
+  const views = isGuest() ? VIEWS.filter((view) => view.key !== "topics") : VIEWS;
   return (
     <ScrollArea type="auto" scrollbarSize={6} style={{ flex: 1, minHeight: 0 }}>
       <Stack gap={2} align="center" py="sm">
@@ -39,7 +44,7 @@ export function Sidebar({ activeKey, onSelect }: SidebarProps) {
           </UnstyledButton>
         </Tooltip>
         <Divider my="xs" />
-        {VIEWS.map((view) => (
+        {views.map((view) => (
           <div key={view.key}>
             {view.sidebarSeparatorBefore && <Divider my="xs" />}
             <Tooltip label={t(view.label)} position="right" withArrow openDelay={300}>

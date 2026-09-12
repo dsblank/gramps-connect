@@ -7,15 +7,31 @@
 // can see it -- the real user list, same ViewOtherUser/ViewOtherTreeUser
 // guard userDirectory.ts's loadUserDirectory() already uses.
 import { getToken, hasPermissions } from "../auth/auth";
-import { fetchAllUsers } from "./adminApi";
+import { fetchAllUsers, ROLE_GUEST } from "./adminApi";
 
 const known = new Set<string>();
+// Usernames the directory load below confirmed are ROLE_GUEST -- guests
+// can't be messaged (see auth.ts's isGuest() doc comment), so they're kept
+// out of getKnownUsers()'s snapshot even though `known` still remembers
+// them. Only ever populated from fetchAllUsers' role field: a username
+// recorded via recordKnownUser() (a live-sync changedBy) carries no role,
+// so it's never assumed to be a guest.
+const guestUsers = new Set<string>();
 const listeners = new Set<() => void>();
 let snapshot: string[] = [];
 let directoryLoadPromise: Promise<void> | null = null;
 
 function recomputeSnapshot(): void {
-  snapshot = Array.from(known).sort((a, b) => a.localeCompare(b));
+  snapshot = Array.from(known)
+    .filter((name) => !guestUsers.has(name))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** True once the user directory has confirmed `username` is a Guest --
+ * ParticipantsInput.tsx uses this to strip a guest's name back out even if
+ * it's freely typed rather than picked from the suggestion list. */
+export function isGuestUser(username: string): boolean {
+  return guestUsers.has(username);
 }
 
 function notify(): void {
@@ -59,6 +75,10 @@ export function loadKnownUsersFromDirectory(force = false): void {
         known.add(user.name);
         changed = true;
       }
+      const wasGuest = guestUsers.has(user.name);
+      if (user.role === ROLE_GUEST) guestUsers.add(user.name);
+      else guestUsers.delete(user.name);
+      if (wasGuest !== guestUsers.has(user.name)) changed = true;
     }
     if (changed) notify();
   })().catch((err) => {
