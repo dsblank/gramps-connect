@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Alert, Button } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { confirmDialog } from "../../store/confirmDialog";
 import { deleteMedia, FILE_NAME_ATTRIBUTE } from "../../store/jobsApi";
 import { clickDownloadLink } from "../../store/downloadFile";
+import { notifyBrowser } from "../../store/browserNotifications";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { zipHandles } from "./sections/shared";
@@ -66,7 +68,20 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
         // way the old `?download=true` URL relied on. `detail.handle` as
         // the last resort matches the delete-confirmation text's own
         // fallback just below.
-        clickDownloadLink(objectUrl, fileName ?? (detail.path as string | undefined) ?? detail.handle);
+        const downloadName = fileName ?? (detail.path as string | undefined) ?? detail.handle;
+        clickDownloadLink(objectUrl, downloadName);
+        // clickDownloadLink() hands off to the browser/OS's own download
+        // machinery (a native Save-As dialog in the standalone desktop
+        // build, see launcher.py's on_download_starting) -- the page gets
+        // no callback either way, so this can't confirm the save actually
+        // completed. Still worth an explicit toast: on desktop that native
+        // dialog can appear behind the window or get missed entirely, and
+        // the delete-confirmation dialog right below would otherwise be
+        // the only feedback the click did anything at all.
+        const title = isExport ? t("Export downloaded") : t("Report downloaded");
+        const message = `${downloadName} — ${t("saved to your downloads.")}`;
+        notifications.show({ color: "green", title, message });
+        notifyBrowser(title, message);
       } finally {
         // Safari needs the URL to outlive the click; a task turn is
         // enough, and the blob is freed either way.
