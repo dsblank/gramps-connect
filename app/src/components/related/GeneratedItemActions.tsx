@@ -90,7 +90,18 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
 
       if (
         hasPermissions("DeleteObject") &&
-        (await confirmDialog(`Delete this ${kind} "${fileName ?? detail.handle}"? There is no undo.`, "Delete"))
+        // Framed as "keep it?" rather than "delete it?" -- the file was
+        // already uploaded as a Media object before this button ever
+        // rendered (see jobsPromote.ts's promoteJob), so there's nothing
+        // left to opt into here, only a chance to opt out. false (Save,
+        // green, or dismissing the dialog -- Escape/backdrop) means keep
+        // it, matching confirmDialog()'s usual "false = safe default"
+        // convention app-wide; only the explicit red "Delete" click
+        // resolves true.
+        (await confirmDialog(`Save this ${kind} "${fileName ?? detail.handle}" as a media object?`, "Delete", {
+          cancelLabel: "Save",
+          cancelColor: "green",
+        }))
       ) {
         await deleteMedia(token, detail.handle);
         setDeleted(true);

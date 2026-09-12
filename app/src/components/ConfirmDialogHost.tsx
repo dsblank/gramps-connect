@@ -22,8 +22,12 @@ export function ConfirmDialogHost() {
     <Modal opened={request != null} onClose={() => resolveConfirmDialog(false)} title={t("Confirm")} size="sm">
       <Text size="sm">{request?.message}</Text>
       <Group justify="flex-end" mt="md">
-        <Button variant="default" onClick={() => resolveConfirmDialog(false)}>
-          {t("Cancel")}
+        <Button
+          variant={request?.cancelColor ? undefined : "default"}
+          color={request?.cancelColor}
+          onClick={() => resolveConfirmDialog(false)}
+        >
+          {t(request?.cancelLabel ?? "Cancel")}
         </Button>
         <Button color="red" onClick={() => resolveConfirmDialog(true)}>
           {t(request?.confirmLabel ?? "Remove")}
