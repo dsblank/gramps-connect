@@ -93,14 +93,18 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
         // Framed as "keep it?" rather than "delete it?" -- the file was
         // already uploaded as a Media object before this button ever
         // rendered (see jobsPromote.ts's promoteJob), so there's nothing
-        // left to opt into here, only a chance to opt out. false (Save,
-        // green, or dismissing the dialog -- Escape/backdrop) means keep
-        // it, matching confirmDialog()'s usual "false = safe default"
-        // convention app-wide; only the explicit red "Delete" click
-        // resolves true.
-        (await confirmDialog(`Save this ${kind} "${fileName ?? detail.handle}" as a media object?`, "Delete", {
+        // left to opt into here, only a chance to opt out. A red "Delete"
+        // button here previously read as destroying something the user
+        // hadn't consented to yet, when it's really just declining to
+        // keep a copy already made -- plain "Don't save" says that
+        // without the false alarm. false (Save, green, or dismissing the
+        // dialog -- Escape/backdrop) means keep it, matching
+        // confirmDialog()'s usual "false = safe default" convention
+        // app-wide; only the explicit "Don't save" click resolves true.
+        (await confirmDialog(`Save this ${kind} "${fileName ?? detail.handle}" as a media object?`, "Don't save", {
           cancelLabel: "Save",
           cancelColor: "green",
+          confirmVariant: "default",
         }))
       ) {
         await deleteMedia(token, detail.handle);

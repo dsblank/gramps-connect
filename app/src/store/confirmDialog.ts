@@ -23,6 +23,11 @@ export interface ConfirmDialogOptions {
    * resolves false either way -- only the label/color changes. */
   cancelLabel?: string;
   cancelColor?: string;
+  /** Un-reds the confirm-slot button -- for a dialog whose true-resolving
+   * action isn't actually destructive to warn about (e.g. "Don't save" when
+   * the file was already saved before the dialog ever opened), so red would
+   * mislead more than it'd warn. */
+  confirmVariant?: string;
 }
 
 export interface ConfirmRequest extends ConfirmDialogOptions {

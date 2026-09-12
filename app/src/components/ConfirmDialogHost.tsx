@@ -29,7 +29,11 @@ export function ConfirmDialogHost() {
         >
           {t(request?.cancelLabel ?? "Cancel")}
         </Button>
-        <Button color="red" onClick={() => resolveConfirmDialog(true)}>
+        <Button
+          variant={request?.confirmVariant}
+          color={request?.confirmVariant ? undefined : "red"}
+          onClick={() => resolveConfirmDialog(true)}
+        >
           {t(request?.confirmLabel ?? "Remove")}
         </Button>
       </Group>
