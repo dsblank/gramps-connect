@@ -19,7 +19,7 @@
 //      same as dropping them into the Media list directly.
 import { useEffect, useRef, useState } from "react";
 import { notifications } from "@mantine/notifications";
-import { getToken } from "../auth/auth";
+import { getToken, hasPermissions } from "../auth/auth";
 import { uploadMediaFile } from "../store/jobsApi";
 import { attachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
@@ -143,6 +143,14 @@ export function useMediaDrop(draftStack: UseDraftStack, activeKey: string): Medi
   activeKeyRef.current = activeKey;
 
   useEffect(() => {
+    // Every outcome above (draft/viewed/none) ends in uploadMediaFile, an
+    // AddObject-only call -- same gate ListHeader.tsx's "New Media" button
+    // hides itself behind. Skip wiring the listeners at all for a role that
+    // lacks it, rather than showing the overlay for a drop that can only
+    // 403: unlike a role change (which forces a reload, see auth.ts's
+    // logout()/refreshTokenNow() docs), this never needs to re-evaluate
+    // mid-session.
+    if (!hasPermissions("AddObject")) return;
     function onDragEnter(e: DragEvent) {
       if (!hasFiles(e)) return;
       e.preventDefault();

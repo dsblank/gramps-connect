@@ -95,6 +95,14 @@ export function TopicThread({ topicHandle, historyHeight = 400 }: { topicHandle:
   // there's nothing to catch beyond letting them propagate.
   const canEditMessages = hasPermissions("EditObject");
   const canDeleteMessages = hasPermissions("DeleteObject");
+  // Posting a message is an AddObject-only Note create (topicsApi.ts's
+  // postTopicMessage) -- same gate ListHeader.tsx's NewTopicButton and
+  // MenuBar.tsx's "New Person…" already hide their own compose UI behind.
+  // A Guest lacks it (and, since every topic Note is private, generally
+  // can't even reach an open thread to see this), but hiding the composer
+  // rather than letting the request 403 keeps this consistent with every
+  // other AddObject-gated create control in the app.
+  const canPost = hasPermissions("AddObject");
 
   async function editMessage(message: TopicChatMessage, newText: string) {
     const token = await getToken();
@@ -124,29 +132,33 @@ export function TopicThread({ topicHandle, historyHeight = 400 }: { topicHandle:
           {messages?.length === 0 && <Text size="sm" c="dimmed">{t("No messages yet — be the first to post.")}</Text>}
         </Stack>
       </ScrollArea.Autosize>
-      <Textarea
-        ref={textareaRef}
-        autosize
-        minRows={3}
-        value={text}
-        onChange={(e) => setText(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          // Plain Enter stays a newline (this is a multi-line textarea);
-          // Ctrl/Cmd+Enter is the send shortcut, matching sendShortcutLabel.
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !saving) {
-            e.preventDefault();
-            send();
-          }
-        }}
-        placeholder={t("Message this discussion…")}
-        disabled={saving}
-      />
-      {error && <Alert color="red">{error}</Alert>}
-      <Group justify="flex-end">
-        <Button onClick={send} loading={saving} disabled={!text.trim()}>
-          {t("Send")} ({sendShortcutLabel})
-        </Button>
-      </Group>
+      {canPost && (
+        <>
+          <Textarea
+            ref={textareaRef}
+            autosize
+            minRows={3}
+            value={text}
+            onChange={(e) => setText(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              // Plain Enter stays a newline (this is a multi-line textarea);
+              // Ctrl/Cmd+Enter is the send shortcut, matching sendShortcutLabel.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !saving) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder={t("Message this discussion…")}
+            disabled={saving}
+          />
+          {error && <Alert color="red">{error}</Alert>}
+          <Group justify="flex-end">
+            <Button onClick={send} loading={saving} disabled={!text.trim()}>
+              {t("Send")} ({sendShortcutLabel})
+            </Button>
+          </Group>
+        </>
+      )}
     </Stack>
   );
 }
