@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { Alert, Box, Button, Group, Stack, Text, Textarea } from "@mantine/core";
+import { Alert, Box, Button, Group, Stack, Text, Textarea, useComputedColorScheme } from "@mantine/core";
 import { confirmDialog } from "../../store/confirmDialog";
 import { formatChange, formatChangeTitle } from "../../store/views";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../../store/userDirectory";
@@ -51,6 +51,13 @@ export function ChatBubble({
   // is a snapped-to-named-color variant of that hue rather than the same
   // raw hsl() value those Avatars use.
   const color = bubbleColorForUsername(message.author);
+  // Plain black/white per resolved scheme, not CSS `light-dark()` -- this
+  // component's own `-light` background is always pale in light mode and
+  // always dark in dark mode (a fixed-alpha hue tint over the page
+  // background either way), but `light-dark()` wasn't tracking Mantine's
+  // actual resolved scheme here, so use the same reactive hook TreeChart.tsx/
+  // MapCanvas.tsx/StoryView.tsx/TimelineView.tsx already rely on instead.
+  const dark = useComputedColorScheme("light") === "dark";
 
   function startEdit() {
     setDraft(message.text);
@@ -139,7 +146,7 @@ export function ChatBubble({
             style={{
               maxWidth: "80%",
               background: `var(--mantine-color-${color}-light)`,
-              color: `var(--mantine-color-${color}-light-color)`,
+              color: dark ? "white" : "black",
               borderRadius: "var(--mantine-radius-lg)",
               whiteSpace: "pre-wrap",
               overflowWrap: "anywhere",
