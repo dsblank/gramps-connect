@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { Avatar, Tooltip, UnstyledButton } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { getCurrentUsername, getToken, hasPermissions } from "../auth/auth";
 import { getActiveUsers, subscribeActiveUsers } from "../store/activeUsers";
 import { openOrCreateUserTopic } from "../store/topicsApi";
@@ -8,21 +9,48 @@ import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "..
 import { colorForUsername, initialsFor } from "../store/userAvatar";
 import { t } from "../i18n/i18n";
 
+// Retries a transient failure (a dropped request, a token-refresh race) a
+// couple of times before giving up -- this click has no dialog of its own
+// to show a retry button in, so it gets one chance to recover silently
+// before messageUser() surfaces anything to the user.
+const RETRY_DELAYS_MS = [300, 1000];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** Opens (or starts) the 1:1 topic with `peer` as a floating chat window --
  * replaces the old dmUi.ts's openDmThread()/DmThread.tsx modal now that a
  * DM is just an ordinary, unlisted Topic (topicsApi.ts's
  * openOrCreateUserTopic). Deliberately doesn't navigate anywhere, same
  * reasoning as DiscussButton.tsx: clicking someone's avatar shouldn't
- * knock you off whatever record or list you're currently looking at. */
+ * knock you off whatever record or list you're currently looking at.
+ *
+ * Retries up to RETRY_DELAYS_MS.length times on failure -- this used to
+ * swallow any error into console.error alone, so a transient failure left
+ * the click looking like it had done nothing at all. Only the final
+ * attempt's failure is surfaced, as a toast rather than console.error,
+ * since there's no dialog here to show an inline error in. */
 async function messageUser(peer: string) {
-  try {
-    const token = await getToken();
-    const me = getCurrentUsername();
-    if (!me) return;
-    const handle = await openOrCreateUserTopic(token, me, peer);
-    openTopicWindow(handle);
-  } catch (err) {
-    console.error("failed to open or create topic with", peer, err);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const token = await getToken();
+      const me = getCurrentUsername();
+      if (!me) return;
+      const handle = await openOrCreateUserTopic(token, me, peer);
+      openTopicWindow(handle);
+      return;
+    } catch (err) {
+      if (attempt >= RETRY_DELAYS_MS.length) {
+        notifications.show({
+          color: "red",
+          title: t("Couldn't open that discussion"),
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    }
   }
 }
 
