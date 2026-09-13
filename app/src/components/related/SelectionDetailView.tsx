@@ -3,6 +3,7 @@ import type { ViewConfig } from "../../store/views";
 import type { UseDraftStack } from "../../store/draftStack";
 import type { OnNavigate, OnViewGallery } from "./types";
 import { RelatedPanel } from "../RelatedPanel";
+import { AddButton } from "./AddButton";
 import { MergeButton } from "./MergeButton";
 import { BulkDeleteButton } from "./BulkDeleteButton";
 import { BulkTagButton } from "./BulkTagButton";
@@ -50,6 +51,7 @@ export function SelectionDetailView({
     <Stack gap={0} h={flow ? undefined : "100%"}>
       {isSplit && (
         <Group gap="xs" p="md" pb={0} justify="flex-end" style={{ flex: "none" }}>
+          <AddButton view={view} draftStack={draftStack} />
           <MergeButton view={view} handles={handles} />
           <BulkDeleteButton view={view} handles={handles} />
           <BulkTagButton view={view} handles={handles} />

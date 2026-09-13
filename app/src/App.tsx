@@ -522,7 +522,7 @@ function AuthenticatedApp() {
               being bounded to the pane. */}
           {view && (
             <Box style={stacked ? undefined : { height: visualHeight, display: "flex", flexDirection: "column" }}>
-              <ListHeader key={`header-${view.key}`} view={view} draftStack={draftStack} />
+              <ListHeader key={`header-${view.key}`} view={view} />
               <FilterBar key={`filter-${view.key}`} view={view} />
               <DataTable key={`table-${view.key}`} view={view} />
               {/* Pyodide add-on PoC, see pyodidePoc/ -- every real Gramps

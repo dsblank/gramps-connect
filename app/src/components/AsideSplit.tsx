@@ -6,6 +6,7 @@ import { formatHash } from "../hash";
 import { VIEWS, type ViewConfig } from "../store/views";
 import { SelectionDetailView } from "./related/SelectionDetailView";
 import { SelectionBulkView } from "./related/SelectionBulkView";
+import { AddButton } from "./related/AddButton";
 import { ReferenceDetail } from "./ReferenceDetail";
 import type { SubSelection } from "./ReferenceDetail";
 import { CurrentPageContext } from "./related/CurrentPageContext";
@@ -133,8 +134,9 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
           ? "No records to show."
           : "Select a row to see its details.";
     return (
-      <Stack h={flow ? undefined : "100%"} align="center" justify="center" p="md">
+      <Stack h={flow ? undefined : "100%"} align="center" justify="center" p="md" gap="sm">
         <Text c="dimmed" size="xl">{message}</Text>
+        <AddButton view={view} draftStack={draftStack} />
       </Stack>
     );
   }

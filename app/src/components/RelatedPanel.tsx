@@ -13,6 +13,7 @@ import { NoteText } from "./related/NoteText";
 import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
 import { gtkColorToCss } from "./related/color";
+import { AddButton } from "./related/AddButton";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MediaMapButton } from "./related/MediaMapButton";
 import { MediaKmlEditButton } from "./related/MediaKmlEditButton";
@@ -498,6 +499,7 @@ export function RelatedPanel({
               {t("The record itself can still be edited or deleted -- that's often what fixes a broken reference like this.")}
             </Text>
             <Group gap="xs">
+              <AddButton view={view} draftStack={draftStack} />
               {draftStack && <EditButton view={view} detail={state.plain} draftStack={draftStack} />}
               <DeleteButton view={view} detail={state.plain} />
             </Group>
@@ -523,6 +525,7 @@ export function RelatedPanel({
           `actions` is false (see RelatedPanelProps' doc comment). */}
       {actions && (
         <Group gap="xs" wrap="wrap" justify="flex-end">
+          <AddButton view={view} draftStack={draftStack} />
           {view.key === "generated" && <GeneratedItemActions detail={detail} />}
           {view.key === "topics" && (
             <EditTopicButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
