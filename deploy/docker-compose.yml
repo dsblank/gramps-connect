@@ -43,6 +43,25 @@ x-app-env: &app-env
   # keeps working either way); set to that origin, or "*", in deploy/.env
   # to opt in.
   GRAMPSWEB_CORS_ORIGINS: ${GRAMPSWEB_CORS_ORIGINS:-}
+  # Outgoing mail (password-reset links, new-user notifications) via an
+  # SMTP relay -- gramps-web-api defaults to a nonexistent localhost:465,
+  # so these all stay empty/unset until real values are set in deploy/.env
+  # (see .env.example). GRAMPSWEB_EMAIL_USE_STARTTLS=true is what a typical
+  # port-587 submission relay (Brevo, SendGrid, Gmail, ...) needs --
+  # without it gramps-web-api defaults to implicit TLS (SMTP_SSL), which
+  # port 587 doesn't speak. Must be lowercase "true"/"false": Flask's
+  # from_prefixed_env() runs each env value through json.loads(), and
+  # gramps-web-api's SMTP config resolver does an `is True` identity check
+  # on the result -- "True"/"False" (capitalized) fail json.loads, stay
+  # plain strings, and silently fail that identity check (which is what
+  # happened here: the config quietly fell back to implicit TLS despite
+  # this being set to the string "True").
+  GRAMPSWEB_EMAIL_HOST: ${GRAMPSWEB_EMAIL_HOST:-}
+  GRAMPSWEB_EMAIL_PORT: ${GRAMPSWEB_EMAIL_PORT:-587}
+  GRAMPSWEB_EMAIL_HOST_USER: ${GRAMPSWEB_EMAIL_HOST_USER:-}
+  GRAMPSWEB_EMAIL_HOST_PASSWORD: ${GRAMPSWEB_EMAIL_HOST_PASSWORD:-}
+  GRAMPSWEB_EMAIL_USE_STARTTLS: ${GRAMPSWEB_EMAIL_USE_STARTTLS:-true}
+  GRAMPSWEB_DEFAULT_FROM_EMAIL: ${GRAMPSWEB_DEFAULT_FROM_EMAIL:-}
 
 x-app-volumes: &app-volumes
   # /root/.gramps/grampsdb (not /app/db) is where the official
