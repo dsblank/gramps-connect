@@ -139,7 +139,7 @@ export function ChatBubble({
             style={{
               maxWidth: "80%",
               background: `var(--mantine-color-${color}-light)`,
-              color: "var(--mantine-color-black)",
+              color: `var(--mantine-color-${color}-light-color)`,
               borderRadius: "var(--mantine-radius-lg)",
               whiteSpace: "pre-wrap",
               overflowWrap: "anywhere",

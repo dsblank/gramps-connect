@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, ScrollArea, Stack, Text, Textarea } from "@mantine/core";
 import { getToken, getCurrentUsername, hasPermissions } from "../../auth/auth";
 import {
-  deleteTopicMessage, fetchTopicMessages, postTopicMessage, updateTopicMessage, type TopicChatMessage,
+  deleteTopicMessage, fetchTopicMessages, postTopicMessage, touchTopic, updateTopicMessage, type TopicChatMessage,
 } from "../../store/topicsApi";
 import { getTopicActivityVersion, subscribeTopicActivity } from "../../store/topicWindows";
 import { ChatBubble } from "./ChatBubble";
@@ -78,6 +78,7 @@ export function TopicThread({ topicHandle, historyHeight = 400 }: { topicHandle:
       await postTopicMessage(token, topicHandle, getCurrentUsername() ?? "unknown", text.trim());
       setText("");
       setLoadNonce((n) => n + 1);
+      void touchTopic(token, topicHandle);
     } catch (err: any) {
       setError(err.message ?? String(err));
     } finally {

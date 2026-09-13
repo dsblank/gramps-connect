@@ -137,6 +137,33 @@ export async function updateTopicMessage(
   if (!putRes.ok) throw new Error(await parseErrorMessage(putRes));
 }
 
+/** Re-PUTs a topic Note's own current content unchanged, purely to bump its
+ * `change` timestamp -- called by TopicThread.tsx's send() after posting a
+ * new topic-message, since the message itself is a separate Note that
+ * doesn't touch the topic's own `change` on its own. Without this, the
+ * TOPICS_VIEW "Discussions" list (sorted newest-`change`-first) wouldn't
+ * move a topic to the top just because someone posted in it -- only an
+ * actual edit via updateTopic (EditTopicButton.tsx) would. Best-effort: a
+ * caller that only holds AddObject (not EditObject) can post a message but
+ * can't PUT the topic note, so failures here are swallowed rather than
+ * surfaced -- the message itself still sent successfully either way. */
+export async function touchTopic(token: string, handle: string): Promise<void> {
+  try {
+    const getRes = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!getRes.ok) return;
+    const obj = await getRes.json();
+    await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(obj),
+    });
+  } catch {
+    // best-effort -- see doc comment above
+  }
+}
+
 export interface TopicChatMessage {
   handle: string;
   author: string;
