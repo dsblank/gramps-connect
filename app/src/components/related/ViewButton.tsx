@@ -1,4 +1,5 @@
-import { Button, Tooltip } from "@mantine/core";
+import { Button, Tooltip, useComputedColorScheme } from "@mantine/core";
+import type { CSSProperties } from "react";
 
 interface ViewButtonProps {
   label: string;
@@ -32,12 +33,20 @@ interface ViewButtonProps {
  * body's own reading order, where an outline button reads as disabled next
  * to real text. */
 export function ViewButton({ label, hint, href, onClick, color }: ViewButtonProps) {
+  // useComputedColorScheme, not CSS light-dark() -- ChatBubble.tsx's own
+  // "gray"-text contrast fix found light-dark() doesn't track this app's
+  // manual scheme toggle, so read the resolved scheme reactively instead.
+  const dark = useComputedColorScheme("light") === "dark";
+  const style: CSSProperties | undefined =
+    color === "gray"
+      ? ({ "--button-color": dark ? "var(--mantine-color-gray-1)" : "var(--mantine-color-gray-8)" } as CSSProperties)
+      : undefined;
   const button = href ? (
-    <Button component="a" href={href} size="xs" variant="light" color={color}>
+    <Button component="a" href={href} size="xs" variant="light" color={color} style={style}>
       {label}
     </Button>
   ) : (
-    <Button size="xs" variant="light" onClick={onClick} color={color}>
+    <Button size="xs" variant="light" onClick={onClick} color={color} style={style}>
       {label}
     </Button>
   );
