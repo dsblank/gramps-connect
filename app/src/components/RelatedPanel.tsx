@@ -16,6 +16,7 @@ import { gtkColorToCss } from "./related/color";
 import { AddButton } from "./related/AddButton";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MediaMapButton } from "./related/MediaMapButton";
+import { MediaViewButton } from "./related/MediaViewButton";
 import { MediaKmlEditButton } from "./related/MediaKmlEditButton";
 import { MediaGrampletEditButton } from "./related/MediaGrampletEditButton";
 import { MediaEditButton } from "./related/MediaEditButton";
@@ -550,6 +551,7 @@ export function RelatedPanel({
           compact icon tucked into a corner shared with the record's own
           controls did not. */}
       <VisualButtons view={view} detail={detail} />
+      {(view.key === "media" || view.key === "generated") && <MediaViewButton detail={detail} />}
       <HistoryButton view={view} detail={detail} />
       {view.key === "media" && <MediaMapButton detail={detail} />}
       <DetailFields type={view.key} detail={detail} />
