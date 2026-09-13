@@ -13,14 +13,19 @@ function filePath(handle: string): string {
  * browser-renderable kind MediaViewButton.tsx offers -- everything
  * MediaThumbnail.tsx's zoomable image click doesn't already cover. PDF and
  * video/audio get the browser's own native viewer/player (an <iframe>/
- * <video>/<audio> pointed at the file's blob: URL); HTML reports render
- * inside a fully sandboxed iframe (`sandbox=""` -- no scripts, no forms, no
+ * <video>/<audio> pointed at the file's blob: URL); SVG renders as a plain
+ * <img> on that same blob URL (see mediaPreviewKind.ts for why this is the
+ * one image type that needs its own path here); HTML reports render inside
+ * a fully sandboxed iframe (`sandbox=""` -- no scripts, no forms, no
  * same-origin) so a generated report's markup shows formatted without ever
- * executing anything a hostile or malformed report might contain; JSON is
- * pretty-printed; everything else (plain text, CSV, GEDCOM, KML/XML, ...)
- * shows as monospace source. Same fullScreen + no-Modal.Stack presentation
- * ImageLightbox.tsx uses for images, for the same reason (this is the only
- * thing on screen while it's open). */
+ * executing anything a hostile or malformed report might contain (though
+ * any asset the report links by relative path -- a stylesheet, an image
+ * folder -- won't resolve, since a lone Media object is just this one file,
+ * not the folder of siblings a multi-file report would have shipped
+ * alongside); JSON is pretty-printed; everything else (plain text, CSV,
+ * GEDCOM, KML/XML, ...) shows as monospace source. Same fullScreen +
+ * no-Modal.Stack presentation ImageLightbox.tsx uses for images, for the
+ * same reason (this is the only thing on screen while it's open). */
 export function MediaPreviewDialog({ opened, onClose, handle, kind }: {
   opened: boolean;
   onClose: () => void;
@@ -50,7 +55,7 @@ export function MediaPreviewDialog({ opened, onClose, handle, kind }: {
           return;
         }
         objectUrl = url;
-        if (kind === "video" || kind === "audio" || kind === "pdf") {
+        if (kind === "video" || kind === "audio" || kind === "pdf" || kind === "svg") {
           setBlobUrl(url);
           return;
         }
@@ -109,6 +114,18 @@ export function MediaPreviewDialog({ opened, onClose, handle, kind }: {
         )}
         {blobUrl && kind === "pdf" && (
           <iframe src={blobUrl} title={t("Preview")} style={{ width: "100%", height: "100%", border: 0 }} />
+        )}
+        {blobUrl && kind === "svg" && (
+          // A plain <img>, not the /thumbnail endpoint MediaThumbnail.tsx
+          // uses elsewhere -- gramps-web-api's thumbnailer can't rasterize
+          // SVG server-side at all (see mediaPreviewKind.ts), but every
+          // browser already rasterizes SVG for an <img src> itself, so this
+          // points straight at the original file instead.
+          <img
+            src={blobUrl}
+            alt=""
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }}
+          />
         )}
         {text !== null && kind === "html" && (
           <iframe
