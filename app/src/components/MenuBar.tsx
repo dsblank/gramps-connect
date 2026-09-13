@@ -238,9 +238,13 @@ interface MenuBarProps {
    * mounted at a time, so state local to this component wouldn't survive
    * that. */
   draftStack: UseDraftStack;
+  /** Called after ManageTreesDialog renames the currently active tree, so
+   * App.tsx's header wordmark can pick up the new name without a page
+   * reload -- see App.tsx's refreshTreeName doc comment. */
+  onTreeRenamed: () => void;
 }
 
-export function MenuBar({ draftStack }: MenuBarProps) {
+export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const [importOpened, setImportOpened] = useState(false);
   const [importMediaOpened, setImportMediaOpened] = useState(false);
   const [exportOpened, setExportOpened] = useState(false);
@@ -456,7 +460,11 @@ export function MenuBar({ draftStack }: MenuBarProps) {
           ]}
         />
       </Group>
-      <ManageTreesDialog opened={manageTreesOpened} onClose={() => setManageTreesOpened(false)} />
+      <ManageTreesDialog
+        opened={manageTreesOpened}
+        onClose={() => setManageTreesOpened(false)}
+        onTreeRenamed={onTreeRenamed}
+      />
       <ImportDialog opened={importOpened} onClose={() => setImportOpened(false)} />
       <ImportMediaDialog opened={importMediaOpened} onClose={() => setImportMediaOpened(false)} />
       <ExportDialog opened={exportOpened} onClose={() => setExportOpened(false)} />

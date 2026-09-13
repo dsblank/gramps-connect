@@ -8,6 +8,10 @@ import { t } from "../i18n/i18n";
 interface ManageTreesDialogProps {
   opened: boolean;
   onClose: () => void;
+  /** Called after a rename that hits the *currently active* tree, so
+   * App.tsx's header wordmark (fetched once on mount, see its doc comment)
+   * can pick up the new name without a page reload. */
+  onTreeRenamed: () => void;
 }
 
 type SortKey = "name" | "people" | "status";
@@ -43,7 +47,7 @@ function compareTrees(a: Tree, b: Tree, key: SortKey): number {
  * fresh token/reload so the app actually switches to it -- the same
  * self-edit path UserManagementPanel.tsx's afterUpdate takes, for the same
  * reason (the JWT's `tree` claim only gets re-derived on a fresh token). */
-export function ManageTreesDialog({ opened, onClose }: ManageTreesDialogProps) {
+export function ManageTreesDialog({ opened, onClose, onTreeRenamed }: ManageTreesDialogProps) {
   const [trees, setTrees] = useState<Tree[]>([]);
   const [multiTree, setMultiTree] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +138,7 @@ export function ManageTreesDialog({ opened, onClose }: ManageTreesDialogProps) {
       const token = await getToken();
       await renameTree(token, selected.id, name);
       await reload();
+      if (selected.id === currentTreeId) onTreeRenamed();
       setPendingAction(null);
     } catch (err: any) {
       setError(err.message ?? String(err));

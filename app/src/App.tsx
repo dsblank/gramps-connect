@@ -1,5 +1,6 @@
 import {
   type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -234,21 +235,23 @@ function AuthenticatedApp() {
   const liveSyncStatus = useLiveSync(onRemoteNoteChange);
   // The active tree's own name (gramps-web-api's metadata.database.name),
   // shown alongside the wordmark below so a user signed into more than one
-  // tree can tell them apart at a glance. Fetched once per mount rather
-  // than kept in some shared store -- logout() now reloads the page (see
-  // auth.ts), so a fresh mount is the only time this can actually change.
+  // tree can tell them apart at a glance. Fetched on mount and re-fetched
+  // via refreshTreeName -- passed down to MenuBar/ManageTreesDialog -- after
+  // an admin renames the currently active tree, since that's the one other
+  // moment this can change without a fresh mount (logout() reloads the page,
+  // see auth.ts, so that case still just re-mounts).
   const [treeName, setTreeName] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
+  const refreshTreeName = useCallback(() => {
     (async () => {
       const metadata = await fetchMetadata(await getToken());
-      if (!cancelled) setTreeName(metadata.database?.name ?? null);
+      setTreeName(metadata.database?.name ?? null);
     })().catch(() => {
       // Best-effort -- the header just falls back to the plain wordmark.
     });
-    return () => {
-      cancelled = true;
-    };
+  }, []);
+  useEffect(() => {
+    refreshTreeName();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Lifted above MenuBar (rather than MenuBar calling this itself) because
   // the header below swaps between two MenuBar instances on resize --
@@ -456,14 +459,14 @@ function AuthenticatedApp() {
                 px="md"
                 style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", overflowX: "auto" }}
               >
-                <MenuBar draftStack={draftStack} />
+                <MenuBar draftStack={draftStack} onTreeRenamed={refreshTreeName} />
               </Box>
             </Stack>
           ) : (
             <Group h="100%" px="md" justify="space-between" wrap="nowrap">
               <Group gap="lg" wrap="nowrap">
                 {wordmark}
-                <MenuBar draftStack={draftStack} />
+                <MenuBar draftStack={draftStack} onTreeRenamed={refreshTreeName} />
               </Group>
               <Group gap="xs" wrap="nowrap">
                 <ActiveUsers />
