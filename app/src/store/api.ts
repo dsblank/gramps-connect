@@ -55,6 +55,14 @@ export async function parseErrorMessage(res: Response): Promise<string> {
   try {
     return JSON.parse(body)?.error?.message ?? body;
   } catch {
+    // A gateway/app-server failure (e.g. gunicorn killing a worker mid
+    // request on a slow/large upload -- see deploy/docker-compose.yml's
+    // GUNICORN_TIMEOUT) returns an HTML error page, not JSON. Dumping
+    // that markup verbatim into a notification/dialog is worse than a
+    // plain status line.
+    if (/^\s*<(!doctype|html)/i.test(body)) {
+      return `Server error (${res.status} ${res.statusText || "request failed"})`;
+    }
     return body;
   }
 }

@@ -62,6 +62,16 @@ x-app-env: &app-env
   GRAMPSWEB_EMAIL_HOST_PASSWORD: ${GRAMPSWEB_EMAIL_HOST_PASSWORD:-}
   GRAMPSWEB_EMAIL_USE_STARTTLS: ${GRAMPSWEB_EMAIL_USE_STARTTLS:-true}
   GRAMPSWEB_DEFAULT_FROM_EMAIL: ${GRAMPSWEB_DEFAULT_FROM_EMAIL:-}
+  # Not a GRAMPSWEB_* setting -- read directly by deploy/Dockerfile's CMD
+  # to size gunicorn's --timeout. A single-file media upload (POST
+  # /api/media/, or the ZIP archive endpoint's write_upload_to_file) is
+  # read synchronously inside the request, so it counts as one long
+  # "silent" request from gunicorn's point of view; the stock 120s default
+  # kills the worker mid-upload on anything slow/large enough, which
+  # surfaces to the browser as a bare "Internal Server Error" with no JSON
+  # body. Raise further in deploy/.env for very large media libraries or
+  # slow client connections.
+  GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-600}
 
 x-app-volumes: &app-volumes
   # /root/.gramps/grampsdb (not /app/db) is where the official
