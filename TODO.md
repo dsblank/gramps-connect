@@ -105,6 +105,16 @@ fields) — ranked roughly by value, most first:
   are a direction worth leaning into (auth without sharing a real user's
   password).
 
+- **Service worker for app-shell caching**: `app/` registers none today, so
+  every tab load/reload is a hard dependency on the network being up at that
+  exact instant — a laptop resuming from sleep mid-load can hit
+  `ERR_NETWORK_CHANGED` on the hashed `index-*.js`/`index-*.css` bundle and
+  render a permanently blank page (no JS ever ran, so nothing — not even an
+  error boundary — can catch or recover from it; a manual reload fixes it
+  once the network's back). `vite-plugin-pwa`/Workbox is the standard fix,
+  and is low-effort for basic offline app-shell caching; the real ongoing
+  cost is cache invalidation on deploy (get it wrong and users silently get
+  stuck on a stale JS bundle until they close every tab).
 - Allow gramplets to edit/create objects (currently read-only via
   `filter()`/`get_object()`).
 - Allow more types of addons: tools, reports.
