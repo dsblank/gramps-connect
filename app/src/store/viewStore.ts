@@ -25,6 +25,15 @@ export interface ViewSnapshot {
   loadedCount: number;
   totalCount: number;
   whereExpr: string | null;
+  /** The "Filters" picker's own contribution (FilterPickerDialog.tsx),
+   * AND-ed with `whereExpr`/`baseFilter` inside combinedFilter() -- kept
+   * as its own field, not folded into `whereExpr`, for exactly the same
+   * reason `whereExpr` is kept separate from `baseFilter`: FilterBar reads
+   * `whereExpr` as "what the user typed" and must never see the picker's
+   * contribution show up in there (or vice versa) as if it came from the
+   * other surface. Applying/clearing one never touches the other -- see
+   * setPickerFilter()/clearPickerFilter(). */
+  pickerExpr: string | null;
   /** Current sort -- always populated (defaults to the view's static
    * orderBy, see ViewConfig.orderBy's doc comment), and shown in the UI
    * as such from the very first render, not just after a click. That's
@@ -86,6 +95,7 @@ const EMPTY_SNAPSHOT_BASE = {
   loadedCount: 0,
   totalCount: 0,
   whereExpr: null,
+  pickerExpr: null,
   status: "idle" as const,
   error: null,
   revision: 0,
@@ -104,6 +114,8 @@ export class ViewStore {
   private loadedCount = 0;
   private totalCount = 0;
   private whereExpr: string | null = null;
+  /** See ViewSnapshot.pickerExpr's doc comment. */
+  private pickerExpr: string | null = null;
   /** Current sort actually sent to the server -- defaults to the view's
    * static default, changed only via setSort(). Kept separate from
    * view.orderBy (which stays the immutable default to fall back to) so
@@ -182,6 +194,7 @@ export class ViewStore {
       loadedCount: this.loadedCount,
       totalCount: this.totalCount,
       whereExpr: this.whereExpr,
+      pickerExpr: this.pickerExpr,
       orderBy: this.orderBy[0],
       status: this.status,
       error: this.error,
@@ -357,25 +370,44 @@ export class ViewStore {
 
   /** Jumps to `handle`'s row -- e.g. a person link in PersonDetail's
    * parents/family sections -- regardless of whether the local cache has
-   * loaded that far yet. Drops any active where_expr first: a linked
-   * record isn't guaranteed to match it (and the point of following a
-   * link is to see that record, not to have it silently fail to appear).
-   * Returns false if the handle doesn't resolve to a row at all (a
-   * dangling reference), true once selection has moved to it. */
-  async navigateToHandle(handle: string): Promise<boolean> {
-    if (this.whereExpr !== null) {
+   * loaded that far yet. Drops any active filter first (both `whereExpr`
+   * and the "Filters" picker's `pickerExpr`, by default -- see the options
+   * below): a linked record isn't guaranteed to match either one (and the
+   * point of following a link is to see that record, not to have it
+   * silently fail to appear). Returns false if the handle doesn't resolve
+   * to a row at all (a dangling reference), true once selection has moved
+   * to it.
+   *
+   * `dropWhereExpr`/`dropPickerFilter` (both default `true`, i.e. drop
+   * both) let clearFilter()/clearPickerFilter() reuse this same
+   * find-and-reselect logic while dropping only *their own* side --
+   * clearing the typed search box must never also silently drop an active
+   * picker filter, or vice versa. */
+  async navigateToHandle(
+    handle: string,
+    options?: { dropWhereExpr?: boolean; dropPickerFilter?: boolean },
+  ): Promise<boolean> {
+    const dropWhereExpr = options?.dropWhereExpr ?? true;
+    const dropPickerFilter = options?.dropPickerFilter ?? true;
+    const isFiltered =
+      (dropWhereExpr && this.whereExpr !== null) || (dropPickerFilter && this.pickerExpr !== null);
+    if (isFiltered) {
       // runQuery() unconditionally nulls out the selection at its start --
       // right for its other callers (the user directly typing/clearing a
       // filter, where "no selection yet in the new results" is a real,
       // observable state), wrong here: this call is purely an internal
-      // step to get whereExpr out of the way before re-selecting a few
+      // step to get the filter(s) out of the way before re-selecting a few
       // lines down, and that transient null must never be observed
       // in between -- useHistorySync.ts mirrors selectedHandle into the
       // URL on every change, so an observed-then-reverted null would
       // wrongly commit an extra "no selection" entry to browser history.
       this.suppressSelectionClear = true;
       try {
-        await this.runQuery(null, false);
+        await this.runQuery(
+          dropWhereExpr ? null : this.whereExpr,
+          false,
+          dropPickerFilter ? { pickerExpr: null } : {},
+        );
       } finally {
         this.suppressSelectionClear = false;
       }
@@ -412,8 +444,24 @@ export class ViewStore {
     if (this.whereExpr === null) return; // nothing active to clear
     const handle = this.selectionIsDefault ? (this.preFilterHandle ?? this.selectedHandle) : this.selectedHandle;
     this.preFilterHandle = null;
-    if (handle === null || !(await this.navigateToHandle(handle))) {
+    // dropPickerFilter: false -- clearing the typed search box must leave
+    // an active "Filters" picker selection exactly as it was; see
+    // navigateToHandle's own doc comment.
+    if (handle === null || !(await this.navigateToHandle(handle, { dropPickerFilter: false }))) {
       await this.runQuery(null, false);
+    }
+  }
+
+  /** The "Filters" picker's counterpart to clearFilter() -- same
+   * position-preserving reselect, but drops only `pickerExpr`, leaving
+   * `whereExpr` (FilterBar's own box) untouched. See
+   * ViewSnapshot.pickerExpr's doc comment on why the two stay independent. */
+  async clearPickerFilter(): Promise<void> {
+    if (this.pickerExpr === null) return; // nothing active to clear
+    const handle = this.selectionIsDefault ? (this.preFilterHandle ?? this.selectedHandle) : this.selectedHandle;
+    this.preFilterHandle = null;
+    if (handle === null || !(await this.navigateToHandle(handle, { dropWhereExpr: false }))) {
+      await this.setPickerFilter(null);
     }
   }
 
@@ -476,11 +524,22 @@ export class ViewStore {
       return [...ties, thisKey].join(" and ");
     });
     const beforeExpr = clauses.map((c) => `(${c})`).join(" or ");
-    // combinedFilter() re-applies this view's own baseFilter (if any) --
-    // without it, a permanently-filtered view (e.g. Output) would
-    // rank against every row of the underlying table, not just the subset
-    // it actually shows.
-    const { totalCount } = await fetchPage(this.view, token, null, true, this.combinedFilter(beforeExpr), this.orderBy, 1);
+    // ANDed with the *actual* currently active filter (baseFilter,
+    // pickerExpr, and whereExpr, whichever of those are set right now --
+    // see combinedFilter()) -- without it, ranking runs against every row
+    // of the underlying table instead of just the subset actually being
+    // shown. Bug this fixed: combinedFilter(beforeExpr) alone (passing
+    // beforeExpr as if it were the *whereExpr* argument) only ever
+    // combined baseFilter with it, silently dropping whatever the real
+    // whereExpr/pickerExpr were -- harmless while navigateToHandle always
+    // dropped both before ranking, but wrong the moment one of
+    // clearFilter()/clearPickerFilter() started asking it to keep the
+    // *other* one active (found live: clearing the "Filters" picker while
+    // a FilterBar search was still active landed selectedIndex on some
+    // unrelated row far outside the still-filtered result set).
+    const activeFilter = this.combinedFilter(this.whereExpr);
+    const rankExpr = activeFilter ? `(${activeFilter}) and (${beforeExpr})` : beforeExpr;
+    const { totalCount } = await fetchPage(this.view, token, null, true, rankExpr, this.orderBy, 1);
     return totalCount ?? 0;
   }
 
@@ -654,6 +713,7 @@ export class ViewStore {
         this.db = db;
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
         this.whereExpr = null;
+        this.pickerExpr = null;
         this.orderBy = this.view.orderBy;
         this.status = "ready";
         this.applyDefaultSelection();
@@ -683,15 +743,26 @@ export class ViewStore {
 
   /** The where_expr actually sent to the server: `whereExpr` (the
    * user-editable part FilterBar drives, always null for a view with
-   * `baseFilter` set -- see ViewConfig.searchable) AND-ed with the view's
-   * own fixed `baseFilter`, if any. Kept separate from `this.whereExpr`
-   * (which stays exactly what the user typed, or null) so the snapshot
-   * FilterBar reads never shows the hidden fixed filter as if it were
-   * user input. */
-  private combinedFilter(whereExpr: string | null): string | null {
-    const base = this.view.baseFilter ?? null;
-    if (base && whereExpr) return `(${base}) and (${whereExpr})`;
-    return base ?? whereExpr;
+   * `baseFilter` set -- see ViewConfig.searchable), the "Filters" picker's
+   * `pickerExpr`, and the view's own fixed `baseFilter` (if any), all
+   * AND-ed together. Kept separate from `this.whereExpr`/`this.pickerExpr`
+   * (which stay exactly what the user typed/picked, or null) so the
+   * snapshot FilterBar/FilterPickerDialog read never shows the hidden
+   * fixed filter -- or each other's contribution -- as if it were its own
+   * input. */
+  /** `pickerExpr` defaults to the already-committed `this.pickerExpr` --
+   * right for every caller outside runQuery() itself (e.g.
+   * globalRankOfItem(), which always runs after any in-flight runQuery()
+   * has already swapped in). runQuery() passes its own pending
+   * `newPickerExpr` explicitly instead, the same way it already passes its
+   * own pending `whereExpr` as this method's first argument rather than
+   * reading `this.whereExpr` -- neither field is actually committed
+   * (`this.whereExpr`/`this.pickerExpr`) until swapIn(). */
+  private combinedFilter(whereExpr: string | null, pickerExpr: string | null = this.pickerExpr): string | null {
+    const parts = [this.view.baseFilter ?? null, pickerExpr, whereExpr].filter(
+      (part): part is string => !!part,
+    );
+    return parts.length === 0 ? null : parts.map((part) => `(${part})`).join(" and ");
   }
 
   /** Fetches a fresh (optionally where_expr-filtered) copy of this view's
@@ -714,9 +785,17 @@ export class ViewStore {
   async runQuery(
     whereExpr: string | null,
     persist: boolean,
-    options?: { preserveDisplayUntilCaughtUp?: boolean }
+    options?: { preserveDisplayUntilCaughtUp?: boolean; pickerExpr?: string | null }
   ): Promise<void> {
     const preserve = options?.preserveDisplayUntilCaughtUp ?? false;
+    // `pickerExpr` absent entirely (the overwhelming majority of calls --
+    // FilterBar submitting a search, setSort(), startRequery()) means
+    // "leave it exactly as it is"; present (even as `null`, from
+    // setPickerFilter()/clearFilter()/navigateToHandle()) means "this is
+    // the new value" -- a plain `options?.pickerExpr ?? this.pickerExpr`
+    // would wrongly fall back to the current value for an explicit `null`
+    // too, since `null` and "absent" are otherwise indistinguishable here.
+    const newPickerExpr = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.pickerExpr;
     const previousLoadedCount = this.loadedCount;
     const myGeneration = ++this.queryGeneration;
     // Captured once per call, not read fresh off `this.orderBy` later --
@@ -741,11 +820,16 @@ export class ViewStore {
     // this call to drop whereExpr on its way to re-selecting -- see its own
     // doc comment on suppressSelectionClear.
     if (!this.suppressSelectionClear) {
-      // Only on the transition into filtering, not on every refinement of
-      // an already-active filter -- clearFilter() should undo the whole
-      // filtering excursion back to where it started, not just the last
-      // query typed during it.
-      if (this.whereExpr === null && whereExpr !== null) {
+      // Only on the transition from fully unfiltered (neither whereExpr
+      // nor pickerExpr active) into *some* filter being active, not on
+      // every refinement of an already-active one, and not when only the
+      // other side changes while this side stays put -- clearFilter()/
+      // clearPickerFilter() should each undo the whole filtering
+      // excursion back to where it started, not just the last query typed
+      // or picked during it.
+      const wasUnfiltered = this.whereExpr === null && this.pickerExpr === null;
+      const willBeFiltered = whereExpr !== null || newPickerExpr !== null;
+      if (wasUnfiltered && willBeFiltered) {
         this.preFilterHandle = this.selectedHandle;
       }
       this.selectedIndex = null;
@@ -776,7 +860,7 @@ export class ViewStore {
     let after: string | null = null;
     let first;
     try {
-      first = await fetchPage(this.view, token, after, true, this.combinedFilter(whereExpr), orderBy);
+      first = await fetchPage(this.view, token, after, true, this.combinedFilter(whereExpr, newPickerExpr), orderBy);
     } catch (err: any) {
       stmt.free();
       newDb.close();
@@ -815,6 +899,7 @@ export class ViewStore {
       previousDb?.close();
       this.totalCount = newTotalCount;
       this.whereExpr = whereExpr;
+      this.pickerExpr = newPickerExpr;
       this.loadedCount = loadedSoFar;
       this.status = "ready";
       // Page one is what makes a default selection possible at all (it's
@@ -834,7 +919,7 @@ export class ViewStore {
     this.backgroundFillActive = true;
     (async () => {
       while (after !== null) {
-        const { page } = await fetchPage(this.view, await getToken(), after, false, this.combinedFilter(whereExpr), orderBy);
+        const { page } = await fetchPage(this.view, await getToken(), after, false, this.combinedFilter(whereExpr, newPickerExpr), orderBy);
         if (myGeneration !== this.queryGeneration) {
           stmt.free();
           // If swapIn() already ran, newDb is the live this.db and the
@@ -878,6 +963,19 @@ export class ViewStore {
       console.error(`[${this.view.label}] background fill error`, err);
       if (myGeneration === this.queryGeneration) this.settleBackgroundFill();
     });
+  }
+
+  /** Applies (or refines) the "Filters" picker's own contribution --
+   * AND-ed with `whereExpr`/`baseFilter` inside combinedFilter(), and
+   * fully independent of both (see ViewSnapshot.pickerExpr's doc
+   * comment): re-issues the *current* `whereExpr` unchanged, alongside
+   * the new `pickerExpr`, through the same runQuery() machinery every
+   * other filter change already goes through. Use clearPickerFilter()
+   * instead of `setPickerFilter(null)` directly to also get its
+   * position-preserving reselect (the same "stay on this record" treatment
+   * clearFilter() gives the typed search box). */
+  setPickerFilter(expr: string | null): Promise<void> {
+    return this.runQuery(this.whereExpr, false, { pickerExpr: expr });
   }
 
   /** Clears backgroundFillActive and, if a requeryDebounced() trigger
@@ -1085,17 +1183,18 @@ export class ViewStore {
    * doc comment). `cursor` is the live-sync poll's own position
    * (historyPoll.ts's afterId) -- not fetchServerState()'s, which is
    * memoized once per page load and would go stale the moment any real time
-   * passes in a long-running tab. Skipped for a filtered view: same "only
-   * the unfiltered dataset persists" rule runQuery()'s persist branch
-   * follows, since a filtered result isn't "the cache". Debounced (short,
-   * fixed delay) so a burst of same-tick patches writes OPFS once, not once
-   * per row. */
+   * passes in a long-running tab. Skipped for a filtered view -- either
+   * `whereExpr` or the "Filters" picker's `pickerExpr` -- same "only the
+   * unfiltered dataset persists" rule runQuery()'s persist branch follows,
+   * since a filtered result (by either one) isn't "the cache". Debounced
+   * (short, fixed delay) so a burst of same-tick patches writes OPFS once,
+   * not once per row. */
   persistLiveState(cursor: number): void {
-    if (!this.db || this.whereExpr !== null) return;
+    if (!this.db || this.whereExpr !== null || this.pickerExpr !== null) return;
     if (this.persistLiveTimer) clearTimeout(this.persistLiveTimer);
     this.persistLiveTimer = setTimeout(() => {
       this.persistLiveTimer = null;
-      if (!this.db || this.whereExpr !== null) return;
+      if (!this.db || this.whereExpr !== null || this.pickerExpr !== null) return;
       updateCachedCursor(this.db, cursor);
       saveToOpfs(this.view.opfsFilename, this.db.export()).catch((err) => {
         console.error(`[${this.view.label}] live-sync persist failed`, err);

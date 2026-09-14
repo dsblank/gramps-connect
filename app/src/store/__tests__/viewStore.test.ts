@@ -368,6 +368,148 @@ describe("ViewStore.clearFilter", () => {
   });
 });
 
+describe("ViewStore picker filter + typed whereExpr combination", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("ANDs the picker's pickerExpr with an already-applied typed whereExpr, not replacing it", async () => {
+    const store = new ViewStore(TAG_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+    expect(store.getSnapshot().whereExpr).toBe("name == 'Chores'");
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.setPickerFilter("priority == 1");
+
+    expect(store.getSnapshot().whereExpr).toBe("name == 'Chores'"); // untouched by the picker
+    expect(store.getSnapshot().pickerExpr).toBe("priority == 1");
+    const calls = vi.mocked(fetchPage).mock.calls;
+    expect(calls[calls.length - 1][4]).toBe("(priority == 1) and (name == 'Chores')");
+  });
+
+  it("keeps an active pickerExpr in place when a new typed search is applied afterward", async () => {
+    const store = new ViewStore(TAG_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.setPickerFilter("priority == 1");
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+
+    expect(store.getSnapshot().pickerExpr).toBe("priority == 1"); // untouched by FilterBar's own apply
+    const calls = vi.mocked(fetchPage).mock.calls;
+    expect(calls[calls.length - 1][4]).toBe("(priority == 1) and (name == 'Chores')");
+  });
+
+  it("clearFilter() drops only the typed whereExpr, leaving an active pickerExpr applied", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.setPickerFilter("priority == 1");
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+
+    // navigateToHandle()'s internal requery, dropping only whereExpr:
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1"));
+    mockRank(0);
+
+    await store.clearFilter();
+
+    expect(store.getSnapshot().whereExpr).toBeNull();
+    expect(store.getSnapshot().pickerExpr).toBe("priority == 1");
+    const calls = vi.mocked(fetchPage).mock.calls;
+    // navigateToHandle's own requery (2nd-to-last call) must still carry
+    // pickerExpr -- only whereExpr was dropped.
+    expect(calls[calls.length - 2][4]).toBe("(priority == 1)");
+  });
+
+  it("clearPickerFilter() drops only pickerExpr, leaving an active typed whereExpr applied", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.setPickerFilter("priority == 1");
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1"));
+    mockRank(0);
+
+    await store.clearPickerFilter();
+
+    expect(store.getSnapshot().pickerExpr).toBeNull();
+    expect(store.getSnapshot().whereExpr).toBe("name == 'Chores'");
+    const calls = vi.mocked(fetchPage).mock.calls;
+    expect(calls[calls.length - 2][4]).toBe("(name == 'Chores')");
+    // globalRankOfItem()'s own rank query (the last call) must still
+    // restrict ranking to the still-active whereExpr's matching subset --
+    // regression: it used to rank against every row in the table,
+    // dropping the active search from the ranking query entirely (see
+    // globalRankOfItem's own doc comment).
+    const rankExprArg = calls[calls.length - 1][4] as string;
+    expect(rankExprArg).toContain("name == 'Chores'");
+  });
+
+  it("navigateToHandle() drops both whereExpr and pickerExpr by default (following a link ignores every active filter)", async () => {
+    const store = new ViewStore(TAG_VIEW, getSql);
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.setPickerFilter("priority == 1");
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    await store.runQuery("name == 'Chores'", false);
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1"), tagRow("H2")], next_after: null },
+      totalCount: 2,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H2"));
+    mockRank(1); // H2's rank once both filters are dropped
+
+    const ok = await store.navigateToHandle("H2");
+
+    expect(ok).toBe(true);
+    expect(store.getSnapshot().whereExpr).toBeNull();
+    expect(store.getSnapshot().pickerExpr).toBeNull();
+  });
+});
+
 describe("ViewStore.setSort secondary sort (Person's surname/given_name pair)", () => {
   beforeEach(() => {
     vi.mocked(fetchPage).mockReset();
