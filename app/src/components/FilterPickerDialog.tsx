@@ -211,7 +211,7 @@ function GroupView({
       pl={isRoot ? 0 : 12}
       style={isRoot ? undefined : { borderLeft: "2px solid var(--mantine-color-default-border)" }}
     >
-      <Group gap="xs" wrap="wrap">
+      <Group gap="xs" wrap="wrap" align="center">
         <SegmentedControl
           size="xs"
           value={group.connector}
@@ -309,12 +309,19 @@ function RowView({
   }
 
   return (
-    <Group gap="xs" wrap="nowrap" align="flex-start">
-      {/* Grabber centered against the label's own Stack (not the whole
-       * row, which also has the taller Checkbox/move/remove buttons) --
-       * comparing it to its one immediate peer, rather than guessing a
-       * pixel offset against font metrics, is what actually keeps it
-       * lined up with the label text regardless of row height. */}
+    // `align="center"` on the outer Group, not "flex-start" -- the
+    // Checkbox/move-up/move-down/remove controls are four different
+    // Mantine components at three different sizes, each with its own
+    // intrinsic height; top-aligning them left each one's own visual
+    // center at a different height (the bug the "embarrassingly ugly"
+    // screenshot showed). Centering the row is what actually lines up
+    // controls of differing heights against each other.
+    <Group gap="xs" wrap="nowrap" align="center">
+      {/* Grabber centered against the label's own Stack, not the whole
+       * row -- same reasoning, one level down, for the params case
+       * (birth/death year range): comparing it to its one immediate peer
+       * keeps it lined up with the label text specifically, not wherever
+       * the row's now-tallest sibling happens to put the row's center. */}
       <Group gap="xs" wrap="nowrap" align="center" style={{ flex: 1 }}>
         <Grabber />
         <Stack gap={4} style={{ flex: 1 }}>
