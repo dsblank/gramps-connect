@@ -30,7 +30,7 @@ import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
 import { buildSimpleSearchExpr } from "../store/simpleSearch";
-import { KML_MIME } from "../store/visualData";
+import { KML_MIME, parseCoords } from "../store/visualData";
 import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { readVisualColors } from "./visuals/cssVar";
 import { seriesColor } from "./visuals/eventCategories";
@@ -75,7 +75,14 @@ export type MapItemEditorTarget =
   // is required here, not optional, so every caller has to already know
   // which one before opening this dialog. MapOverlaysSection.tsx (a
   // place's own detail panel) is the only caller that creates one now.
-  | { kind: "new"; place: { handle: string; title: string } }
+  // lat/long (raw Place field strings, parsed via visualData.ts's own
+  // parseCoords) are optional -- a place created just to hold a new
+  // overlay has none yet -- and only ever used once, to center the map
+  // there on open (see the centering effect below) instead of leaving it
+  // at this dialog's hardcoded world-view default (found live: opening
+  // "+ Add overlay" on an existing, already-located place left the map
+  // exactly there).
+  | { kind: "new"; place: { handle: string; title: string; lat?: string; long?: string } }
   | { kind: "edit"; handle: string };
 
 /** One placed-and-sized image overlay in this dialog -- always 4 explicit
@@ -1282,6 +1289,27 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       notifications.show({ color: "red", title: t("Could not add that image"), message: err.message ?? String(err) });
     }
   }
+
+  // A brand-new overlay's target place may already have its own
+  // coordinates (the common case -- MapOverlaysSection.tsx only ever opens
+  // this for a place already being viewed) -- centers the map there once
+  // it's ready, instead of leaving it at this dialog's hardcoded world-view
+  // default and making the user hunt for where they actually are before
+  // drawing anything (found live). A place with no coordinates yet
+  // (freshly created just to hold this overlay) leaves the default view
+  // alone -- same as today, nothing regresses. Runs once `ready` flips,
+  // not on every render: `target` itself never changes for the life of
+  // this dialog.
+  useEffect(() => {
+    if (!ready || target.kind !== "new") return;
+    const map = mapRef.current;
+    if (!map) return;
+    const coords = parseCoords(target.place.lat ?? null, target.place.long ?? null);
+    if (!coords) return;
+    const [lat, long] = coords;
+    map.jumpTo({ center: [long, lat], zoom: 14 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   // Loads an existing KML media object's shapes and image overlays in once
   // the map/draw instance is ready -- fetchAllKmlFeatures/

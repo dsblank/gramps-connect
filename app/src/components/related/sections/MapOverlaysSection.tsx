@@ -48,7 +48,15 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
   const [adding, setAdding] = useState(false);
   if (rows.length === 0 && !canAttach) return null;
 
-  const place = { handle: detail.handle, title: (detail.title as string | undefined) ?? "" };
+  // lat/long ride along so a brand-new overlay's editor opens centered on
+  // this place instead of its own hardcoded world-view default (see
+  // MapItemEditorDialog.tsx's own centering effect) -- undefined, not "",
+  // for a place with no coordinates yet, since parseCoords there treats an
+  // empty string and "unset" the same way anyway.
+  const place = {
+    handle: detail.handle, title: (detail.title as string | undefined) ?? "",
+    lat: detail.lat as string | undefined, long: detail.long as string | undefined,
+  };
 
   async function handleRemove(handle: string, target: { desc?: string; path?: string } | undefined) {
     const summary = summaryLine("media", target) || "this map overlay";

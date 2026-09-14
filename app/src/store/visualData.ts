@@ -350,7 +350,7 @@ export function readVisualData(): VisualData {
  * value gramps-web also discards (see its _hasCoords). Out-of-range
  * values are dropped too: maplibre would otherwise wrap or clamp them
  * into a marker at a plausible-looking but wrong spot. */
-function parseCoords(latText: string | null, longText: string | null): [number, number] | null {
+export function parseCoords(latText: string | null, longText: string | null): [number, number] | null {
   if (!latText || !longText) return null;
   const lat = Number.parseFloat(latText);
   const long = Number.parseFloat(longText);
