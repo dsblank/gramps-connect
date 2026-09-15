@@ -55,3 +55,8 @@ standalone/thumbnail_cache/
 
 # deploy: real secrets/config, machine- and deployment-specific -- not source
 deploy/.env
+
+# tests/gql_presets: exported from app/src/data/gqlFilterPresets.ts by
+# app/scripts/export-gql-presets.mjs (tests/gql_presets/conftest.py runs it
+# automatically) -- not source, single source of truth is the TS file.
+tests/gql_presets/gql_presets.generated.json

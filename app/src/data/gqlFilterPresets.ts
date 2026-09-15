@@ -11,7 +11,21 @@
  * translation today -- see each one's `notes`.
  */
 
-export type GqlFilterNamespace = "Person" | "Family";
+/** GOQL's own registered object types, 1:1 with `gramps_object_query_language
+ * .query.py`'s `PERSON`/`FAMILY`/`EVENT`/.../`NOTE` specs and
+ * gramps-web-api's matching `/api/<type>/query/` resources -- every Gramps
+ * primary object type except Tag (GOQL supports it too, `TAG`, but nothing
+ * here offers Tags a Filters button; see ListHeader.tsx). */
+export type GqlFilterNamespace =
+  | "Person"
+  | "Family"
+  | "Event"
+  | "Place"
+  | "Repository"
+  | "Source"
+  | "Citation"
+  | "Media"
+  | "Note";
 
 /** Which GOQL namespace (if any) a list view's presets come from --
  * `undefined` for a view with no presets in the catalog yet, which the
@@ -21,10 +35,18 @@ export type GqlFilterNamespace = "Person" | "Family";
  * ("person"/"family") and every namespace here happens to be that
  * capitalized -- kept as an explicit map rather than a capitalize() call so
  * a future namespace whose view key doesn't match this trivially (plural,
- * different casing, ...) doesn't slip through silently. */
+ * different casing, ...) doesn't slip through silently. Deliberately omits
+ * `tag` -- every other primary view gets Filters, Tags doesn't. */
 const NAMESPACE_BY_VIEW_KEY: Record<string, GqlFilterNamespace> = {
   person: "Person",
   family: "Family",
+  event: "Event",
+  place: "Place",
+  repository: "Repository",
+  source: "Source",
+  citation: "Citation",
+  media: "Media",
+  note: "Note",
 };
 
 export function namespaceForViewKey(viewKey: string): GqlFilterNamespace | undefined {
@@ -85,26 +107,29 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     label: "Birth year between",
     category: "Dates",
     namespace: "Person",
-    sourceRule: "Birthdate",
+    sourceRule: "HasBirth",
     expr: "Date('Jan 1, {startYear}') <= birth.date.sortval <= Date('Dec 31, {endYear}')",
     params: [
       { name: "startYear", label: "Start year", type: "year" },
       { name: "endYear", label: "End year", type: "year" },
     ],
     supported: true,
+    notes:
+      "HasBirth is broader than this -- it also matches a Place and a Description text, and its single Date field accepts any Gramps date expression (not just a year range). This preset covers only the year-range portion. Verified: matches Date('Jan 1, 1800') <= birth.date.sortval <= Date('Dec 31, 1850') against gramps-core's own example.gramps fixture exactly (145/145).",
   },
   {
     id: "death-year-between",
     label: "Death year between",
     category: "Dates",
     namespace: "Person",
-    sourceRule: "Deathdate",
+    sourceRule: "HasDeath",
     expr: "Date('Jan 1, {startYear}') <= death.date.sortval <= Date('Dec 31, {endYear}')",
     params: [
       { name: "startYear", label: "Start year", type: "year" },
       { name: "endYear", label: "End year", type: "year" },
     ],
     supported: true,
+    notes: "Same scope note as birth-year-between, for HasDeath.",
   },
 
   // -- Properties -----------------------------------------------------------
@@ -136,6 +161,15 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     supported: true,
   },
   {
+    id: "has-other-gender",
+    label: "People who are neither male nor female",
+    category: "Properties",
+    namespace: "Person",
+    sourceRule: "HasOtherGender",
+    expr: "gender == Person.OTHER",
+    supported: true,
+  },
+  {
     id: "has-alternate-name",
     label: "People with an alternate name",
     category: "Properties",
@@ -152,19 +186,21 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "HasNickname",
-    expr: "primary_name.nick_name != ''",
+    expr: "primary_name.nick != ''",
     supported: true,
+    notes:
+      "Field is `nick`, not `nick_name` (fixed -- the old name doesn't exist on Name's schema). gramps-core's real HasNickname also checks every alternate name and a person-level Attribute of type NICKNAME; GOQL can only reach primary_name, so this only catches a nickname stored there. Verified against gramps-core's own example.gramps fixture (3/3 match on that data, which happens not to exercise the alternate-name/Attribute cases).",
   },
   {
     id: "adopted",
     label: "Adopted people",
     category: "Properties",
     namespace: "Person",
-    sourceRule: "HasNoteRegexp / adoption via ChildRefType",
+    sourceRule: "HaveAltFamilies",
     expr: "",
     supported: false,
     notes:
-      "Adoption type lives on the child_ref entry inside a *family's* child_ref_list, keyed to a specific child. GOQL's exists(parent_families, ...) has no way to reach 'the child_ref that refers to me' from the child's own Person row.",
+      "The real rule (HaveAltFamilies) finds, for each of a person's parent families, the ChildRef entry whose `ref` is this person's own handle, then checks that entry's own frel/mrel against ChildRefType.ADOPTED. GOQL's exists(parent_families, ...) join only ever exposes the *joined Family row's* own fields to its condition (confirmed via query.py's Collection.ref_field mechanism) -- frel/mrel live on the ChildRef struct itself, a sibling of `ref`, not reachable through that condition. Same class of gap as has-alternate-name/has-addresses.",
   },
   {
     id: "has-children",
@@ -184,7 +220,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     expr: "primary_name.first_name == '' or primary_name.surname_list[0].surname == ''",
     supported: true,
     notes:
-      "The core rule also checks every alternate name; GOQL can only reach primary_name (see has-alternate-name), so this only catches an incomplete *primary* name.",
+      "The core rule also checks every alternate name (and treats a name with no surname_list entries at all as incomplete too, not just an empty surname); GOQL can only reach primary_name (see has-alternate-name), so this only catches an incomplete *primary* name with at least one surname entry present. Verified exact match against gramps-core's own example.gramps fixture (76/76) -- that data happens not to exercise the alternate-name gap.",
   },
   {
     id: "no-marriage-records",
@@ -194,6 +230,8 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     sourceRule: "NeverMarried",
     expr: "count(families) == 0",
     supported: true,
+    notes:
+      "\"Marriage\" here means gramps-core's own NeverMarried: zero family_list entries of *any* FamilyRelType (married, unmarried partner, civil union, ...) -- not specifically type MARRIED, despite the name. Verified exact match against example.gramps (751/751).",
   },
   {
     id: "multiple-marriages",
@@ -203,6 +241,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     sourceRule: "MultipleMarriages",
     expr: "count(families) > 1",
     supported: true,
+    notes: "Same \"any FamilyRelType counts\" scope as no-marriage-records. Verified exact match against example.gramps (50/50).",
   },
   {
     id: "no-birth-date",
@@ -228,8 +267,10 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "PersonWithIncompleteEvent",
-    expr: "exists(events, place is None or date.sortval is None)",
+    expr: "exists(events, place == '' or place is None or date.sortval is None)",
     supported: true,
+    notes:
+      "Fixed: an Event's unset `place` is the empty string at runtime, never null (confirmed directly against a fresh Event()) -- the old `place is None` check matched *zero* rows instead of the correct set. gramps-core's own \"missing date\" half of this rule is effectively dead code (a Gramps Date object is never actually None, so `not event.date` never fires in practice); this GOQL version is intentionally a bit stricter, since it can correctly detect an empty/invalid date via sortval too. Verified exact match against example.gramps (745/745) with this fix.",
   },
   {
     id: "families-incomplete-events",
@@ -237,10 +278,10 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Family",
     sourceRule: "FamilyWithIncompleteEvent",
-    expr: "exists(events, place is None or date.sortval is None)",
+    expr: "exists(events, place == '' or place is None or date.sortval is None)",
     supported: true,
     notes:
-      "The core rule is a Person filter (person's own families' events); this is the direct Family-namespace equivalent. Combine with exists(Person's `families`, ...) to filter people instead.",
+      "gramps-core's real FamilyWithIncompleteEvent is, surprisingly, a *Person* rule (rules/person/_familywithincompleteevent.py) that walks person.family_list's own families' events -- there's no Family-typed rule of this name in gramps-core at all. This preset is a deliberate Family-namespace reformulation of the same underlying check (which family, not which person, has the incomplete event), not a literal port; same place-empty-string fix and same date-check caveat as incomplete-events. Verified exact match against example.gramps (397/397, checked per-family against the real rule's own inner loop) with this fix -- the old `place is None` form matched zero rows here too.",
   },
   {
     id: "missing-parents",
@@ -267,7 +308,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     label: "People with media",
     category: "Associations",
     namespace: "Person",
-    sourceRule: "HasMedia",
+    sourceRule: "HavePhotos",
     expr: "exists(media)",
     supported: true,
   },
@@ -286,10 +327,10 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Associations",
     namespace: "Person",
     sourceRule: "HasSourceCount",
-    expr: "exists(citations, source.handle is not None)",
+    expr: "count(citations) > 0",
     supported: true,
     notes:
-      "The core rule counts distinct Sources reachable via the person's citations. GOQL has no distinct-count across a two-hop relationship, so this checks 'has at least one citation whose source exists' rather than a source tally.",
+      "gramps-core's HasSourceCount literally counts len(citation_list) (Citations, not distinct Sources -- its own source comment says so), so count(citations) > 0 is the direct, faithful translation, not an approximation. Verified exact match against example.gramps (2090/2090).",
   },
   {
     id: "has-addresses",
@@ -329,7 +370,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     label: "Private",
     category: "Privacy",
     namespace: "Person",
-    sourceRule: "PeoplePrivate / IsPrivate",
+    sourceRule: "PeoplePrivate",
     expr: "private == True",
     supported: true,
   },
@@ -338,7 +379,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     label: "Not private",
     category: "Privacy",
     namespace: "Person",
-    sourceRule: "IsPrivate(False)",
+    sourceRule: "PeoplePublic",
     expr: "private == False",
     supported: true,
   },

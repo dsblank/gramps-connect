@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build:gramplet-catalog": "node scripts/build-gramplet-catalog.mjs",
-    "update:wikidata-place-types": "node scripts/update-wikidata-place-types.mjs"
+    "update:wikidata-place-types": "node scripts/update-wikidata-place-types.mjs",
+    "export:gql-presets": "node scripts/export-gql-presets.mjs"
   },
   "dependencies": {
     "@gramps-connect/gramps-date": "*",

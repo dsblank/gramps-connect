@@ -350,16 +350,6 @@ export const FAMILY_VIEW: ViewConfig = {
   ],
 };
 
-/** The `ViewConfig` whose `/query/` endpoint a GOQL namespace resolves
- * against -- gqlFilterPresets.ts's `namespaceForViewKey()` in reverse.
- * Used by customRuleMedia.ts's validateWhereExpr() to check a Custom
- * Rule's raw expression against the right endpoint regardless of which
- * view happens to currently be open (a namespace, not a specific view
- * instance, is what actually determines validity). */
-export function viewForNamespace(namespace: GqlFilterNamespace): ViewConfig {
-  return namespace === "Person" ? PERSON_VIEW : FAMILY_VIEW;
-}
-
 // EventType's value -> untranslated name, from gramps/gen/lib/eventtype.py's
 // _DATAMAP. Needed because the .../query/ endpoints return the *raw* struct,
 // where a built-in type carries only its integer `value` and leaves `string`
@@ -931,6 +921,30 @@ function colorSwatch(sqlColor: unknown): ReactNode {
       border: "1px solid var(--mantine-color-default-border)",
     },
   });
+}
+
+/** The `ViewConfig` whose `/query/` endpoint a GOQL namespace resolves
+ * against -- gqlFilterPresets.ts's `namespaceForViewKey()` in reverse.
+ * Used by customRuleMedia.ts's validateWhereExpr() to check a Custom
+ * Rule's raw expression against the right endpoint regardless of which
+ * view happens to currently be open (a namespace, not a specific view
+ * instance, is what actually determines validity). Tag is deliberately
+ * absent -- GqlFilterNamespace never includes it (Tags get no Filters
+ * button), so there's no case for it here either. */
+const VIEW_BY_NAMESPACE: Record<GqlFilterNamespace, ViewConfig> = {
+  Person: PERSON_VIEW,
+  Family: FAMILY_VIEW,
+  Event: EVENT_VIEW,
+  Place: PLACE_VIEW,
+  Repository: REPOSITORY_VIEW,
+  Source: SOURCE_VIEW,
+  Citation: CITATION_VIEW,
+  Media: MEDIA_VIEW,
+  Note: NOTE_VIEW,
+};
+
+export function viewForNamespace(namespace: GqlFilterNamespace): ViewConfig {
+  return VIEW_BY_NAMESPACE[namespace];
 }
 
 export const TAG_VIEW: ViewConfig = {
