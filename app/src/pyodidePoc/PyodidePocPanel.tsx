@@ -337,6 +337,16 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     lastWhereExprRef.current = grampletFilterExpr(snapshot);
     return store.subscribe(() => {
       const snap = store.getSnapshot();
+      // runQuery() (a filter/sort change) emits twice: once synchronously
+      // when it starts (status "loading", selection already cleared but
+      // whereExpr/pickerExpr still the *old* committed values) and again
+      // once the fetch settles (status "ready", filter now actually
+      // updated). Reacting to the first would rerun this Gramplet against
+      // stale data, immediately followed by a second, correct rerun -- a
+      // visible "flash old data, then new data". Skipping the loading
+      // snapshot means only the settled one is compared against the refs
+      // below, so a single filter/selection change yields a single rerun.
+      if (snap.status === "loading") return;
       const currentFilterExpr = grampletFilterExpr(snap);
       const selectionChanged = listensToSelection && snap.selectedHandle !== lastSelectedHandleRef.current;
       const filterChanged = listensToFilter && currentFilterExpr !== lastWhereExprRef.current;

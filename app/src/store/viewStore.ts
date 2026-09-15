@@ -917,6 +917,20 @@ export class ViewStore {
     }
 
     this.backgroundFillActive = true;
+    // Throttles the emit() below to at most once every 150ms while pages
+    // keep landing back-to-back (a local, already-cached fetchPage() can
+    // resolve near-instantly, one page after another) -- every subscriber
+    // (DataTable, FilterBar, a listening Gramplet's panel, ...) re-renders
+    // on each one, and a large result set's worth of those in a tight loop
+    // was visible live as a paint stall/flicker on anything static-looking
+    // nearby (a Gramplet's own output, in particular, since nothing about
+    // it was actually changing during this span -- see PyodidePocPanel.tsx's
+    // selection/filter-subscription effect's own doc comment on why a
+    // Gramplet itself only reacts once per real filter change; this was a
+    // separate, unrelated render storm from the same background fill any
+    // filter change kicks off). The very last page's emit is never
+    // throttled -- final loadedCount/totalCount still land immediately.
+    let lastFillEmitAt = 0;
     (async () => {
       while (after !== null) {
         const { page } = await fetchPage(this.view, await getToken(), after, false, this.combinedFilter(whereExpr, newPickerExpr), orderBy);
@@ -942,7 +956,11 @@ export class ViewStore {
         } else {
           continue; // still catching up -- nothing new to show yet
         }
-        this.emit();
+        const now = Date.now();
+        if (after === null || now - lastFillEmitAt >= 150) {
+          lastFillEmitAt = now;
+          this.emit();
+        }
       }
       stmt.free();
 

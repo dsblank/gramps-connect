@@ -22,6 +22,16 @@ import type { GrampletBlock, PyodideWorkerResponse, TableCell } from "./types";
 // reads as "waiting its turn", not "something's broken/stuck".
 export type RunStatus = "idle" | "queued" | "loading" | "done" | "error";
 
+// Module-level (not per-component-instance) and never cleared for the
+// page's lifetime -- an external script's own top-level side effects
+// (plotly.min.js defining window.Plotly, e.g.) are themselves global and
+// permanent once they've run, the same way they'd be for a plain <script
+// src> in a static HTML page that only ever loads once. See HtmlOutput's
+// own script-reinsertion effect below for why re-running one anyway (once
+// per Gramplet rerun that happens to include the same external script) is
+// both pointless and, confirmed live, not actually free.
+const loadedScriptSrcs = new Set<string>();
+
 // html(markup)'s result -- reaches the DOM completely unsanitized (no
 // DOMPurify -- removed here; see types.ts's GrampletBlock doc comment and
 // pyodideWorker.ts's html() for the fuller trust-model note). Gramplet
@@ -205,6 +215,23 @@ function HtmlOutput({
           old.replaceWith(script);
           continue;
         }
+        if (loadedScriptSrcs.has(script.src)) {
+          // Already loaded and executed once (this render or an earlier
+          // one -- e.g. plotly.min.js from a previous chart) -- its
+          // top-level side effects (window.Plotly, e.g.) already ran and
+          // stay in place for the page's lifetime, so there's nothing left
+          // for a fresh copy of this exact script to do. Found live: a
+          // *reinserted* <script src> genuinely re-executes the whole
+          // file's top-level code, not just a cheap cache-hit fetch --
+          // for plotly.min.js that's ~300ms, spent showing an empty
+          // just-inserted chart div while later scripts (the actual
+          // Plotly.newPlot() call) sat blocked waiting for this one's
+          // "load" event, which is exactly the flash a rerun landing on
+          // an already-plotly-loaded page doesn't need to pay again.
+          // `old` itself is left alone (inert either way; not worth a DOM
+          // write to remove it).
+          continue;
+        }
         const loaded = new Promise<boolean>((resolve) => {
           script.addEventListener("load", () => resolve(true), { once: true });
           script.addEventListener("error", () => resolve(false), { once: true });
@@ -220,6 +247,7 @@ function HtmlOutput({
           console.error(`GrampletResultView: failed to load script "${script.src}"`);
           return;
         }
+        loadedScriptSrcs.add(script.src);
       }
     });
     return () => {

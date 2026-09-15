@@ -1111,11 +1111,46 @@ def print(*args, sep=" ", end="\\n", **kwargs):
             # other resize. .catch(() => {}) alongside is defense in
             # depth against that same rejection in any other case this
             # guard doesn't anticipate.
+            #
+            # Skips this observer's own guaranteed *first* callback --
+            # per spec, ResizeObserver always fires once right after
+            # observe() starts, reporting whatever size the element
+            # already has, even though nothing has "resized" yet. On a
+            # freshly created plot div that's always a completely
+            # redundant echo: to_html()'s own inline Plotly.newPlot() call
+            # (see above) already drew the chart correctly at that exact
+            # size moments earlier, so acting on this first callback just
+            # means a full, visible second redraw (clears and rebuilds the
+            # whole SVG) of a chart that's already showing right --
+            # confirmed live: the very next full redraw after a fresh
+            # chart lands consistently arrives ~150ms later (this file's
+            # own debounce window below), i.e. exactly the debounced
+            # first callback, not a real subsequent resize. Only the
+            # *second* and later callbacks -- genuine size changes after
+            # that -- reach Plots.resize() at all.
+            #
+            # Those genuine later ones are still debounced (150ms, same
+            # window this project's own debounce patterns already use
+            # elsewhere) rather than calling Plotly.Plots.resize()
+            # straight from the callback -- a burst of unrelated layout
+            # shifts nearby (e.g. the person list's own rows changing size
+            # as a background page-fill streams in more of them after a
+            # filter change) can still fire this observer repeatedly in
+            # quick succession, and collapsing a burst into one redraw
+            # after things settle avoids several full redraws back to
+            # back reading as the chart flashing/flickering.
             resize_js = (
                 "var gd = document.getElementById('{plot_id}');"
                 "if (gd && window.ResizeObserver) {"
+                "var resizeTimer = null;"
+                "var isFirstCallback = true;"
                 "new ResizeObserver(function () {"
+                "if (isFirstCallback) { isFirstCallback = false; return; }"
+                "if (resizeTimer) clearTimeout(resizeTimer);"
+                "resizeTimer = setTimeout(function () {"
+                "resizeTimer = null;"
                 "if (gd.offsetParent !== null) { Plotly.Plots.resize(gd).catch(function () {}); }"
+                "}, 150);"
                 "}).observe(gd);"
                 "}"
             )
@@ -1145,6 +1180,22 @@ def print(*args, sep=" ", end="\\n", **kwargs):
                     # with.
                     default_height="450px",
                     post_script=resize_js,
+                    # to_html() defaults config["responsive"] to True --
+                    # plotly.js's own newPlot() then wires up its own,
+                    # separate resize-handling on the same div (confirmed
+                    # live: a live-captured trace showed a full chart
+                    # redraw firing *before* this file's own resize_js
+                    # ResizeObserver ever got its first callback, so it
+                    # wasn't resize_js causing it). Two independent
+                    # resize-reaction mechanisms on one div, both doing a
+                    # full redraw whenever anything nearby so much as
+                    # reflows (a person list streaming in more rows after
+                    # a filter change, e.g.) -- resize_js's own debounce
+                    # only ever covered its own half of that. False here
+                    # leaves resize_js as the *only* one, so a burst of
+                    # nearby layout shifts collapses into the one redraw
+                    # resize_js's own debounce already intends, not two.
+                    config={"responsive": False},
                 )
             )
             return
