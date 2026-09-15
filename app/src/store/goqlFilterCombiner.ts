@@ -45,6 +45,19 @@ export class FilterCombineError extends Error {}
  * in). */
 const YEAR_RE = /^\d{1,4}$/;
 
+/** Strips quotes/backslashes from a `type: "text"` param's raw value
+ * before it's spliced into a `'...'` string literal -- same convention
+ * simpleSearch.ts's buildSimpleSearchExpr()/personSearch.ts's
+ * buildPersonSearchExpr() already use for user-typed search text, applied
+ * here for the same reason: this is plain string interpolation, not a
+ * parameterized query, so a raw `'` or `\` in the value could otherwise
+ * break out of the literal and inject arbitrary GOQL. Stripping (not
+ * escaping) matches those two call sites exactly, rather than introducing
+ * a second convention for the same problem. */
+function sanitizeTextParam(raw: string): string {
+  return raw.replace(/['\\]/g, "");
+}
+
 function fillParams(preset: GqlFilterPreset, values: Record<string, string> | undefined): string {
   const params = preset.params ?? [];
   if (params.length === 0) {
@@ -63,7 +76,13 @@ function fillParams(preset: GqlFilterPreset, values: Record<string, string> | un
         `"${preset.label}"'s "${param.label}" must be a plain year (e.g. 1968), got "${raw}"`,
       );
     }
-    expr = expr.split(`{${param.name}}`).join(raw);
+    const safeValue = param.type === "text" ? sanitizeTextParam(raw) : raw;
+    if (safeValue === "") {
+      throw new FilterCombineError(
+        `"${preset.label}"'s "${param.label}" can't be made up of only quotes/backslashes`,
+      );
+    }
+    expr = expr.split(`{${param.name}}`).join(safeValue);
   }
   return expr;
 }

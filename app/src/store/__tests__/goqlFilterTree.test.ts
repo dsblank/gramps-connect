@@ -65,11 +65,11 @@ describe("combineFilterTree", () => {
   it("fills in a parameterized rule's values", () => {
     const tree = createEmptyTree("Person");
     tree.root.children = [
-      createRuleRow("birth-year-between", { startYear: "1900", endYear: "1950" }),
+      createRuleRow("birth-year-between", { startDate: "1 Jan 1900", endDate: "31 Dec 1950" }),
     ];
 
     expect(combineFilterTree(tree, gqlFilterPresets).whereExpr).toBe(
-      "(Date('Jan 1, 1900') <= birth.date.sortval <= Date('Dec 31, 1950'))",
+      "(Date('1 Jan 1900') <= birth.date.sortval <= Date('31 Dec 1950'))",
     );
   });
 
@@ -199,12 +199,12 @@ describe("tree mutation helpers", () => {
 
   it("updateRowValues replaces a rule's param values wholesale", () => {
     const tree = createEmptyTree("Person");
-    const row = createRuleRow("birth-year-between", { startYear: "", endYear: "" });
+    const row = createRuleRow("birth-year-between", { startDate: "", endDate: "" });
     tree.root.children = [row];
 
-    const next = updateRowValues(tree, row.id, { startYear: "1900", endYear: "1950" });
+    const next = updateRowValues(tree, row.id, { startDate: "1900", endDate: "1950" });
 
-    expect((next.root.children[0] as any).values).toEqual({ startYear: "1900", endYear: "1950" });
+    expect((next.root.children[0] as any).values).toEqual({ startDate: "1900", endDate: "1950" });
   });
 
   it("countRules counts leaf rows recursively, ignoring rule group nodes themselves", () => {

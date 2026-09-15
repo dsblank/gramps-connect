@@ -36,7 +36,7 @@ from gramps.gen.filters.rules.person import (
     PeoplePublic,
     PersonWithIncompleteEvent,
 )
-from gramps.gen.lib import Date
+from gramps.gen.datehandler import parser as date_parser
 from gramps_object_query_language.query_lang import QueryError, QueryLangError, compile_expr
 import pytest
 
@@ -205,31 +205,33 @@ def test_not_private(db, gramps_user, preset_by_id):
     )
 
 
-def test_a_real_tag(db, gramps_user, preset_by_id):
-    """Not a specific `tag-<name>` preset (none of the fixed TAG_NAMES
-    are guaranteed to exist in example.gramps) -- proves the shared
-    `exists(tags, name == '<name>')` mechanism every `tag-*` preset
-    uses, against whatever tag genuinely exists in the fixture.
+def test_has_tag(db, gramps_user, preset_by_id):
+    """`has-tag` takes the tag name as a user-filled value (originally
+    one hardcoded preset per fixed tag name -- replaced since a tree's
+    actual tags are user-defined, not that fixed list) -- fills in the
+    shipped preset's own `{tagName}` placeholder exactly the way the
+    UI's params substitution does (goqlFilterCombiner.ts's fillParams()),
+    against whatever tag genuinely exists in the fixture.
     """
     tags = list(db.iter_tags())
     assert tags, "example.gramps fixture has no tags at all -- can't exercise the tag mechanism"
     tag_name = tags[0].name
-    expr = f"exists(tags, name == {tag_name!r})"
+    expr = preset_by_id["has-tag"]["expr"].replace("{tagName}", tag_name)
     assert_goql_matches_rule(db, "Person", expr, HasTag([tag_name]), db.iter_people(), user=gramps_user)
 
 
-def test_birth_year_between(db):
-    """No single gramps-core Rule matches "year between" 1:1 (HasBirth
-    takes one free-form date expression, which *can* express a range,
+def test_birth_year_between(db, preset_by_id):
+    """No single gramps-core Rule matches a date range 1:1 (HasBirth
+    takes one free-form date expression, matched via `event.date.match()`,
     plus place/description this preset intentionally doesn't cover --
     see its own `notes`), so "expected" here is computed directly from
     birth_ref_index/date.sortval, matching exactly what the expr itself
-    claims to do.
+    claims to do. Uses full date strings (not bare years), parsed via
+    Gramps' own date parser -- proving the preset's bounds accept any
+    Gramps date expression, not just a year.
     """
-    start_year, end_year = 1800, 1850
-    lo, hi = Date(), Date()
-    lo.set_yr_mon_day(start_year, 1, 1)
-    hi.set_yr_mon_day(end_year, 12, 31)
+    start_date, end_date = "12 May 1800", "31 Dec 1850"
+    lo, hi = date_parser.parse(start_date), date_parser.parse(end_date)
 
     expected = set()
     for p in db.iter_people():
@@ -240,17 +242,17 @@ def test_birth_year_between(db):
             expected.add(p.handle)
 
     expr = (
-        f"Date('Jan 1, {start_year}') <= birth.date.sortval <= Date('Dec 31, {end_year}')"
+        preset_by_id["birth-year-between"]["expr"]
+        .replace("{startDate}", start_date)
+        .replace("{endDate}", end_date)
     )
     actual = goql_matching_handles(db, "Person", expr, db.iter_people())
     assert actual == expected
 
 
-def test_death_year_between(db):
-    start_year, end_year = 1800, 1850
-    lo, hi = Date(), Date()
-    lo.set_yr_mon_day(start_year, 1, 1)
-    hi.set_yr_mon_day(end_year, 12, 31)
+def test_death_year_between(db, preset_by_id):
+    start_date, end_date = "12 May 1800", "31 Dec 1850"
+    lo, hi = date_parser.parse(start_date), date_parser.parse(end_date)
 
     expected = set()
     for p in db.iter_people():
@@ -261,7 +263,9 @@ def test_death_year_between(db):
             expected.add(p.handle)
 
     expr = (
-        f"Date('Jan 1, {start_year}') <= death.date.sortval <= Date('Dec 31, {end_year}')"
+        preset_by_id["death-year-between"]["expr"]
+        .replace("{startDate}", start_date)
+        .replace("{endDate}", end_date)
     )
     actual = goql_matching_handles(db, "Person", expr, db.iter_people())
     assert actual == expected

@@ -69,7 +69,16 @@ export type GqlFilterCategory =
 export interface GqlFilterParam {
   name: string;
   label: string;
-  type: "year";
+  /** "year" gets a numeric input, validated as a plain 1-4 digit year
+   * before being spliced into a `Date('...')` literal (see
+   * goqlFilterCombiner.ts's YEAR_RE). "text" gets a plain text input,
+   * sanitized (quotes/backslashes stripped, same convention
+   * simpleSearch.ts/personSearch.ts already use for user-typed search
+   * text) before being spliced into a `'...'` string literal -- this is
+   * plain string interpolation into `where_expr` text, not a
+   * parameterized query, so an unescaped value could otherwise break out
+   * of the literal. */
+  type: "year" | "text";
 }
 
 export interface GqlFilterPreset {
@@ -85,48 +94,33 @@ export interface GqlFilterPreset {
   notes?: string;
 }
 
-const TAG_NAMES = [
-  "Blog",
-  "Children",
-  "Citations",
-  "Coronation",
-  "Family",
-  "Import",
-  "Map",
-  "Media",
-  "Relationships",
-  "Repository",
-  "Tasks",
-  "ToDo",
-];
-
 export const gqlFilterPresets: GqlFilterPreset[] = [
   // -- Dates --------------------------------------------------------------
   {
     id: "birth-year-between",
-    label: "Birth year between",
+    label: "Birth date between",
     category: "Dates",
     namespace: "Person",
     sourceRule: "HasBirth",
-    expr: "Date('Jan 1, {startYear}') <= birth.date.sortval <= Date('Dec 31, {endYear}')",
+    expr: "Date('{startDate}') <= birth.date.sortval <= Date('{endDate}')",
     params: [
-      { name: "startYear", label: "Start year", type: "year" },
-      { name: "endYear", label: "End year", type: "year" },
+      { name: "startDate", label: "Start date", type: "text" },
+      { name: "endDate", label: "End date", type: "text" },
     ],
     supported: true,
     notes:
-      "HasBirth is broader than this -- it also matches a Place and a Description text, and its single Date field accepts any Gramps date expression (not just a year range). This preset covers only the year-range portion. Verified: matches Date('Jan 1, 1800') <= birth.date.sortval <= Date('Dec 31, 1850') against gramps-core's own example.gramps fixture exactly (145/145).",
+      "HasBirth is broader than this -- it also matches a Place and a Description text; this preset covers only its Date field. Each bound accepts any Gramps date expression (e.g. \"1 Jan 1900\", \"1900\", \"before 1950\"), parsed via Gramps' own date parser -- not restricted to a bare year. Verified: matches Date('Jan 1, 1800') <= birth.date.sortval <= Date('Dec 31, 1850') against gramps-core's own example.gramps fixture exactly (145/145).",
   },
   {
     id: "death-year-between",
-    label: "Death year between",
+    label: "Death date between",
     category: "Dates",
     namespace: "Person",
     sourceRule: "HasDeath",
-    expr: "Date('Jan 1, {startYear}') <= death.date.sortval <= Date('Dec 31, {endYear}')",
+    expr: "Date('{startDate}') <= death.date.sortval <= Date('{endDate}')",
     params: [
-      { name: "startYear", label: "Start year", type: "year" },
-      { name: "endYear", label: "End year", type: "year" },
+      { name: "startDate", label: "Start date", type: "text" },
+      { name: "endDate", label: "End date", type: "text" },
     ],
     supported: true,
     notes: "Same scope note as birth-year-between, for HasDeath.",
@@ -354,15 +348,18 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
   },
 
   // -- Tags -------------------------------------------------------------------
-  ...TAG_NAMES.map((tagName): GqlFilterPreset => ({
-    id: `tag-${tagName.toLowerCase()}`,
-    label: `Tag: ${tagName}`,
+  {
+    id: "has-tag",
+    label: "Tagged",
     category: "Tags",
     namespace: "Person",
     sourceRule: "HasTag",
-    expr: `exists(tags, name == '${tagName}')`,
+    expr: "exists(tags, name == '{tagName}')",
+    params: [{ name: "tagName", label: "Tag name", type: "text" }],
     supported: true,
-  })),
+    notes:
+      "Originally one hardcoded preset per tag name (a fixed list of common Gramps tag categories) -- replaced with a single rule taking the tag name as a value, since a tree's actual tags are user-defined, not this list. gramps-core's own HasTag resolves the name to a handle once at prepare() time and matches nothing at all if no tag by that name exists (silent, not an error) -- this GOQL translation behaves the same way: exists(tags, name == '...') is simply false if the name doesn't match any tag on the tree.",
+  },
 
   // -- Privacy ------------------------------------------------------------
   {

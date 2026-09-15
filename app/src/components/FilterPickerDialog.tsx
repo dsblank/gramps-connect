@@ -1005,21 +1005,36 @@ function RowView({
           </Group>
           {preset.params && preset.params.length > 0 && (
             <Group gap="xs">
-              {preset.params.map((param) => (
-                <NumberInput
-                  key={param.name}
-                  size="xs"
-                  w={100}
-                  placeholder={t(param.label)}
-                  hideControls
-                  value={row.values?.[param.name] ?? ""}
-                  onChange={(v) =>
-                    mutate((t) =>
-                      updateRowValues(t, row.id, { ...row.values, [param.name]: v === "" ? "" : String(v) }),
-                    )
-                  }
-                />
-              ))}
+              {preset.params.map((param) =>
+                param.type === "text" ? (
+                  <TextInput
+                    key={param.name}
+                    size="xs"
+                    w={140}
+                    placeholder={t(param.label)}
+                    value={row.values?.[param.name] ?? ""}
+                    onChange={(e) =>
+                      mutate((t) =>
+                        updateRowValues(t, row.id, { ...row.values, [param.name]: e.currentTarget.value }),
+                      )
+                    }
+                  />
+                ) : (
+                  <NumberInput
+                    key={param.name}
+                    size="xs"
+                    w={100}
+                    placeholder={t(param.label)}
+                    hideControls
+                    value={row.values?.[param.name] ?? ""}
+                    onChange={(v) =>
+                      mutate((t) =>
+                        updateRowValues(t, row.id, { ...row.values, [param.name]: v === "" ? "" : String(v) }),
+                      )
+                    }
+                  />
+                ),
+              )}
             </Group>
           )}
         </Stack>
