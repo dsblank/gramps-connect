@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
-  Button, Checkbox, CloseButton, Divider, Group, Modal, NumberInput, ScrollArea, Select,
+  Anchor, Button, Checkbox, CloseButton, Collapse, Divider, Group, Modal, NumberInput, ScrollArea, Select,
   SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip,
 } from "@mantine/core";
 import {
@@ -109,6 +109,14 @@ interface FilterPickerDialogProps {
  * `whereExpr`, so applying here ANDs with (never replaces) whatever's
  * currently typed in the search box, and vice versa. See
  * ViewSnapshot.pickerExpr's doc comment in viewStore.ts.
+ *
+ * The tree editor, its GOQL preview, and "Custom rules…" all live inside
+ * a collapsed-by-default "Edit options" section (`editOptionsOpen`) --
+ * picking a Saved Filter from the dropdown and hitting Apply is the
+ * common path and needs none of that visible; it's a click away for
+ * anyone building or tweaking a rule. "Delete" (the loaded Saved
+ * Filter, not a rule) lives with Clear/Save/Apply in the always-visible
+ * button row at the bottom instead, disabled whenever nothing's loaded.
  */
 export function FilterPickerDialog({
   opened, onClose, viewKey, viewLabel, namespace,
@@ -131,6 +139,14 @@ export function FilterPickerDialog({
   const [applying, setApplying] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [manageRulesOpen, setManageRulesOpen] = useState(false);
+  // Keeps the rule-builder/GOQL/Custom-rules editing surface tucked away
+  // by default -- the goal is a quick pick from "Load a saved filter…"
+  // for the common case, with the full editor a click away for anyone
+  // who needs it. Not reset on open/close (the dialog stays mounted the
+  // whole time a view has a namespace, see ListHeader.tsx) -- once
+  // someone expands it to build/tweak something, it stays expanded for
+  // the rest of that session rather than re-hiding their own work.
+  const [editOptionsOpen, setEditOptionsOpen] = useState(false);
   // True while handleSelectSavedFilter's own confirmDialog() is pending
   // -- that confirm is a single, app-wide Modal (ConfirmDialogHost.tsx),
   // mounted entirely outside this component, so there's no other way for
@@ -331,11 +347,11 @@ export function FilterPickerDialog({
       await removeSavedFilter(handle);
       setSavedFilters((prev) => prev.filter((f) => f.handle !== handle));
       if (savedFilterHandle === handle) {
-        // The tree itself is left alone -- deleting the *saved* copy
-        // doesn't discard what's currently in the editor, it just
-        // severs the "Update" link (falls back to plain "Save…").
-        setSavedFilterHandle(undefined);
-        setSavedFilterName(undefined);
+        // Deleting the *loaded* filter clears the Filter Builder too --
+        // its rules were only ever a view onto the now-gone saved copy,
+        // so leaving them in place would let "Save…" silently recreate
+        // it under a new handle with no name of its own.
+        handleClear();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -405,82 +421,101 @@ export function FilterPickerDialog({
       closeOnEscape={!saveDialogOpen && !manageRulesOpen && !confirmPending}
     >
       <Stack gap="md">
-        <Group justify="space-between" wrap="wrap" gap="xs">
-          <Group gap="xs">
-            <Select
-              size="xs"
-              w={260}
-              placeholder={t("Load a saved filter…")}
-              data={[
-                // A real, visible label -- an empty one (the earlier
-                // approach, relying on `placeholder` showing through a
-                // blank selected box) rendered as a blank, unclickable
-                // row in the dropdown itself. This is purely this
-                // Select's own display text for "nothing loaded"; its
-                // `value` stays EMPTY_SAVED_FILTER_VALUE, a sentinel
-                // that can't collide with a real Media handle, so
-                // handleSelectSavedFilter() below still treats it as
-                // "load nothing" -- it's never written anywhere as an
-                // actual Saved Filter name (SaveFilterDialog's own
-                // `initialName` is always "" for a fresh "Save…", not
-                // derived from this label).
-                { value: EMPTY_SAVED_FILTER_VALUE, label: t("New Filter") },
-                ...savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
-              ]}
-              value={savedFilterHandle ?? EMPTY_SAVED_FILTER_VALUE}
-              onChange={handleSelectSavedFilter}
-            />
-            {savedFilterHandle && (
-              <Button size="xs" variant="subtle" color="red" onClick={() => handleDeleteSavedFilter(savedFilterHandle)}>
-                {t("Delete")}
-              </Button>
-            )}
-            {/* Only signal this app-worthy while it's actually true:
-             * discussed with the user rather than blocking/confirming
-             * Apply on it (see project_saved_filters_persistence_plan.md
-             * -- editing already survives an Apply-then-reopen within
-             * the same page session, so this is a discoverability nudge,
-             * not a warning about real data loss). */}
-            {isDirty && <Text size="xs" c="dimmed">{t("Unsaved changes")}</Text>}
-          </Group>
-          <Button size="xs" variant="subtle" onClick={() => setManageRulesOpen(true)}>{t("Custom rules…")}</Button>
+        <Group gap="xs" wrap="wrap">
+          <Select
+            size="xs"
+            w={260}
+            placeholder={t("Load a saved filter…")}
+            data={[
+              // A real, visible label -- an empty one (the earlier
+              // approach, relying on `placeholder` showing through a
+              // blank selected box) rendered as a blank, unclickable
+              // row in the dropdown itself. This is purely this
+              // Select's own display text for "nothing loaded"; its
+              // `value` stays EMPTY_SAVED_FILTER_VALUE, a sentinel
+              // that can't collide with a real Media handle, so
+              // handleSelectSavedFilter() below still treats it as
+              // "load nothing" -- it's never written anywhere as an
+              // actual Saved Filter name (SaveFilterDialog's own
+              // `initialName` is always "" for a fresh "Save…", not
+              // derived from this label).
+              { value: EMPTY_SAVED_FILTER_VALUE, label: t("New Filter") },
+              ...savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
+            ]}
+            value={savedFilterHandle ?? EMPTY_SAVED_FILTER_VALUE}
+            onChange={handleSelectSavedFilter}
+          />
+          {/* Only signal this app-worthy while it's actually true:
+           * discussed with the user rather than blocking/confirming
+           * Apply on it (see project_saved_filters_persistence_plan.md
+           * -- editing already survives an Apply-then-reopen within
+           * the same page session, so this is a discoverability nudge,
+           * not a warning about real data loss). */}
+          {isDirty && <Text size="xs" c="dimmed">{t("Unsaved changes")}</Text>}
         </Group>
 
         <Divider />
 
-        <FilterTreeNodeView node={tree.root} isRoot namespace={namespace} presets={presets} mutate={mutate} />
+        {/* Everything below is the "advanced" surface -- the rule
+         * builder, its live GOQL preview, and the Custom Rules manager --
+         * collapsed by default so picking a saved filter (the common
+         * case) doesn't force scrolling past it. Same ▸/▾ + Collapse
+         * convention as ObjectEditDialog.tsx's own "Details" section. */}
+        <Anchor component="button" type="button" size="sm" onClick={() => setEditOptionsOpen((v) => !v)}>
+          {editOptionsOpen ? "▾" : "▸"} {t("Edit options")}
+        </Anchor>
+        <Collapse in={editOptionsOpen}>
+          <Stack gap="md">
+            <Button size="xs" variant="light" style={{ alignSelf: "flex-start" }} onClick={() => setManageRulesOpen(true)}>
+              {t("Custom Rules")}
+            </Button>
 
-        <Divider />
+            <Text size="xs" fw={600} c="dimmed">{t("Filter Builder")}</Text>
+            <FilterTreeNodeView node={tree.root} isRoot namespace={namespace} presets={presets} mutate={mutate} />
 
-        {preview && (
-          <Stack gap={4}>
-            <Text size="xs" c="dimmed">{t("GOQL:")}</Text>
-            {preview.ok ? (
-              <Textarea
-                readOnly
-                autosize
-                minRows={2}
-                maxRows={10}
-                ff="monospace"
-                size="xs"
-                value={formatWhereExpr(preview.whereExpr)}
-              />
-            ) : (
-              <Text size="xs" c="red">{preview.message}</Text>
+            {preview && (
+              <Stack gap={4}>
+                <Text size="xs" c="dimmed">{t("GOQL:")}</Text>
+                {preview.ok ? (
+                  <Textarea
+                    readOnly
+                    autosize
+                    minRows={2}
+                    maxRows={10}
+                    ff="monospace"
+                    size="xs"
+                    value={formatWhereExpr(preview.whereExpr)}
+                  />
+                ) : (
+                  <Text size="xs" c="red">{preview.message}</Text>
+                )}
+              </Stack>
             )}
           </Stack>
-        )}
+        </Collapse>
+
         {error && <Text size="xs" c="red">{error}</Text>}
 
         <Group justify="space-between">
-          <Button
-            variant="subtle"
-            color="gray"
-            disabled={countRules(tree) === 0}
-            onClick={handleClear}
-          >
-            {t("Clear")}
-          </Button>
+          <Group gap="xs">
+            <Button
+              size="xs"
+              variant="subtle"
+              color="red"
+              disabled={!savedFilterHandle}
+              onClick={() => savedFilterHandle && handleDeleteSavedFilter(savedFilterHandle)}
+            >
+              {t("Delete")}
+            </Button>
+            <Button
+              variant="subtle"
+              color="gray"
+              disabled={countRules(tree) === 0}
+              onClick={handleClear}
+            >
+              {t("Clear")}
+            </Button>
+          </Group>
           <Group gap="xs">
             {savedFilterHandle ? (
               <>
@@ -517,6 +552,7 @@ export function FilterPickerDialog({
           opened={saveDialogOpen}
           mode={savedFilterHandle ? "copy" : "save"}
           initialName={savedFilterHandle && savedFilterName ? `${savedFilterName} (copy)` : ""}
+          existingNames={savedFiltersForNamespace.map((f) => f.name)}
           onSave={handleSaveAsNew}
           onClose={() => setSaveDialogOpen(false)}
         />
@@ -544,7 +580,7 @@ export function FilterPickerDialog({
  * mounted with `opened` toggled, reset to blank on each open via the
  * effect below -- same convention `ManageCustomRulesDialog` uses. */
 function SaveFilterDialog({
-  opened, mode, initialName, onSave, onClose,
+  opened, mode, initialName, existingNames, onSave, onClose,
 }: {
   opened: boolean;
   mode: "save" | "copy";
@@ -553,6 +589,13 @@ function SaveFilterDialog({
    * doesn't default to blank next to the thing it was copied from), or
    * `""` for a first-time "Save…". */
   initialName: string;
+  /** Every other Saved Filter's name in this namespace -- both "Save…"
+   * and "Copy…" always create a brand-new Saved Filter (never rename one
+   * in place; that's what "Save" on an already-loaded filter does
+   * instead, with no name involved), so there's no "current" name to
+   * exclude from the collision check. Compared case-insensitively,
+   * trimmed, so "Widows" and " widows " are treated as the same name. */
+  existingNames: string[];
   onSave: (name: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -568,12 +611,15 @@ function SaveFilterDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
 
+  const trimmedName = name.trim();
+  const nameTaken = existingNames.some((n) => n.trim().toLowerCase() === trimmedName.toLowerCase());
+
   async function handleSave() {
-    if (!name.trim()) return;
+    if (!trimmedName || nameTaken) return;
     setSaving(true);
     setError("");
     try {
-      await onSave(name.trim());
+      await onSave(trimmedName);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSaving(false);
@@ -594,12 +640,13 @@ function SaveFilterDialog({
           label={t("Name")}
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
+          error={nameTaken ? t("A saved filter with this name already exists.") : undefined}
           autoFocus
         />
         {error && <Text size="xs" c="red">{error}</Text>}
         <Group gap="xs" justify="flex-end">
           <Button size="xs" variant="default" onClick={onClose}>{t("Cancel")}</Button>
-          <Button size="xs" onClick={handleSave} loading={saving} disabled={!name.trim()}>
+          <Button size="xs" onClick={handleSave} loading={saving} disabled={!trimmedName || nameTaken}>
             {mode === "copy" ? t("Copy") : t("Save")}
           </Button>
         </Group>
