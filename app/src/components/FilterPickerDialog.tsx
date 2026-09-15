@@ -397,13 +397,19 @@ export function FilterPickerDialog({
               w={260}
               placeholder={t("Load a saved filter…")}
               data={[
-                // Empty label, not "— Empty —" -- selecting it renders
-                // the input as a blank box (Select's own `finalValue` is
-                // this option's `label`), which then lets `placeholder`
-                // above show through as the hint, rather than showing
-                // literal placeholder-like text as if it were a real
-                // saved filter's name.
-                { value: EMPTY_SAVED_FILTER_VALUE, label: "" },
+                // A real, visible label -- an empty one (the earlier
+                // approach, relying on `placeholder` showing through a
+                // blank selected box) rendered as a blank, unclickable
+                // row in the dropdown itself. This is purely this
+                // Select's own display text for "nothing loaded"; its
+                // `value` stays EMPTY_SAVED_FILTER_VALUE, a sentinel
+                // that can't collide with a real Media handle, so
+                // handleSelectSavedFilter() below still treats it as
+                // "load nothing" -- it's never written anywhere as an
+                // actual Saved Filter name (SaveFilterDialog's own
+                // `initialName` is always "" for a fresh "Save…", not
+                // derived from this label).
+                { value: EMPTY_SAVED_FILTER_VALUE, label: t("New Filter") },
                 ...savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
               ]}
               value={savedFilterHandle ?? EMPTY_SAVED_FILTER_VALUE}
