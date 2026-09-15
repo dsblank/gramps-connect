@@ -343,7 +343,7 @@ export function GrampletEditDialog({
           <Switch
             label={t("Re-run automatically when the filter changes")}
             description={t(
-              "Only meaningful with a specific View above (not \"All\") -- reads the filter currently applied on that list, as get_filter(). Leave off for a Gramplet that doesn't care what's filtered in; this preview here never has a filter either way."
+              "Only meaningful with a specific View above (not \"All\") -- reads the filter currently applied on that list (the search box or a Filters picker selection), as get_filter(). Leave off for a Gramplet that doesn't care what's filtered in; this preview here never has a filter either way."
             )}
             checked={gramplet.listensToFilter ?? false}
             onChange={(e) => setGramplet({ ...gramplet, listensToFilter: e.currentTarget.checked })}

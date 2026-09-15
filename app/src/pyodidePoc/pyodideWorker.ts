@@ -870,9 +870,11 @@ async def get_home_person():
 
 def get_filter():
     """The where_expr string currently applied on the view this Gramplet is
-    running on (FilterBar's own search box, see ViewStore's whereExpr) --
-    the same string filter()'s own \`where\` argument takes, or None when no
-    filter is active or there's no view context at all (the standalone
+    running on -- FilterBar's own search box and the "Filters" picker's
+    saved filter/Custom Rule, ANDed together when both are active (see
+    PyodidePocPanel.tsx's grampletFilterExpr()) -- the same string filter()'s
+    own \`where\` argument takes, or None when no filter is active from
+    either surface, or there's no view context at all (the standalone
     editor's own preview run). Unlike get_selected()/get_home_person() this
     is a plain string already, not a handle needing a fetch -- no \`await\`
     needed, and no round trip either way."""

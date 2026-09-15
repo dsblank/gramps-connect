@@ -65,6 +65,23 @@ function readStoredCollapsed(viewKey: string): boolean {
   return raw === null ? true : raw === "1";
 }
 
+// The filter a Gramplet's get_filter() sees and Gramplet.listensToFilter
+// watches for changes -- FilterBar's own typed search box (whereExpr) ANDed
+// with the "Filters" picker's saved-filter/custom-rule contribution
+// (pickerExpr), either/both/neither of which may be active. Deliberately
+// excludes ViewStore's own combinedFilter()'s third ingredient, baseFilter
+// (e.g. Notes/Topics/Stories) -- that's a structural property of the view
+// itself, not something the user applied, so a listening Gramplet shouldn't
+// treat being tabbed onto such a view as "the filter changed". Bug fixed
+// 2026-09-15: applying/clearing a saved filter or Custom Rule through the
+// Filters picker used to change only pickerExpr, which get_filter()/
+// listensToFilter never looked at -- a Gramplet re-ran on a FilterBar search
+// but sat stale through a picker-applied filter.
+function grampletFilterExpr(snapshot: { whereExpr: string | null; pickerExpr: string | null }): string | null {
+  const parts = [snapshot.pickerExpr, snapshot.whereExpr].filter((part): part is string => !!part);
+  return parts.length === 0 ? null : parts.map((part) => `(${part})`).join(" and ");
+}
+
 export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // Gates "Create new Gramplet" and each tab's own edit-pencil below --
   // see grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION doc comment for why
@@ -295,11 +312,17 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // other row got clicked or the filter box was edited. Both live on the
   // same ViewStore snapshot, so one subscription covers both -- carries no
   // payload (just "something in this view's snapshot changed" --
-  // loadedCount, revision, ... as well as selectedHandle/whereExpr), so
-  // lastSelectedHandleRef/lastWhereExprRef are what tell a real change in
-  // the field this Gramplet actually asked about apart from one of those
-  // unrelated snapshot updates (or a change in the *other* field, when
-  // only one of the two flags is set). Only the active tab reacts, same as
+  // loadedCount, revision, ... as well as selectedHandle/whereExpr/
+  // pickerExpr), so lastSelectedHandleRef/lastWhereExprRef are what tell a
+  // real change in the field this Gramplet actually asked about apart from
+  // one of those unrelated snapshot updates (or a change in the *other*
+  // field, when only one of the two flags is set). "The filter" -- what
+  // lastWhereExprRef tracks -- is grampletFilterExpr(snap) (see its own
+  // doc comment above), not the snapshot's raw whereExpr: a filter applied
+  // through the "Filters" picker (a saved filter or Custom Rule) changes
+  // only pickerExpr, which is just as much "the filter changing" from a
+  // listening Gramplet's point of view as a FilterBar search is. Only the
+  // active tab reacts, same as
   // the tree-change effect -- a backgrounded listening Gramplet just picks
   // up the latest selection/filter next time it's reactivated (its own
   // activeId-driven run, below).
@@ -311,13 +334,14 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     const store = getViewStore(viewKey);
     const snapshot = store.getSnapshot();
     lastSelectedHandleRef.current = snapshot.selectedHandle;
-    lastWhereExprRef.current = snapshot.whereExpr;
+    lastWhereExprRef.current = grampletFilterExpr(snapshot);
     return store.subscribe(() => {
       const snap = store.getSnapshot();
+      const currentFilterExpr = grampletFilterExpr(snap);
       const selectionChanged = listensToSelection && snap.selectedHandle !== lastSelectedHandleRef.current;
-      const filterChanged = listensToFilter && snap.whereExpr !== lastWhereExprRef.current;
+      const filterChanged = listensToFilter && currentFilterExpr !== lastWhereExprRef.current;
       lastSelectedHandleRef.current = snap.selectedHandle;
-      lastWhereExprRef.current = snap.whereExpr;
+      lastWhereExprRef.current = currentFilterExpr;
       if (selectionChanged || filterChanged) setSelectionNonce((n) => n + 1);
     });
   }, [viewKey, activeId, gramplets]);
@@ -448,7 +472,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     const viewSnapshot = getViewStore(viewKey).getSnapshot();
     const selectedHandle = viewSnapshot.selectedHandle;
     const selectedType = selectedHandle !== null ? viewKey : null;
-    const whereExpr = viewSnapshot.whereExpr;
+    const whereExpr = grampletFilterExpr(viewSnapshot);
 
     const cached = resultCacheRef.current.get(cacheKey);
     if (
@@ -582,7 +606,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     const viewSnapshot = getViewStore(viewKey).getSnapshot();
     const selectedHandle = viewSnapshot.selectedHandle;
     const selectedType = selectedHandle !== null ? viewKey : null;
-    const whereExpr = viewSnapshot.whereExpr;
+    const whereExpr = grampletFilterExpr(viewSnapshot);
     setRunStatus("queued");
     // Deliberately not setResponse(null) here, unlike the effect above --
     // GrampletResultView.tsx keeps rendering the *previous* response's
