@@ -22,6 +22,7 @@ import {
 import {
   fetchSavedFilters, removeSavedFilter, saveSavedFilterManifest, uploadSavedFilter, type SavedFilter,
 } from "../store/savedFilterMedia";
+import { confirmDialog } from "../store/confirmDialog";
 import { getSearchHelp } from "../store/searchHelp";
 import { viewForNamespace } from "../store/views";
 import { useViewStore } from "../hooks/useViewStore";
@@ -130,6 +131,14 @@ export function FilterPickerDialog({
   const [applying, setApplying] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [manageRulesOpen, setManageRulesOpen] = useState(false);
+  // True while handleSelectSavedFilter's own confirmDialog() is pending
+  // -- that confirm is a single, app-wide Modal (ConfirmDialogHost.tsx),
+  // mounted entirely outside this component, so there's no other way for
+  // this Modal to know one is open. Same reasoning as
+  // saveDialogOpen/manageRulesOpen's own closeOnEscape guard below:
+  // without it, Escape while the confirm is up would close both it and
+  // this whole Filters dialog in the same keypress.
+  const [confirmPending, setConfirmPending] = useState(false);
 
   const [customRules, setCustomRules] = useState<CustomRule[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
@@ -245,6 +254,34 @@ export function FilterPickerDialog({
     setSavedFilterName(filter.name);
   }
 
+  // The "Load a saved filter…" Select's own onChange -- confirms first
+  // when the current tree is dirty, since switching (to a different
+  // filter, or to "— Empty —") would otherwise discard those edits with
+  // no warning at all, unlike the bottom "Clear" button (whose label
+  // already says what it does). Cancelling leaves everything untouched;
+  // the Select is a controlled component bound to `savedFilterHandle`,
+  // so its displayed value snaps back to the still-current one on its
+  // own -- nothing extra needed to "undo" the pick.
+  async function handleSelectSavedFilter(value: string | null) {
+    const found = value && value !== EMPTY_SAVED_FILTER_VALUE
+      ? savedFiltersForNamespace.find((f) => f.handle === value)
+      : undefined;
+    if (isDirty) {
+      setConfirmPending(true);
+      const ok = await confirmDialog(
+        `${t("Discard your unsaved changes to")} "${savedFilterName}"?`,
+        t("Discard"),
+      );
+      setConfirmPending(false);
+      if (!ok) return;
+    }
+    if (found) {
+      handleLoadSavedFilter(found);
+    } else {
+      handleClear();
+    }
+  }
+
   // Saves the current tree as a new Saved Filter and loads it -- used
   // for both "Save…" (nothing loaded) and "Copy…" (something loaded;
   // keeps the original untouched under its own handle).
@@ -332,19 +369,21 @@ export function FilterPickerDialog({
       title={`${t("Filters")} — ${t(viewLabel)}`}
       size="lg"
       scrollAreaComponent={ScrollArea.Autosize}
-      // Suppressed while either nested dialog (SaveFilterDialog/
-      // ManageCustomRulesDialog) is open -- both live outside a real
-      // Modal.Stack (manual zIndex nesting instead, see this
-      // component's own doc comment), so each one's `<Modal>` binds its
-      // own independent window-level Escape listener with no awareness
-      // of the others. Without this, Escape while a nested dialog is
-      // open closes *both* it and this outer one in the same keypress
+      // Suppressed while any nested dialog is open -- SaveFilterDialog/
+      // ManageCustomRulesDialog (both live outside a real Modal.Stack,
+      // manual zIndex nesting instead, see this component's own doc
+      // comment) or the single app-wide confirmDialog() Modal
+      // (ConfirmDialogHost.tsx, mounted in App.tsx, entirely outside
+      // this component) -- each one's `<Modal>` binds its own
+      // independent window-level Escape listener with no awareness of
+      // the others. Without this, Escape while any of them is open
+      // closes *both* it and this outer one in the same keypress
       // (confirmed by reading Mantine's own useModal source -- every
       // mounted+opened Modal checks the same event, and none of them
       // stop each other). Disabling this one for that keypress lets the
       // nested dialog's own (still-enabled) Escape handler close just
       // itself.
-      closeOnEscape={!saveDialogOpen && !manageRulesOpen}
+      closeOnEscape={!saveDialogOpen && !manageRulesOpen && !confirmPending}
     >
       <Stack gap="md">
         <Group justify="space-between" wrap="wrap" gap="xs">
@@ -364,14 +403,7 @@ export function FilterPickerDialog({
                 ...savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
               ]}
               value={savedFilterHandle ?? EMPTY_SAVED_FILTER_VALUE}
-              onChange={(value) => {
-                if (!value || value === EMPTY_SAVED_FILTER_VALUE) {
-                  handleClear();
-                  return;
-                }
-                const found = savedFiltersForNamespace.find((f) => f.handle === value);
-                if (found) handleLoadSavedFilter(found);
-              }}
+              onChange={handleSelectSavedFilter}
             />
             {savedFilterHandle && (
               <Button size="xs" variant="subtle" color="red" onClick={() => handleDeleteSavedFilter(savedFilterHandle)}>
