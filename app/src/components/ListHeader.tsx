@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Button, CloseButton, Group, Title } from "@mantine/core";
-import { namespaceForViewKey } from "../data/gqlFilterPresets";
+import { Button, CloseButton, Group, Text, Title, Tooltip } from "@mantine/core";
+import { gqlFilterPresets, namespaceForViewKey } from "../data/gqlFilterPresets";
+import { customRuleAsPreset, getCachedCustomRules } from "../store/customRuleMedia";
 import { getFilterPickerState, setFilterPickerState } from "../store/filterPickerState";
-import { countConditions, createEmptyTree } from "../store/goqlFilterTree";
+import { countRules, createEmptyTree } from "../store/goqlFilterTree";
+import { summarizeFilterTree } from "../store/filterTreeSummary";
 import { getViewStore } from "../store/registry";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -29,7 +31,20 @@ export function ListHeader({ view }: { view: ViewConfig }) {
   // this component (setFiltersOpen), which is when this needs to be
   // fresh. Good enough until the count also needs to reflect an Apply
   // made from a different mount of this same view (doesn't happen today).
-  const activeCount = namespace ? countConditions(getFilterPickerState(view.key, namespace).tree) : 0;
+  const activeCount = namespace ? countRules(getFilterPickerState(view.key, namespace).tree) : 0;
+  // Human-readable ("Females AND (Widowed OR Divorced)"), not the compiled
+  // GOQL -- resolves each rule against built-in presets plus whatever
+  // Custom Rules FilterPickerDialog.tsx last fetched into its shared cache
+  // (customRuleMedia.ts's getCachedCustomRules()), so a tree referencing
+  // one still labels it correctly here without this component fetching
+  // anything of its own. Same "good enough, not perfectly reactive"
+  // tradeoff activeCount above already accepts.
+  const summary = activeCount > 0 && namespace
+    ? summarizeFilterTree(
+        getFilterPickerState(view.key, namespace).tree,
+        [...gqlFilterPresets, ...getCachedCustomRules().map(customRuleAsPreset)],
+      )
+    : "";
 
   // Clears filterPickerState.ts optimistically (so the badge/dialog reset
   // immediately, no need to wait on a network round trip) and fires the
@@ -49,19 +64,27 @@ export function ListHeader({ view }: { view: ViewConfig }) {
 
   return (
     <Group justify="space-between" mb="sm" wrap="nowrap">
-      <Group gap="xs" wrap="nowrap">
-        <Title order={4}>{t(view.label)}</Title>
+      <Group gap="xs" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+        <Title order={4} style={{ flexShrink: 0 }}>{t(view.label)}</Title>
         {namespace && (
           <Button
             size="xs"
             variant={activeCount > 0 ? "light" : "subtle"}
             onClick={() => setFiltersOpen(true)}
+            style={{ flexShrink: 0 }}
           >
             {t("Filters")}{activeCount > 0 ? ` (${activeCount})` : ""}
           </Button>
         )}
         {namespace && activeCount > 0 && (
-          <CloseButton size="sm" onClick={handleClear} aria-label={t("Clear filters")} />
+          <CloseButton size="sm" onClick={handleClear} aria-label={t("Clear filters")} style={{ flexShrink: 0 }} />
+        )}
+        {namespace && activeCount > 0 && summary && (
+          <Tooltip label={summary} multiline w={320} withArrow>
+            <Text size="xs" c="dimmed" truncate style={{ minWidth: 0 }}>
+              {summary}
+            </Text>
+          </Tooltip>
         )}
       </Group>
       {namespace && (

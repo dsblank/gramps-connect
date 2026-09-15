@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDebouncedValue } from "@mantine/hooks";
 import {
-  Button, Checkbox, CloseButton, Divider, Group, Modal, NumberInput, ScrollArea,
+  Button, Checkbox, CloseButton, Divider, Group, Modal, NumberInput, ScrollArea, Select,
   SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip,
 } from "@mantine/core";
 import {
@@ -8,24 +9,37 @@ import {
 } from "../data/gqlFilterPresets";
 import { FilterCombineError } from "../store/goqlFilterCombiner";
 import {
-  addConditionRow, addGroup, combineFilterTree, countConditions, createEmptyTree, moveNode,
+  addRuleGroup, addRuleRow, combineFilterTree, countRules, createEmptyTree, moveNode,
   removeNode, setConnector, toggleNegate, updateRowValues,
-  type FilterConditionRow, type FilterConnector, type FilterGroup, type FilterTree, type FilterTreeNode,
+  type FilterConnector, type FilterRuleGroup, type FilterRuleRow, type FilterTree, type FilterTreeNode,
 } from "../store/goqlFilterTree";
 import { formatWhereExpr } from "../store/formatWhereExpr";
-import { getFilterPickerState, setFilterPickerState } from "../store/filterPickerState";
+import { setFilterPickerState } from "../store/filterPickerState";
+import {
+  customRuleAsPreset, refreshCustomRules, removeCustomRule, saveCustomRuleManifest,
+  setCachedCustomRules, uploadCustomRule, validateWhereExpr, type CustomRule,
+} from "../store/customRuleMedia";
+import {
+  fetchSavedFilters, removeSavedFilter, saveSavedFilterManifest, uploadSavedFilter, type SavedFilter,
+} from "../store/savedFilterMedia";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import { t } from "../i18n/i18n";
 
-const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy"];
+const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy", "Custom"];
+
+/** "Load a saved filter…"'s own explicit "nothing loaded" entry -- lets
+ * that choice be made right there, rather than only reachable via the
+ * bottom "Clear" button. Not a real Media handle, so it can't collide
+ * with one. */
+const EMPTY_SAVED_FILTER_VALUE = "__empty__";
 
 type Preview = { ok: true; whereExpr: string } | { ok: false; message: string } | null;
 
 /** Applies one tree-mutation helper (goqlFilterTree.ts) and commits the
- * result -- every control below (a checkbox, a move/remove button, a
- * picked preset) goes through this same shape, never touching `tree`
- * directly. */
+ * result -- every control in the tree editor below (a checkbox, a move/
+ * remove button, a picked preset) goes through this same shape, never
+ * touching `tree` directly. */
 type Mutate = (fn: (tree: FilterTree) => FilterTree) => void;
 
 interface FilterPickerDialogProps {
@@ -37,20 +51,53 @@ interface FilterPickerDialogProps {
   namespace: GqlFilterNamespace;
 }
 
-/** The "Filters" trigger's dialog: a direct, recursive editor for a
- * `FilterTree` (goqlFilterTree.ts) -- AND/OR groups, inline NOT on any row
- * or group, and nesting, all scoped to one namespace (Person presets never
- * show up while editing Family's list, see project_goql_filter_system_design
- * memory).
+/** The "Filters" trigger's dialog: one continuous, always-editable
+ * `FilterTree` editor (AND/OR rule groups, inline NOT on any rule or
+ * rule group, nesting), plus loading/saving it as a named Saved Filter.
  *
- * One dialog, not "a simple picker plus a separate arrange screen": a flat
- * list of checked presets *is* a `FilterTree` with no nesting and no
- * negation, so the common case is just what this renders before anyone
- * uses the extra power. "+ Add condition" expands its search list inline
- * (never a `Popover`) -- AttachControl.tsx's own doc comment covers why a
- * scrollable list of clickable rows misbehaves inside a Popover's
- * outside-click handling, and this is already a Modal, so a second
- * floating layer nested inside it would hit the same problem again.
+ * This went through several rounds that split it into separate "modes"
+ * (a quick single-rule picker kept apart from the tree editor, kept
+ * apart from a Saved Filter loader) before settling back here, on
+ * review: the split picker reimplemented a worse version of what
+ * "+ Add rule" already did (it never rendered a parameterized preset's
+ * value inputs, so a rule like "Birth year between" could be picked but
+ * never made valid), and kept Saved-Filter editing from working without
+ * a bolted-on bridge between panels. One editor, with Save/Load above
+ * it, avoids both: there's only one place a rule is ever added, so
+ * `RowView`'s param inputs are always reachable, and loading a filter
+ * just means the editor now shows it -- editing it directly and clicking
+ * "Update" needs no separate step. See project_saved_filters_persistence_plan.md.
+ *
+ * `savedFilterHandle`/`savedFilterName` track which Saved Filter (if
+ * any) is currently loaded. Loading sets them; an ordinary tree edit
+ * (`mutate`) deliberately leaves them alone, so editing a loaded filter
+ * and clicking "Update" is direct, not a special mode. Only an explicit
+ * action breaks the link: loading something else, picking "— Empty —",
+ * "Clear", or deleting the loaded filter.
+ *
+ * Every rule a tree can reference is a *primitive* -- either a built-in
+ * GqlFilterPreset (gqlFilterPresets.ts, constant across installs) or a
+ * user-authored, persisted Custom Rule (customRuleMedia.ts). Both are
+ * adapted into the same GqlFilterPreset shape (customRuleAsPreset()) and
+ * merged into one `presets` array -- goqlFilterTree.ts/
+ * goqlFilterCombiner.ts never need to know two sources exist. Custom
+ * Rules are authored/edited/deleted from their own dedicated
+ * `ManageCustomRulesDialog` (below, opened via "Custom rules…") -- the
+ * one place raw GOQL entry is allowed at all in this feature, and the
+ * *only* place a Custom Rule is created or changed; "+ Add rule" inside
+ * the tree editor is a pure picker, nothing more.
+ *
+ * "+ Add rule" expands its search list inline (never a `Popover`) --
+ * AttachControl.tsx's own doc comment covers why a scrollable list of
+ * clickable rows misbehaves inside a Popover's outside-click handling,
+ * and this is already a Modal, so a second floating layer nested inside
+ * it would hit the same problem again. A freshly-empty rule group (the
+ * root when the dialog opens with nothing built yet, or one just nested
+ * via "+ Add rule group") starts with that list already expanded
+ * (`RuleGroupView`'s own `addOpen` default) -- applying a single rule
+ * needs no extra click to get there. "Save…"/"Copy…" and the Custom
+ * Rules manager, by contrast, each open their own stacked `<Modal>`
+ * (`SaveFilterDialog`/`ManageCustomRulesDialog` below).
  *
  * Applies through ViewStore.setPickerFilter()/clearPickerFilter() -- a
  * slot (`pickerExpr`) kept fully independent of FilterBar's own
@@ -62,27 +109,67 @@ export function FilterPickerDialog({
   opened, onClose, viewKey, viewLabel, namespace,
 }: FilterPickerDialogProps) {
   const snapshot = useViewStore(viewKey);
-  const [tree, setTreeState] = useState<FilterTree>(
-    () => getFilterPickerState(viewKey, namespace).tree,
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [applying, setApplying] = useState(false);
 
+  const [tree, setTreeState] = useState<FilterTree>(() => createEmptyTree(namespace));
   function setTree(next: FilterTree) {
     setTreeState(next);
-    setFilterPickerState(viewKey, next);
   }
   const mutate: Mutate = (fn) => setTree(fn(tree));
 
+  // Which (if any) Saved Filter `tree` is currently loaded from -- see
+  // this component's own doc comment for why an ordinary edit leaves
+  // this alone rather than clearing it.
+  const [savedFilterHandle, setSavedFilterHandle] = useState<string | undefined>(undefined);
+  const [savedFilterName, setSavedFilterName] = useState<string | undefined>(undefined);
+
+  const [error, setError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [manageRulesOpen, setManageRulesOpen] = useState(false);
+
+  const [customRules, setCustomRules] = useState<CustomRule[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+
+  // Refetched every time the dialog opens (not just once on mount) -- a
+  // Custom Rule or Saved Filter another tab/session created since this
+  // one last opened it should show up without a full page reload.
+  useEffect(() => {
+    if (!opened) return;
+    refreshCustomRules().then(setCustomRules).catch((err) => console.error("[filters] failed to load custom rules", err));
+    fetchSavedFilters().then(setSavedFilters).catch((err) => console.error("[filters] failed to load saved filters", err));
+  }, [opened]);
+
+  // Built-in presets (constant) plus every Custom Rule, adapted into the
+  // same shape -- see this component's own doc comment. Not namespace-
+  // filtered here; RowView/PresetSearchList each already do their own
+  // namespace filtering, and combineFilterTree only ever resolves the
+  // ids a tree actually references.
+  const presets = useMemo(
+    () => [...gqlFilterPresets, ...customRules.map(customRuleAsPreset)],
+    [customRules],
+  );
+
+  const savedFiltersForNamespace = useMemo(
+    () => savedFilters.filter((f) => f.namespace === namespace),
+    [savedFilters, namespace],
+  );
+
+  // Reported out for ListHeader.tsx's own badge/clear-button/summary --
+  // see filterPickerState.ts's own doc comment for why this is the only
+  // thing shared across components.
+  useEffect(() => {
+    setFilterPickerState(viewKey, tree);
+  }, [viewKey, tree]);
+
   // Mirrors FilterBar.tsx's own external-clear effect: a person-link
   // navigation (ViewStore.navigateToHandle) or clearPickerFilter() called
-  // from elsewhere can drop pickerExpr out from under this dialog while
-  // it's mounted but closed -- without this, reopening it would still
-  // show the stale tree, and clicking Apply unchanged would silently
-  // resurrect a filter that was just dropped. Skips its very first run:
-  // mounting with a restored (possibly non-empty) tree but a snapshot
-  // that legitimately starts at pickerExpr === null is the ordinary case,
-  // not an external clear.
+  // from elsewhere (e.g. ListHeader.tsx's own "×") can drop pickerExpr out
+  // from under this dialog while it's mounted but closed -- without this,
+  // reopening it would still show the stale tree, and clicking Apply
+  // unchanged would silently resurrect a filter that was just dropped.
+  // Skips its very first run: mounting with a restored (possibly non-
+  // empty) tree but a snapshot that legitimately starts at
+  // pickerExpr === null is the ordinary case, not an external clear.
   const skipNextPickerExprClear = useRef(true);
   useEffect(() => {
     if (skipNextPickerExprClear.current) {
@@ -91,21 +178,33 @@ export function FilterPickerDialog({
     }
     if (snapshot.pickerExpr !== null) return;
     setTree(createEmptyTree(namespace));
+    setSavedFilterHandle(undefined);
+    setSavedFilterName(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.pickerExpr]);
+
+  // Whether `tree` has actually changed since it was loaded from
+  // `savedFilterHandle` -- gates the "Save" button below (nothing to
+  // save if it's unchanged). Plain JSON comparison: both sides are the
+  // exact same JSON-shaped object this feature already round-trips
+  // through Media file content, so this is exact, not approximate.
+  const loadedFilterTree = savedFilterHandle
+    ? savedFiltersForNamespace.find((f) => f.handle === savedFilterHandle)?.tree
+    : undefined;
+  const isDirty = loadedFilterTree ? JSON.stringify(tree) !== JSON.stringify(loadedFilterTree) : false;
 
   // Recomputed on every edit -- cheap (a handful of string-only presets) --
   // so the preview (and the Apply button's disabled state) reflect a bad/
   // missing param value immediately, not only once Apply is clicked.
   const preview: Preview = useMemo(() => {
-    if (countConditions(tree) === 0) return null;
+    if (countRules(tree) === 0) return null;
     try {
-      const combined = combineFilterTree(tree, gqlFilterPresets);
+      const combined = combineFilterTree(tree, presets);
       return { ok: true, whereExpr: combined.whereExpr };
     } catch (err) {
       return { ok: false, message: err instanceof FilterCombineError ? err.message : String(err) };
     }
-  }, [tree]);
+  }, [tree, presets]);
 
   async function handleApply() {
     setError(null);
@@ -127,6 +226,101 @@ export function FilterPickerDialog({
     }
   }
 
+  // Resets the tree to empty and drops the loaded-filter link -- used by
+  // both the bottom "Clear" button and the Load dropdown's own
+  // "— Empty —" entry.
+  function handleClear() {
+    setTree(createEmptyTree(namespace));
+    setSavedFilterHandle(undefined);
+    setSavedFilterName(undefined);
+  }
+
+  function handleLoadSavedFilter(filter: SavedFilter) {
+    setTree(filter.tree);
+    setSavedFilterHandle(filter.handle);
+    setSavedFilterName(filter.name);
+  }
+
+  // Saves the current tree as a new Saved Filter and loads it -- used
+  // for both "Save…" (nothing loaded) and "Copy…" (something loaded;
+  // keeps the original untouched under its own handle).
+  async function handleSaveAsNew(name: string) {
+    const filter: SavedFilter = { id: crypto.randomUUID(), name, namespace, tree };
+    const handle = await uploadSavedFilter(filter);
+    setSavedFilters((prev) => [...prev, { ...filter, handle }]);
+    setSavedFilterHandle(handle);
+    setSavedFilterName(name);
+    setSaveDialogOpen(false);
+  }
+
+  // Overwrites the loaded Saved Filter in place with the tree's current
+  // content, keeping its existing name (no rename via Update -- "Copy…"
+  // under a different name covers that).
+  async function handleUpdate() {
+    if (!savedFilterHandle) return;
+    setError(null);
+    try {
+      const existing = savedFiltersForNamespace.find((f) => f.handle === savedFilterHandle);
+      const filter: SavedFilter = { id: existing?.id ?? crypto.randomUUID(), name: savedFilterName ?? "", namespace, tree };
+      await saveSavedFilterManifest(savedFilterHandle, filter);
+      setSavedFilters((prev) => prev.map((f) => (f.handle === savedFilterHandle ? { ...filter, handle: savedFilterHandle } : f)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDeleteSavedFilter(handle: string) {
+    setError(null);
+    try {
+      await removeSavedFilter(handle);
+      setSavedFilters((prev) => prev.filter((f) => f.handle !== handle));
+      if (savedFilterHandle === handle) {
+        // The tree itself is left alone -- deleting the *saved* copy
+        // doesn't discard what's currently in the editor, it just
+        // severs the "Update" link (falls back to plain "Save…").
+        setSavedFilterHandle(undefined);
+        setSavedFilterName(undefined);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleCreateCustomRule(name: string, whereExpr: string): Promise<void> {
+    const rule: CustomRule = { id: crypto.randomUUID(), name, namespace, whereExpr };
+    const handle = await uploadCustomRule(rule);
+    setCustomRules((prev) => {
+      const next = [...prev, { ...rule, handle }];
+      setCachedCustomRules(next);
+      return next;
+    });
+  }
+
+  async function handleUpdateCustomRule(handle: string, name: string, whereExpr: string): Promise<void> {
+    const existing = customRules.find((c) => c.handle === handle);
+    const rule: CustomRule = { id: existing?.id ?? crypto.randomUUID(), name, namespace, whereExpr };
+    await saveCustomRuleManifest(handle, rule);
+    setCustomRules((prev) => {
+      const next = prev.map((c) => (c.handle === handle ? { ...rule, handle } : c));
+      setCachedCustomRules(next);
+      return next;
+    });
+  }
+
+  async function handleDeleteCustomRule(handle: string) {
+    setError(null);
+    try {
+      await removeCustomRule(handle);
+      setCustomRules((prev) => {
+        const next = prev.filter((c) => c.handle !== handle);
+        setCachedCustomRules(next);
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   return (
     <Modal
       opened={opened}
@@ -134,9 +328,66 @@ export function FilterPickerDialog({
       title={`${t("Filters")} — ${t(viewLabel)}`}
       size="lg"
       scrollAreaComponent={ScrollArea.Autosize}
+      // Suppressed while either nested dialog (SaveFilterDialog/
+      // ManageCustomRulesDialog) is open -- both live outside a real
+      // Modal.Stack (manual zIndex nesting instead, see this
+      // component's own doc comment), so each one's `<Modal>` binds its
+      // own independent window-level Escape listener with no awareness
+      // of the others. Without this, Escape while a nested dialog is
+      // open closes *both* it and this outer one in the same keypress
+      // (confirmed by reading Mantine's own useModal source -- every
+      // mounted+opened Modal checks the same event, and none of them
+      // stop each other). Disabling this one for that keypress lets the
+      // nested dialog's own (still-enabled) Escape handler close just
+      // itself.
+      closeOnEscape={!saveDialogOpen && !manageRulesOpen}
     >
       <Stack gap="md">
-        <FilterTreeNodeView node={tree.root} isRoot namespace={namespace} mutate={mutate} />
+        <Group justify="space-between" wrap="wrap" gap="xs">
+          <Group gap="xs">
+            <Select
+              size="xs"
+              w={260}
+              placeholder={t("Load a saved filter…")}
+              data={[
+                // Empty label, not "— Empty —" -- selecting it renders
+                // the input as a blank box (Select's own `finalValue` is
+                // this option's `label`), which then lets `placeholder`
+                // above show through as the hint, rather than showing
+                // literal placeholder-like text as if it were a real
+                // saved filter's name.
+                { value: EMPTY_SAVED_FILTER_VALUE, label: "" },
+                ...savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
+              ]}
+              value={savedFilterHandle ?? EMPTY_SAVED_FILTER_VALUE}
+              onChange={(value) => {
+                if (!value || value === EMPTY_SAVED_FILTER_VALUE) {
+                  handleClear();
+                  return;
+                }
+                const found = savedFiltersForNamespace.find((f) => f.handle === value);
+                if (found) handleLoadSavedFilter(found);
+              }}
+            />
+            {savedFilterHandle && (
+              <Button size="xs" variant="subtle" color="red" onClick={() => handleDeleteSavedFilter(savedFilterHandle)}>
+                {t("Delete")}
+              </Button>
+            )}
+            {/* Only signal this app-worthy while it's actually true:
+             * discussed with the user rather than blocking/confirming
+             * Apply on it (see project_saved_filters_persistence_plan.md
+             * -- editing already survives an Apply-then-reopen within
+             * the same page session, so this is a discoverability nudge,
+             * not a warning about real data loss). */}
+            {isDirty && <Text size="xs" c="dimmed">{t("Unsaved changes")}</Text>}
+          </Group>
+          <Button size="xs" variant="subtle" onClick={() => setManageRulesOpen(true)}>{t("Custom rules…")}</Button>
+        </Group>
+
+        <Divider />
+
+        <FilterTreeNodeView node={tree.root} isRoot namespace={namespace} presets={presets} mutate={mutate} />
 
         <Divider />
 
@@ -164,46 +415,390 @@ export function FilterPickerDialog({
           <Button
             variant="subtle"
             color="gray"
-            disabled={countConditions(tree) === 0}
-            onClick={() => setTree(createEmptyTree(namespace))}
+            disabled={countRules(tree) === 0}
+            onClick={handleClear}
           >
-            {t("Clear all")}
+            {t("Clear")}
           </Button>
           <Group gap="xs">
-            <Button variant="default" onClick={onClose}>{t("Cancel")}</Button>
+            {savedFilterHandle ? (
+              <>
+                {/* No "…" -- unlike "Save…"/"Copy…" below, this commits
+                 * immediately (no naming dialog); disabled until the
+                 * tree actually differs from what's loaded, since
+                 * there's nothing to save otherwise. */}
+                <Button size="xs" variant="default" disabled={!isDirty} onClick={handleUpdate}>
+                  {t("Save")}
+                </Button>
+                <Button size="xs" variant="subtle" onClick={() => setSaveDialogOpen(true)}>{t("Copy…")}</Button>
+              </>
+            ) : (
+              <Button
+                size="xs"
+                variant="default"
+                disabled={countRules(tree) === 0}
+                onClick={() => setSaveDialogOpen(true)}
+              >
+                {t("Save…")}
+              </Button>
+            )}
+            {/* No "Cancel" -- this dialog writes nothing until Apply/
+             * Save/Copy is explicitly clicked, so the Modal's own ×/
+             * outside-click/Escape already do exactly what a Cancel
+             * button would. */}
             <Button onClick={handleApply} loading={applying} disabled={preview?.ok === false}>
-              {t("Apply")}{countConditions(tree) > 0 ? ` (${countConditions(tree)})` : ""}
+              {t("Apply")}{countRules(tree) > 0 ? ` (${countRules(tree)})` : ""}
             </Button>
           </Group>
+        </Group>
+
+        <SaveFilterDialog
+          opened={saveDialogOpen}
+          mode={savedFilterHandle ? "copy" : "save"}
+          initialName={savedFilterHandle && savedFilterName ? `${savedFilterName} (copy)` : ""}
+          onSave={handleSaveAsNew}
+          onClose={() => setSaveDialogOpen(false)}
+        />
+
+        <ManageCustomRulesDialog
+          opened={manageRulesOpen}
+          namespace={namespace}
+          customRules={customRules}
+          onCreate={handleCreateCustomRule}
+          onUpdate={handleUpdateCustomRule}
+          onDelete={handleDeleteCustomRule}
+          onClose={() => setManageRulesOpen(false)}
+        />
+      </Stack>
+    </Modal>
+  );
+}
+
+/** "Save…"/"Copy…"'s own dialog -- a stacked `<Modal>`. `FilterPickerDialog`
+ * lives outside the app's real `Modal.Stack` (that's `EditDialogs.tsx`'s,
+ * for the create/edit draft stack), so this follows
+ * `MapItemEditorDialog.tsx`'s existing manual-`zIndex={1000}` nesting
+ * convention instead of `stackId` (an ordinary nested Modal defaults to
+ * the same base z-index as its parent and renders underneath it). Always
+ * mounted with `opened` toggled, reset to blank on each open via the
+ * effect below -- same convention `ManageCustomRulesDialog` uses. */
+function SaveFilterDialog({
+  opened, mode, initialName, onSave, onClose,
+}: {
+  opened: boolean;
+  mode: "save" | "copy";
+  /** Prefilled name on open -- `"{name} (copy)"` for "Copy…" (the
+   * original filter's own name, with a suffix so a saved-as-new copy
+   * doesn't default to blank next to the thing it was copied from), or
+   * `""` for a first-time "Save…". */
+  initialName: string;
+  onSave: (name: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(initialName);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!opened) return;
+    setName(initialName);
+    setSaving(false);
+    setError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened]);
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(name.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={mode === "copy" ? t("Copy filter") : t("Save filter")}
+      size="sm"
+      zIndex={1000}
+    >
+      <Stack gap="sm">
+        <TextInput
+          size="xs"
+          label={t("Name")}
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+          autoFocus
+        />
+        {error && <Text size="xs" c="red">{error}</Text>}
+        <Group gap="xs" justify="flex-end">
+          <Button size="xs" variant="default" onClick={onClose}>{t("Cancel")}</Button>
+          <Button size="xs" onClick={handleSave} loading={saving} disabled={!name.trim()}>
+            {mode === "copy" ? t("Copy") : t("Save")}
+          </Button>
         </Group>
       </Stack>
     </Modal>
   );
 }
 
-function FilterTreeNodeView({
-  node, isRoot = false, namespace, mutate,
+/** Name + raw `where_expr` form shared by `ManageCustomRulesDialog`'s
+ * create ("+ New custom rule…") and edit ("Edit" on an existing row)
+ * actions -- same fields either way, just a different submit label/
+ * initial values/handler. This is the one place a raw expression can be
+ * typed in this whole feature; see `FilterPickerDialog`'s own top
+ * comment.
+ *
+ * The submit button stays disabled until `whereExpr` has actually been
+ * checked against the server (customRuleMedia.ts's validateWhereExpr(),
+ * a real `limit=1` query against the namespace's own endpoint) and come
+ * back valid -- a typo here would otherwise only surface much later,
+ * whenever this rule is actually used inside a tree. Debounced
+ * (`useDebouncedValue`, 400ms) so it doesn't fire on every keystroke;
+ * `checkedExpr` tracks which exact string was last confirmed valid, so
+ * typing further after a successful check correctly re-disables submit
+ * until the *new* text is itself confirmed. Seeded from
+ * `initialWhereExpr` (edit mode's existing, presumably-already-valid
+ * expression) so opening "Edit" on an unmodified rule doesn't force an
+ * unnecessary round trip before Save re-enables. */
+function CustomRuleForm({
+  namespace, initialName, initialWhereExpr, submitLabel, onSubmit, onCancel,
 }: {
-  node: FilterTreeNode;
-  isRoot?: boolean;
   namespace: GqlFilterNamespace;
-  mutate: Mutate;
+  initialName: string;
+  initialWhereExpr: string;
+  submitLabel: string;
+  onSubmit: (name: string, whereExpr: string) => Promise<void>;
+  onCancel: () => void;
 }) {
-  if (node.kind === "group") {
-    return <GroupView group={node} isRoot={isRoot} namespace={namespace} mutate={mutate} />;
+  const [name, setName] = useState(initialName);
+  const [whereExpr, setWhereExpr] = useState(initialWhereExpr);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const [checking, setChecking] = useState(false);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [checkedExpr, setCheckedExpr] = useState<string | null>(initialWhereExpr.trim() || null);
+  const [debouncedWhereExpr] = useDebouncedValue(whereExpr, 400);
+
+  useEffect(() => {
+    const expr = debouncedWhereExpr.trim();
+    if (!expr || expr === checkedExpr) {
+      setChecking(false);
+      return;
+    }
+    let cancelled = false;
+    setChecking(true);
+    setQueryError(null);
+    validateWhereExpr(namespace, expr).then((result) => {
+      if (cancelled) return;
+      setChecking(false);
+      if (result.ok) {
+        setCheckedExpr(expr);
+      } else {
+        setQueryError(result.message);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedWhereExpr, namespace]);
+
+  const whereExprValid = whereExpr.trim().length > 0 && whereExpr.trim() === checkedExpr;
+
+  async function handleSubmit() {
+    if (!name.trim() || !whereExprValid) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onSubmit(name.trim(), whereExpr.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setSaving(false);
+    }
   }
-  return <RowView row={node} namespace={namespace} mutate={mutate} />;
+
+  return (
+    // onKeyDown here (not on each field individually) catches Escape
+    // bubbling up from either one, so a single handler covers both; the
+    // `data-mantine-stop-propagation` below is what actually keeps
+    // Mantine's own Modal(s) from treating this same keypress as their
+    // own "close" -- see FilterPickerDialog's own doc comment on why
+    // that attribute (not stopPropagation()) is the only thing that
+    // works against a Modal's window-level Escape listener.
+    <Stack gap="xs" onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}>
+      <TextInput
+        size="xs"
+        label={t("Name")}
+        value={name}
+        onChange={(e) => setName(e.currentTarget.value)}
+        autoFocus
+        data-mantine-stop-propagation
+      />
+      <Textarea
+        size="xs"
+        label={t("Raw GOQL")}
+        ff="monospace"
+        autosize
+        minRows={2}
+        maxRows={6}
+        placeholder={t('e.g. like(primary_name.surname, "Smith%")')}
+        value={whereExpr}
+        onChange={(e) => {
+          setWhereExpr(e.currentTarget.value);
+          setQueryError(null);
+        }}
+        data-mantine-stop-propagation
+      />
+      {checking && <Text size="xs" c="dimmed">{t("Checking…")}</Text>}
+      {queryError && <Text size="xs" c="red">{queryError}</Text>}
+      {error && <Text size="xs" c="red">{error}</Text>}
+      <Group gap="xs" justify="flex-end">
+        <Button size="xs" variant="default" onClick={onCancel}>{t("Cancel")}</Button>
+        <Button size="xs" onClick={handleSubmit} loading={saving} disabled={!name.trim() || !whereExprValid}>
+          {submitLabel}
+        </Button>
+      </Group>
+    </Stack>
+  );
 }
 
-function GroupView({
-  group, isRoot, namespace, mutate,
+/** "Custom rules…"'s own dialog -- the one place Custom Rules are
+ * created, edited, or deleted (never from inside the tree editor's own
+ * "+ Add rule", which is a pure picker). Same manual-`zIndex={1000}`
+ * nesting convention as `SaveFilterDialog`. Always mounted with `opened`
+ * toggled; resets any in-progress create/edit form back to the list view
+ * on close via the effect below, so reopening never shows a stale
+ * half-filled form. */
+function ManageCustomRulesDialog({
+  opened, namespace, customRules, onCreate, onUpdate, onDelete, onClose,
 }: {
-  group: FilterGroup;
-  isRoot: boolean;
+  opened: boolean;
   namespace: GqlFilterNamespace;
-  mutate: Mutate;
+  customRules: CustomRule[];
+  onCreate: (name: string, whereExpr: string) => Promise<void>;
+  onUpdate: (handle: string, name: string, whereExpr: string) => Promise<void>;
+  onDelete: (handle: string) => Promise<void>;
+  onClose: () => void;
 }) {
-  const [addOpen, setAddOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [editingHandle, setEditingHandle] = useState<string | null>(null);
+  const [deletingHandle, setDeletingHandle] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (opened) return;
+    setCreating(false);
+    setEditingHandle(null);
+  }, [opened]);
+
+  const rulesForNamespace = useMemo(
+    () => customRules.filter((c) => c.namespace === namespace),
+    [customRules, namespace],
+  );
+
+  async function handleDelete(handle: string) {
+    setDeletingHandle(handle);
+    try {
+      await onDelete(handle);
+    } finally {
+      setDeletingHandle(null);
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={t("Custom rules")} size="md" zIndex={1000}>
+      <Stack gap="sm">
+        {rulesForNamespace.length === 0 && !creating && (
+          <Text size="xs" c="dimmed">{t("No custom rules yet.")}</Text>
+        )}
+        {rulesForNamespace.map((rule) =>
+          editingHandle === rule.handle ? (
+            <CustomRuleForm
+              key={rule.id}
+              namespace={namespace}
+              initialName={rule.name}
+              initialWhereExpr={rule.whereExpr}
+              submitLabel={t("Save")}
+              onSubmit={async (name, whereExpr) => {
+                await onUpdate(rule.handle!, name, whereExpr);
+                setEditingHandle(null);
+              }}
+              onCancel={() => setEditingHandle(null)}
+            />
+          ) : (
+            <Group key={rule.id} gap="xs" wrap="nowrap" align="flex-start">
+              <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm">{rule.name}</Text>
+                <Text size="xs" c="dimmed" ff="monospace" truncate>{rule.whereExpr}</Text>
+              </Stack>
+              <Button size="xs" variant="subtle" onClick={() => setEditingHandle(rule.handle ?? null)}>{t("Edit")}</Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="red"
+                disabled={deletingHandle === rule.handle}
+                onClick={() => rule.handle && handleDelete(rule.handle)}
+              >
+                {t("Delete")}
+              </Button>
+            </Group>
+          ),
+        )}
+
+        <Divider />
+
+        {creating ? (
+          <CustomRuleForm
+            namespace={namespace}
+            initialName=""
+            initialWhereExpr=""
+            submitLabel={t("Create")}
+            onSubmit={async (name, whereExpr) => {
+              await onCreate(name, whereExpr);
+              setCreating(false);
+            }}
+            onCancel={() => setCreating(false)}
+          />
+        ) : (
+          <Button size="xs" variant="subtle" onClick={() => setCreating(true)}>{t("+ New custom rule…")}</Button>
+        )}
+      </Stack>
+    </Modal>
+  );
+}
+
+interface TreeViewProps {
+  namespace: GqlFilterNamespace;
+  presets: GqlFilterPreset[];
+  mutate: Mutate;
+}
+
+function FilterTreeNodeView({
+  node, isRoot = false, ...rest
+}: TreeViewProps & { node: FilterTreeNode; isRoot?: boolean }) {
+  if (node.kind === "rule-group") {
+    return <RuleGroupView group={node} isRoot={isRoot} {...rest} />;
+  }
+  return <RowView row={node} presets={rest.presets} mutate={rest.mutate} />;
+}
+
+function RuleGroupView({
+  group, isRoot, ...rest
+}: TreeViewProps & { group: FilterRuleGroup; isRoot: boolean }) {
+  // Starts expanded when this group is freshly empty -- the root on the
+  // dialog's first open with nothing built yet, or one just nested via
+  // "+ Add rule group" (a new group is a new React element, so this
+  // initializer runs again for it) -- so applying a single rule needs no
+  // extra click to get to the picker. Only the *initial* value; toggled
+  // normally by the buttons below from then on.
+  const [addOpen, setAddOpen] = useState(() => group.children.length === 0);
+  const { namespace, presets, mutate } = rest;
 
   return (
     <Stack
@@ -235,32 +830,33 @@ function GroupView({
             <Button size="xs" variant="subtle" px={6} onClick={() => mutate((t) => moveNode(t, group.id, "down"))} aria-label={t("Move down")}>
               ↓
             </Button>
-            <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, group.id))} aria-label={t("Remove group")} />
+            <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, group.id))} aria-label={t("Remove rule group")} />
           </Group>
         )}
       </Group>
 
       <Stack gap={6} pl={12}>
-        {group.children.length === 0 && (
-          <Text size="xs" c="dimmed">{t("No conditions yet -- add one below.")}</Text>
+        {group.children.length === 0 && !addOpen && (
+          <Text size="xs" c="dimmed">{t("No rules yet -- add one below.")}</Text>
         )}
         {group.children.map((child) => (
-          <FilterTreeNodeView key={child.id} node={child} namespace={namespace} mutate={mutate} />
+          <FilterTreeNodeView key={child.id} node={child} {...rest} />
         ))}
 
         {addOpen ? (
           <PresetSearchList
             namespace={namespace}
+            presets={presets}
             onPick={(preset) => {
-              mutate((t) => addConditionRow(t, group.id, preset.id));
+              mutate((t) => addRuleRow(t, group.id, preset.id));
               setAddOpen(false);
             }}
             onCancel={() => setAddOpen(false)}
           />
         ) : (
           <Group gap="xs">
-            <Button size="xs" variant="subtle" onClick={() => setAddOpen(true)}>{t("+ Add condition")}</Button>
-            <Button size="xs" variant="subtle" onClick={() => mutate((t) => addGroup(t, group.id))}>{t("+ Add group")}</Button>
+            <Button size="xs" variant="subtle" onClick={() => setAddOpen(true)}>{t("+ Add rule")}</Button>
+            <Button size="xs" variant="subtle" onClick={() => mutate((t) => addRuleGroup(t, group.id))}>{t("+ Add rule group")}</Button>
           </Group>
         )}
       </Stack>
@@ -269,12 +865,12 @@ function GroupView({
 }
 
 /** A drag-handle glyph -- purely decorative for now (there's no actual
- * drag-and-drop yet, only the up/down move buttons), but marks each
- * condition row as a reorderable item at a glance and gives future
- * drag-and-drop an obvious place to attach to without moving anything
- * else in the row. Not a button: `aria-hidden` and no `onClick`, so it's
- * invisible to a screen reader/keyboard user, who already has the
- * up/down buttons for the same job. */
+ * drag-and-drop yet, only the up/down move buttons), but marks each rule
+ * row as a reorderable item at a glance and gives future drag-and-drop an
+ * obvious place to attach to without moving anything else in the row.
+ * Not a button: `aria-hidden` and no `onClick`, so it's invisible to a
+ * screen reader/keyboard user, who already has the up/down buttons for
+ * the same job. */
 function Grabber() {
   return (
     <Text size="sm" c="dimmed" aria-hidden="true" style={{ cursor: "grab", userSelect: "none" }}>
@@ -284,25 +880,25 @@ function Grabber() {
 }
 
 function RowView({
-  row, namespace, mutate,
+  row, presets, mutate,
 }: {
-  row: FilterConditionRow;
-  namespace: GqlFilterNamespace;
+  row: FilterRuleRow;
+  presets: GqlFilterPreset[];
   mutate: Mutate;
 }) {
   const preset = useMemo(
-    () => gqlFilterPresets.find((p) => p.id === row.presetId && p.namespace === namespace),
-    [row.presetId, namespace],
+    () => presets.find((p) => p.id === row.presetId),
+    [presets, row.presetId],
   );
 
   if (!preset) {
-    // A stale id (catalog changed since this tree was built) -- surfaced
-    // rather than silently dropped, but the only thing to do with it is
-    // remove it.
+    // A stale id (catalog changed, or the referenced Custom Rule was
+    // deleted, since this tree was built) -- surfaced rather than
+    // silently dropped, but the only thing to do with it is remove it.
     return (
       <Group gap="xs" wrap="nowrap">
         <Grabber />
-        <Text size="sm" c="red">{t("Unknown filter")}: {row.presetId}</Text>
+        <Text size="sm" c="red">{t("Unknown rule")}: {row.presetId}</Text>
         <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, row.id))} aria-label={t("Remove")} />
       </Group>
     );
@@ -325,7 +921,10 @@ function RowView({
       <Group gap="xs" wrap="nowrap" align="center" style={{ flex: 1 }}>
         <Grabber />
         <Stack gap={4} style={{ flex: 1 }}>
-          <Text size="sm">{t(preset.label)}</Text>
+          <Group gap={4}>
+            <Text size="sm">{t(preset.label)}</Text>
+            {preset.category === "Custom" && <Text size="xs" c="dimmed">({t("Custom")})</Text>}
+          </Group>
           {preset.params && preset.params.length > 0 && (
             <Group gap="xs">
               {preset.params.map((param) => (
@@ -366,46 +965,60 @@ function RowView({
   );
 }
 
-/** The "+ Add condition" inline (never floating) search list -- a search
- * box plus this namespace's presets grouped by category, same grouping
- * `gqlFilterPresets.ts` defines. Clicking a supported preset calls
- * `onPick` once and the caller is responsible for closing this back up;
- * an unsupported preset (adopted/has-addresses today) is shown, disabled,
- * with its `notes` as a tooltip -- visible so it's discoverable, not
- * pickable. */
+/** The "+ Add rule" inline (never floating) search list -- a search box
+ * plus this namespace's presets grouped by category, same grouping
+ * `gqlFilterPresets.ts` defines, plus a "Custom" group of this
+ * namespace's user-authored Custom Rules (customRuleMedia.ts). Clicking a
+ * supported preset calls `onPick` once and the caller is responsible for
+ * closing this back up; an unsupported built-in preset (adopted/has-
+ * addresses today) is shown, disabled, with its `notes` as a tooltip --
+ * visible so it's discoverable, not pickable.
+ *
+ * Purely a picker -- authoring/editing/deleting a Custom Rule all live in
+ * `ManageCustomRulesDialog` instead (`FilterPickerDialog`'s own doc
+ * comment), not duplicated here. */
 function PresetSearchList({
-  namespace, onPick, onCancel,
+  namespace, presets, onPick, onCancel,
 }: {
   namespace: GqlFilterNamespace;
+  presets: GqlFilterPreset[];
   onPick: (preset: GqlFilterPreset) => void;
   onCancel: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const presets = useMemo(
-    () => gqlFilterPresets.filter((p) => p.namespace === namespace),
-    [namespace],
+  const filtered = useMemo(
+    () => presets.filter((p) => p.namespace === namespace),
+    [presets, namespace],
   );
   const bySearch = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return presets;
-    return presets.filter((p) => p.label.toLowerCase().includes(q));
-  }, [presets, search]);
+    if (!q) return filtered;
+    return filtered.filter((p) => p.label.toLowerCase().includes(q));
+  }, [filtered, search]);
   const noMatches = bySearch.length === 0;
 
   return (
+    // onKeyDown + data-mantine-stop-propagation on the search field --
+    // same pairing and reasoning as CustomRuleForm's own fields (see
+    // FilterPickerDialog's doc comment): without it, Escape while
+    // typing a search term bubbles straight into this Modal's own
+    // Escape handler and closes the *entire* Filters dialog, not just
+    // this inline "+ Add rule" panel.
     <Stack
       gap="xs"
       p="xs"
       style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: "var(--mantine-radius-sm)" }}
+      onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
     >
       <Group gap="xs" wrap="nowrap">
         <TextInput
           size="xs"
           style={{ flex: 1 }}
-          placeholder={t("Search filters…")}
+          placeholder={t("Search rules…")}
           value={search}
           onChange={(e) => setSearch(e.currentTarget.value)}
           autoFocus
+          data-mantine-stop-propagation
         />
         <CloseButton size="sm" onClick={onCancel} aria-label={t("Cancel")} />
       </Group>
@@ -421,7 +1034,7 @@ function PresetSearchList({
               </Stack>
             );
           })}
-          {noMatches && <Text size="xs" c="dimmed">{t("No filters match your search.")}</Text>}
+          {noMatches && <Text size="xs" c="dimmed">{t("No rules match your search.")}</Text>}
         </Stack>
       </ScrollArea.Autosize>
     </Stack>

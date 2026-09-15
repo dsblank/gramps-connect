@@ -36,7 +36,13 @@ export type GqlFilterCategory =
   | "Properties"
   | "Associations"
   | "Tags"
-  | "Privacy";
+  | "Privacy"
+  /** Not a real built-in category -- reserved for Custom Rules
+   * (customRuleMedia.ts's customRuleAsPreset()), user-authored
+   * primitives adapted into this same GqlFilterPreset shape so the picker
+   * can list them alongside built-ins. No preset in this file's own
+   * catalog below is ever given this category. */
+  | "Custom";
 
 export interface GqlFilterParam {
   name: string;

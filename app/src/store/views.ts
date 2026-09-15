@@ -7,6 +7,7 @@
 // git history) -- this is the production copy now; see PLAN.md.
 import { createElement, type ReactNode } from "react";
 import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
+import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
 import { gtkColorToCss } from "../components/related/color";
@@ -348,6 +349,16 @@ export const FAMILY_VIEW: ViewConfig = {
     { key: "mother_handle", label: "Mother handle", select: "mother_handle", sqlType: "TEXT", hidden: true },
   ],
 };
+
+/** The `ViewConfig` whose `/query/` endpoint a GOQL namespace resolves
+ * against -- gqlFilterPresets.ts's `namespaceForViewKey()` in reverse.
+ * Used by customRuleMedia.ts's validateWhereExpr() to check a Custom
+ * Rule's raw expression against the right endpoint regardless of which
+ * view happens to currently be open (a namespace, not a specific view
+ * instance, is what actually determines validity). */
+export function viewForNamespace(namespace: GqlFilterNamespace): ViewConfig {
+  return namespace === "Person" ? PERSON_VIEW : FAMILY_VIEW;
+}
 
 // EventType's value -> untranslated name, from gramps/gen/lib/eventtype.py's
 // _DATAMAP. Needed because the .../query/ endpoints return the *raw* struct,

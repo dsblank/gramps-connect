@@ -3,26 +3,26 @@ import { describe, expect, it } from "vitest";
 import { gqlFilterPresets } from "../../data/gqlFilterPresets";
 import { FilterCombineError } from "../goqlFilterCombiner";
 import {
-  addConditionRow,
-  addGroup,
+  addRuleGroup,
+  addRuleRow,
   combineFilterTree,
-  countConditions,
-  createConditionRow,
+  countRules,
   createEmptyTree,
-  createGroup,
+  createRuleGroup,
+  createRuleRow,
   moveNode,
   removeNode,
   setConnector,
   toggleNegate,
   updateRowValues,
-  type FilterGroup,
+  type FilterRuleGroup,
 } from "../goqlFilterTree";
 
 describe("combineFilterTree", () => {
-  it("combines a flat AND group of two rows", () => {
+  it("combines a flat AND rule group of two rows", () => {
     const tree = createEmptyTree("Person");
     tree.root.connector = "and";
-    tree.root.children = [createConditionRow("females"), createConditionRow("has-media")];
+    tree.root.children = [createRuleRow("females"), createRuleRow("has-media")];
 
     expect(combineFilterTree(tree, gqlFilterPresets)).toEqual({
       namespace: "Person",
@@ -30,18 +30,18 @@ describe("combineFilterTree", () => {
     });
   });
 
-  it("negates a row inline, with no separate node needed", () => {
+  it("negates a rule inline, with no separate node needed", () => {
     const tree = createEmptyTree("Person");
-    const row = createConditionRow("has-notes");
+    const row = createRuleRow("has-notes");
     row.negate = true;
     tree.root.children = [row];
 
     expect(combineFilterTree(tree, gqlFilterPresets).whereExpr).toBe("not ((exists(notes)))");
   });
 
-  it("negates a whole group", () => {
+  it("negates a whole rule group", () => {
     const tree = createEmptyTree("Person");
-    const group = createGroup("or", [createConditionRow("males"), createConditionRow("females")]);
+    const group = createRuleGroup("or", [createRuleRow("males"), createRuleRow("females")]);
     group.negate = true;
     tree.root.children = [group];
 
@@ -50,12 +50,12 @@ describe("combineFilterTree", () => {
     );
   });
 
-  it("nests a sub-group to mix AND/OR", () => {
+  it("nests a sub-rule-group to mix AND/OR", () => {
     const tree = createEmptyTree("Person");
     tree.root.connector = "and";
     tree.root.children = [
-      createConditionRow("has-media"),
-      createGroup("or", [createConditionRow("males"), createConditionRow("females")]),
+      createRuleRow("has-media"),
+      createRuleGroup("or", [createRuleRow("males"), createRuleRow("females")]),
     ];
 
     expect(combineFilterTree(tree, gqlFilterPresets).whereExpr).toBe(
@@ -63,10 +63,10 @@ describe("combineFilterTree", () => {
     );
   });
 
-  it("fills in a parameterized row's values", () => {
+  it("fills in a parameterized rule's values", () => {
     const tree = createEmptyTree("Person");
     tree.root.children = [
-      createConditionRow("birth-year-between", { startYear: "1900", endYear: "1950" }),
+      createRuleRow("birth-year-between", { startYear: "1900", endYear: "1950" }),
     ];
 
     expect(combineFilterTree(tree, gqlFilterPresets).whereExpr).toBe(
@@ -76,7 +76,7 @@ describe("combineFilterTree", () => {
 
   it("throws on a stale/unknown preset id", () => {
     const tree = createEmptyTree("Person");
-    tree.root.children = [createConditionRow("no-such-preset")];
+    tree.root.children = [createRuleRow("no-such-preset")];
 
     expect(() => combineFilterTree(tree, gqlFilterPresets)).toThrow(FilterCombineError);
   });
@@ -84,8 +84,8 @@ describe("combineFilterTree", () => {
   it("still rejects a namespace mismatch reached through the tree", () => {
     const tree = createEmptyTree("Person");
     tree.root.children = [
-      createConditionRow("females"),
-      createConditionRow("families-incomplete-events"),
+      createRuleRow("females"),
+      createRuleRow("families-incomplete-events"),
     ];
 
     expect(() => combineFilterTree(tree, gqlFilterPresets)).toThrow(FilterCombineError);
@@ -93,61 +93,61 @@ describe("combineFilterTree", () => {
 });
 
 describe("tree mutation helpers", () => {
-  it("addConditionRow appends to the root group", () => {
+  it("addRuleRow appends to the root rule group", () => {
     const tree = createEmptyTree("Person");
-    const next = addConditionRow(tree, tree.root.id, "females");
+    const next = addRuleRow(tree, tree.root.id, "females");
 
     expect(next.root.children).toHaveLength(1);
     expect((next.root.children[0] as any).presetId).toBe("females");
     expect(tree.root.children).toHaveLength(0); // original untouched
   });
 
-  it("addConditionRow appends to a nested group by id", () => {
+  it("addRuleRow appends to a nested rule group by id", () => {
     const tree = createEmptyTree("Person");
-    const nested = createGroup("or");
+    const nested = createRuleGroup("or");
     tree.root.children = [nested];
 
-    const next = addConditionRow(tree, nested.id, "males");
+    const next = addRuleRow(tree, nested.id, "males");
 
-    const nextNested = next.root.children[0] as FilterGroup;
+    const nextNested = next.root.children[0] as FilterRuleGroup;
     expect(nextNested.children).toHaveLength(1);
     expect((nextNested.children[0] as any).presetId).toBe("males");
   });
 
-  it("addConditionRow is a no-op when the target id doesn't exist", () => {
+  it("addRuleRow is a no-op when the target id doesn't exist", () => {
     const tree = createEmptyTree("Person");
-    const next = addConditionRow(tree, "no-such-id", "females");
+    const next = addRuleRow(tree, "no-such-id", "females");
     expect(next.root.children).toHaveLength(0);
   });
 
-  it("addGroup nests a new empty AND-group under the target", () => {
+  it("addRuleGroup nests a new empty AND-rule-group under the target", () => {
     const tree = createEmptyTree("Person");
-    const next = addGroup(tree, tree.root.id);
+    const next = addRuleGroup(tree, tree.root.id);
 
     expect(next.root.children).toHaveLength(1);
-    const child = next.root.children[0] as FilterGroup;
-    expect(child.kind).toBe("group");
+    const child = next.root.children[0] as FilterRuleGroup;
+    expect(child.kind).toBe("rule-group");
     expect(child.connector).toBe("and");
     expect(child.children).toHaveLength(0);
   });
 
-  it("removeNode drops a row from wherever it sits, including nested", () => {
+  it("removeNode drops a rule from wherever it sits, including nested", () => {
     const tree = createEmptyTree("Person");
-    const row = createConditionRow("females");
-    const nested = createGroup("or", [row, createConditionRow("males")]);
+    const row = createRuleRow("females");
+    const nested = createRuleGroup("or", [row, createRuleRow("males")]);
     tree.root.children = [nested];
 
     const next = removeNode(tree, row.id);
 
-    const nextNested = next.root.children[0] as FilterGroup;
+    const nextNested = next.root.children[0] as FilterRuleGroup;
     expect(nextNested.children).toHaveLength(1);
     expect((nextNested.children[0] as any).presetId).toBe("males");
   });
 
-  it("removeNode removes a whole group, children included", () => {
+  it("removeNode removes a whole rule group, children included", () => {
     const tree = createEmptyTree("Person");
-    const nested = createGroup("or", [createConditionRow("females")]);
-    tree.root.children = [createConditionRow("males"), nested];
+    const nested = createRuleGroup("or", [createRuleRow("females")]);
+    tree.root.children = [createRuleRow("males"), nested];
 
     const next = removeNode(tree, nested.id);
 
@@ -157,15 +157,15 @@ describe("tree mutation helpers", () => {
 
   it("removeNode on the root id is a no-op -- a tree always keeps its root", () => {
     const tree = createEmptyTree("Person");
-    tree.root.children = [createConditionRow("females")];
+    tree.root.children = [createRuleRow("females")];
     const next = removeNode(tree, tree.root.id);
     expect(next).toBe(tree);
   });
 
-  it("toggleNegate flips a row's own flag without touching siblings", () => {
+  it("toggleNegate flips a rule's own flag without touching siblings", () => {
     const tree = createEmptyTree("Person");
-    const row = createConditionRow("females");
-    tree.root.children = [row, createConditionRow("males")];
+    const row = createRuleRow("females");
+    tree.root.children = [row, createRuleRow("males")];
 
     const next = toggleNegate(tree, row.id);
 
@@ -174,21 +174,21 @@ describe("tree mutation helpers", () => {
     expect(row.negate).toBe(false); // original untouched
   });
 
-  it("toggleNegate works on a nested group and on the root itself", () => {
+  it("toggleNegate works on a nested rule group and on the root itself", () => {
     const tree = createEmptyTree("Person");
-    const nested = createGroup("or", [createConditionRow("females")]);
+    const nested = createRuleGroup("or", [createRuleRow("females")]);
     tree.root.children = [nested];
 
     const withNestedNegated = toggleNegate(tree, nested.id);
-    expect((withNestedNegated.root.children[0] as FilterGroup).negate).toBe(true);
+    expect((withNestedNegated.root.children[0] as FilterRuleGroup).negate).toBe(true);
 
     const withRootNegated = toggleNegate(tree, tree.root.id);
     expect(withRootNegated.root.negate).toBe(true);
   });
 
-  it("setConnector changes a group's AND/OR and is a no-op on a row id", () => {
+  it("setConnector changes a rule group's AND/OR and is a no-op on a rule id", () => {
     const tree = createEmptyTree("Person");
-    const row = createConditionRow("females");
+    const row = createRuleRow("females");
     tree.root.children = [row];
 
     const next = setConnector(tree, tree.root.id, "or");
@@ -198,9 +198,9 @@ describe("tree mutation helpers", () => {
     expect(noop.root.children).toEqual(tree.root.children);
   });
 
-  it("updateRowValues replaces a row's param values wholesale", () => {
+  it("updateRowValues replaces a rule's param values wholesale", () => {
     const tree = createEmptyTree("Person");
-    const row = createConditionRow("birth-year-between", { startYear: "", endYear: "" });
+    const row = createRuleRow("birth-year-between", { startYear: "", endYear: "" });
     tree.root.children = [row];
 
     const next = updateRowValues(tree, row.id, { startYear: "1900", endYear: "1950" });
@@ -210,9 +210,9 @@ describe("tree mutation helpers", () => {
 
   it("moveNode reorders within the same parent, and no-ops at either edge", () => {
     const tree = createEmptyTree("Person");
-    const a = createConditionRow("females");
-    const b = createConditionRow("males");
-    const c = createConditionRow("has-media");
+    const a = createRuleRow("females");
+    const b = createRuleRow("males");
+    const c = createRuleRow("has-media");
     tree.root.children = [a, b, c];
 
     const movedUp = moveNode(tree, b.id, "up");
@@ -225,12 +225,12 @@ describe("tree mutation helpers", () => {
     expect(noopAtBottom.root.children.map((n) => n.id)).toEqual([a.id, b.id, c.id]);
   });
 
-  it("moveNode only reorders within the node's own nested parent, never across groups", () => {
+  it("moveNode only reorders within the node's own nested parent, never across rule groups", () => {
     const tree = createEmptyTree("Person");
-    const inner1 = createConditionRow("females");
-    const inner2 = createConditionRow("males");
-    const nested = createGroup("or", [inner1, inner2]);
-    const outer = createConditionRow("has-media");
+    const inner1 = createRuleRow("females");
+    const inner2 = createRuleRow("males");
+    const nested = createRuleGroup("or", [inner1, inner2]);
+    const outer = createRuleRow("has-media");
     tree.root.children = [outer, nested];
 
     const next = moveNode(tree, inner2.id, "up");
@@ -238,19 +238,29 @@ describe("tree mutation helpers", () => {
     // outer/nested order at the root is untouched -- only inner1/inner2
     // swapped, inside `nested`.
     expect(next.root.children.map((n) => n.id)).toEqual([outer.id, nested.id]);
-    const nextNested = next.root.children[1] as FilterGroup;
+    const nextNested = next.root.children[1] as FilterRuleGroup;
     expect(nextNested.children.map((n) => n.id)).toEqual([inner2.id, inner1.id]);
   });
 
-  it("countConditions counts leaf rows recursively, ignoring group nodes themselves", () => {
+  it("countRules counts leaf rows recursively, ignoring rule group nodes themselves", () => {
     const tree = createEmptyTree("Person");
-    const nested = createGroup("or", [createConditionRow("females"), createConditionRow("males")]);
-    tree.root.children = [createConditionRow("has-media"), nested];
+    const nested = createRuleGroup("or", [createRuleRow("females"), createRuleRow("males")]);
+    tree.root.children = [createRuleRow("has-media"), nested];
 
-    expect(countConditions(tree)).toBe(3);
+    expect(countRules(tree)).toBe(3);
   });
 
-  it("countConditions is 0 for an empty tree", () => {
-    expect(countConditions(createEmptyTree("Person"))).toBe(0);
+  it("countRules is 0 for an empty tree", () => {
+    expect(countRules(createEmptyTree("Person"))).toBe(0);
+  });
+
+  it("countRules doesn't crash on a node with an old/unrecognized kind (e.g. a pre-rename \"condition\"/\"group\" tree loaded from a Saved Filter)", () => {
+    const tree = createEmptyTree("Person");
+    // Not a real FilterTreeNode -- simulates a tree persisted before a
+    // future rename of the `kind` values, round-tripped back in via
+    // fetchSavedFilters(). Cast through `any` since the real type no
+    // longer allows this shape.
+    tree.root.children = [{ kind: "condition", id: "stale", presetId: "females", negate: false } as any];
+    expect(countRules(tree)).toBe(0);
   });
 });

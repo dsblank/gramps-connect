@@ -4,10 +4,10 @@
  * NOT, fill in a param). Deliberately a different shape from
  * ./goqlFilterCombiner's `FilterNode`: rows here hold a `presetId` string
  * (serializable, stable across a catalog reload) instead of an embedded
- * `GqlFilterPreset` object, and every node -- row or group -- carries its
- * own `negate` flag so negating one condition is a checkbox on that row,
- * never a separate filter the way Gramps' desktop Custom Filter Editor
- * requires (see project_goql_filter_system_design memory).
+ * `GqlFilterPreset` object, and every node -- a rule or a rule group --
+ * carries its own `negate` flag so negating one rule is a checkbox on that
+ * row, never a separate filter the way Gramps' desktop Custom Filter
+ * Editor requires (see project_goql_filter_system_design memory).
  *
  * `treeToFilterNode`/`combineFilterTree` are the bridge into the existing
  * compiler -- the editor works in this shape, then hands off to
@@ -19,10 +19,10 @@ import { combineFilters, FilterCombineError, type CombinedFilter, type FilterNod
 
 export type FilterConnector = "and" | "or";
 
-export interface FilterConditionRow {
-  kind: "condition";
+export interface FilterRuleRow {
+  kind: "rule";
   /** Stable across edits -- React key, and the target of the add/remove/
-   * move/toggle helpers below (addConditionRow/addGroup/removeNode/
+   * move/toggle helpers below (addRuleRow/addRuleGroup/removeNode/
    * toggleNegate/setConnector/updateRowValues/moveNode), all of which
    * locate a node by this id rather than by array position. */
   id: string;
@@ -32,7 +32,7 @@ export interface FilterConditionRow {
    * whole catalog along with it). */
   presetId: string;
   /** Inline NOT toggle -- the one thing this data model exists to make
-   * cheap. Negating a row is flipping this, not creating another node. */
+   * cheap. Negating a rule is flipping this, not creating another node. */
   negate: boolean;
   /** Keyed by each of the preset's `params[].name`; absent/empty until the
    * user fills the row in. Left unset (not defaulted) so the editor can
@@ -40,22 +40,22 @@ export interface FilterConditionRow {
   values?: Record<string, string>;
 }
 
-export interface FilterGroup {
-  kind: "group";
+export interface FilterRuleGroup {
+  kind: "rule-group";
   id: string;
   /** One connector for every direct child -- mixed AND/OR comes only from
    * nesting a sub-group, matching how `FilterNode`'s `and`/`or` already
-   * take a flat children array. Keeps each group's own control (a single
-   * AND/OR toggle) unambiguous instead of Gramps' one-mode-for-the-whole-
-   * filter picker. */
+   * take a flat children array. Keeps each rule group's own control (a
+   * single AND/OR toggle) unambiguous instead of Gramps' one-mode-for-
+   * the-whole-filter picker. */
   connector: FilterConnector;
-  /** Inline NOT toggle on the group as a whole (e.g. "NOT (any of these
-   * three)"). */
+  /** Inline NOT toggle on the rule group as a whole (e.g. "NOT (any of
+   * these three)"). */
   negate: boolean;
   children: FilterTreeNode[];
 }
 
-export type FilterTreeNode = FilterConditionRow | FilterGroup;
+export type FilterTreeNode = FilterRuleRow | FilterRuleGroup;
 
 export interface FilterTree {
   /** Fixed for the life of the tree -- the picker only offers presets from
@@ -64,28 +64,28 @@ export interface FilterTree {
    * (see goqlFilterCombiner.ts), since this field is just the editor's own
    * declared contract, not itself a proof. */
   namespace: GqlFilterNamespace;
-  /** Always a group, even for a single condition -- gives the editor one
+  /** Always a rule group, even for a single rule -- gives the editor one
    * consistent root to render/mutate rather than special-casing "the tree
    * is currently just one bare row." */
-  root: FilterGroup;
+  root: FilterRuleGroup;
 }
 
-export function createConditionRow(
+export function createRuleRow(
   presetId: string,
   values?: Record<string, string>,
-): FilterConditionRow {
-  return { kind: "condition", id: crypto.randomUUID(), presetId, negate: false, values };
+): FilterRuleRow {
+  return { kind: "rule", id: crypto.randomUUID(), presetId, negate: false, values };
 }
 
-export function createGroup(
+export function createRuleGroup(
   connector: FilterConnector = "and",
   children: FilterTreeNode[] = [],
-): FilterGroup {
-  return { kind: "group", id: crypto.randomUUID(), connector, negate: false, children };
+): FilterRuleGroup {
+  return { kind: "rule-group", id: crypto.randomUUID(), connector, negate: false, children };
 }
 
 export function createEmptyTree(namespace: GqlFilterNamespace): FilterTree {
-  return { namespace, root: createGroup("and", []) };
+  return { namespace, root: createRuleGroup("and", []) };
 }
 
 /** Finds `nodeId` anywhere in `group`'s subtree (a direct child or nested
@@ -98,10 +98,10 @@ export function createEmptyTree(namespace: GqlFilterNamespace): FilterTree {
  * handled directly by each exported helper below, since replacing/removing
  * *it* would leave a `FilterTree` with no root at all. */
 function mapChildren(
-  group: FilterGroup,
+  group: FilterRuleGroup,
   nodeId: string,
   updater: (node: FilterTreeNode) => FilterTreeNode | null,
-): FilterGroup {
+): FilterRuleGroup {
   let changed = false;
   const children: FilterTreeNode[] = [];
   for (const child of group.children) {
@@ -111,7 +111,7 @@ function mapChildren(
       if (replaced !== null) children.push(replaced);
       continue;
     }
-    if (child.kind === "group") {
+    if (child.kind === "rule-group") {
       const mapped = mapChildren(child, nodeId, updater);
       if (mapped !== child) changed = true;
       children.push(mapped);
@@ -122,9 +122,10 @@ function mapChildren(
   return changed ? { ...group, children } : group;
 }
 
-/** Flips `nodeId`'s own `negate` flag -- root included, the group as a
- * whole can be negated too. The one operation this whole data model exists
- * to make cheap: no second node, no separate saved filter, just this. */
+/** Flips `nodeId`'s own `negate` flag -- root included, the rule group as
+ * a whole can be negated too. The one operation this whole data model
+ * exists to make cheap: no second node, no separate saved filter, just
+ * this. */
 export function toggleNegate(tree: FilterTree, nodeId: string): FilterTree {
   if (tree.root.id === nodeId) {
     return { ...tree, root: { ...tree.root, negate: !tree.root.negate } };
@@ -133,72 +134,72 @@ export function toggleNegate(tree: FilterTree, nodeId: string): FilterTree {
 }
 
 /** Changes `groupId`'s AND/OR connector -- a no-op if `groupId` doesn't
- * name a group (defensive: the UI only ever offers this control on a
- * group's own row, so this guard should never actually trigger). */
+ * name a rule group (defensive: the UI only ever offers this control on a
+ * rule group's own row, so this guard should never actually trigger). */
 export function setConnector(tree: FilterTree, groupId: string, connector: FilterConnector): FilterTree {
   if (tree.root.id === groupId) {
     return { ...tree, root: { ...tree.root, connector } };
   }
   return {
     ...tree,
-    root: mapChildren(tree.root, groupId, (n) => (n.kind === "group" ? { ...n, connector } : n)),
+    root: mapChildren(tree.root, groupId, (n) => (n.kind === "rule-group" ? { ...n, connector } : n)),
   };
 }
 
 /** Replaces `rowId`'s param values wholesale (the editor always has the
  * complete, current set of that row's inputs on hand when one changes) --
- * a no-op if `rowId` doesn't name a condition row. */
+ * a no-op if `rowId` doesn't name a rule row. */
 export function updateRowValues(tree: FilterTree, rowId: string, values: Record<string, string>): FilterTree {
   return {
     ...tree,
-    root: mapChildren(tree.root, rowId, (n) => (n.kind === "condition" ? { ...n, values } : n)),
+    root: mapChildren(tree.root, rowId, (n) => (n.kind === "rule" ? { ...n, values } : n)),
   };
 }
 
-/** Removes `nodeId` (a row or a whole group, children included) from
- * wherever it sits in the tree. A no-op for the root itself -- a
- * `FilterTree` always has a root group, so there's nothing sensible to
- * remove it *to*; the editor should offer no remove control on the root
- * row in the first place. */
+/** Removes `nodeId` (a rule row or a whole rule group, children included)
+ * from wherever it sits in the tree. A no-op for the root itself -- a
+ * `FilterTree` always has a root rule group, so there's nothing sensible
+ * to remove it *to*; the editor should offer no remove control on the
+ * root row in the first place. */
 export function removeNode(tree: FilterTree, nodeId: string): FilterTree {
   if (tree.root.id === nodeId) return tree;
   return { ...tree, root: mapChildren(tree.root, nodeId, () => null) };
 }
 
-/** Appends a new condition row for `presetId` to `groupId`'s children --
- * a no-op if `groupId` doesn't name a group. */
-export function addConditionRow(tree: FilterTree, groupId: string, presetId: string): FilterTree {
-  const row = createConditionRow(presetId);
+/** Appends a new rule row for `presetId` to `groupId`'s children -- a
+ * no-op if `groupId` doesn't name a rule group. */
+export function addRuleRow(tree: FilterTree, groupId: string, presetId: string): FilterTree {
+  const row = createRuleRow(presetId);
   if (tree.root.id === groupId) {
     return { ...tree, root: { ...tree.root, children: [...tree.root.children, row] } };
   }
   return {
     ...tree,
-    root: mapChildren(tree.root, groupId, (n) => (n.kind === "group" ? { ...n, children: [...n.children, row] } : n)),
+    root: mapChildren(tree.root, groupId, (n) => (n.kind === "rule-group" ? { ...n, children: [...n.children, row] } : n)),
   };
 }
 
-/** Nests a new, empty AND-group under `groupId` -- the only way to mix
- * AND and OR: a group's own connector applies uniformly to its direct
- * children, so combining differently requires a sub-group with its own
- * connector. A no-op if `groupId` doesn't name a group. */
-export function addGroup(tree: FilterTree, groupId: string): FilterTree {
-  const group = createGroup();
+/** Nests a new, empty AND-rule-group under `groupId` -- the only way to
+ * mix AND and OR: a rule group's own connector applies uniformly to its
+ * direct children, so combining differently requires a sub-group with its
+ * own connector. A no-op if `groupId` doesn't name a rule group. */
+export function addRuleGroup(tree: FilterTree, groupId: string): FilterTree {
+  const group = createRuleGroup();
   if (tree.root.id === groupId) {
     return { ...tree, root: { ...tree.root, children: [...tree.root.children, group] } };
   }
   return {
     ...tree,
-    root: mapChildren(tree.root, groupId, (n) => (n.kind === "group" ? { ...n, children: [...n.children, group] } : n)),
+    root: mapChildren(tree.root, groupId, (n) => (n.kind === "rule-group" ? { ...n, children: [...n.children, group] } : n)),
   };
 }
 
 /** Finds `nodeId`'s *direct* parent (unlike `mapChildren`, which finds the
  * node itself at any depth) and swaps it with its adjacent sibling --
  * moving a node only ever reorders within its own parent's `children`,
- * never across groups. A no-op at either end of the array (nothing to
- * swap with) or if `nodeId` isn't found. */
-function moveWithinParent(group: FilterGroup, nodeId: string, direction: "up" | "down"): FilterGroup {
+ * never across rule groups. A no-op at either end of the array (nothing
+ * to swap with) or if `nodeId` isn't found. */
+function moveWithinParent(group: FilterRuleGroup, nodeId: string, direction: "up" | "down"): FilterRuleGroup {
   const index = group.children.findIndex((c) => c.id === nodeId);
   if (index !== -1) {
     const swapWith = direction === "up" ? index - 1 : index + 1;
@@ -209,7 +210,7 @@ function moveWithinParent(group: FilterGroup, nodeId: string, direction: "up" | 
   }
   let changed = false;
   const children = group.children.map((child) => {
-    if (child.kind !== "group") return child;
+    if (child.kind !== "rule-group") return child;
     const mapped = moveWithinParent(child, nodeId, direction);
     if (mapped !== child) changed = true;
     return mapped;
@@ -225,33 +226,47 @@ export function moveNode(tree: FilterTree, nodeId: string, direction: "up" | "do
   return { ...tree, root: moveWithinParent(tree.root, nodeId, direction) };
 }
 
-/** Counts every condition row in the tree, recursively -- for the
- * "Filters (N)" trigger badge (ListHeader.tsx), which needs a single
- * number regardless of how deeply the presets it's counting are nested. */
-export function countConditions(tree: FilterTree): number {
-  const countIn = (node: FilterTreeNode): number =>
-    node.kind === "condition" ? 1 : node.children.reduce((sum, child) => sum + countIn(child), 0);
+/** Counts every rule row in the tree, recursively -- for the "Filters (N)"
+ * trigger badge (ListHeader.tsx), which needs a single number regardless
+ * of how deeply the presets it's counting are nested. Checks `"rule-group"`
+ * explicitly rather than assuming "anything that isn't a rule must be a
+ * rule group" -- this walks trees that round-trip through Saved Filter
+ * Media JSON (savedFilterMedia.ts), so a node whose `kind` predates a
+ * future rename (or is otherwise unrecognized) hits the `0` fallback
+ * instead of crashing on a `.children` that isn't there. */
+export function countRules(tree: FilterTree): number {
+  const countIn = (node: FilterTreeNode): number => {
+    if (node.kind === "rule") return 1;
+    if (node.kind === "rule-group") return node.children.reduce((sum, child) => sum + countIn(child), 0);
+    return 0;
+  };
   return countIn(tree.root);
 }
 
-/** Resolves each row's `presetId` and lowers the UI tree into the
+/** Resolves each rule's `presetId` and lowers the UI tree into the
  * `FilterNode` shape `combineFilters` compiles -- wrapping in `not` for
  * any node with `negate: true` along the way. Throws `FilterCombineError`
  * for a `presetId` that isn't in `presetsById` (a stale reference after a
- * catalog change, most likely), the same error type `combineFilters`
- * itself throws for everything else, so a caller only needs one catch.
+ * catalog change, most likely) or for a node whose `kind` is neither
+ * `"rule"` nor `"rule-group"` (a tree round-tripped through Saved Filter
+ * Media JSON whose `kind` predates a future rename, most likely) -- the
+ * same error type `combineFilters` itself throws for everything else, so
+ * a caller only needs one catch.
  */
 export function treeToFilterNode(
   node: FilterTreeNode,
   presetsById: ReadonlyMap<string, GqlFilterPreset>,
 ): FilterNode {
-  if (node.kind === "condition") {
+  if (node.kind === "rule") {
     const preset = presetsById.get(node.presetId);
     if (!preset) {
       throw new FilterCombineError(`unknown filter preset id "${node.presetId}"`);
     }
     const leaf: FilterNode = { kind: "preset", preset, values: node.values };
     return node.negate ? { kind: "not", child: leaf } : leaf;
+  }
+  if (node.kind !== "rule-group") {
+    throw new FilterCombineError(`unrecognized filter tree node kind "${(node as { kind: string }).kind}"`);
   }
   const group: FilterNode = {
     kind: node.connector,
