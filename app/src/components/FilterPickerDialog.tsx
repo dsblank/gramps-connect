@@ -196,15 +196,24 @@ export function FilterPickerDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.pickerExpr]);
 
-  // Whether `tree` has actually changed since it was loaded from
-  // `savedFilterHandle` -- gates the "Save" button below (nothing to
-  // save if it's unchanged). Plain JSON comparison: both sides are the
+  // Whether `tree` holds anything that isn't yet safely persisted --
+  // gates both the "Unsaved changes" note and the Load dropdown's
+  // confirm-before-discard below. Two cases: something's loaded
+  // (`savedFilterHandle` set), where it's whether `tree` has actually
+  // changed since that load (plain JSON comparison -- both sides are the
   // exact same JSON-shaped object this feature already round-trips
-  // through Media file content, so this is exact, not approximate.
+  // through Media file content, so this is exact, not approximate); or
+  // nothing's loaded ("New Filter", the Load dropdown's own default),
+  // where there's no saved snapshot to diff against at all, so any rule
+  // built from scratch is itself the only copy of that work and counts
+  // as dirty -- otherwise switching the Load dropdown to a real saved
+  // filter from scratch would silently discard it with no warning.
   const loadedFilterTree = savedFilterHandle
     ? savedFiltersForNamespace.find((f) => f.handle === savedFilterHandle)?.tree
     : undefined;
-  const isDirty = loadedFilterTree ? JSON.stringify(tree) !== JSON.stringify(loadedFilterTree) : false;
+  const isDirty = savedFilterHandle
+    ? (loadedFilterTree ? JSON.stringify(tree) !== JSON.stringify(loadedFilterTree) : false)
+    : countRules(tree) > 0;
 
   // Recomputed on every edit -- cheap (a handful of string-only presets) --
   // so the preview (and the Apply button's disabled state) reflect a bad/
@@ -256,12 +265,16 @@ export function FilterPickerDialog({
 
   // The "Load a saved filter…" Select's own onChange -- confirms first
   // when the current tree is dirty, since switching (to a different
-  // filter, or to "— Empty —") would otherwise discard those edits with
-  // no warning at all, unlike the bottom "Clear" button (whose label
-  // already says what it does). Cancelling leaves everything untouched;
-  // the Select is a controlled component bound to `savedFilterHandle`,
-  // so its displayed value snaps back to the still-current one on its
-  // own -- nothing extra needed to "undo" the pick.
+  // filter, or back to "New Filter") would otherwise discard those edits
+  // with no warning at all, unlike the bottom "Clear" button (whose
+  // label already says what it does). Cancelling leaves everything
+  // untouched; the Select is a controlled component bound to
+  // `savedFilterHandle`, so its displayed value snaps back to the still-
+  // current one on its own -- nothing extra needed to "undo" the pick.
+  // `savedFilterName` is only set once something's actually loaded (see
+  // isDirty's own doc comment on the "New Filter"/scratch case), so the
+  // message falls back to a nameless phrasing rather than showing
+  // "undefined" when there's no loaded filter to name.
   async function handleSelectSavedFilter(value: string | null) {
     const found = value && value !== EMPTY_SAVED_FILTER_VALUE
       ? savedFiltersForNamespace.find((f) => f.handle === value)
@@ -269,7 +282,9 @@ export function FilterPickerDialog({
     if (isDirty) {
       setConfirmPending(true);
       const ok = await confirmDialog(
-        `${t("Discard your unsaved changes to")} "${savedFilterName}"?`,
+        savedFilterName
+          ? `${t("Discard your unsaved changes to")} "${savedFilterName}"?`
+          : t("Discard your unsaved filter?"),
         t("Discard"),
       );
       setConfirmPending(false);
