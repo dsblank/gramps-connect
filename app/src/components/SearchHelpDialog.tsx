@@ -15,6 +15,13 @@ interface SearchHelpDialogProps {
    * names 'Smith' and a real search names whoever you're actually after, so
    * it lands as something to edit rather than as a result set. */
   onUseExample: (expr: string) => void;
+  /** For a caller that's itself nested outside the app's real
+   * `Modal.Stack` (manual-zIndex nesting, e.g. FilterPickerDialog.tsx's
+   * "Custom rules…" manager) -- same convention as
+   * WikidataPlaceLookupDialog.tsx's own `zIndex` prop. Every ordinary
+   * caller (FilterBar.tsx) leaves this unset and relies on `stackId`-free
+   * default stacking instead, same as that dialog's own doc comment. */
+  zIndex?: number;
 }
 
 /** The FilterBar "i" button's content: how to search *this* list.
@@ -26,7 +33,7 @@ interface SearchHelpDialogProps {
  * list, so it's static prose here; everything above it comes from
  * store/searchHelp.ts, keyed by view. */
 export function SearchHelpDialog({
-  opened, onClose, viewLabel, help, onUseExample,
+  opened, onClose, viewLabel, help, onUseExample, zIndex,
 }: SearchHelpDialogProps) {
   return (
     <Modal
@@ -35,6 +42,7 @@ export function SearchHelpDialog({
       title={`${t("Searching")} ${t(viewLabel)}`}
       size="lg"
       scrollAreaComponent={ScrollArea.Autosize}
+      zIndex={zIndex}
     >
       <Stack gap="lg">
         <Stack gap="xs">

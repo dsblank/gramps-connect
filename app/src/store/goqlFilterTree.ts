@@ -1,7 +1,7 @@
 /**
  * Editable UI-side tree for the filter editor -- what the picker/editor
- * component actually reads and mutates (add/remove/reorder rows, toggle
- * NOT, fill in a param). Deliberately a different shape from
+ * component actually reads and mutates (add/remove rows, toggle NOT,
+ * fill in a param). Deliberately a different shape from
  * ./goqlFilterCombiner's `FilterNode`: rows here hold a `presetId` string
  * (serializable, stable across a catalog reload) instead of an embedded
  * `GqlFilterPreset` object, and every node -- a rule or a rule group --
@@ -22,9 +22,9 @@ export type FilterConnector = "and" | "or";
 export interface FilterRuleRow {
   kind: "rule";
   /** Stable across edits -- React key, and the target of the add/remove/
-   * move/toggle helpers below (addRuleRow/addRuleGroup/removeNode/
-   * toggleNegate/setConnector/updateRowValues/moveNode), all of which
-   * locate a node by this id rather than by array position. */
+   * toggle helpers below (addRuleRow/addRuleGroup/removeNode/
+   * toggleNegate/setConnector/updateRowValues), all of which locate a
+   * node by this id rather than by array position. */
   id: string;
   /** Looked up in the catalog at render/compile time -- see
    * `treeToFilterNode`. Never an embedded preset object, so the tree stays
@@ -192,38 +192,6 @@ export function addRuleGroup(tree: FilterTree, groupId: string): FilterTree {
     ...tree,
     root: mapChildren(tree.root, groupId, (n) => (n.kind === "rule-group" ? { ...n, children: [...n.children, group] } : n)),
   };
-}
-
-/** Finds `nodeId`'s *direct* parent (unlike `mapChildren`, which finds the
- * node itself at any depth) and swaps it with its adjacent sibling --
- * moving a node only ever reorders within its own parent's `children`,
- * never across rule groups. A no-op at either end of the array (nothing
- * to swap with) or if `nodeId` isn't found. */
-function moveWithinParent(group: FilterRuleGroup, nodeId: string, direction: "up" | "down"): FilterRuleGroup {
-  const index = group.children.findIndex((c) => c.id === nodeId);
-  if (index !== -1) {
-    const swapWith = direction === "up" ? index - 1 : index + 1;
-    if (swapWith < 0 || swapWith >= group.children.length) return group;
-    const children = [...group.children];
-    [children[index], children[swapWith]] = [children[swapWith], children[index]];
-    return { ...group, children };
-  }
-  let changed = false;
-  const children = group.children.map((child) => {
-    if (child.kind !== "rule-group") return child;
-    const mapped = moveWithinParent(child, nodeId, direction);
-    if (mapped !== child) changed = true;
-    return mapped;
-  });
-  return changed ? { ...group, children } : group;
-}
-
-/** Reorders `nodeId` one slot earlier/later among its own parent's
- * children -- root is never a valid target (it has no parent/siblings to
- * move among), so the editor should offer no move controls on the root
- * row, same as removeNode(). */
-export function moveNode(tree: FilterTree, nodeId: string, direction: "up" | "down"): FilterTree {
-  return { ...tree, root: moveWithinParent(tree.root, nodeId, direction) };
 }
 
 /** Counts every rule row in the tree, recursively -- for the "Filters (N)"

@@ -10,7 +10,6 @@ import {
   createEmptyTree,
   createRuleGroup,
   createRuleRow,
-  moveNode,
   removeNode,
   setConnector,
   toggleNegate,
@@ -206,40 +205,6 @@ describe("tree mutation helpers", () => {
     const next = updateRowValues(tree, row.id, { startYear: "1900", endYear: "1950" });
 
     expect((next.root.children[0] as any).values).toEqual({ startYear: "1900", endYear: "1950" });
-  });
-
-  it("moveNode reorders within the same parent, and no-ops at either edge", () => {
-    const tree = createEmptyTree("Person");
-    const a = createRuleRow("females");
-    const b = createRuleRow("males");
-    const c = createRuleRow("has-media");
-    tree.root.children = [a, b, c];
-
-    const movedUp = moveNode(tree, b.id, "up");
-    expect(movedUp.root.children.map((n) => n.id)).toEqual([b.id, a.id, c.id]);
-
-    const noopAtTop = moveNode(tree, a.id, "up");
-    expect(noopAtTop.root.children.map((n) => n.id)).toEqual([a.id, b.id, c.id]);
-
-    const noopAtBottom = moveNode(tree, c.id, "down");
-    expect(noopAtBottom.root.children.map((n) => n.id)).toEqual([a.id, b.id, c.id]);
-  });
-
-  it("moveNode only reorders within the node's own nested parent, never across rule groups", () => {
-    const tree = createEmptyTree("Person");
-    const inner1 = createRuleRow("females");
-    const inner2 = createRuleRow("males");
-    const nested = createRuleGroup("or", [inner1, inner2]);
-    const outer = createRuleRow("has-media");
-    tree.root.children = [outer, nested];
-
-    const next = moveNode(tree, inner2.id, "up");
-
-    // outer/nested order at the root is untouched -- only inner1/inner2
-    // swapped, inside `nested`.
-    expect(next.root.children.map((n) => n.id)).toEqual([outer.id, nested.id]);
-    const nextNested = next.root.children[1] as FilterRuleGroup;
-    expect(nextNested.children.map((n) => n.id)).toEqual([inner2.id, inner1.id]);
   });
 
   it("countRules counts leaf rows recursively, ignoring rule group nodes themselves", () => {

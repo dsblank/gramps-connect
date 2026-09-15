@@ -9,7 +9,7 @@ import {
 } from "../data/gqlFilterPresets";
 import { FilterCombineError } from "../store/goqlFilterCombiner";
 import {
-  addRuleGroup, addRuleRow, combineFilterTree, countRules, createEmptyTree, moveNode,
+  addRuleGroup, addRuleRow, combineFilterTree, countRules, createEmptyTree,
   removeNode, setConnector, toggleNegate, updateRowValues,
   type FilterConnector, type FilterRuleGroup, type FilterRuleRow, type FilterTree, type FilterTreeNode,
 } from "../store/goqlFilterTree";
@@ -22,9 +22,13 @@ import {
 import {
   fetchSavedFilters, removeSavedFilter, saveSavedFilterManifest, uploadSavedFilter, type SavedFilter,
 } from "../store/savedFilterMedia";
+import { getSearchHelp } from "../store/searchHelp";
+import { viewForNamespace } from "../store/views";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import { t } from "../i18n/i18n";
+import { InfoButton } from "./InfoButton";
+import { SearchHelpDialog } from "./SearchHelpDialog";
 
 const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy", "Custom"];
 
@@ -567,7 +571,7 @@ function SaveFilterDialog({
  * expression) so opening "Edit" on an unmodified rule doesn't force an
  * unnecessary round trip before Save re-enables. */
 function CustomRuleForm({
-  namespace, initialName, initialWhereExpr, submitLabel, onSubmit, onCancel,
+  namespace, initialName, initialWhereExpr, submitLabel, onSubmit, onCancel, onNestedDialogChange,
 }: {
   namespace: GqlFilterNamespace;
   initialName: string;
@@ -575,11 +579,24 @@ function CustomRuleForm({
   submitLabel: string;
   onSubmit: (name: string, whereExpr: string) => Promise<void>;
   onCancel: () => void;
+  /** Fired whenever this form's own GOQL-syntax help popup opens/closes
+   * -- lets `ManageCustomRulesDialog`'s own `<Modal>` gate its
+   * `closeOnEscape` on it, same reasoning as `FilterPickerDialog`'s own
+   * `saveDialogOpen`/`manageRulesOpen` guard (see that component's doc
+   * comment): without it, Escape while the help popup is open would
+   * close *both* it and this Custom Rules manager in the same keypress. */
+  onNestedDialogChange?: (open: boolean) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [whereExpr, setWhereExpr] = useState(initialWhereExpr);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [helpOpen, setHelpOpenState] = useState(false);
+  function setHelpOpen(open: boolean) {
+    setHelpOpenState(open);
+    onNestedDialogChange?.(open);
+  }
+  const help = getSearchHelp(viewForNamespace(namespace));
 
   const [checking, setChecking] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -641,21 +658,32 @@ function CustomRuleForm({
         autoFocus
         data-mantine-stop-propagation
       />
-      <Textarea
-        size="xs"
-        label={t("Raw GOQL")}
-        ff="monospace"
-        autosize
-        minRows={2}
-        maxRows={6}
-        placeholder={t('e.g. like(primary_name.surname, "Smith%")')}
-        value={whereExpr}
-        onChange={(e) => {
-          setWhereExpr(e.currentTarget.value);
-          setQueryError(null);
-        }}
-        data-mantine-stop-propagation
-      />
+      <Stack gap={2}>
+        <Group gap={6} wrap="nowrap">
+          <Text size="xs" fw={500}>{t("Raw GOQL")}</Text>
+          {help && (
+            <InfoButton
+              size="xs"
+              label={`${t("GOQL syntax for")} ${t(namespace)}`}
+              onClick={() => setHelpOpen(true)}
+            />
+          )}
+        </Group>
+        <Textarea
+          size="xs"
+          ff="monospace"
+          autosize
+          minRows={2}
+          maxRows={6}
+          placeholder={t('e.g. like(primary_name.surname, "Smith%")')}
+          value={whereExpr}
+          onChange={(e) => {
+            setWhereExpr(e.currentTarget.value);
+            setQueryError(null);
+          }}
+          data-mantine-stop-propagation
+        />
+      </Stack>
       {checking && <Text size="xs" c="dimmed">{t("Checking…")}</Text>}
       {queryError && <Text size="xs" c="red">{queryError}</Text>}
       {error && <Text size="xs" c="red">{error}</Text>}
@@ -665,6 +693,21 @@ function CustomRuleForm({
           {submitLabel}
         </Button>
       </Group>
+
+      {help && (
+        <SearchHelpDialog
+          opened={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          viewLabel={viewForNamespace(namespace).label}
+          help={help}
+          zIndex={1001}
+          onUseExample={(expr) => {
+            setWhereExpr(expr);
+            setQueryError(null);
+            setHelpOpen(false);
+          }}
+        />
+      )}
     </Stack>
   );
 }
@@ -690,6 +733,10 @@ function ManageCustomRulesDialog({
   const [creating, setCreating] = useState(false);
   const [editingHandle, setEditingHandle] = useState<string | null>(null);
   const [deletingHandle, setDeletingHandle] = useState<string | null>(null);
+  // Whichever CustomRuleForm is currently mounted (create xor edit-of-
+  // one-row, never both) reports its own GOQL-help popup's open state
+  // here -- see CustomRuleForm's own onNestedDialogChange doc comment.
+  const [nestedDialogOpen, setNestedDialogOpen] = useState(false);
 
   useEffect(() => {
     if (opened) return;
@@ -712,7 +759,18 @@ function ManageCustomRulesDialog({
   }
 
   return (
-    <Modal opened={opened} onClose={onClose} title={t("Custom rules")} size="md" zIndex={1000}>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={t("Custom rules")}
+      size="md"
+      zIndex={1000}
+      // Suppressed while the GOQL-help popup (opened from whichever
+      // CustomRuleForm is mounted) is open -- same reasoning as
+      // FilterPickerDialog's own outer-Modal guard, one level deeper:
+      // without this, Escape would close both it and this dialog at once.
+      closeOnEscape={!nestedDialogOpen}
+    >
       <Stack gap="sm">
         {rulesForNamespace.length === 0 && !creating && (
           <Text size="xs" c="dimmed">{t("No custom rules yet.")}</Text>
@@ -730,6 +788,7 @@ function ManageCustomRulesDialog({
                 setEditingHandle(null);
               }}
               onCancel={() => setEditingHandle(null)}
+              onNestedDialogChange={setNestedDialogOpen}
             />
           ) : (
             <Group key={rule.id} gap="xs" wrap="nowrap" align="flex-start">
@@ -764,6 +823,7 @@ function ManageCustomRulesDialog({
               setCreating(false);
             }}
             onCancel={() => setCreating(false)}
+            onNestedDialogChange={setNestedDialogOpen}
           />
         ) : (
           <Button size="xs" variant="subtle" onClick={() => setCreating(true)}>{t("+ New custom rule…")}</Button>
@@ -823,15 +883,7 @@ function RuleGroupView({
           onChange={() => mutate((t) => toggleNegate(t, group.id))}
         />
         {!isRoot && (
-          <Group gap={2}>
-            <Button size="xs" variant="subtle" px={6} onClick={() => mutate((t) => moveNode(t, group.id, "up"))} aria-label={t("Move up")}>
-              ↑
-            </Button>
-            <Button size="xs" variant="subtle" px={6} onClick={() => mutate((t) => moveNode(t, group.id, "down"))} aria-label={t("Move down")}>
-              ↓
-            </Button>
-            <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, group.id))} aria-label={t("Remove rule group")} />
-          </Group>
+          <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, group.id))} aria-label={t("Remove rule group")} />
         )}
       </Group>
 
@@ -864,17 +916,16 @@ function RuleGroupView({
   );
 }
 
-/** A drag-handle glyph -- purely decorative for now (there's no actual
- * drag-and-drop yet, only the up/down move buttons), but marks each rule
- * row as a reorderable item at a glance and gives future drag-and-drop an
- * obvious place to attach to without moving anything else in the row.
- * Not a button: `aria-hidden` and no `onClick`, so it's invisible to a
- * screen reader/keyboard user, who already has the up/down buttons for
- * the same job. */
-function Grabber() {
+/** A small marker at the start of every rule row -- purely decorative
+ * (unlike the old `Grabber` glyph it replaces, this one doesn't imply any
+ * affordance -- no drag, no reordering, nothing to click) -- just enough
+ * visual weight that a rule line reads as "a rule" at a glance, so a
+ * rule group with several rows (each already differing in label/params/
+ * NOT) doesn't blend into one wall of text. */
+function RuleIcon() {
   return (
-    <Text size="sm" c="dimmed" aria-hidden="true" style={{ cursor: "grab", userSelect: "none" }}>
-      ⠿
+    <Text size="sm" c="dimmed" aria-hidden="true" style={{ userSelect: "none" }}>
+      ✓
     </Text>
   );
 }
@@ -897,7 +948,7 @@ function RowView({
     // silently dropped, but the only thing to do with it is remove it.
     return (
       <Group gap="xs" wrap="nowrap">
-        <Grabber />
+        <RuleIcon />
         <Text size="sm" c="red">{t("Unknown rule")}: {row.presetId}</Text>
         <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, row.id))} aria-label={t("Remove")} />
       </Group>
@@ -906,20 +957,15 @@ function RowView({
 
   return (
     // `align="center"` on the outer Group, not "flex-start" -- the
-    // Checkbox/move-up/move-down/remove controls are four different
-    // Mantine components at three different sizes, each with its own
-    // intrinsic height; top-aligning them left each one's own visual
-    // center at a different height (the bug the "embarrassingly ugly"
-    // screenshot showed). Centering the row is what actually lines up
-    // controls of differing heights against each other.
+    // Checkbox/remove controls are different Mantine components at
+    // different sizes, each with its own intrinsic height; top-aligning
+    // them left each one's own visual center at a different height (the
+    // bug the "embarrassingly ugly" screenshot showed). Centering the
+    // row is what actually lines up controls of differing heights
+    // against each other.
     <Group gap="xs" wrap="nowrap" align="center">
-      {/* Grabber centered against the label's own Stack, not the whole
-       * row -- same reasoning, one level down, for the params case
-       * (birth/death year range): comparing it to its one immediate peer
-       * keeps it lined up with the label text specifically, not wherever
-       * the row's now-tallest sibling happens to put the row's center. */}
       <Group gap="xs" wrap="nowrap" align="center" style={{ flex: 1 }}>
-        <Grabber />
+        <RuleIcon />
         <Stack gap={4} style={{ flex: 1 }}>
           <Group gap={4}>
             <Text size="sm">{t(preset.label)}</Text>
@@ -952,15 +998,7 @@ function RowView({
         checked={row.negate}
         onChange={() => mutate((t) => toggleNegate(t, row.id))}
       />
-      <Group gap={2}>
-        <Button size="xs" variant="subtle" px={6} onClick={() => mutate((t) => moveNode(t, row.id, "up"))} aria-label={t("Move up")}>
-          ↑
-        </Button>
-        <Button size="xs" variant="subtle" px={6} onClick={() => mutate((t) => moveNode(t, row.id, "down"))} aria-label={t("Move down")}>
-          ↓
-        </Button>
-        <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, row.id))} aria-label={t("Remove")} />
-      </Group>
+      <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, row.id))} aria-label={t("Remove")} />
     </Group>
   );
 }
