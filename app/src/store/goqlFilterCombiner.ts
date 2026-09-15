@@ -37,15 +37,15 @@ export type FilterNode = FilterPresetNode | FilterAndNode | FilterOrNode | Filte
 
 export class FilterCombineError extends Error {}
 
-/** A bare 4-digit year -- the only shape allowed into a `Date('...')`
- * literal by substitution below. Rejecting anything else closes off
- * expression injection via a quote/paren in a supplied value (this is
- * plain string interpolation into `where_expr` text, not a parameterized
- * query, so the value itself must be shown to be inert before it's spliced
- * in). */
-const YEAR_RE = /^\d{1,4}$/;
+/** A bare (optionally negative) whole number -- the only shape allowed
+ * into a `type: "integer"` param's substitution below, spliced in raw
+ * (unquoted). Rejecting anything else closes off expression injection via
+ * a stray operator/paren in a supplied value (this is plain string
+ * interpolation into `where_expr` text, not a parameterized query, so the
+ * value itself must be shown to be inert before it's spliced in). */
+const INTEGER_RE = /^-?\d+$/;
 
-/** Strips quotes/backslashes from a `type: "text"` param's raw value
+/** Strips quotes/backslashes from a `type: "string"` param's raw value
  * before it's spliced into a `'...'` string literal -- same convention
  * simpleSearch.ts's buildSimpleSearchExpr()/personSearch.ts's
  * buildPersonSearchExpr() already use for user-typed search text, applied
@@ -71,12 +71,12 @@ function fillParams(preset: GqlFilterPreset, values: Record<string, string> | un
         `"${preset.label}" needs a value for "${param.label}"`,
       );
     }
-    if (param.type === "year" && !YEAR_RE.test(raw)) {
+    if (param.type === "integer" && !INTEGER_RE.test(raw)) {
       throw new FilterCombineError(
-        `"${preset.label}"'s "${param.label}" must be a plain year (e.g. 1968), got "${raw}"`,
+        `"${preset.label}"'s "${param.label}" must be a whole number (e.g. 1968), got "${raw}"`,
       );
     }
-    const safeValue = param.type === "text" ? sanitizeTextParam(raw) : raw;
+    const safeValue = param.type === "string" ? sanitizeTextParam(raw) : raw;
     if (safeValue === "") {
       throw new FilterCombineError(
         `"${preset.label}"'s "${param.label}" can't be made up of only quotes/backslashes`,

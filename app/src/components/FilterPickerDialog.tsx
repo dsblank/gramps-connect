@@ -5,7 +5,7 @@ import {
   SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip,
 } from "@mantine/core";
 import {
-  gqlFilterPresets, type GqlFilterCategory, type GqlFilterNamespace, type GqlFilterPreset,
+  gqlFilterPresets, type GqlFilterCategory, type GqlFilterNamespace, type GqlFilterParam, type GqlFilterPreset,
 } from "../data/gqlFilterPresets";
 import { FilterCombineError } from "../store/goqlFilterCombiner";
 import {
@@ -327,8 +327,10 @@ export function FilterPickerDialog({
     }
   }
 
-  async function handleCreateCustomRule(name: string, whereExpr: string): Promise<void> {
-    const rule: CustomRule = { id: crypto.randomUUID(), name, namespace, whereExpr };
+  async function handleCreateCustomRule(
+    name: string, whereExpr: string, params: GqlFilterParam[] | undefined,
+  ): Promise<void> {
+    const rule: CustomRule = { id: crypto.randomUUID(), name, namespace, whereExpr, params };
     const handle = await uploadCustomRule(rule);
     setCustomRules((prev) => {
       const next = [...prev, { ...rule, handle }];
@@ -337,9 +339,11 @@ export function FilterPickerDialog({
     });
   }
 
-  async function handleUpdateCustomRule(handle: string, name: string, whereExpr: string): Promise<void> {
+  async function handleUpdateCustomRule(
+    handle: string, name: string, whereExpr: string, params: GqlFilterParam[] | undefined,
+  ): Promise<void> {
     const existing = customRules.find((c) => c.handle === handle);
-    const rule: CustomRule = { id: existing?.id ?? crypto.randomUUID(), name, namespace, whereExpr };
+    const rule: CustomRule = { id: existing?.id ?? crypto.randomUUID(), name, namespace, whereExpr, params };
     await saveCustomRuleManifest(handle, rule);
     setCustomRules((prev) => {
       const next = prev.map((c) => (c.handle === handle ? { ...rule, handle } : c));
@@ -583,33 +587,72 @@ function SaveFilterDialog({
   );
 }
 
-/** Name + raw `where_expr` form shared by `ManageCustomRulesDialog`'s
- * create ("+ New custom rule…") and edit ("Edit" on an existing row)
- * actions -- same fields either way, just a different submit label/
- * initial values/handler. This is the one place a raw expression can be
- * typed in this whole feature; see `FilterPickerDialog`'s own top
- * comment.
+/** A parameter name must be a bare identifier -- it's spliced into
+ * `whereExpr` as a literal `{name}` token (CustomRuleForm's own
+ * PARAM_TYPE_OPTIONS/substituteParamsForValidation below, and
+ * goqlFilterCombiner.ts's fillParams() once the rule is actually used),
+ * so anything else could never be typed into the GOQL text as a matching
+ * token anyway. */
+const PARAM_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const PARAM_TYPES: GqlFilterParam["type"][] = ["string", "integer"];
+
+/** Fills every `{param.name}` token in `expr` with a syntactically-inert
+ * placeholder value of the right shape (an integer becomes `1`, a string
+ * becomes `x`) so the *unparameterized* result can be checked for GOQL
+ * syntax validity via the same real-query validateWhereExpr() a non-
+ * parameterized Custom Rule already uses -- this can't validate that a
+ * caller will supply sensible values, only that the expression's own
+ * shape (parens, field names, operators) parses. Mirrors
+ * goqlFilterCombiner.ts's fillParams() splice mechanics exactly (raw,
+ * unquoted substitution -- any quoting a string param needs must already
+ * be present in `expr` itself, same as a built-in preset's `expr`). */
+function substituteParamsForValidation(expr: string, params: GqlFilterParam[]): string {
+  let out = expr;
+  for (const param of params) {
+    if (!param.name) continue;
+    out = out.split(`{${param.name}}`).join(param.type === "integer" ? "1" : "x");
+  }
+  return out;
+}
+
+/** Name + raw `where_expr` (+ optional named/typed parameters) form
+ * shared by `ManageCustomRulesDialog`'s create ("+ New custom rule…") and
+ * edit ("Edit" on an existing row) actions -- same fields either way,
+ * just a different submit label/initial values/handler. This is the one
+ * place a raw expression can be typed in this whole feature; see
+ * `FilterPickerDialog`'s own top comment.
  *
- * The submit button stays disabled until `whereExpr` has actually been
- * checked against the server (customRuleMedia.ts's validateWhereExpr(),
- * a real `limit=1` query against the namespace's own endpoint) and come
- * back valid -- a typo here would otherwise only surface much later,
- * whenever this rule is actually used inside a tree. Debounced
- * (`useDebouncedValue`, 400ms) so it doesn't fire on every keystroke;
- * `checkedExpr` tracks which exact string was last confirmed valid, so
- * typing further after a successful check correctly re-disables submit
- * until the *new* text is itself confirmed. Seeded from
- * `initialWhereExpr` (edit mode's existing, presumably-already-valid
- * expression) so opening "Edit" on an unmodified rule doesn't force an
- * unnecessary round trip before Save re-enables. */
+ * A parameter (name/label/type) works exactly like a built-in preset's
+ * own `GqlFilterParam` (gqlFilterPresets.ts) -- `whereExpr` references it
+ * as `{name}`, and once saved it's filled in the same way (RowView's
+ * inputs, goqlFilterCombiner.ts's fillParams()) whether the preset is
+ * built-in or a Custom Rule; see customRuleMedia.ts's customRuleAsPreset().
+ *
+ * The submit button stays disabled until `whereExpr` (with every current
+ * `{param.name}` token filled with a placeholder value via
+ * substituteParamsForValidation()) has actually been checked against the
+ * server (customRuleMedia.ts's validateWhereExpr(), a real `limit=1`
+ * query against the namespace's own endpoint) and come back valid -- a
+ * typo here would otherwise only surface much later, whenever this rule
+ * is actually used inside a tree. Debounced (`useDebouncedValue`, 400ms)
+ * so it doesn't fire on every keystroke; `checkedSubstituted` tracks
+ * which exact substituted string was last confirmed valid, so typing
+ * further (in either the expression or a param's name) after a
+ * successful check correctly re-disables submit until the *new* text is
+ * itself confirmed. Seeded from `initialWhereExpr`/`initialParams` (edit
+ * mode's existing, presumably-already-valid expression) so opening
+ * "Edit" on an unmodified rule doesn't force an unnecessary round trip
+ * before Save re-enables. */
 function CustomRuleForm({
-  namespace, initialName, initialWhereExpr, submitLabel, onSubmit, onCancel, onNestedDialogChange,
+  namespace, initialName, initialWhereExpr, initialParams, submitLabel, onSubmit, onCancel, onNestedDialogChange,
 }: {
   namespace: GqlFilterNamespace;
   initialName: string;
   initialWhereExpr: string;
+  initialParams: GqlFilterParam[];
   submitLabel: string;
-  onSubmit: (name: string, whereExpr: string) => Promise<void>;
+  onSubmit: (name: string, whereExpr: string, params: GqlFilterParam[] | undefined) => Promise<void>;
   onCancel: () => void;
   /** Fired whenever this form's own GOQL-syntax help popup opens/closes
    * -- lets `ManageCustomRulesDialog`'s own `<Modal>` gate its
@@ -621,6 +664,7 @@ function CustomRuleForm({
 }) {
   const [name, setName] = useState(initialName);
   const [whereExpr, setWhereExpr] = useState(initialWhereExpr);
+  const [params, setParams] = useState<GqlFilterParam[]>(initialParams);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [helpOpen, setHelpOpenState] = useState(false);
@@ -630,14 +674,30 @@ function CustomRuleForm({
   }
   const help = getSearchHelp(viewForNamespace(namespace));
 
+  // Trimmed, with a blank label falling back to the param's own name --
+  // the shape actually persisted/submitted; `params` itself keeps
+  // whatever's literally in each input so a trailing space mid-typing
+  // isn't yanked out from under the user.
+  const trimmedParams = params.map((p) => ({
+    name: p.name.trim(),
+    label: p.label.trim() || p.name.trim(),
+    type: p.type,
+  }));
+  const paramNamesValid = trimmedParams.every((p) => PARAM_NAME_RE.test(p.name));
+  const paramNamesUnique = new Set(trimmedParams.map((p) => p.name)).size === trimmedParams.length;
+  const paramsValid = paramNamesValid && paramNamesUnique;
+
   const [checking, setChecking] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
-  const [checkedExpr, setCheckedExpr] = useState<string | null>(initialWhereExpr.trim() || null);
-  const [debouncedWhereExpr] = useDebouncedValue(whereExpr, 400);
+  const [checkedSubstituted, setCheckedSubstituted] = useState<string | null>(
+    () => substituteParamsForValidation(initialWhereExpr, initialParams).trim() || null,
+  );
+  const substitutedExpr = paramsValid ? substituteParamsForValidation(whereExpr, trimmedParams) : "";
+  const [debouncedSubstituted] = useDebouncedValue(substitutedExpr, 400);
 
   useEffect(() => {
-    const expr = debouncedWhereExpr.trim();
-    if (!expr || expr === checkedExpr) {
+    const expr = debouncedSubstituted.trim();
+    if (!expr || expr === checkedSubstituted) {
       setChecking(false);
       return;
     }
@@ -648,7 +708,7 @@ function CustomRuleForm({
       if (cancelled) return;
       setChecking(false);
       if (result.ok) {
-        setCheckedExpr(expr);
+        setCheckedSubstituted(expr);
       } else {
         setQueryError(result.message);
       }
@@ -657,20 +717,26 @@ function CustomRuleForm({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedWhereExpr, namespace]);
+  }, [debouncedSubstituted, namespace]);
 
-  const whereExprValid = whereExpr.trim().length > 0 && whereExpr.trim() === checkedExpr;
+  const whereExprValid =
+    paramsValid && whereExpr.trim().length > 0 && substitutedExpr.trim() === checkedSubstituted;
+  const canSubmit = !!name.trim() && whereExprValid;
 
   async function handleSubmit() {
-    if (!name.trim() || !whereExprValid) return;
+    if (!canSubmit) return;
     setSaving(true);
     setError("");
     try {
-      await onSubmit(name.trim(), whereExpr.trim());
+      await onSubmit(name.trim(), whereExpr.trim(), trimmedParams.length ? trimmedParams : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSaving(false);
     }
+  }
+
+  function updateParam(index: number, patch: Partial<GqlFilterParam>) {
+    setParams((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)));
   }
 
   return (
@@ -716,12 +782,72 @@ function CustomRuleForm({
           data-mantine-stop-propagation
         />
       </Stack>
+
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>{t("Parameters")}</Text>
+        {params.map((param, i) => (
+          <Group key={i} gap={4} wrap="nowrap">
+            <TextInput
+              size="xs"
+              w={110}
+              placeholder={t("Name (e.g. minAge)")}
+              value={param.name}
+              onChange={(e) => updateParam(i, { name: e.currentTarget.value })}
+              data-mantine-stop-propagation
+            />
+            <TextInput
+              size="xs"
+              w={120}
+              placeholder={t("Label (optional)")}
+              value={param.label}
+              onChange={(e) => updateParam(i, { label: e.currentTarget.value })}
+              data-mantine-stop-propagation
+            />
+            <Select
+              size="xs"
+              w={90}
+              data={PARAM_TYPES.map((type) => ({ value: type, label: type === "string" ? t("String") : t("Integer") }))}
+              value={param.type}
+              onChange={(v) => updateParam(i, { type: (v as GqlFilterParam["type"]) ?? "string" })}
+              allowDeselect={false}
+              comboboxProps={{ zIndex: 1001 }}
+              data-mantine-stop-propagation
+            />
+            <CloseButton
+              size="sm"
+              onClick={() => setParams((prev) => prev.filter((_, j) => j !== i))}
+              aria-label={t("Remove parameter")}
+            />
+          </Group>
+        ))}
+        <Group gap="xs">
+          <Button
+            size="xs"
+            variant="subtle"
+            onClick={() => setParams((prev) => [...prev, { name: "", label: "", type: "string" }])}
+          >
+            {t("+ Add parameter")}
+          </Button>
+          {params.length > 0 && (
+            <Text size="xs" c="dimmed">{t("Reference a parameter in your GOQL as {name}.")}</Text>
+          )}
+        </Group>
+        {!paramNamesValid && (
+          <Text size="xs" c="red">
+            {t("Parameter names must start with a letter/underscore and contain only letters, digits, underscores.")}
+          </Text>
+        )}
+        {paramNamesValid && !paramNamesUnique && (
+          <Text size="xs" c="red">{t("Parameter names must be unique.")}</Text>
+        )}
+      </Stack>
+
       {checking && <Text size="xs" c="dimmed">{t("Checking…")}</Text>}
       {queryError && <Text size="xs" c="red">{queryError}</Text>}
       {error && <Text size="xs" c="red">{error}</Text>}
       <Group gap="xs" justify="flex-end">
         <Button size="xs" variant="default" onClick={onCancel}>{t("Cancel")}</Button>
-        <Button size="xs" onClick={handleSubmit} loading={saving} disabled={!name.trim() || !whereExprValid}>
+        <Button size="xs" onClick={handleSubmit} loading={saving} disabled={!canSubmit}>
           {submitLabel}
         </Button>
       </Group>
@@ -757,8 +883,8 @@ function ManageCustomRulesDialog({
   opened: boolean;
   namespace: GqlFilterNamespace;
   customRules: CustomRule[];
-  onCreate: (name: string, whereExpr: string) => Promise<void>;
-  onUpdate: (handle: string, name: string, whereExpr: string) => Promise<void>;
+  onCreate: (name: string, whereExpr: string, params: GqlFilterParam[] | undefined) => Promise<void>;
+  onUpdate: (handle: string, name: string, whereExpr: string, params: GqlFilterParam[] | undefined) => Promise<void>;
   onDelete: (handle: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -814,9 +940,10 @@ function ManageCustomRulesDialog({
               namespace={namespace}
               initialName={rule.name}
               initialWhereExpr={rule.whereExpr}
+              initialParams={rule.params ?? []}
               submitLabel={t("Save")}
-              onSubmit={async (name, whereExpr) => {
-                await onUpdate(rule.handle!, name, whereExpr);
+              onSubmit={async (name, whereExpr, params) => {
+                await onUpdate(rule.handle!, name, whereExpr, params);
                 setEditingHandle(null);
               }}
               onCancel={() => setEditingHandle(null)}
@@ -827,6 +954,11 @@ function ManageCustomRulesDialog({
               <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
                 <Text size="sm">{rule.name}</Text>
                 <Text size="xs" c="dimmed" ff="monospace" truncate>{rule.whereExpr}</Text>
+                {rule.params && rule.params.length > 0 && (
+                  <Text size="xs" c="dimmed">
+                    {t("Parameters")}: {rule.params.map((p) => p.label).join(", ")}
+                  </Text>
+                )}
               </Stack>
               <Button size="xs" variant="subtle" onClick={() => setEditingHandle(rule.handle ?? null)}>{t("Edit")}</Button>
               <Button
@@ -849,9 +981,10 @@ function ManageCustomRulesDialog({
             namespace={namespace}
             initialName=""
             initialWhereExpr=""
+            initialParams={[]}
             submitLabel={t("Create")}
-            onSubmit={async (name, whereExpr) => {
-              await onCreate(name, whereExpr);
+            onSubmit={async (name, whereExpr, params) => {
+              await onCreate(name, whereExpr, params);
               setCreating(false);
             }}
             onCancel={() => setCreating(false)}
@@ -1006,7 +1139,7 @@ function RowView({
           {preset.params && preset.params.length > 0 && (
             <Group gap="xs">
               {preset.params.map((param) =>
-                param.type === "text" ? (
+                param.type === "string" ? (
                   <TextInput
                     key={param.name}
                     size="xs"

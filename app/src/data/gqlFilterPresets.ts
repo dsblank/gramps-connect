@@ -5,8 +5,8 @@
  * the "Filters" picker (./../components/FilterPickerDialog.tsx) is the UI on
  * top of both.
  *
- * `expr` uses `{placeholder}` tokens for the two rules that take user
- * input (a year range); every other entry is a complete, literal
+ * `expr` uses `{placeholder}` tokens for rules that take user input (a
+ * date range, a tag name); every other entry is a complete, literal
  * `where_expr` string. `supported: false` entries have no faithful GOQL
  * translation today -- see each one's `notes`.
  */
@@ -69,16 +69,16 @@ export type GqlFilterCategory =
 export interface GqlFilterParam {
   name: string;
   label: string;
-  /** "year" gets a numeric input, validated as a plain 1-4 digit year
-   * before being spliced into a `Date('...')` literal (see
-   * goqlFilterCombiner.ts's YEAR_RE). "text" gets a plain text input,
-   * sanitized (quotes/backslashes stripped, same convention
+  /** "integer" gets a numeric input, validated as a plain (optionally
+   * negative) whole number before being spliced in raw -- see
+   * goqlFilterCombiner.ts's INTEGER_RE. "string" gets a plain text
+   * input, sanitized (quotes/backslashes stripped, same convention
    * simpleSearch.ts/personSearch.ts already use for user-typed search
    * text) before being spliced into a `'...'` string literal -- this is
    * plain string interpolation into `where_expr` text, not a
    * parameterized query, so an unescaped value could otherwise break out
    * of the literal. */
-  type: "year" | "text";
+  type: "integer" | "string";
 }
 
 export interface GqlFilterPreset {
@@ -104,8 +104,8 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     sourceRule: "HasBirth",
     expr: "Date('{startDate}') <= birth.date.sortval <= Date('{endDate}')",
     params: [
-      { name: "startDate", label: "Start date", type: "text" },
-      { name: "endDate", label: "End date", type: "text" },
+      { name: "startDate", label: "Start date", type: "string" },
+      { name: "endDate", label: "End date", type: "string" },
     ],
     supported: true,
     notes:
@@ -119,8 +119,8 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     sourceRule: "HasDeath",
     expr: "Date('{startDate}') <= death.date.sortval <= Date('{endDate}')",
     params: [
-      { name: "startDate", label: "Start date", type: "text" },
-      { name: "endDate", label: "End date", type: "text" },
+      { name: "startDate", label: "Start date", type: "string" },
+      { name: "endDate", label: "End date", type: "string" },
     ],
     supported: true,
     notes: "Same scope note as birth-year-between, for HasDeath.",
@@ -355,7 +355,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     namespace: "Person",
     sourceRule: "HasTag",
     expr: "exists(tags, name == '{tagName}')",
-    params: [{ name: "tagName", label: "Tag name", type: "text" }],
+    params: [{ name: "tagName", label: "Tag name", type: "string" }],
     supported: true,
     notes:
       "Originally one hardcoded preset per tag name (a fixed list of common Gramps tag categories) -- replaced with a single rule taking the tag name as a value, since a tree's actual tags are user-defined, not this list. gramps-core's own HasTag resolves the name to a handle once at prepare() time and matches nothing at all if no tag by that name exists (silent, not an error) -- this GOQL translation behaves the same way: exists(tags, name == '...') is simply false if the name doesn't match any tag on the tree.",

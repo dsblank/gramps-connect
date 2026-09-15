@@ -43,9 +43,36 @@ describe("fetchCustomRules", () => {
       { handle: "h1", body: JSON.stringify({ id: "c1", name: "Good", namespace: "Person", whereExpr: "x" }) },
       { handle: "h2", body: "not json" },
       { handle: "h3", body: JSON.stringify({ id: "c3", namespace: "Person" }) }, // missing name/whereExpr
+      {
+        handle: "h4",
+        body: JSON.stringify({
+          id: "c4", name: "Bad param", namespace: "Person", whereExpr: "x",
+          params: [{ name: "n", label: "N", type: "float" }], // "float" isn't a valid param type
+        }),
+      },
     ]);
     const result = await fetchCustomRules();
     expect(result.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("parses a rule with typed parameters, with handle attached", async () => {
+    stubFetch([
+      {
+        handle: "h1",
+        body: JSON.stringify({
+          id: "c1", name: "Older than", namespace: "Person", whereExpr: "count(families) > {minCount}",
+          params: [{ name: "minCount", label: "Minimum count", type: "integer" }],
+        }),
+      },
+    ]);
+    const result = await fetchCustomRules();
+    expect(result).toEqual([
+      {
+        id: "c1", name: "Older than", namespace: "Person", whereExpr: "count(families) > {minCount}",
+        params: [{ name: "minCount", label: "Minimum count", type: "integer" }],
+        handle: "h1",
+      },
+    ]);
   });
 });
 
@@ -59,7 +86,18 @@ describe("customRuleAsPreset", () => {
       namespace: "Family",
       sourceRule: "",
       expr: "type == 3",
+      params: undefined,
       supported: true,
     });
+  });
+
+  it("passes params through unchanged for a rule that has them", () => {
+    const rule: CustomRule = {
+      id: "c1", name: "Older than", namespace: "Person", whereExpr: "count(families) > {minCount}",
+      params: [{ name: "minCount", label: "Minimum count", type: "integer" }],
+    };
+    expect(customRuleAsPreset(rule).params).toEqual([
+      { name: "minCount", label: "Minimum count", type: "integer" },
+    ]);
   });
 });

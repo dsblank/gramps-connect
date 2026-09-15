@@ -18,7 +18,7 @@
 import { getToken } from "../auth/auth";
 import { fetchPage, parseErrorMessage } from "./api";
 import { API_BASE } from "../config";
-import type { GqlFilterNamespace, GqlFilterPreset } from "../data/gqlFilterPresets";
+import type { GqlFilterNamespace, GqlFilterParam, GqlFilterPreset } from "../data/gqlFilterPresets";
 import { getOrCreateTagHandle, tagAndDescribeMedia, updateMediaFile, uploadMedia, deleteMedia } from "./jobsApi";
 import { MEDIA_VIEW, viewForNamespace } from "./views";
 
@@ -29,13 +29,31 @@ export interface CustomRule {
   id: string;
   name: string;
   namespace: GqlFilterNamespace;
-  /** Raw GOQL, exactly as typed -- no `{param}` substitution (unlike a
-   * built-in GqlFilterPreset), see customRuleAsPreset() below. */
+  /** Raw GOQL, exactly as typed -- may reference `{param.name}` tokens
+   * (same substitution convention a built-in GqlFilterPreset's own `expr`
+   * uses) when `params` below is non-empty, see customRuleAsPreset(). */
   whereExpr: string;
+  /** Named, typed placeholders `whereExpr` can reference as `{name}` --
+   * same GqlFilterParam shape (and the same fillParams()/RowView handling
+   * in goqlFilterCombiner.ts/FilterPickerDialog.tsx) a built-in preset's
+   * own `params` already uses, so a Custom Rule with params behaves
+   * identically to one once adapted via customRuleAsPreset() below.
+   * Omitted (not an empty array) for a rule with no parameters. */
+  params?: GqlFilterParam[];
   /** The backing Media object's handle -- runtime-only, never part of the
    * stored JSON itself (stripped before every write, same convention
    * Gramplet.handle uses in pyodidePoc/types.ts). */
   handle?: string;
+}
+
+function isCustomRuleParam(value: unknown): value is GqlFilterParam {
+  if (!value || typeof value !== "object") return false;
+  const p = value as Record<string, unknown>;
+  return (
+    typeof p.name === "string" &&
+    typeof p.label === "string" &&
+    (p.type === "integer" || p.type === "string")
+  );
 }
 
 function isCustomRule(value: unknown): value is CustomRule {
@@ -45,7 +63,8 @@ function isCustomRule(value: unknown): value is CustomRule {
     typeof c.id === "string" &&
     typeof c.name === "string" &&
     (c.namespace === "Person" || c.namespace === "Family") &&
-    typeof c.whereExpr === "string"
+    typeof c.whereExpr === "string" &&
+    (c.params === undefined || (Array.isArray(c.params) && c.params.every(isCustomRuleParam)))
   );
 }
 
@@ -158,7 +177,9 @@ export async function removeCustomRule(handle: string): Promise<void> {
  * other change to that machinery. `category: "Custom"` is its own
  * GqlFilterCategory value, purely so the picker's search list can group it
  * apart from the built-in categories; `sourceRule` has no meaning for a
- * user-authored rule, so it's left empty. */
+ * user-authored rule, so it's left empty. `params` passes through as-is --
+ * a parameterized Custom Rule then renders/validates exactly like a
+ * parameterized built-in preset. */
 export function customRuleAsPreset(rule: CustomRule): GqlFilterPreset {
   return {
     id: rule.id,
@@ -167,6 +188,7 @@ export function customRuleAsPreset(rule: CustomRule): GqlFilterPreset {
     namespace: rule.namespace,
     sourceRule: "",
     expr: rule.whereExpr,
+    params: rule.params,
     supported: true,
   };
 }

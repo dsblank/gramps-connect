@@ -98,6 +98,36 @@ describe("combineFilters", () => {
     expect(() => combineFilters(node)).toThrow(FilterCombineError);
   });
 
+  it("substitutes an integer param raw, unquoted", () => {
+    const customPreset = {
+      id: "custom-min-age",
+      label: "Custom rule",
+      category: "Custom" as const,
+      namespace: "Person" as const,
+      sourceRule: "",
+      expr: "count(families) > {minCount}",
+      params: [{ name: "minCount", label: "Minimum count", type: "integer" as const }],
+      supported: true,
+    };
+    const node: FilterNode = { kind: "preset", preset: customPreset, values: { minCount: "-3" } };
+    expect(combineFilters(node).whereExpr).toBe("(count(families) > -3)");
+  });
+
+  it("rejects an integer param that isn't a whole number", () => {
+    const customPreset = {
+      id: "custom-min-age",
+      label: "Custom rule",
+      category: "Custom" as const,
+      namespace: "Person" as const,
+      sourceRule: "",
+      expr: "count(families) > {minCount}",
+      params: [{ name: "minCount", label: "Minimum count", type: "integer" as const }],
+      supported: true,
+    };
+    const node: FilterNode = { kind: "preset", preset: customPreset, values: { minCount: "3 or 1==1" } };
+    expect(() => combineFilters(node)).toThrow(FilterCombineError);
+  });
+
   it("rejects an unsupported preset", () => {
     const node: FilterNode = { kind: "preset", preset: preset("adopted") };
     expect(() => combineFilters(node)).toThrow(FilterCombineError);
