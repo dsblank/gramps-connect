@@ -34,6 +34,7 @@ import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep } from "./store/jobsPoll";
+import { startAppUpdateCheck } from "./store/appUpdateCheck";
 import { loadUserDirectory } from "./store/userDirectory";
 import { loadKnownUsersFromDirectory } from "./store/knownUsers";
 import { bumpTopicActivity } from "./store/topicWindows";
@@ -63,6 +64,12 @@ export function App() {
     if (!awaitingHandoff) return;
     tryHandoffLogin().finally(() => setAwaitingHandoff(false));
   }, [awaitingHandoff]);
+
+  // Mounted once for the whole app's lifetime, logged in or not -- see
+  // appUpdateCheck.tsx.
+  useEffect(() => {
+    return startAppUpdateCheck();
+  }, []);
 
   if (awaitingHandoff) {
     return (
