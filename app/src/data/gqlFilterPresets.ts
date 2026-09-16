@@ -191,10 +191,10 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "HaveAltFamilies",
-    expr: "",
-    supported: false,
+    expr: "any(child_refs, frel.value == ChildRefType.ADOPTED or mrel.value == ChildRefType.ADOPTED)",
+    supported: true,
     notes:
-      "The real rule (HaveAltFamilies) finds, for each of a person's parent families, the ChildRef entry whose `ref` is this person's own handle, then checks that entry's own frel/mrel against ChildRefType.ADOPTED. GOQL's exists(parent_families, ...) join only ever exposes the *joined Family row's* own fields to its condition (confirmed via query.py's Collection.ref_field mechanism) -- frel/mrel live on the ChildRef struct itself, a sibling of `ref`, not reachable through that condition. A different gap than has-alternate-name/has-addresses (those were plain counts, fixed by len()) -- this one needs access to a field on the *join/link* itself, not an element of an array living in the current row.",
+      "The real rule (HaveAltFamilies) finds, for each of a person's parent families, the ChildRef entry whose `ref` is this person's own handle, then checks that entry's own frel/mrel against ChildRefType.ADOPTED. GOQL's child_refs is a new kind of collection built for exactly this: a *self-linked* Collection whose condition is about a field on the join/link itself (the specific ChildRef entry naming this person), not the joined Family row's own fields. Verified exact match against gramps-core's own example.gramps fixture (2/2).",
   },
   {
     id: "has-children",

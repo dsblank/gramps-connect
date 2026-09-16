@@ -129,7 +129,22 @@ describe("combineFilters", () => {
   });
 
   it("rejects an unsupported preset", () => {
-    const node: FilterNode = { kind: "preset", preset: preset("adopted") };
+    // No built-in preset is currently `supported: false` (the registry's
+    // last three such entries -- has-alternate-name/has-addresses/adopted
+    // -- were fixed via len()/any(child_refs, ...), see
+    // gramps-object-query-language's DISABLED-FILTER-RULES.md) -- a
+    // synthetic one exercises this rejection path directly rather than
+    // depending on the registry happening to contain one.
+    const unsupportedPreset = {
+      id: "custom-unsupported",
+      label: "Unsupported rule",
+      category: "Custom" as const,
+      namespace: "Person" as const,
+      sourceRule: "",
+      expr: "",
+      supported: false as const,
+    };
+    const node: FilterNode = { kind: "preset", preset: unsupportedPreset };
     expect(() => combineFilters(node)).toThrow(FilterCombineError);
   });
 
