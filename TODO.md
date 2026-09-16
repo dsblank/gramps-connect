@@ -55,6 +55,24 @@ worth every commit).
   this rules-based endpoint is the one path left that doesn't.
 - Full object-model UI redesign, design system, search-as-navigation — not
   scoped yet.
+- **Generations graph (`FamilyGraphView.tsx`) descendant-subtree placement**:
+  `DescendantChildrenBox`'s expanded-children row is centered via plain CSS
+  (`Stack align="center"`) relative to the *whole* children box's width, not
+  anchored to whichever specific child triggered it. When only one child
+  (of several) has been expanded and that child sits off-center in a wide
+  row, its subtree renders under the row's overall midpoint instead of
+  under that child — the connector line still measures/points correctly,
+  but visibly stretches a long diagonal to bridge the gap. Fixing this
+  properly means switching that subtree row from CSS flow centering to
+  measured absolute positioning (same `getBoundingClientRect`-based
+  technique the connector lines already use, but setting each subtree's own
+  `left` from its trigger's measured center, not just drawing a line to it)
+  — needs a `position: relative` container, a measure-then-reposition pass,
+  and explicit height reservation since absolutely-positioned children
+  don't contribute to their parent's layout height. The ancestor side
+  (`SiblingGroupWithAncestry`) doesn't have this bug — each expanded
+  sibling-group's own parent-row lives in a `Stack` scoped to just that one
+  trigger, with no wider unrelated content sharing its centering context.
 
 ## Feature ideas / backlog
 

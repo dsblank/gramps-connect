@@ -7,12 +7,14 @@ import { pickerResultLabel } from "../RefPickerField";
 import { RecordPicker } from "../RecordPicker";
 import type { QueryItem } from "../../store/api";
 import {
-  buildAncestorTree, buildDescendantTree, fetchBatchAncestorExpansion, fetchPersonExpansion, fetchTreeData,
-  mergeTreeData, resolveTreeRoot,
-  type TreeNode, type TreePersonRaw, type TreeRoot,
+  buildAncestorTree, buildDescendantTree, buildFamilyClusterTree, computeSpouseHandles, ensureClusterLoaded,
+  fetchBatchAncestorExpansion, fetchPersonExpansion, fetchTreeData, mergeTreeData,
+  parentPairKey, resolveTreeRoot,
+  type FamilyClusterNode, type TreeNode, type TreePersonRaw, type TreeRoot,
 } from "../../store/treeData";
 import { isManualExpandEnabled, setManualExpandEnabled } from "../../store/treeExpandPreference";
 import { PERSON_VIEW } from "../../store/views";
+import { FamilyGraphView } from "./FamilyGraphView";
 import { FanChart } from "./FanChart";
 import type { FanColorScheme } from "../../charts/fanChart";
 import { TreeChart } from "./TreeChart";
@@ -94,7 +96,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // subject-change effect below (unlike selection/expansion state), so
   // re-rooting (Make root, or picking a new person) stays in whichever
   // style the user was already looking at.
-  const [chartStyle, setChartStyle] = useState<"box" | "fan">("box");
+  const [chartStyle, setChartStyle] = useState<"box" | "fan" | "family">("box");
   // Fan mode's own "Show lifespan" toggle -- each wedge's own radius
   // becomes that person's actual birth/death year on a shared calendar
   // axis (fanChart.ts's own nodeRadii) instead of a fixed per-generation
@@ -132,6 +134,39 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const fetchedExpansionsRef = useRef<Set<string>>(new Set());
   const expandingRef = useRef<Set<string>>(new Set());
 
+  // The Family graph's own "expand up" state: keys are
+  // `${clusterLabel}:${siblingHandle}` (see buildFamilyClusterTree). Once a
+  // key is in `expandedFamilyUp` it's permanently revealed -- there's no
+  // collapse for this graph in v1, matching its "always growing" framing.
+  const [expandedFamilyUp, setExpandedFamilyUp] = useState<Set<string>>(new Set());
+  const [expandingFamilyUp, setExpandingFamilyUp] = useState<Set<string>>(new Set());
+  const expandingFamilyUpRef = useRef<Set<string>>(new Set());
+  // Whether the Family graph's own currently-focused cluster (that person's
+  // parents + full sibling row + immediate children) has been loaded yet --
+  // guards the one-time fetch below from re-firing on every render.
+  const familyFocusLoadedRef = useRef<string | null>(null);
+  // The Family graph's *own* notion of "root," independent of the global
+  // `root` (URL-driven, shared with box/fan mode) -- selecting "Make this
+  // person the root" *while on the Family tab* only changes this, rather
+  // than navigating (which would unmount and rebuild the whole graph from
+  // scratch, the very thing that made the re-root animation below
+  // impossible to see: there was nothing left on screen to animate). Synced
+  // to the global root whenever *that* changes (see the effect below), but
+  // otherwise independent -- switching chart styles back and forth doesn't
+  // reset it, same as this file's other per-style expansion state.
+  const [familyFocusHandle, setFamilyFocusHandle] = useState<string | null>(null);
+
+  // The Family graph's own "Expand spouses" state: person handles whose
+  // spouse(s) are now shown, each as their own full sibling-group cluster
+  // (see spouseClustersByHandle below) beside their own card, wherever it
+  // appears (a sibling-group box, or a children box). Keyed globally by
+  // handle (not per-occurrence like expandedFamilyUp),
+  // since a person's own spouse set doesn't depend on where in the graph
+  // their card happens to be.
+  const [expandedSpouses, setExpandedSpouses] = useState<Set<string>>(new Set());
+  const [expandingSpouses, setExpandingSpouses] = useState<Set<string>>(new Set());
+  const expandingSpousesRef = useRef<Set<string>>(new Set());
+
   // The handle whose boundary marker was most recently *clicked* (never an
   // auto-expand-on-reveal) -- TreeChart.tsx re-centers the view on it once
   // the resulting rebuild lands, the same "pan to the thing that just
@@ -156,6 +191,10 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     setExpandCenterHandle(null);
     fetchedExpansionsRef.current = new Set();
     expandingRef.current = new Set();
+    setFamilyFocusHandle(null);
+    setExpandedSpouses(new Set());
+    setExpandingSpouses(new Set());
+    expandingSpousesRef.current = new Set();
     if (!subject) return;
     let cancelled = false;
     setRootLoading(true);
@@ -194,8 +233,13 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     // `expandedAncestor` label set (see fanTree's own doc comment) and a
     // label marked expanded has to keep finding the person it points at
     // regardless of which style asks.
-    const nAnc = chartStyle === "fan" ? FAN_BASE_ANC : BASE_ANC;
-    const nDesc = chartStyle === "fan" ? 0 : BASE_DESC;
+    // Family mode fetches neither up front -- its own focus-tracking effect
+    // below (keyed on `familyFocusHandle`, not `root`) fetches exactly
+    // whichever person is currently focused, cluster and immediate children
+    // together, so recentering within Family mode never depends on this
+    // root-keyed effect refiring at all.
+    const nAnc = chartStyle === "box" ? BASE_ANC : chartStyle === "fan" ? FAN_BASE_ANC : 0;
+    const nDesc = chartStyle === "box" ? BASE_DESC : 0;
     (async () => {
       const t = await getToken();
       const rows = await fetchTreeData(t, root.grampsId, nAnc, nDesc);
@@ -214,6 +258,66 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       cancelled = true;
     };
   }, [root, chartStyle]);
+
+  // Keeps the Family graph's own focus synced to the global root whenever
+  // *that* changes (a genuine re-root via navigation/search) -- but a local
+  // `setFamilyFocusHandle` call (from `focusFamilyOn` below) never touches
+  // `root` itself, so it doesn't retrigger this and isn't overwritten by it.
+  useEffect(() => {
+    setFamilyFocusHandle(root?.handle ?? null);
+  }, [root?.handle]);
+
+  // A fresh focus (global re-root, or a local `focusFamilyOn`) makes
+  // whatever was expanded under the old one meaningless, same as every
+  // other "new root" reset in this file.
+  useEffect(() => {
+    setExpandedFamilyUp(new Set());
+    setExpandingFamilyUp(new Set());
+    expandingFamilyUpRef.current = new Set();
+    familyFocusLoadedRef.current = null;
+  }, [familyFocusHandle]);
+
+  // Family mode's own data fetch, keyed on `familyFocusHandle` rather than
+  // `root` -- so recentering onto a different person (`focusFamilyOn`)
+  // fetches that person's own cluster + immediate children without ever
+  // unmounting FamilyGraphView (`root` itself doesn't change), which is what
+  // lets its own re-center/reveal animation actually play against a still-
+  // mounted graph instead of a hard unmount-then-remount. `ensureClusterLoaded`
+  // needs three sequential fetch-and-merge rounds (parents, then their own
+  // families, then siblings), so it's its own effect rather than folded into
+  // fetchTreeData's single round trip; the follow-up fetchTreeData call
+  // fetches the focus's own immediate children (nDesc=1) the same way the
+  // box-tree's initial load does, since ensureClusterLoaded itself only
+  // covers "up" (parents/siblings), not "down".
+  useEffect(() => {
+    if (!familyFocusHandle || chartStyle !== "family") return;
+    if (familyFocusLoadedRef.current === familyFocusHandle) return;
+    let cancelled = false;
+    (async () => {
+      const t = await getToken();
+      let next = await ensureClusterLoaded(t, data ?? [], familyFocusHandle);
+      const focusPerson = next.find((p) => p.handle === familyFocusHandle);
+      if (focusPerson) {
+        const descendantRows = await fetchTreeData(t, focusPerson.gramps_id, 0, BASE_DESC);
+        next = mergeTreeData(next, descendantRows);
+      }
+      if (cancelled) return;
+      setData(next);
+      setToken(t);
+      familyFocusLoadedRef.current = familyFocusHandle;
+    })().catch((err: unknown) => {
+      if (!cancelled) {
+        notifications.show({
+          color: "red",
+          title: "Couldn't load the family group",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [familyFocusHandle, chartStyle, data]);
 
   const trees = useMemo(() => {
     if (!data || !root || chartStyle !== "box") return null;
@@ -248,6 +352,134 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     collectBoundaryNodes(fanTree, acc);
     return acc;
   }, [fanTree]);
+
+  // Family mode's own ancestor-ward tree: a chain of sibling clusters, one
+  // per generation expanded "up" so far -- see buildFamilyClusterTree's own
+  // doc comment. `expandedFamilyUp` is this graph's own state, not shared
+  // with the box-tree's `expandedAncestor` (the two trees have entirely
+  // different node shapes -- clusters of siblings here, single ancestors
+  // there -- so there's no label convention in common to share).
+  const familyAncestorCluster = useMemo(() => {
+    if (!data || !familyFocusHandle || chartStyle !== "family") return null;
+    return buildFamilyClusterTree(data, familyFocusHandle, expandedFamilyUp);
+  }, [data, familyFocusHandle, chartStyle, expandedFamilyUp]);
+
+  // Family mode's own descendant-ward tree: the *same* buildDescendantTree
+  // the box-tree uses (same `expandedDescendant`/`collapsedDescendant`
+  // state too, so a branch expanded from one chart style stays expanded if
+  // you switch to the other), just with the Birth-only filter always
+  // relaxed -- full disclosure (including step/adopted) is this graph's
+  // whole point.
+  const familyDescendantTree = useMemo(() => {
+    if (!data || !familyFocusHandle || chartStyle !== "family") return null;
+    return buildDescendantTree(data, familyFocusHandle, BASE_DESC, expandedDescendant, collapsedDescendant, "all");
+  }, [data, familyFocusHandle, chartStyle, expandedDescendant, collapsedDescendant]);
+
+  // "Make this person the root" while on the Family tab: recenter this
+  // graph's own focus locally rather than navigating (see
+  // `familyFocusHandle`'s own doc comment on why).
+  const focusFamilyOn = useCallback((handle: string) => {
+    setFamilyFocusHandle(handle);
+  }, []);
+
+  // The Family graph's own "expand up" trigger: fired once per parent-pair
+  // *group* (FamilyGraphView visually groups full siblings together under
+  // one shared "+"), not per person -- keyed by parentPairKey rather than
+  // `sibling.handle` so clicking it via any one member of the group is
+  // equivalent (they all resolve to the identical father/mother handles).
+  // Ensures both of that group's own parents' clusters are fully loaded
+  // (ensureClusterLoaded handles each parent's own row, their parents, and
+  // their siblings' rows -- three fetch rounds per parent) before marking
+  // the key expanded.
+  const expandFamilyUp = useCallback(
+    async (clusterId: string, sibling: TreePersonRaw) => {
+      const key = `${clusterId}:${parentPairKey(sibling)}`;
+      if (expandedFamilyUp.has(key) || expandingFamilyUpRef.current.has(key)) return;
+      expandingFamilyUpRef.current.add(key);
+      setExpandingFamilyUp(new Set(expandingFamilyUpRef.current));
+      try {
+        const fatherHandle = sibling.extended?.primary_parent_family?.father_handle;
+        const motherHandle = sibling.extended?.primary_parent_family?.mother_handle;
+        const t = await getToken();
+        let next = data ?? [];
+        if (fatherHandle) next = await ensureClusterLoaded(t, next, fatherHandle);
+        if (motherHandle) next = await ensureClusterLoaded(t, next, motherHandle);
+        setData(next);
+        setToken(t);
+        setExpandedFamilyUp((prev) => new Set(prev).add(key));
+      } catch (err) {
+        notifications.show({
+          color: "red",
+          title: "Couldn't load more of the family",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        expandingFamilyUpRef.current.delete(key);
+        setExpandingFamilyUp(new Set(expandingFamilyUpRef.current));
+      }
+    },
+    [data, expandedFamilyUp],
+  );
+
+  // The Family graph's own "Expand spouses" trigger, fired from PersonCard
+  // (not a per-card marker -- see PersonCard's own "Expand spouses"
+  // button). Every person here belongs in a sibling group -- a spouse is
+  // no exception -- so this loads each spouse's own *cluster* (their own
+  // row, parents, and siblings) via ensureClusterLoaded, the exact same
+  // helper expandFamilyUp above uses, rather than just the spouse's own
+  // row: without it, computeClusterSiblings would have no parent rows to
+  // read and the spouse would render alone regardless of what
+  // spouseClustersByHandle/AncestorClusterBlock are built to show.
+  const expandSpousesFor = useCallback(
+    async (person: TreePersonRaw) => {
+      if (expandedSpouses.has(person.handle) || expandingSpousesRef.current.has(person.handle)) return;
+      expandingSpousesRef.current.add(person.handle);
+      setExpandingSpouses(new Set(expandingSpousesRef.current));
+      try {
+        const t = await getToken();
+        let next = data ?? [];
+        for (const spouseHandle of computeSpouseHandles(person)) {
+          next = await ensureClusterLoaded(t, next, spouseHandle);
+        }
+        setData(next);
+        setToken(t);
+        setExpandedSpouses((prev) => new Set(prev).add(person.handle));
+      } catch (err) {
+        notifications.show({
+          color: "red",
+          title: "Couldn't load spouse(s)",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        expandingSpousesRef.current.delete(person.handle);
+        setExpandingSpouses(new Set(expandingSpousesRef.current));
+      }
+    },
+    [data, expandedSpouses],
+  );
+
+  // Each spouse's own *cluster* (their own sibling group, expandable "up"
+  // exactly like any other person in this graph -- see the user's own
+  // framing: "every person belongs in a sibling group," so a spouse is
+  // never a bare leaf card), keyed by the person they belong to -- only for
+  // handles in `expandedSpouses`. `rootLabel` (`spouse:${handle}:${spouseHandle}`)
+  // namespaces each spouse cluster's own labels so they never collide with
+  // the main graph's own "fc:..." labels or with each other, and so its own
+  // "+Up" clicks share the same `expandedFamilyUp`/`expandFamilyUp`
+  // bookkeeping as every other cluster without cross-talk.
+  const spouseClustersByHandle = useMemo(() => {
+    const map = new Map<string, FamilyClusterNode[]>();
+    if (!data) return map;
+    for (const handle of expandedSpouses) {
+      const person = data.find((p) => p.handle === handle);
+      if (!person) continue;
+      const clusters = computeSpouseHandles(person)
+        .map((spouseHandle) => buildFamilyClusterTree(data, spouseHandle, expandedFamilyUp, `spouse:${handle}:${spouseHandle}`))
+        .filter((c): c is FamilyClusterNode => !!c);
+      if (clusters.length > 0) map.set(handle, clusters);
+    }
+    return map;
+  }, [data, expandedSpouses, expandedFamilyUp]);
 
   // The single funnel every expand trigger calls through: a marker click
   // (TreeChart.tsx's box), "Increase depth" below firing one call per
@@ -471,10 +703,11 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
             <SegmentedControl
               size="xs"
               value={chartStyle}
-              onChange={(v) => setChartStyle(v as "box" | "fan")}
+              onChange={(v) => setChartStyle(v as "box" | "fan" | "family")}
               data={[
                 { value: "box", label: t("Tree") },
                 { value: "fan", label: t("Fan") },
+                { value: "family", label: t("Generations") },
               ]}
             />
             {chartStyle === "box" && SHOW_MANUAL_EXPAND_TOGGLE && (
@@ -532,6 +765,13 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
               </Group>
             </Group>
           ) : undefined
+        ) : chartStyle === "family" ? (
+          familyAncestorCluster ? (
+            <Text size="xs" c="dimmed">
+              click a person for details · "+ Up" reveals their parents and full sibling row (half/step/adopted
+              included) · "+ Down" reveals their own children
+            </Text>
+          ) : undefined
         ) : trees ? (
           <Text size="xs" c="dimmed">
             drag to pan · scroll to zoom · click a person for details ·{" "}
@@ -547,6 +787,22 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           onSelectPerson={setSelectedHandle}
           sizeByLifespan={sizeByLifespan}
           colorScheme={colorScheme}
+        />
+      )}
+      {chartStyle === "family" && familyAncestorCluster && (
+        <FamilyGraphView
+          ancestorCluster={familyAncestorCluster}
+          descendantTree={familyDescendantTree}
+          rootHandle={familyFocusHandle}
+          token={token}
+          selectedHandle={selectedHandle}
+          onSelectPerson={setSelectedHandle}
+          onExpandUp={expandFamilyUp}
+          onExpandDown={(label, handle) => expandNode(label, handle, "descendant", "click")}
+          expandedUpKeys={expandedFamilyUp}
+          expandingUpKeys={expandingFamilyUp}
+          expandingDownKeys={expandingKeys}
+          spouseClustersByHandle={spouseClustersByHandle}
         />
       )}
       {chartStyle === "box" && trees && (
@@ -567,13 +823,24 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           person={selectedPerson}
           onOpen={() => openPerson(selectedPerson.handle)}
           onClose={() => setSelectedHandle(null)}
-          onMakeRoot={() => makeRoot(selectedPerson.handle)}
+          // Labeled the same as every other chart style ("Make this person
+          // the root"), but on the Family tab it recenters that graph's own
+          // local focus in place instead of navigating (see
+          // familyFocusHandle's own doc comment on why) -- the visible
+          // effect is the same either way (a new root), just without a full
+          // page/URL change here, which is also what makes the re-root
+          // animation possible at all.
+          onMakeRoot={() => (chartStyle === "family" ? focusFamilyOn(selectedPerson.handle) : makeRoot(selectedPerson.handle))}
           onCollapseDescendants={() => collapseDescendants(selectedPerson.handle)}
           onCollapseAncestors={() => collapseAncestors(selectedPerson.handle)}
-          canMakeRoot={selectedPerson.handle !== root?.handle}
+          canMakeRoot={chartStyle === "family" ? selectedPerson.handle !== familyFocusHandle : selectedPerson.handle !== root?.handle}
           showCollapseControls={chartStyle === "box"}
           canCollapseDescendants={canCollapseDescendants}
           canCollapseAncestors={canCollapseAncestors}
+          showSpouseControl={chartStyle === "family"}
+          onExpandSpouses={() => expandSpousesFor(selectedPerson)}
+          canExpandSpouses={!expandedSpouses.has(selectedPerson.handle) && computeSpouseHandles(selectedPerson).length > 0}
+          expandingSpouses={expandingSpouses.has(selectedPerson.handle)}
         />
       )}
     </VisualFrame>
@@ -594,6 +861,14 @@ interface PersonCardProps {
   showCollapseControls: boolean;
   canCollapseDescendants: boolean;
   canCollapseAncestors: boolean;
+  /** Family tab only -- "Expand spouses" shows the selected person's own
+   * spouse(s), each as their own sibling-group cluster, beside their card,
+   * wherever it appears (see TreeView.tsx's own
+   * spouseClustersByHandle/expandSpousesFor). */
+  showSpouseControl: boolean;
+  onExpandSpouses: () => void;
+  canExpandSpouses: boolean;
+  expandingSpouses: boolean;
 }
 
 /** The clicked box's details, and the one control that leaves the tree for
@@ -608,6 +883,7 @@ interface PersonCardProps {
 function PersonCard({
   person, onOpen, onClose, onMakeRoot, onCollapseDescendants, onCollapseAncestors,
   canMakeRoot, showCollapseControls, canCollapseDescendants, canCollapseAncestors,
+  showSpouseControl, onExpandSpouses, canExpandSpouses, expandingSpouses,
 }: PersonCardProps) {
   const name = [person.profile?.name_given, person.profile?.name_surname].filter(Boolean).join(" ") || "(unnamed person)";
   return (
@@ -639,6 +915,11 @@ function PersonCard({
               {t("Collapse ancestors")}
             </Button>
           </>
+        )}
+        {showSpouseControl && (
+          <Button size="xs" fullWidth variant="default" onClick={onExpandSpouses} disabled={!canExpandSpouses} loading={expandingSpouses}>
+            {t("Expand spouses")}
+          </Button>
         )}
       </Stack>
       <Button size="xs" fullWidth onClick={onOpen}>{t("Open in People")}</Button>
