@@ -1256,9 +1256,10 @@ function RowView({
  * `gqlFilterPresets.ts` defines, plus a "Custom" group of this
  * namespace's user-authored Custom Rules (customRuleMedia.ts). Clicking a
  * supported preset calls `onPick` once and the caller is responsible for
- * closing this back up; an unsupported built-in preset (adopted/has-
- * addresses today) is shown, disabled, with its `notes` as a tooltip --
- * visible so it's discoverable, not pickable.
+ * closing this back up; an unsupported built-in preset ("adopted" today,
+ * the registry's only remaining `supported: false` entry) is shown,
+ * disabled, with its `notes` as a tooltip -- visible so it's discoverable,
+ * not pickable.
  *
  * Purely a picker -- authoring/editing/deleting a Custom Rule all live in
  * `ManageCustomRulesDialog` instead (`FilterPickerDialog`'s own doc

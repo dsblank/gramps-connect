@@ -169,10 +169,10 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "HasAlternateName",
-    expr: "",
-    supported: false,
+    expr: "len(alternate_names) > 0",
+    supported: true,
     notes:
-      "The rule checks person.alternate_names, but `alternate_names` isn't a registered GOQL collection (only primary_name is reachable) -- no exists()/count() form can express it today.",
+      "The real rule is exactly bool(person.alternate_names) -- a plain count, no per-name field condition -- so GOQL's len() (array-length comparisons) is a direct, faithful translation. Verified exact match against gramps-core's own example.gramps fixture (2/2).",
   },
   {
     id: "has-nickname",
@@ -194,7 +194,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     expr: "",
     supported: false,
     notes:
-      "The real rule (HaveAltFamilies) finds, for each of a person's parent families, the ChildRef entry whose `ref` is this person's own handle, then checks that entry's own frel/mrel against ChildRefType.ADOPTED. GOQL's exists(parent_families, ...) join only ever exposes the *joined Family row's* own fields to its condition (confirmed via query.py's Collection.ref_field mechanism) -- frel/mrel live on the ChildRef struct itself, a sibling of `ref`, not reachable through that condition. Same class of gap as has-alternate-name/has-addresses.",
+      "The real rule (HaveAltFamilies) finds, for each of a person's parent families, the ChildRef entry whose `ref` is this person's own handle, then checks that entry's own frel/mrel against ChildRefType.ADOPTED. GOQL's exists(parent_families, ...) join only ever exposes the *joined Family row's* own fields to its condition (confirmed via query.py's Collection.ref_field mechanism) -- frel/mrel live on the ChildRef struct itself, a sibling of `ref`, not reachable through that condition. A different gap than has-alternate-name/has-addresses (those were plain counts, fixed by len()) -- this one needs access to a field on the *join/link* itself, not an element of an array living in the current row.",
   },
   {
     id: "has-children",
@@ -214,7 +214,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     expr: "primary_name.first_name == '' or primary_name.surname_list[0].surname == ''",
     supported: true,
     notes:
-      "The core rule also checks every alternate name (and treats a name with no surname_list entries at all as incomplete too, not just an empty surname); GOQL can only reach primary_name (see has-alternate-name), so this only catches an incomplete *primary* name with at least one surname entry present. Verified exact match against gramps-core's own example.gramps fixture (76/76) -- that data happens not to exercise the alternate-name gap.",
+      "The core rule also checks every alternate name (and treats a name with no surname_list entries at all as incomplete too, not just an empty surname); GOQL's len()/exists()/count() can count or check flat fields across alternate_names, but can't yet test a per-name field like this one (a still-open any(path, condition) gap, distinct from has-alternate-name's plain-count case, which len() already covers) -- so this only catches an incomplete *primary* name with at least one surname entry present. Verified exact match against gramps-core's own example.gramps fixture (76/76) -- that data happens not to exercise the alternate-name gap.",
   },
   {
     id: "no-marriage-records",
@@ -332,10 +332,10 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Associations",
     namespace: "Person",
     sourceRule: "HasAddress",
-    expr: "",
-    supported: false,
+    expr: "len(address_list) > 0",
+    supported: true,
     notes:
-      "address_list isn't a registered GOQL collection (unlike notes/citations/media/tags), so there's no exists(addresses) form. A raw JSON-path presence check would misreport 'no addresses at all' under three-valued NULL logic.",
+      "The real rule is parameterized (a count and a </==/> comparison), but this quick-pick preset only offers the simple 'has at least one' case -- len() handles that directly and correctly: address_list is always serialized as [] (never absent) even with no addresses, so len(...) > 0 doesn't misreport 'none' the way a raw JSON-path presence check would have. Verified exact match against gramps-core's own example.gramps fixture (1/1, using the rule's own 'greater than 0' parameterization).",
   },
   {
     id: "has-associations",
