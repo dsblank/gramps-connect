@@ -77,6 +77,14 @@ RUN npm run build -w app
 # --- Stage 2: layer the frontend onto the official backend image --------
 FROM dmstraub/gramps-webapi:latest
 
+# dmstraub/gramps-webapi:latest pins whatever gramps-object-query-language
+# release existed when *that* image was last published upstream, which can
+# lag behind PyPI -- force at least this version regardless of what the
+# base image shipped. Bump the version here when a newer GOQL release is
+# needed (see .github/workflows/build-standalone.yml for the same pin on
+# the standalone build).
+RUN pip install --no-cache-dir "gramps-object-query-language>=0.5.3"
+
 COPY --from=frontend-build /src/app/dist /app/static
 
 # deploy/docker-entrypoint.sh is gramps-web-api's own docker-entrypoint.sh
