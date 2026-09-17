@@ -5,7 +5,7 @@
 // resolves its hard-coded table or Python's stdlib mimetypes database),
 // which would need a backend change; tagging instead reuses the exact
 // mechanism GENERATED_VIEW already uses for reports/exports
-// (`exists(tags, name == '...')`), no backend change needed.
+// (`any(t.name == '...' for t in tags)`), no backend change needed.
 //
 // This makes a Gramplet a real tree object: it syncs to every client and
 // travels with a Gramps XML export. Authoring (creating one, or editing an
@@ -156,7 +156,7 @@ export async function fetchGramplets(): Promise<Gramplet[]> {
     token,
     null,
     false,
-    `exists(tags, name == ${JSON.stringify(GRAMPLET_TAG_NAME)})`,
+    `any(t.name == ${JSON.stringify(GRAMPLET_TAG_NAME)} for t in tags)`,
     MEDIA_VIEW.orderBy,
     100
   );

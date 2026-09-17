@@ -15,6 +15,8 @@ cleanly anyway.
 
 from gramps.gen.filters.rules.person import (
     Disconnected,
+    HasAddress,
+    HasAlternateName,
     HasAssociation,
     HasNickname,
     HasNote,
@@ -22,6 +24,7 @@ from gramps.gen.filters.rules.person import (
     HasSourceCount,
     HasTag,
     HasUnknownGender,
+    HaveAltFamilies,
     HaveChildren,
     HavePhotos,
     IncompleteNames,
@@ -97,6 +100,43 @@ def test_has_children(db, gramps_user, preset_by_id):
     assert_goql_matches_rule(
         db, "Person", person_expr(preset_by_id, "has-children"), HaveChildren([]), db.iter_people(),
         user=gramps_user,
+    )
+
+
+def test_has_alternate_name(db, gramps_user, preset_by_id):
+    """The real rule is exactly bool(person.alternate_names) -- a plain
+    count, no per-name field condition -- so len() alone (no any()) is a
+    faithful translation. Closed via len(path) once that shipped -- see
+    gramps-object-query-language's DISABLED-FILTER-RULES.md.
+    """
+    assert_goql_matches_rule(
+        db, "Person", person_expr(preset_by_id, "has-alternate-name"), HasAlternateName([]),
+        db.iter_people(), user=gramps_user,
+    )
+
+
+def test_has_addresses(db, gramps_user, preset_by_id):
+    """The real rule is parameterized (a count and a </==/> comparison);
+    this quick-pick preset only offers the simple 'has at least one' case,
+    matched here against the rule's own equivalent parameterization.
+    """
+    assert_goql_matches_rule(
+        db, "Person", person_expr(preset_by_id, "has-addresses"), HasAddress(["0", "greater than"]),
+        db.iter_people(), user=gramps_user,
+    )
+
+
+def test_adopted(db, gramps_user, preset_by_id):
+    """HaveAltFamilies finds, for each of a person's parent families, the
+    ChildRef entry whose `ref` is this person's own handle, then checks
+    that entry's own frel/mrel against ChildRefType.ADOPTED -- a field on
+    the join/link itself, not on Person or Family. Closed by child_refs, a
+    self-linked Collection built for exactly this shape -- see
+    gramps-object-query-language's DISABLED-FILTER-RULES.md.
+    """
+    assert_goql_matches_rule(
+        db, "Person", person_expr(preset_by_id, "adopted"), HaveAltFamilies([]),
+        db.iter_people(), user=gramps_user,
     )
 
 
@@ -176,8 +216,8 @@ def test_has_notes(db, gramps_user, preset_by_id):
 
 def test_has_sources(db, gramps_user, preset_by_id):
     """gramps-core's HasSourceCount literally counts citations (its own
-    source comment says so) -- `count(citations) > 0` is the direct
-    translation, not an approximation.
+    source comment says so) -- `len([c for c in citations]) > 0` is the
+    direct translation, not an approximation.
     """
     assert_goql_matches_rule(
         db, "Person", person_expr(preset_by_id, "has-sources"), HasSourceCount(["0", "greater than"]),
@@ -305,14 +345,14 @@ def test_families_incomplete_events(db, preset_by_id):
         # raising, and this test fails -- forcing a deliberate update
         # (flip `supported` to `true`, fill in the real `expr`) instead
         # of the gap silently going stale.
-        ("has-alternate-name", "Person", "exists(alternate_names)"),
-        ("has-addresses", "Person", "exists(addresses)"),
-        # `frel` lives on the ChildRef struct itself, a sibling of
-        # `children`'s own ref_field -- not a field of the *target*
-        # (Person) exists(children, ...) actually resolves conditions
-        # against, which is the precise mechanism the "adopted" note
-        # describes.
-        ("adopted", "Family", "exists(children, frel == 2)"),
+        #
+        # Empty for now -- the registry's last three `supported: false`
+        # entries (has-alternate-name/has-addresses/adopted) were closed by
+        # len()/child_refs (see gramps-object-query-language's
+        # DISABLED-FILTER-RULES.md); test_has_alternate_name/
+        # test_has_addresses/test_adopted above now cover them as ordinary
+        # behavioral-equivalence tests instead. The mechanism stays for
+        # whenever a future GOQL gap adds a new `supported: false` preset.
     ],
 )
 def test_unsupported_preset_genuinely_cannot_compile(preset_id, namespace, expr_if_it_existed, preset_by_id):

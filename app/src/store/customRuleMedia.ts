@@ -80,7 +80,7 @@ export async function fetchCustomRules(): Promise<CustomRule[]> {
     token,
     null,
     false,
-    `exists(tags, name == ${JSON.stringify(CUSTOM_RULE_TAG_NAME)})`,
+    `any(t.name == ${JSON.stringify(CUSTOM_RULE_TAG_NAME)} for t in tags)`,
     MEDIA_VIEW.orderBy,
     100
   );

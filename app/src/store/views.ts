@@ -570,7 +570,7 @@ const GRAMPLET_TAG_NAME = "Gramplet";
 
 /** MEDIA_VIEW's "category" column -- `mime`'s stored value (still the raw
  * MIME type, aliased through unchanged: see the column's own `select`) plus
- * `is_gramplet`'s sibling column (a `count(tags, ...)` select, 0 or more),
+ * `is_gramplet`'s sibling column (a `len(tags, ...)` select, 0 or more),
  * both already fetched in the same row since every column is requested
  * together. A raw mime string is precise but meaningless to read at a
  * glance in a table row; this collapses it to what the user actually cares
@@ -612,11 +612,13 @@ export const MEDIA_VIEW: ViewConfig = {
     // files, so its stored value can't become the category text below.
     { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT", hidden: true },
     // Hidden: 0 or more, feeding mediaCategory's "Gramplet" case below --
-    // see grampletMedia.ts's own `exists(tags, name == 'Gramplet')` for the
-    // same tag-based detection used elsewhere.
+    // see grampletMedia.ts's own `any(t.name == 'Gramplet' for t in tags)`
+    // for the same tag-based detection used elsewhere. `select` entries
+    // don't support comprehension sugar (only `where` does), so this stays
+    // the direct-call form -- just the canonical `len(...)`, not `count(...)`.
     {
       key: "is_gramplet", label: "Is Gramplet",
-      select: `count(tags, name == ${JSON.stringify(GRAMPLET_TAG_NAME)}) as is_gramplet`,
+      select: `len(tags, name == ${JSON.stringify(GRAMPLET_TAG_NAME)}) as is_gramplet`,
       sqlType: "INTEGER", hidden: true,
     },
     // The MIME type column, but shown as what it means to the user
@@ -654,7 +656,7 @@ export const GENERATED_VIEW: ViewConfig = {
   icon: iconReports,
   table: "media",
   endpoint: "/api/media/query/",
-  baseFilter: "exists(tags, name == 'report') or exists(tags, name == 'export')",
+  baseFilter: "any(t.name == 'report' for t in tags) or any(t.name == 'export' for t in tags)",
   // Sidebar.tsx draws a divider above this view -- it's not another
   // user-authored object type like the rest of VIEWS, but a fixed-filter
   // window onto generated reports/exports, so it reads as visually

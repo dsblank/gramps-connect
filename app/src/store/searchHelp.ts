@@ -44,8 +44,8 @@ export interface SearchHelp {
   fields: HelpEntry[];
   /** One-to-one hops a path can cross into another record. */
   relationships?: HelpEntry[];
-  /** One-to-many lists, usable only as exists(...)/count(...)'s first
-   * argument -- never as a path segment. */
+  /** One-to-many lists, usable only via any(...)/len(...) -- e.g.
+   * `any(x for x in name if ...)` -- never as a path segment. */
   collections?: HelpEntry[];
 }
 
@@ -57,7 +57,7 @@ export interface SearchHelp {
 const NOTES: HelpEntry = { name: "notes", description: "Notes attached to the record" };
 const CITATIONS: HelpEntry = { name: "citations", description: "Citations attached to the record" };
 const MEDIA: HelpEntry = { name: "media", description: "Photos and other media attached to the record" };
-const TAGS: HelpEntry = { name: "tags", description: "Tags on the record, e.g. exists(tags, name == 'todo')" };
+const TAGS: HelpEntry = { name: "tags", description: "Tags on the record, e.g. any(t.name == 'todo' for t in tags)" };
 
 const PRIVATE: HelpEntry = { name: "private", description: "True for a record marked private" };
 const CHANGE: HelpEntry = { name: "change", description: "When the record was last edited, as a number (larger is more recent)" };
@@ -96,8 +96,8 @@ const PERSON_HELP: SearchHelp = {
     { expr: "birth.date.sortval >= Date('Jan 1, 1968')", description: "Born on or after a date" },
     { expr: "birth.place.title == death.place.title", description: "Born and died in the same place" },
     { expr: "death.date.sortval is None", description: "No death date recorded" },
-    { expr: "not exists(notes)", description: "Nobody has written a note about them" },
-    { expr: "exists(citations, confidence >= Citation.CONF_HIGH)", description: "Has at least one well-sourced citation" },
+    { expr: "not any(n for n in notes)", description: "Nobody has written a note about them" },
+    { expr: "any(c.confidence >= Citation.CONF_HIGH for c in citations)", description: "Has at least one well-sourced citation" },
   ],
   fields: [
     GRAMPS_ID,
@@ -130,9 +130,9 @@ const FAMILY_HELP: SearchHelp = {
     { expr: "mother.given_name == 'Mary'", description: "Families whose mother is named Mary" },
     { expr: "father.surname == mother.surname", description: "Both parents share a last name" },
     { expr: "father.birth.date.sortval < Date('Jan 1, 1850')", description: "The father was born before 1850" },
-    { expr: "exists(children, given_name == 'Steve')", description: "At least one child named Steve" },
-    { expr: "count(children) > 2", description: "More than two children recorded" },
-    { expr: "not exists(children)", description: "No children recorded at all" },
+    { expr: "any(c.given_name == 'Steve' for c in children)", description: "At least one child named Steve" },
+    { expr: "len([c for c in children]) > 2", description: "More than two children recorded" },
+    { expr: "not any(c for c in children)", description: "No children recorded at all" },
     { expr: "type.value == FamilyRelType.MARRIED", description: "Married couples only" },
   ],
   fields: [
@@ -148,7 +148,7 @@ const FAMILY_HELP: SearchHelp = {
     { name: "mother", description: "The mother's own record, e.g. mother.given_name" },
   ],
   collections: [
-    { name: "children", description: "The family's children, e.g. count(children, gender == Person.MALE) > 1" },
+    { name: "children", description: "The family's children, e.g. len([c for c in children if c.gender == Person.MALE]) > 1" },
     { name: "events", description: "Family events: marriage, divorce, ..." },
     NOTES, CITATIONS, MEDIA, TAGS,
   ],
@@ -214,7 +214,7 @@ const REPOSITORY_HELP: SearchHelp = {
   examples: [
     { expr: "like(name, '%Library%')", description: "Anything with Library in its name" },
     { expr: "type.value == RepositoryType.CEMETERY", description: "Cemeteries only" },
-    { expr: "not exists(notes)", description: "No notes written about it" },
+    { expr: "not any(n for n in notes)", description: "No notes written about it" },
   ],
   fields: [
     GRAMPS_ID,
@@ -232,7 +232,7 @@ const SOURCE_HELP: SearchHelp = {
     { expr: "like(author, '%Smith%')", description: "Sources by an author named Smith" },
     { expr: "'census' in title", description: "The title mentions a census" },
     { expr: "author == ''", description: "No author recorded" },
-    { expr: "exists(repositories)", description: "Held by at least one repository" },
+    { expr: "any(r for r in repositories)", description: "Held by at least one repository" },
   ],
   fields: [
     GRAMPS_ID,
@@ -278,7 +278,7 @@ const MEDIA_HELP: SearchHelp = {
     { expr: "like(mime, 'image/%')", description: "Pictures only" },
     { expr: "'wedding' in desc", description: "The description mentions a wedding" },
     { expr: "like(path, '%.pdf')", description: "PDF files" },
-    { expr: "not exists(citations)", description: "Nothing citing it" },
+    { expr: "not any(c for c in citations)", description: "Nothing citing it" },
   ],
   fields: MEDIA_FIELDS,
   collections: [NOTES, CITATIONS, TAGS],
@@ -294,7 +294,7 @@ const NOTE_HELP: SearchHelp = {
     { expr: "'TODO' in text.string", description: "Notes mentioning TODO anywhere" },
     { expr: "like(text.string, 'Check %')", description: "Notes starting with 'Check '" },
     { expr: "type.value == NoteType.RESEARCH", description: "Research notes only" },
-    { expr: "exists(tags, name == 'todo')", description: "Notes carrying a particular tag" },
+    { expr: "any(t.name == 'todo' for t in tags)", description: "Notes carrying a particular tag" },
   ],
   fields: NOTE_FIELDS,
   collections: [TAGS],
@@ -327,8 +327,8 @@ const GENERATED_HELP: SearchHelp = {
     "they are stored as media, so a search here searches those media records, and is " +
     "narrowed down further within the list rather than reaching the rest of your media.",
   examples: [
-    { expr: "exists(tags, name == 'report')", description: "Reports only, leaving out exports" },
-    { expr: "exists(tags, name == 'export')", description: "Exports only" },
+    { expr: "any(t.name == 'report' for t in tags)", description: "Reports only, leaving out exports" },
+    { expr: "any(t.name == 'export' for t in tags)", description: "Exports only" },
     { expr: "'Descendant' in desc", description: "Whatever was produced by a Descendant report" },
     { expr: "mime == 'application/pdf'", description: "PDFs only" },
   ],
@@ -348,7 +348,7 @@ const TOPICS_HELP: SearchHelp = {
   examples: [
     { expr: "'Smith' in text.string", description: "Discussions whose title or description mentions Smith" },
     { expr: "like(text.string, '%\"title\":\"About:%')", description: "Discussions still using the auto-generated \"About: ...\" title" },
-    { expr: "exists(tags)", description: "Discussions you've tagged yourself" },
+    { expr: "any(t for t in tags)", description: "Discussions you've tagged yourself" },
   ],
   fields: NOTE_FIELDS,
   collections: [TAGS],
@@ -364,7 +364,7 @@ const STORY_HELP: SearchHelp = {
   examples: [
     { expr: "'wedding' in text.string", description: "Stories whose generated text mentions a wedding" },
     { expr: "like(text.string, '%\"title\":\"The Story of%')", description: "Stories still using the generated default title" },
-    { expr: "exists(tags)", description: "Stories you've tagged yourself" },
+    { expr: "any(t for t in tags)", description: "Stories you've tagged yourself" },
   ],
   fields: NOTE_FIELDS,
   collections: [TAGS],

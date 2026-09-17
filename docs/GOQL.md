@@ -98,22 +98,22 @@ through three different kinds of record, ending at the place's name, all
 in one line. The same chaining works from any view, in whatever
 combination the relationships above allow.
 
-## Collections: `exists` and `count`
+## Collections: `any` and `len`
 
 A person has exactly one birth event, but any number of children, notes,
 citations, or attached media — those need a different kind of check.
-`exists(children, given_name == 'Steve')` matches a family if *any* child
-satisfies the condition; leaving the condition out (`exists(notes)`) just
-asks whether anything is attached at all, which is how `not
-exists(notes)` finds people with no notes recorded. `count(...)` asks
-"how many" instead of "at least one" — `count(children) > 2` finds
-families with more than two children, and `count(children, gender ==
-Person.MALE) > 1` narrows that to counting only the sons.
+`any(c.given_name == 'Steve' for c in children)` matches a family if *any*
+child satisfies the condition; leaving the condition out (`any(n for n in
+notes)`) just asks whether anything is attached at all, which is how `not
+any(n for n in notes)` finds people with no notes recorded. `len(...)` asks
+"how many" instead of "at least one" — `len([c for c in children]) > 2`
+finds families with more than two children, and `len([c for c in children
+if c.gender == Person.MALE]) > 1` narrows that to counting only the sons.
 
 A collection is as far as a single query can reach in that direction,
 though. The chaining described above (`father.birth.place.title`) only
 works through relationships that connect to exactly one record —
-`exists`/`count` can tell you whether something *inside* a collection
+`any`/`len` can tell you whether something *inside* a collection
 matches a condition, but the query can't then keep chaining past that
 match to reach one of *its* own related records. A family's father has
 his own parent family, for instance — but since a person can be recorded

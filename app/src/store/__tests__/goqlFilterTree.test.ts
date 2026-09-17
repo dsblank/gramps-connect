@@ -25,7 +25,7 @@ describe("combineFilterTree", () => {
 
     expect(combineFilterTree(tree, gqlFilterPresets)).toEqual({
       namespace: "Person",
-      whereExpr: "((gender == Person.FEMALE) and (exists(media)))",
+      whereExpr: "((gender == Person.FEMALE) and (any(m for m in media)))",
     });
   });
 
@@ -35,7 +35,9 @@ describe("combineFilterTree", () => {
     row.negate = true;
     tree.root.children = [row];
 
-    expect(combineFilterTree(tree, gqlFilterPresets).whereExpr).toBe("not ((exists(notes)))");
+    expect(combineFilterTree(tree, gqlFilterPresets).whereExpr).toBe(
+      "not ((any(n for n in notes)))",
+    );
   });
 
   it("negates a whole rule group", () => {
@@ -58,7 +60,7 @@ describe("combineFilterTree", () => {
     ];
 
     expect(combineFilterTree(tree, gqlFilterPresets).whereExpr).toBe(
-      "((exists(media)) and ((gender == Person.MALE) or (gender == Person.FEMALE)))",
+      "((any(m for m in media)) and ((gender == Person.MALE) or (gender == Person.FEMALE)))",
     );
   });
 

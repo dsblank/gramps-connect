@@ -65,7 +65,7 @@ export async function fetchSavedFilters(): Promise<SavedFilter[]> {
     token,
     null,
     false,
-    `exists(tags, name == ${JSON.stringify(SAVED_FILTER_TAG_NAME)})`,
+    `any(t.name == ${JSON.stringify(SAVED_FILTER_TAG_NAME)} for t in tags)`,
     MEDIA_VIEW.orderBy,
     100
   );

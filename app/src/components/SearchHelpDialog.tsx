@@ -106,10 +106,10 @@ export function SearchHelpDialog({
           <Section title={t("Testing lists of related records")}>
             <Text size="sm">
               These reach any number of records rather than exactly one, so instead of a
-              dot they take <Code>exists(list, condition)</Code> — true when at least one
-              of them matches — or <Code>count(list, condition)</Code>, which gives a
-              number to compare. The condition can be left out entirely:{" "}
-              <Code>exists(notes)</Code> just asks whether there are any.
+              dot they take <Code>any(x.field == ... for x in list)</Code> — true when at
+              least one of them matches — or <Code>len([x for x in list if ...])</Code>,
+              which gives a number to compare. The condition can be left out entirely:{" "}
+              <Code>any(n for n in notes)</Code> just asks whether there are any.
             </Text>
             <EntryTable entries={help.collections} />
           </Section>

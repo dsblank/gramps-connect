@@ -1257,7 +1257,7 @@ function RowView({
  * namespace's user-authored Custom Rules (customRuleMedia.ts). Clicking a
  * supported preset calls `onPick` once and the caller is responsible for
  * closing this back up; an unsupported built-in preset -- none currently
- * registered, now that `len()`/`any(child_refs, ...)` (see
+ * registered, now that `len()`/`any(...)` (see
  * gramps-object-query-language's own ROADMAP.md) closed the last of the
  * three original gaps -- would show disabled, with its `notes` as a
  * tooltip, if a future GOQL gap ever adds one back.

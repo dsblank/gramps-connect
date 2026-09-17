@@ -15,7 +15,7 @@
 #   - a dotted "where" condition crossing a relationship
 #   - resolving a related field for display via db's own methods, the
 #     same handle-indirection technique as 02_person_lookup.py
-#   - exists(...)/count(...) over a one-to-many collection (events,
+#   - any(...)/len(...) over a one-to-many collection (events,
 #     children, citations, ...)
 # =============================================================================
 
@@ -49,15 +49,15 @@ for person in born_and_died_same_place:
     # -- row() special-cases any primary Gramps object, not just Person.
     row(person, birth_place(person))
 
-# ---- exists()/count() over a collection -----------------------------------
+# ---- any()/len() over a collection -----------------------------------
 # Not every relationship is one-to-one (a person has exactly one birth
 # event, but any number of other events/citations/children/...) -- those
-# are "collections", usable with exists(...) or count(...) but never as a
+# are "collections", usable with any(...) or len(...) but never as a
 # plain dotted path on their own.
 html("<hr>")
 print("People with at least one high-confidence citation but no notes:")
 well_sourced_undocumented = people(
-    "exists(citations, confidence >= Citation.CONF_HIGH) and not exists(notes)",
+    "any(c.confidence >= Citation.CONF_HIGH for c in citations) and not any(n for n in notes)",
     limit=25,
 )
 columns("Person")
@@ -66,7 +66,7 @@ for person in well_sourced_undocumented:
 
 html("<hr>")
 print("Families with more than 4 children:")
-large_families = families("count(children) > 4", limit=25)
+large_families = families("len([c for c in children]) > 4", limit=25)
 columns("Family", "Children")
 for family in large_families:
     row(family, len(family.child_ref_list))

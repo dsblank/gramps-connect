@@ -8,7 +8,7 @@
 # from 04_interactive_search.py, this time over Notes instead of People.
 #
 # Demonstrates:
-#   - collections/tags: exists(tags, name == '...')
+#   - collections/tags: any(t.name == '...' for t in tags)
 #   - a Note's own type field (NoteType.RESEARCH, .TODO, ...)
 #   - combining a widget's value into a "where" string built from fixed
 #     pieces (safe here with no f-string, since nothing is user-typed --

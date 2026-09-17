@@ -169,7 +169,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "HasAlternateName",
-    expr: "len(alternate_names) > 0",
+    expr: "len([n for n in alternate_names]) > 0",
     supported: true,
     notes:
       "The real rule is exactly bool(person.alternate_names) -- a plain count, no per-name field condition -- so GOQL's len() (array-length comparisons) is a direct, faithful translation. Verified exact match against gramps-core's own example.gramps fixture (2/2).",
@@ -191,7 +191,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "HaveAltFamilies",
-    expr: "any(child_refs, frel.value == ChildRefType.ADOPTED or mrel.value == ChildRefType.ADOPTED)",
+    expr: "any(ref for ref in child_refs if ref.frel.value == ChildRefType.ADOPTED or ref.mrel.value == ChildRefType.ADOPTED)",
     supported: true,
     notes:
       "The real rule (HaveAltFamilies) finds, for each of a person's parent families, the ChildRef entry whose `ref` is this person's own handle, then checks that entry's own frel/mrel against ChildRefType.ADOPTED. GOQL's child_refs is a new kind of collection built for exactly this: a *self-linked* Collection whose condition is about a field on the join/link itself (the specific ChildRef entry naming this person), not the joined Family row's own fields. Verified exact match against gramps-core's own example.gramps fixture (2/2).",
@@ -202,7 +202,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "HaveChildren",
-    expr: "exists(families, count(children) > 0)",
+    expr: "any(f for f in families if len([c for c in f.children]) > 0)",
     supported: true,
   },
   {
@@ -214,7 +214,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     expr: "primary_name.first_name == '' or primary_name.surname_list[0].surname == ''",
     supported: true,
     notes:
-      "The core rule also checks every alternate name (and treats a name with no surname_list entries at all as incomplete too, not just an empty surname); GOQL's len()/exists()/count() can count or check flat fields across alternate_names, but can't yet test a per-name field like this one (a still-open any(path, condition) gap, distinct from has-alternate-name's plain-count case, which len() already covers) -- so this only catches an incomplete *primary* name with at least one surname entry present. Verified exact match against gramps-core's own example.gramps fixture (76/76) -- that data happens not to exercise the alternate-name gap.",
+      "The core rule also checks every alternate name (and treats a name with no surname_list entries at all as incomplete too, not just an empty surname); this preset only checks the *primary* name -- alternate_names could now be reached too via any(n.first_name == '' for n in alternate_names)-style conditions (any(path, condition) shipped after this preset was written), but doing so for every field IncompleteNames itself checks is still a follow-up, not done here. Verified exact match against gramps-core's own example.gramps fixture (76/76) -- that data happens not to exercise the alternate-name gap.",
   },
   {
     id: "no-marriage-records",
@@ -222,7 +222,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "NeverMarried",
-    expr: "count(families) == 0",
+    expr: "len([f for f in families]) == 0",
     supported: true,
     notes:
       "\"Marriage\" here means gramps-core's own NeverMarried: zero family_list entries of *any* FamilyRelType (married, unmarried partner, civil union, ...) -- not specifically type MARRIED, despite the name. Verified exact match against example.gramps (751/751).",
@@ -233,7 +233,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "MultipleMarriages",
-    expr: "count(families) > 1",
+    expr: "len([f for f in families]) > 1",
     supported: true,
     notes: "Same \"any FamilyRelType counts\" scope as no-marriage-records. Verified exact match against example.gramps (50/50).",
   },
@@ -261,7 +261,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "PersonWithIncompleteEvent",
-    expr: "exists(events, place == '' or place is None or date.sortval is None)",
+    expr: "any(e.place == '' or e.place is None or e.date.sortval is None for e in events)",
     supported: true,
     notes:
       "Fixed: an Event's unset `place` is the empty string at runtime, never null (confirmed directly against a fresh Event()) -- the old `place is None` check matched *zero* rows instead of the correct set. gramps-core's own \"missing date\" half of this rule is effectively dead code (a Gramps Date object is never actually None, so `not event.date` never fires in practice); this GOQL version is intentionally a bit stricter, since it can correctly detect an empty/invalid date via sortval too. Verified exact match against example.gramps (745/745) with this fix.",
@@ -272,7 +272,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Family",
     sourceRule: "FamilyWithIncompleteEvent",
-    expr: "exists(events, place == '' or place is None or date.sortval is None)",
+    expr: "any(e.place == '' or e.place is None or e.date.sortval is None for e in events)",
     supported: true,
     notes:
       "gramps-core's real FamilyWithIncompleteEvent is, surprisingly, a *Person* rule (rules/person/_familywithincompleteevent.py) that walks person.family_list's own families' events -- there's no Family-typed rule of this name in gramps-core at all. This preset is a deliberate Family-namespace reformulation of the same underlying check (which family, not which person, has the incomplete event), not a literal port; same place-empty-string fix and same date-check caveat as incomplete-events. Verified exact match against example.gramps (397/397, checked per-family against the real rule's own inner loop) with this fix -- the old `place is None` form matched zero rows here too.",
@@ -283,7 +283,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "MissingParent",
-    expr: "count(parent_families) == 0 or exists(parent_families, father_handle is None or mother_handle is None)",
+    expr: "len([f for f in parent_families]) == 0 or any(f.father_handle is None or f.mother_handle is None for f in parent_families)",
     supported: true,
   },
   {
@@ -292,7 +292,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "Disconnected",
-    expr: "count(parent_families) == 0 and count(families) == 0",
+    expr: "len([f for f in parent_families]) == 0 and len([f for f in families]) == 0",
     supported: true,
   },
 
@@ -303,7 +303,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Associations",
     namespace: "Person",
     sourceRule: "HavePhotos",
-    expr: "exists(media)",
+    expr: "any(m for m in media)",
     supported: true,
   },
   {
@@ -312,7 +312,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Associations",
     namespace: "Person",
     sourceRule: "HasNote",
-    expr: "exists(notes)",
+    expr: "any(n for n in notes)",
     supported: true,
   },
   {
@@ -321,10 +321,10 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Associations",
     namespace: "Person",
     sourceRule: "HasSourceCount",
-    expr: "count(citations) > 0",
+    expr: "len([c for c in citations]) > 0",
     supported: true,
     notes:
-      "gramps-core's HasSourceCount literally counts len(citation_list) (Citations, not distinct Sources -- its own source comment says so), so count(citations) > 0 is the direct, faithful translation, not an approximation. Verified exact match against example.gramps (2090/2090).",
+      "gramps-core's HasSourceCount literally counts len(citation_list) (Citations, not distinct Sources -- its own source comment says so), so len([c for c in citations]) > 0 is the direct, faithful translation, not an approximation. Verified exact match against example.gramps (2090/2090).",
   },
   {
     id: "has-addresses",
@@ -332,7 +332,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Associations",
     namespace: "Person",
     sourceRule: "HasAddress",
-    expr: "len(address_list) > 0",
+    expr: "len([a for a in address_list]) > 0",
     supported: true,
     notes:
       "The real rule is parameterized (a count and a </==/> comparison), but this quick-pick preset only offers the simple 'has at least one' case -- len() handles that directly and correctly: address_list is always serialized as [] (never absent) even with no addresses, so len(...) > 0 doesn't misreport 'none' the way a raw JSON-path presence check would have. Verified exact match against gramps-core's own example.gramps fixture (1/1, using the rule's own 'greater than 0' parameterization).",
@@ -343,7 +343,7 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Associations",
     namespace: "Person",
     sourceRule: "HasAssociation",
-    expr: "exists(associations)",
+    expr: "any(a for a in associations)",
     supported: true,
   },
 
@@ -354,11 +354,11 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     category: "Tags",
     namespace: "Person",
     sourceRule: "HasTag",
-    expr: "exists(tags, name == '{tagName}')",
+    expr: "any(t.name == '{tagName}' for t in tags)",
     params: [{ name: "tagName", label: "Tag name", type: "string" }],
     supported: true,
     notes:
-      "Originally one hardcoded preset per tag name (a fixed list of common Gramps tag categories) -- replaced with a single rule taking the tag name as a value, since a tree's actual tags are user-defined, not this list. gramps-core's own HasTag resolves the name to a handle once at prepare() time and matches nothing at all if no tag by that name exists (silent, not an error) -- this GOQL translation behaves the same way: exists(tags, name == '...') is simply false if the name doesn't match any tag on the tree.",
+      "Originally one hardcoded preset per tag name (a fixed list of common Gramps tag categories) -- replaced with a single rule taking the tag name as a value, since a tree's actual tags are user-defined, not this list. gramps-core's own HasTag resolves the name to a handle once at prepare() time and matches nothing at all if no tag by that name exists (silent, not an error) -- this GOQL translation behaves the same way: any(t.name == '...' for t in tags) is simply false if the name doesn't match any tag on the tree.",
   },
 
   // -- Privacy ------------------------------------------------------------

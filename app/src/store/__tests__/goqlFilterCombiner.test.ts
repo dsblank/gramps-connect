@@ -26,7 +26,9 @@ describe("combineFilters", () => {
         { kind: "preset", preset: preset("has-media") },
       ],
     };
-    expect(combineFilters(node).whereExpr).toBe("((gender == Person.FEMALE) and (exists(media)))");
+    expect(combineFilters(node).whereExpr).toBe(
+      "((gender == Person.FEMALE) and (any(m for m in media)))",
+    );
   });
 
   it("ORs multiple presets and negates a subtree", () => {
@@ -38,7 +40,7 @@ describe("combineFilters", () => {
       ],
     };
     expect(combineFilters(node).whereExpr).toBe(
-      "((gender == Person.MALE) or not ((exists(notes))))",
+      "((gender == Person.MALE) or not ((any(n for n in notes))))",
     );
   });
 
@@ -75,7 +77,7 @@ describe("combineFilters", () => {
       preset: preset("has-tag"),
       values: { tagName: "ToDo" },
     };
-    expect(combineFilters(node).whereExpr).toBe("(exists(tags, name == 'ToDo'))");
+    expect(combineFilters(node).whereExpr).toBe("(any(t.name == 'ToDo' for t in tags))");
   });
 
   it("strips quotes/backslashes from a text param instead of letting them break out of the string literal", () => {
@@ -89,7 +91,7 @@ describe("combineFilters", () => {
     // text -- so the value can never close the surrounding '...' literal
     // early, regardless of what it contains.
     expect(combineFilters(node).whereExpr).toBe(
-      "(exists(tags, name == 'x) or (1==1) or exists(tags, name == x'))",
+      "(any(t.name == 'x) or (1==1) or exists(tags, name == x' for t in tags))",
     );
   });
 

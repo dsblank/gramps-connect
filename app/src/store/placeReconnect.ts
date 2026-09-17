@@ -63,7 +63,7 @@ export async function reconnectPlaceChildren(token: string, deletedHandles: stri
   // a where_expr string is already relied on elsewhere (api.ts's
   // fetchByHandle).
   const handleList = [...deletedSet].map((h) => `'${h}'`).join(", ");
-  const whereExpr = `exists(enclosing_places, handle in [${handleList}])`;
+  const whereExpr = `any(p.handle in [${handleList}] for p in enclosing_places)`;
   const { page } = await fetchPage(PLACE_VIEW, token, null, false, whereExpr);
 
   for (const child of page.items) {
