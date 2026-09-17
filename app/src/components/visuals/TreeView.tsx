@@ -107,6 +107,11 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // has several more, but generation/age-at-death are the two computable
   // from data this app already fetches with no further plumbing).
   const [colorScheme, setColorScheme] = useState<FanColorScheme>("gen");
+  // Generations mode's own "Compact" toggle -- same spot/style as fan
+  // mode's "Show lifespan" checkbox above. Drops each card's avatar,
+  // shows dates beside the name instead of below it, and lists a sibling
+  // group vertically instead of side by side (FamilyGraphView.tsx).
+  const [familyCompact, setFamilyCompact] = useState(false);
 
   // See store/treeExpandPreference.ts -- persisted across sessions, not
   // reset on a new root/subject the way selection/expansion state below is,
@@ -767,10 +772,18 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           ) : undefined
         ) : chartStyle === "family" ? (
           familyAncestorCluster ? (
-            <Text size="xs" c="dimmed">
-              click a person for details · "+ Up" reveals their parents and full sibling row (half/step/adopted
-              included) · "+ Down" reveals their own children
-            </Text>
+            <Group justify="space-between" wrap="wrap" gap="xs">
+              <Text size="xs" c="dimmed">
+                click a person for details · "+ Up" reveals their parents and full sibling row (half/step/adopted
+                included) · "+ Down" reveals their own children
+              </Text>
+              <Checkbox
+                size="xs"
+                label={t("Compact")}
+                checked={familyCompact}
+                onChange={(e) => setFamilyCompact(e.currentTarget.checked)}
+              />
+            </Group>
           ) : undefined
         ) : trees ? (
           <Text size="xs" c="dimmed">
@@ -803,6 +816,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           expandingUpKeys={expandingFamilyUp}
           expandingDownKeys={expandingKeys}
           spouseClustersByHandle={spouseClustersByHandle}
+          compact={familyCompact}
         />
       )}
       {chartStyle === "box" && trees && (
