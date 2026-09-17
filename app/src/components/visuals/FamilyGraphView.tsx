@@ -79,11 +79,20 @@ function groupRelationLabel(group: SiblingGroup): string | null {
   return relation === "half-father" ? t("Half-siblings (father's side)") : t("Half-siblings (mother's side)");
 }
 
-interface LinePos { x1: number; y1: number; x2: number; y2: number }
+interface LinePos {
+  x1: number; y1: number; x2: number; y2: number;
+  /** Which edge of `from` this line actually left from -- "vertical" for
+   * the usual top/bottom-center attachment, "horizontal" for compact
+   * mode's left/right-edge one (see the `compact` candidates below).
+   * ConnectorSvg's own compact curve needs this to know which axis to bow
+   * the line's start away from; `to` (always a box, never a person card)
+   * always attaches on its vertical edge either way. */
+  axis: "vertical" | "horizontal";
+}
 
 function linePosEqual(a: LinePos[], b: LinePos[]): boolean {
   if (a.length !== b.length) return false;
-  return a.every((l, i) => l.x1 === b[i].x1 && l.y1 === b[i].y1 && l.x2 === b[i].x2 && l.y2 === b[i].y2);
+  return a.every((l, i) => l.x1 === b[i].x1 && l.y1 === b[i].y1 && l.x2 === b[i].x2 && l.y2 === b[i].y2 && l.axis === b[i].axis);
 }
 
 /** Shared measurement logic behind every real connector line in this graph
@@ -160,11 +169,11 @@ function useConnectorLines(
         const toIsBelow = tr.top >= fr.top;
         const toX = tr.left + tr.width / 2;
         const toY = toIsBelow ? tr.top : tr.bottom;
-        const fromCandidates = [
-          { x: fr.left + fr.width / 2, y: toIsBelow ? fr.bottom : fr.top },
+        const fromCandidates: { x: number; y: number; axis: LinePos["axis"] }[] = [
+          { x: fr.left + fr.width / 2, y: toIsBelow ? fr.bottom : fr.top, axis: "vertical" },
           ...(compact ? [
-            { x: fr.left, y: fr.top + fr.height / 2 },
-            { x: fr.right, y: fr.top + fr.height / 2 },
+            { x: fr.left, y: fr.top + fr.height / 2, axis: "horizontal" as const },
+            { x: fr.right, y: fr.top + fr.height / 2, axis: "horizontal" as const },
           ] : []),
         ];
         const from2 = fromCandidates.reduce((a, b) => (
@@ -175,6 +184,7 @@ function useConnectorLines(
           y1: from2.y - containerRect.top,
           x2: toX - containerRect.left,
           y2: toY - containerRect.top,
+          axis: from2.axis,
         };
       })
       .filter((l): l is LinePos => l !== null);
@@ -195,20 +205,69 @@ function useConnectorLines(
     const ro = new ResizeObserver(recompute);
     ro.observe(container);
     window.addEventListener("resize", recompute);
+    // A card's own `familyReveal` mount animation (FamilySquareCard) is a
+    // `transform: scale(...)` -- it changes the card's *painted* box, which
+    // `getBoundingClientRect()` reflects while the animation is still
+    // running, but never its actual layout size, so the ResizeObserver
+    // above never fires once it finishes. The very first `recompute()`
+    // (the useLayoutEffect below, right after mount) can land mid-animation
+    // and freeze in that not-yet-settled position -- nothing re-measures it
+    // afterward unless something unrelated happens to re-render this graph
+    // first. `animationend` bubbles up from every card inside `container`,
+    // so listening here (rather than per-card) catches every one of them
+    // and re-measures right as each settles, with no arbitrary delay guess.
+    container.addEventListener("animationend", recompute);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", recompute);
+      container.removeEventListener("animationend", recompute);
     };
   }, [containerRef, recompute]);
 
   return lines;
 }
 
-function ConnectorSvg({ lines }: { lines: LinePos[] }) {
+/** A cubic Bezier's two control points, bowed away from each endpoint along
+ * *that* endpoint's own edge (so the curve leaves each shape roughly
+ * perpendicular to it) rather than one generic curve formula -- `to` is
+ * always a box, attached on its vertical edge, so its own control point
+ * always bows vertically; `from`'s own control point follows whichever
+ * edge `l.axis` says it actually left from (see LinePos's own doc comment).
+ * The offset is a fraction of the *relevant* axis's own span, clamped so a
+ * very short or very long line still curves by a sane amount. */
+function connectorCurvePath(l: LinePos): string {
+  const dx = l.x2 - l.x1;
+  const dy = l.y2 - l.y1;
+  const clamp = (v: number) => Math.max(16, Math.min(Math.abs(v) * 0.5, 60));
+  const cp2 = { x: l.x2, y: l.y2 - Math.sign(dy || 1) * clamp(dy) };
+  const cp1 = l.axis === "horizontal"
+    ? { x: l.x1 + Math.sign(dx || 1) * clamp(dx), y: l.y1 }
+    : { x: l.x1, y: l.y1 + Math.sign(dy || 1) * clamp(dy) };
+  return `M ${l.x1} ${l.y1} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${l.x2} ${l.y2}`;
+}
+
+/** `curved` -- compact mode only, for now -- draws each connector as a
+ * smooth cubic-Bezier path (connectorCurvePath) instead of a straight
+ * `<line>`. Left as a per-call flag rather than baked into `lines` itself,
+ * since the underlying measurement (useConnectorLines) doesn't care how
+ * its endpoints end up drawn. */
+function ConnectorSvg({ lines, curved }: { lines: LinePos[]; curved?: boolean }) {
   return (
     <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible" }}>
-      {lines.map((l, i) => (
+      {lines.map((l, i) => (curved ? (
+        <path key={i} d={connectorCurvePath(l)} fill="none" stroke="var(--mantine-color-default-border)" strokeWidth={1.5} />
+      ) : (
         <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="var(--mantine-color-default-border)" strokeWidth={1.5} />
+      )))}
+      {/* One small dot at each end of every line, marking exactly where it
+          attaches (a card's own edge, or a box's) -- separate from the
+          line/path loop above so a line's own stroke never draws on top of
+          either dot regardless of curved vs. straight. */}
+      {lines.map((l, i) => (
+        <g key={i}>
+          <circle cx={l.x1} cy={l.y1} r={3} fill="var(--mantine-color-gray-5)" />
+          <circle cx={l.x2} cy={l.y2} r={3} fill="var(--mantine-color-gray-5)" />
+        </g>
       ))}
     </svg>
   );
@@ -877,7 +936,7 @@ export function FamilyGraphView({
             </div>
           ))}
         </Stack>
-        <ConnectorSvg lines={lines} />
+        <ConnectorSvg lines={lines} curved={shared.compact} />
       </div>
     </div>
   );
