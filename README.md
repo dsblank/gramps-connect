@@ -41,6 +41,18 @@ more ground.
 For a full tour of the app itself, see [docs/Overview.md](docs/Overview.md);
 for the search-box query language behind it, see [docs/GOQL.md](docs/GOQL.md).
 
+The **[project wiki](https://github.com/dsblank/gramps-connect/wiki)** has
+more, and is kept up to date as features change: an
+[Overview](https://github.com/dsblank/gramps-connect/wiki/Overview) feature
+tour, [Installing](https://github.com/dsblank/gramps-connect/wiki/Installing)
+and [Deploying](https://github.com/dsblank/gramps-connect/wiki/Deploying)
+guides, [Data Model and Editing](https://github.com/dsblank/gramps-connect/wiki/Data-Model-and-Editing),
+[Messaging](https://github.com/dsblank/gramps-connect/wiki/Messaging),
+[GOQL](https://github.com/dsblank/gramps-connect/wiki/GOQL) search syntax,
+[Gramplets](https://github.com/dsblank/gramps-connect/wiki/Gramplets),
+[Architecture](https://github.com/dsblank/gramps-connect/wiki/Architecture),
+and the [Roadmap](https://github.com/dsblank/gramps-connect/wiki/Roadmap).
+
 <img width="1489" height="704" alt="image" src="https://github.com/user-attachments/assets/1183bb72-520f-44fb-ace7-d88c84724697" />
 
 ## FAQ
