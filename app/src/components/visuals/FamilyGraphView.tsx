@@ -21,6 +21,12 @@ import { t } from "../../i18n/i18n";
 
 const CARD_WIDTH = 150;
 
+/** Starting `visited` set for both of FamilyGraphView's own top-level trees
+ * (ancestorCluster, descendantTree) -- see spouseClusterElements' own doc
+ * comment on what it's for. A shared empty-set constant rather than `new
+ * Set()` inline at each call site, since neither ever mutates it. */
+const ROOT_VISITED: ReadonlySet<string> = new Set();
+
 /** Just the frel/mrel part (Adopted/Step/...) -- same Birth/Step/Adopted
  * vocabulary app/src/components/related/RefBadges.tsx's RelationBadge
  * already shows elsewhere, just inlined here rather than imported since
@@ -329,23 +335,42 @@ function FamilySquareCard({
  * under an already-drawn line. Keeping spouse clusters outside the box
  * means adding one never moves anything the connector logic depends on in
  * the first place. */
+/** `visited` is every handle already rendered somewhere above this point in
+ * the current spouse-cluster descent -- e.g. once A's "Expand spouses" has
+ * shown B, and B's own "Expand spouses" has shown A back, `expandedSpouses`
+ * holds both, and `spouseClustersByHandle` has a cluster for each pointing
+ * at the other. Without this guard, rendering A's cluster draws B's card,
+ * whose own spouse cluster draws A's card again, forever -- an infinite
+ * React tree (and, longer chains aside, any cycle at all through repeated
+ * "Expand spouses" clicks). A cluster whose anchor is already in `visited`
+ * is simply not drawn a second time. */
 function spouseClusterElements(
   person: TreePersonRaw,
   shared: SharedProps,
   onExpandUp: OnExpandUp,
   expandedUpKeys: ReadonlySet<string>,
   expandingUpKeys: ReadonlySet<string>,
+  visited: ReadonlySet<string>,
 ) {
-  return (shared.spouseClustersByHandle.get(person.handle) ?? []).map((cluster) => (
-    <AncestorClusterBlock
-      key={cluster.id}
-      cluster={cluster}
-      onExpandUp={onExpandUp}
-      expandedUpKeys={expandedUpKeys}
-      expandingUpKeys={expandingUpKeys}
-      {...shared}
-    />
-  ));
+  return (shared.spouseClustersByHandle.get(person.handle) ?? [])
+    .map((cluster) => ({ cluster, anchorHandle: cluster.siblings.find((s) => s.isAnchor)?.person.handle }))
+    .filter(({ anchorHandle }) => !anchorHandle || !visited.has(anchorHandle))
+    .map(({ cluster, anchorHandle }) => {
+      const nextVisited = new Set(visited);
+      nextVisited.add(person.handle);
+      if (anchorHandle) nextVisited.add(anchorHandle);
+      return (
+        <AncestorClusterBlock
+          key={cluster.id}
+          cluster={cluster}
+          onExpandUp={onExpandUp}
+          expandedUpKeys={expandedUpKeys}
+          expandingUpKeys={expandingUpKeys}
+          visited={nextVisited}
+          {...shared}
+        />
+      );
+    });
 }
 
 /** `personHandle` plus the anchor handle of each of their expanded spouse
@@ -387,12 +412,16 @@ interface SharedProps {
  * every group's parents into one shared row, since two different groups
  * can have entirely different parents. */
 function AncestorClusterBlock({
-  cluster, onExpandUp, expandedUpKeys, expandingUpKeys, ...shared
+  cluster, onExpandUp, expandedUpKeys, expandingUpKeys, visited, ...shared
 }: SharedProps & {
   cluster: FamilyClusterNode;
   onExpandUp: (clusterId: string, sibling: TreePersonRaw) => void;
   expandedUpKeys: ReadonlySet<string>;
   expandingUpKeys: ReadonlySet<string>;
+  /** See spouseClusterElements' own doc comment -- threaded through
+   * unchanged to every sibling group here so their own spouse-cluster
+   * rendering can detect a cycle back to a handle already on screen above. */
+  visited: ReadonlySet<string>;
 }) {
   return (
     // `nowrap` -- same reasoning as the parent row's own `nowrap` below:
@@ -410,6 +439,7 @@ function AncestorClusterBlock({
           onExpandUp={onExpandUp}
           expandedUpKeys={expandedUpKeys}
           expandingUpKeys={expandingUpKeys}
+          visited={visited}
           {...shared}
         />
       ))}
@@ -427,7 +457,7 @@ function AncestorClusterBlock({
  * them at once. A group that isn't the anchor's own primary family (i.e. a
  * half-sibling branch) gets a small label identifying which side it's on. */
 function SiblingGroupWithAncestry({
-  group, clusterId, parentClusters, onExpandUp, expandedUpKeys, expandingUpKeys, ...shared
+  group, clusterId, parentClusters, onExpandUp, expandedUpKeys, expandingUpKeys, visited, ...shared
 }: SharedProps & {
   group: SiblingGroup;
   clusterId: string;
@@ -435,6 +465,7 @@ function SiblingGroupWithAncestry({
   onExpandUp: (clusterId: string, sibling: TreePersonRaw) => void;
   expandedUpKeys: ReadonlySet<string>;
   expandingUpKeys: ReadonlySet<string>;
+  visited: ReadonlySet<string>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const groupBoxRef = useRef<HTMLDivElement>(null);
@@ -467,6 +498,7 @@ function SiblingGroupWithAncestry({
                 onExpandUp={onExpandUp}
                 expandedUpKeys={expandedUpKeys}
                 expandingUpKeys={expandingUpKeys}
+                visited={visited}
                 {...shared}
               />
             ))}
@@ -520,7 +552,7 @@ function SiblingGroupWithAncestry({
                 />
               )}
             </div>
-            {group.siblings.flatMap((sib) => spouseClusterElements(sib.person, shared, onExpandUp, expandedUpKeys, expandingUpKeys))}
+            {group.siblings.flatMap((sib) => spouseClusterElements(sib.person, shared, onExpandUp, expandedUpKeys, expandingUpKeys, visited))}
           </Group>
         </Stack>
       </Stack>
@@ -544,7 +576,7 @@ function SiblingGroupWithAncestry({
  * always start at the same row regardless of how much content is below
  * each one. */
 function DescendantChildrenBox({
-  children: childNodes, onExpandDown, expandingDownKeys, onExpandUp, expandedUpKeys, expandingUpKeys, ...shared
+  children: childNodes, onExpandDown, expandingDownKeys, onExpandUp, expandedUpKeys, expandingUpKeys, visited, ...shared
 }: SharedProps & {
   children: TreeNode[];
   onExpandDown: (label: string, handle: string) => void;
@@ -555,6 +587,12 @@ function DescendantChildrenBox({
   onExpandUp: OnExpandUp;
   expandedUpKeys: ReadonlySet<string>;
   expandingUpKeys: ReadonlySet<string>;
+  /** See spouseClusterElements' own doc comment -- the same cycle guard the
+   * ancestor side threads through, kept separately per recursive call here
+   * (each nested DescendantChildrenBox gets the unchanged set its own
+   * caller had; spouseClusterElements grows it locally per spouse cluster
+   * it actually renders). */
+  visited: ReadonlySet<string>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const subtreeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -609,7 +647,7 @@ function DescendantChildrenBox({
             </Group>
           </div>
           {childNodes.flatMap((child) => (
-            child.person ? spouseClusterElements(child.person, shared, onExpandUp, expandedUpKeys, expandingUpKeys) : []
+            child.person ? spouseClusterElements(child.person, shared, onExpandUp, expandedUpKeys, expandingUpKeys, visited) : []
           ))}
         </Group>
         {expandedChildren.length > 0 && <div style={{ height: 20 }} />}
@@ -630,6 +668,7 @@ function DescendantChildrenBox({
                   onExpandUp={onExpandUp}
                   expandedUpKeys={expandedUpKeys}
                   expandingUpKeys={expandingUpKeys}
+                  visited={visited}
                   {...shared}
                 />
               </div>
@@ -779,6 +818,7 @@ export function FamilyGraphView({
             onExpandUp={handleExpandUp}
             expandedUpKeys={expandedUpKeys}
             expandingUpKeys={expandingUpKeys}
+            visited={ROOT_VISITED}
             {...sharedProps}
           />
           {hasChildren && (
@@ -792,6 +832,7 @@ export function FamilyGraphView({
                   onExpandUp={handleExpandUp}
                   expandedUpKeys={expandedUpKeys}
                   expandingUpKeys={expandingUpKeys}
+                  visited={ROOT_VISITED}
                   {...sharedProps}
                 />
               </div>
