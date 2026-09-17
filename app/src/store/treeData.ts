@@ -236,13 +236,28 @@ export async function fetchTreeData(token: string, grampsId: string, nAnc: numbe
 
 export interface ClusterSibling {
   person: TreePersonRaw;
-  /** Relative to the cluster's own anchor: shares both known parents, or
-   * only the father, or only the mother. Someone with neither parent known
-   * in common never appears here at all -- see computeClusterSiblings. */
-  relation: "full" | "half-father" | "half-mother";
+  /** Relative to the cluster's own anchor, and always a *blood* tie where
+   * claimed: "full" shares both parents by birth, "half-father"/
+   * "half-mother" shares only that one by birth, and "step" shares neither
+   * by birth even though one of this person's own parents matches one of
+   * the anchor's (e.g. the anchor's father's third wife's own children --
+   * their tie to the anchor is only ever through that marriage, never
+   * blood). Someone with neither parent known in common never appears here
+   * at all -- see computeClusterSiblings. */
+  relation: "full" | "half-father" | "half-mother" | "step";
   frel?: string;
   mrel?: string;
   isAnchor: boolean;
+}
+
+/** Whether a child_ref's own frel/mrel marks a *blood* tie to that specific
+ * parent -- Gramps' ChildRefType default is "Birth" (often left unset by
+ * the API rather than spelled out), every other value (Stepchild, Adopted,
+ * Foster, Sponsored, Unknown, ...) means this parent isn't a biological one
+ * for this specific child, even within a family where the *other* parent
+ * -- or other children -- are. */
+function isBloodChildRel(rel: string | undefined): boolean {
+  return !rel || rel === "Birth";
 }
 
 export interface FamilyClusterNode {
@@ -281,15 +296,25 @@ export function computeClusterSiblings(data: TreePersonRaw[], person: TreePerson
   for (const fam of families) {
     if (seenFamilyHandles.has(fam.handle)) continue;
     seenFamilyHandles.add(fam.handle);
-    const isFull = !!fatherHandle && !!motherHandle && fam.father_handle === fatherHandle && fam.mother_handle === motherHandle;
-    const isHalfFather = !isFull && !!fatherHandle && fam.father_handle === fatherHandle;
-    const isHalfMother = !isFull && !!motherHandle && fam.mother_handle === motherHandle;
-    if (!isFull && !isHalfFather && !isHalfMother) continue;
-    const relation: ClusterSibling["relation"] = isFull ? "full" : isHalfFather ? "half-father" : "half-mother";
+    // Whether this family's own father/mother slot is filled by one of the
+    // anchor's own parents at all -- a family neither parent is in has
+    // nothing relevant in it. Deliberately *not* an aggregate "isFull" for
+    // the whole family: a blended family's own child_ref_list can mix
+    // frel/mrel values per child (the father's own kids as Birth alongside
+    // his wife's kids from a prior marriage as Step to him), so which
+    // parent this specific child is a *blood* tie to has to be decided
+    // per-child, below, not once for the family as a whole.
+    const matchesFather = !!fatherHandle && fam.father_handle === fatherHandle;
+    const matchesMother = !!motherHandle && fam.mother_handle === motherHandle;
+    if (!matchesFather && !matchesMother) continue;
     for (const ref of fam.child_ref_list ?? []) {
       if (byHandle.has(ref.ref)) continue;
       const siblingPerson = findPerson(data, ref.ref);
       if (!siblingPerson) continue; // not fetched yet -- missingSiblingHandles catches this
+      const bloodFather = matchesFather && isBloodChildRel(ref.frel);
+      const bloodMother = matchesMother && isBloodChildRel(ref.mrel);
+      const relation: ClusterSibling["relation"] =
+        bloodFather && bloodMother ? "full" : bloodFather ? "half-father" : bloodMother ? "half-mother" : "step";
       byHandle.set(ref.ref, {
         person: siblingPerson,
         relation,

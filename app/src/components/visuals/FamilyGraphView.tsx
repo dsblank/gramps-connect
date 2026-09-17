@@ -63,14 +63,19 @@ function personRelationBadge(sib: ClusterSibling): string | null {
   return relType && relType !== "Birth" ? relType : null;
 }
 
-/** Every member of a group shares the identical relation-to-anchor
- * classification (a function purely of the group's own shared parent pair
- * vs. the anchor's), so reading it off the first member applies to the
- * whole group. Null for the anchor's own group ("full") -- nothing to call
- * out there. */
+/** Every member of a group was found via the same family record and shares
+ * that family's own blood-tie classification to the anchor (computed
+ * per-child in computeClusterSiblings, not just from the family's own
+ * father/mother handles -- a blended family can otherwise mix relations),
+ * so reading it off the first member applies to the whole group. Null for
+ * the anchor's own group ("full") -- nothing to call out there. "step"
+ * covers a group with no blood tie to either of the anchor's own parents
+ * even though they share this family (e.g. the anchor's father's third
+ * wife's own children from her prior marriage). */
 function groupRelationLabel(group: SiblingGroup): string | null {
   const relation = group.siblings[0].relation;
   if (relation === "full") return null;
+  if (relation === "step") return t("Step-siblings");
   return relation === "half-father" ? t("Half-siblings (father's side)") : t("Half-siblings (mother's side)");
 }
 
