@@ -42,16 +42,16 @@ bar.add("People", [n for _, n in top_surnames])
 html(bar.render())
 
 # ---- Chart 2: gender split --------------------------------------------
-# count(..., where=...) -- no db equivalent for a conditional count, same
-# reasoning as 03_tree_statistics.py's own use of it. and_filters(
-# get_filter(), ...) narrows each count to the current filter, same as
-# Chart 1 above -- and the "total" used for the "other" slice is counted
-# the same filtered way (rather than db.get_number_of_people(), which is
-# always the whole tree), so the three slices still add up correctly
-# whether or not a filter is applied.
-total = count("person", where=get_filter())
-women = count("person", where=and_filters(get_filter(), "gender == Person.FEMALE"))
-men = count("person", where=and_filters(get_filter(), "gender == Person.MALE"))
+# db.get_number_of(..., where=...) -- the conditional counterpart to
+# db.get_number_of_people(), same reasoning as 03_tree_statistics.py's own
+# use of it. and_filters(get_filter(), ...) narrows each count to the
+# current filter, same as Chart 1 above -- and the "total" used for the
+# "other" slice is counted the same filtered way (rather than
+# db.get_number_of_people(), which is always the whole tree), so the three
+# slices still add up correctly whether or not a filter is applied.
+total = db.get_number_of("person", where=get_filter())
+women = db.get_number_of("person", where=and_filters(get_filter(), "gender == Person.FEMALE"))
+men = db.get_number_of("person", where=and_filters(get_filter(), "gender == Person.MALE"))
 other = total - women - men
 
 pie = pygal.Pie(title="Gender")

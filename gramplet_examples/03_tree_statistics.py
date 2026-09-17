@@ -2,17 +2,17 @@
 # 03 - Tree Statistics
 # =============================================================================
 # A quick "how big is this tree?" summary -- one row per record type, plus
-# a couple of derived numbers computed from cheap count() queries rather
-# than downloading every record just to count them.
+# a couple of derived numbers computed from cheap db.get_number_of*()
+# queries rather than downloading every record just to count them.
 #
 # Demonstrates:
 #   - db.get_number_of_<type>() -- a cheap count, no records downloaded
-#   - count(object_type, where=...) -- the same thing with a filter
+#   - db.get_number_of(object_type, where=...) -- the same thing with a filter
 #   - plain Python (a list of tuples, an f-string, a percentage) working
 #     exactly like it would in any other script
 # =============================================================================
 
-# One count() call per record type -- each is cheap (the match total comes
+# One count query per record type -- each is cheap (the match total comes
 # back in a response header; no records are actually downloaded to produce
 # it), so this whole dashboard is 10-ish small requests, not one that
 # downloads the tree.
@@ -32,15 +32,14 @@ columns("Record type", "Count")
 for label, total in counts:
     row(label, total)
 
-# count(object_type, where=...) rather than a db method: db's own get_
-# number_of_*() methods (above) always count the whole tree, with no
-# where= parameter -- there's no db equivalent for a *conditional* count,
-# so this is the one place in these examples where reaching past db's own
-# methods is the only option, not a shortcut around them.
+# db.get_number_of(object_type, where=...): db's own get_number_of_*()
+# methods (above) always count the whole tree, with no where= parameter --
+# this is the conditional counterpart, for when the count itself needs a
+# filter.
 total_people = db.get_number_of_people()
-women = count("person", where="gender == Person.FEMALE")
-men = count("person", where="gender == Person.MALE")
-no_birth_date = count("person", where="birth.date.sortval is None")
+women = db.get_number_of("person", where="gender == Person.FEMALE")
+men = db.get_number_of("person", where="gender == Person.MALE")
+no_birth_date = db.get_number_of("person", where="birth.date.sortval is None")
 
 html("<hr>")
 print(f"Total people: {total_people}")

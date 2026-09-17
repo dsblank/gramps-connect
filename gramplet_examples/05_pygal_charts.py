@@ -37,10 +37,11 @@ bar.add("People", [n for _, n in top_surnames])
 html(bar.render())
 
 # ---- Chart 2: gender split --------------------------------------------
-# count(..., where=...) -- no db equivalent for a conditional count, same
-# reasoning as 03_tree_statistics.py's own use of it.
-women = count("person", where="gender == Person.FEMALE")
-men = count("person", where="gender == Person.MALE")
+# db.get_number_of(..., where=...) -- the conditional counterpart to
+# db.get_number_of_people(), same reasoning as 03_tree_statistics.py's own
+# use of it.
+women = db.get_number_of("person", where="gender == Person.FEMALE")
+men = db.get_number_of("person", where="gender == Person.MALE")
 other = db.get_number_of_people() - women - men
 
 pie = pygal.Pie(title="Gender")

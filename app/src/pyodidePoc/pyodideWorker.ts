@@ -565,9 +565,13 @@ class Db:
     plural (e.g. people()/families()), \`get_<type>_from_gramps_id(id)\`
     wraps filter()+get_object() (Tag has no gramps_id field in
     gramps.gen.lib, so it alone skips this one), and
-    \`get_number_of_<plural>()\` wraps count(), and \`get_<type>_backlinks(handle)\`
-    wraps get_backlinks() -- for each of person/family/event/place/
-    repository/source/citation/media/note/tag. Unlike DbReadBase's real
+    \`get_number_of_<plural>()\` wraps count() with no filter, and
+    \`get_<type>_backlinks(handle)\` wraps get_backlinks() -- for each of
+    person/family/event/place/repository/source/citation/media/note/tag.
+    \`get_number_of(object_type, where=...)\`, defined once below (not
+    per-type, since it already takes object_type as an argument), is the
+    conditional counterpart -- reach for this one over the bare top-level
+    count() function. Unlike DbReadBase's real
     iter_* methods, these take the same where/order/limit as filter() and
     are capped at limit (default 50) rather than always walking every row
     in the tree -- there's no local cache here, every call is a real
@@ -665,6 +669,19 @@ class Db:
         # relationship_string normalizes that to a plain empty list, so
         # \`if not db.get_relationships(...)\` means what it looks like.
         return [item for item in items if item.get("relationship_string")]
+
+    async def get_number_of(self, object_type, where=None):
+        """A conditional count, as a \`db\` method rather than the bare
+        top-level \`count(object_type, where=...)\` -- same underlying call
+        (in fact, calls that function directly), just namespaced the same
+        way every other db operation already is
+        (\`get_<type>_from_handle\`, \`iter_<plural>\`, ...), and clearly
+        distinct from GOQL's own \`count(...)\`/\`len(...)\` (a where_expr
+        keyword, not a Python call) -- the two happening to share a name
+        was worth a db-namespaced alternative. \`get_number_of_<plural>()\`
+        below (no \`where\`) stays the shorthand for an unconditional count;
+        this is the one to reach for with a filter."""
+        return await count(object_type, where=where)
 
 
 
