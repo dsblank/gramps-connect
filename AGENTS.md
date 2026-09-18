@@ -8,3 +8,18 @@
   Commit and push the wiki change alongside the code change, not as a
   separate follow-up. A pure refactor, internal fix, or doc-comment change
   with no visible effect doesn't need this.
+
+## Backend & deployment architecture
+
+- gramps-connect is a pure browser frontend (React/TypeScript) with no
+  Python runtime of its own. It talks to gramps-web-api over HTTP; GOQL
+  queries compile to SQL and execute inside gramps-web-api's own process,
+  against whichever DBAPI backend that server is configured with.
+- Two production targets, with different backends: Desktop (the
+  standalone build) runs gramps-core's stock SQLite backend; Docker runs
+  the `SharedPostgreSQL` addon against a Postgres container.
+- Every object is stored as a JSON blob (`json_data` column: `TEXT` in
+  SQLite, `jsonb` in Postgres). GOQL resolves any dotted field path
+  generically via `json_extract`/`->`, so every field on every schema —
+  including deeply nested ones, e.g. `birth.date.modifier` — is queryable
+  without per-field wiring.
