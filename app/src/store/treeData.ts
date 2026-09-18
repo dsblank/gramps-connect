@@ -60,6 +60,19 @@ export interface TreeNode {
    * a true leaf" -- drives the auto-expand-on-reveal marker in
    * charts/treeChart.ts. Never set on a node that has `children`. */
   hasMore?: boolean;
+  /** Set only on a descendant-tree child node (descendantNode/
+   * buildDescendantTree) -- the handle of the specific family (marriage)
+   * this child came from, and that family's *other* parent (besides the one
+   * being walked), if known. Two children of the same person from two
+   * different marriages always get different `familyHandle`s even though
+   * neither array position nor person data alone would otherwise tell them
+   * apart. FamilyGraphView's own groupChildrenByFamily (below) is the only
+   * reader -- it draws one children-box per family instead of merging every
+   * marriage's kids into one, and wires each box's connector lines to only
+   * that family's own two parents. Undefined on every other kind of
+   * TreeNode (ancestor nodes, the root itself). */
+  familyHandle?: string;
+  familySpouseHandle?: string;
 }
 
 function findPerson(data: TreePersonRaw[], handle: string | undefined): TreePersonRaw | undefined {
@@ -163,7 +176,7 @@ function descendantNode(
   // box-tree's own callers pass an empty Set, leaving this filter exactly as
   // it always has been for them.
   const isRelaxed = relaxed === "all" || relaxed.has(label);
-  const childHandles = (person?.extended?.families ?? []).flatMap((fam) => {
+  const childRefs = (person?.extended?.families ?? []).flatMap((fam) => {
     const isFather = fam.father_handle === person?.handle;
     const isMother = fam.mother_handle === person?.handle;
     if (!isFather && !isMother) return [];
@@ -175,19 +188,27 @@ function descendantNode(
     const refs = isRelaxed
       ? (fam.child_ref_list ?? [])
       : (fam.child_ref_list ?? []).filter((ref) => ref[relationKey] === "Birth");
-    return refs.map((ref) => ref.ref);
+    // The *other* parent of this specific family -- e.g. one of the
+    // person's own three wives -- so each child keeps track of which
+    // marriage produced them and who its other parent was, not just their
+    // own handle. See TreeNode.familyHandle's own doc comment.
+    const otherParentHandle = isFather ? fam.mother_handle : fam.father_handle;
+    return refs.map((ref) => ({ handle: ref.ref, familyHandle: fam.handle, otherParentHandle }));
   });
   // See ancestorNode's matching comment -- `collapsed` forces the same
   // boundary within base depth, unless a later re-expand of this exact
   // label overrides it.
   const isExpanded = expanded.has(label);
   if ((i >= baseDepth && !isExpanded) || (collapsed.has(label) && !isExpanded)) {
-    node.hasMore = childHandles.length > 0;
+    node.hasMore = childRefs.length > 0;
     return node;
   }
-  node.children = childHandles.map((childHandle, idx) =>
-    descendantNode(data, childHandle, i + 1, baseDepth, expanded, collapsed, relaxed, `${label}c${idx}`)
-  );
+  node.children = childRefs.map((childRef, idx) => {
+    const childNode = descendantNode(data, childRef.handle, i + 1, baseDepth, expanded, collapsed, relaxed, `${label}c${idx}`);
+    childNode.familyHandle = childRef.familyHandle;
+    childNode.familySpouseHandle = childRef.otherParentHandle;
+    return childNode;
+  });
   return node;
 }
 
@@ -420,6 +441,39 @@ export function groupSiblingsByParents(siblings: ClusterSibling[]): SiblingGroup
     group.push(sib);
   }
   return order.map((key) => ({ key, siblings: byKey.get(key)! }));
+}
+
+export interface ChildFamilyGroup {
+  key: string;
+  /** The family's other parent (besides whichever person these are
+   * `children` of), if known -- FamilyGraphView.tsx's own connector wiring
+   * uses this to draw a box's incoming lines from only that specific
+   * family's two parents, not indiscriminately from every expanded spouse. */
+  otherParentHandle?: string;
+  children: TreeNode[];
+}
+
+/** Descendant-side mirror of groupSiblingsByParents: groups a person's
+ * `children` (descendantNode's already-flattened array, across every
+ * marriage) back apart by `familyHandle`, in first-appearance order -- one
+ * group per marriage, so three wives' worth of children never collapse into
+ * a single visual box. A child with no `familyHandle` (shouldn't happen for
+ * a real descendant-tree node, but keeps this total) gets its own singleton
+ * group by index rather than silently merging with an unrelated family. */
+export function groupChildrenByFamily(children: TreeNode[]): ChildFamilyGroup[] {
+  const order: string[] = [];
+  const byKey = new Map<string, ChildFamilyGroup>();
+  children.forEach((child, idx) => {
+    const key = child.familyHandle ?? `?${idx}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, otherParentHandle: child.familySpouseHandle, children: [] };
+      byKey.set(key, group);
+      order.push(key);
+    }
+    group.children.push(child);
+  });
+  return order.map((key) => byKey.get(key)!);
 }
 
 /** GET /api/people/<handle>?profile=self&extend=primary_parent_family,

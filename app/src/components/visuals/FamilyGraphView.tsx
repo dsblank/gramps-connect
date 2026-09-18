@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ActionIcon, Avatar, Badge, Divider, Group, Paper, Stack, Text } from "@mantine/core";
 import {
-  groupSiblingsByParents, personThumbnailUrl,
+  groupChildrenByFamily, groupSiblingsByParents, personThumbnailUrl,
   type ClusterSibling, type FamilyClusterNode, type SiblingGroup, type TreeNode, type TreePersonRaw,
 } from "../../store/treeData";
 type OnExpandUp = (clusterId: string, sibling: TreePersonRaw) => void;
@@ -425,17 +425,23 @@ function FamilySquareCard({
   );
 }
 
-/** `personHandle` plus the anchor handle of each of their expanded spouse
- * clusters -- every "line down to this person's children" connector uses
- * this as its set of *sources*, not just `personHandle` alone, so that
- * expanding a spouse correctly adds a second line converging on the same
- * children box instead of leaving it looking like only one parent connects
- * to kids that are actually both of theirs. */
-function parentAndSpouseHandles(personHandle: string, spouseClustersByHandle: ReadonlyMap<string, FamilyClusterNode[]>): string[] {
-  const spouseHandles = (spouseClustersByHandle.get(personHandle) ?? [])
-    .map((c) => c.siblings.find((s) => s.isAnchor)?.person.handle)
-    .filter((h): h is string => !!h);
-  return [personHandle, ...spouseHandles];
+/** `personHandle` plus that specific family's `otherParentHandle` -- but
+ * only if that other parent is actually visible in the graph right now (an
+ * "Expand spouses" click made a card for them). Each children-box's
+ * connector uses this as its set of *sources*, so a box only ever gets a
+ * line from the two parents who are actually that family's own -- e.g.
+ * wife #1's box never gets a line from wife #2's card, even once she's been
+ * expanded too. Without the other parent expanded, only `personHandle`'s
+ * own line is drawn, same as before spouses existed in this graph at all. */
+function familyParentHandles(
+  personHandle: string,
+  otherParentHandle: string | undefined,
+  spouseClustersByHandle: ReadonlyMap<string, FamilyClusterNode[]>,
+): string[] {
+  if (!otherParentHandle) return [personHandle];
+  const otherParentExpanded = (spouseClustersByHandle.get(personHandle) ?? [])
+    .some((c) => c.siblings.find((s) => s.isAnchor)?.person.handle === otherParentHandle);
+  return otherParentExpanded ? [personHandle, otherParentHandle] : [personHandle];
 }
 
 interface SharedProps {
@@ -461,7 +467,8 @@ interface SharedProps {
    * mode applies uniformly across the whole graph, not per-branch. */
   compact: boolean;
   /** Every rendered box (SiblingGroupBox: keyed `${clusterId}:${group.key}`;
-   * ChildrenGroupBox: keyed `desc:${parentHandle}`) registers itself here --
+   * ChildrenGroupBox: keyed `desc:${parentHandle}:${familyKey}`, one per
+   * family/marriage) registers itself here --
    * FamilyGraphView's single connector overlay looks boxes up by this same
    * key. Boxes no longer nest inside whichever box is one generation over
    * (see this file's own top doc comment on generation rows), so there's no
@@ -698,10 +705,13 @@ function collectAncestorCluster(
   }
 }
 
-/** Descendant-side mirror of collectAncestorCluster: one box per person's
- * own row of children, bucketed the same way by generation (-1 = this
- * person's own children, -2 = grandchildren, ...), keyed `desc:${
- * parentHandle}` so FamilyGraphView's connector overlay can target it. */
+/** Descendant-side mirror of collectAncestorCluster: one box per *family*
+ * (marriage) among a person's own children, bucketed the same way by
+ * generation (-1 = this person's own children, -2 = grandchildren, ...),
+ * each keyed `desc:${parentHandle}:${familyKey}` so FamilyGraphView's
+ * connector overlay can target it. `groupChildrenByFamily` is what keeps
+ * three marriages' worth of children from landing in the same box -- see
+ * its own doc comment (treeData.ts) and TreeNode.familyHandle. */
 function collectDescendantChildren(
   childNodes: TreeNode[],
   generation: number,
@@ -716,44 +726,46 @@ function collectDescendantChildren(
   rows: Map<number, ReactNode[]>,
   connectors: ConnectorSpec[],
 ) {
-  const boxKey = `desc:${parentHandle}`;
-  pushRow(rows, generation, (
-    <ChildrenGroupBox
-      key={boxKey}
-      boxKey={boxKey}
-      childNodes={childNodes}
-      onExpandDown={onExpandDown}
-      expandingDownKeys={expandingDownKeys}
-      shared={shared}
-    />
-  ));
+  for (const group of groupChildrenByFamily(childNodes)) {
+    const boxKey = `desc:${parentHandle}:${group.key}`;
+    connectors.push({
+      fromHandles: familyParentHandles(parentHandle, group.otherParentHandle, shared.spouseClustersByHandle),
+      toBoxKey: boxKey,
+    });
+    pushRow(rows, generation, (
+      <ChildrenGroupBox
+        key={boxKey}
+        boxKey={boxKey}
+        childNodes={group.children}
+        onExpandDown={onExpandDown}
+        expandingDownKeys={expandingDownKeys}
+        shared={shared}
+      />
+    ));
 
-  for (const child of childNodes) {
-    if (!child.person) continue;
-    for (const { cluster: spouseCluster, anchorHandle } of spouseClusterInfos(child.person, shared, visited)) {
-      const nextVisited = new Set(visited);
-      nextVisited.add(child.person.handle);
-      if (anchorHandle) nextVisited.add(anchorHandle);
-      collectAncestorCluster(
-        spouseCluster, generation, shared, onExpandUp, expandedUpKeys, expandingUpKeys, nextVisited, rows, connectors,
+    for (const child of group.children) {
+      if (!child.person) continue;
+      for (const { cluster: spouseCluster, anchorHandle } of spouseClusterInfos(child.person, shared, visited)) {
+        const nextVisited = new Set(visited);
+        nextVisited.add(child.person.handle);
+        if (anchorHandle) nextVisited.add(anchorHandle);
+        collectAncestorCluster(
+          spouseCluster, generation, shared, onExpandUp, expandedUpKeys, expandingUpKeys, nextVisited, rows, connectors,
+        );
+      }
+    }
+
+    for (const child of group.children) {
+      if (!child.person || !child.children || child.children.length === 0) continue;
+      // The recursive call below pushes this child's own family-grouped
+      // connector(s) itself (same per-family loop, one level down) -- no
+      // separate connector push needed here the way a single flat box used
+      // to require.
+      collectDescendantChildren(
+        child.children, generation - 1, child.person.handle, shared, onExpandDown, expandingDownKeys,
+        onExpandUp, expandedUpKeys, expandingUpKeys, visited, rows, connectors,
       );
     }
-  }
-
-  for (const child of childNodes) {
-    if (!child.person || !child.children || child.children.length === 0) continue;
-    // One line per (child or expanded spouse of that child) -> that
-    // child's own further-descendants box -- a fork, exactly like the
-    // ancestor side's own connector, once a spouse has been expanded for
-    // that child (both of them are that box's own parents, after all).
-    connectors.push({
-      fromHandles: parentAndSpouseHandles(child.person.handle, shared.spouseClustersByHandle),
-      toBoxKey: `desc:${child.person.handle}`,
-    });
-    collectDescendantChildren(
-      child.children, generation - 1, child.person.handle, shared, onExpandDown, expandingDownKeys,
-      onExpandUp, expandedUpKeys, expandingUpKeys, visited, rows, connectors,
-    );
   }
 }
 
@@ -897,9 +909,9 @@ export function FamilyGraphView({
   if (ancestorCluster) {
     collectAncestorCluster(ancestorCluster, 0, sharedProps, handleExpandUp, expandedUpKeys, expandingUpKeys, ROOT_VISITED, rows, connectors);
     if (rootHandle && descendantTree?.children && descendantTree.children.length > 0) {
-      // The root's own card, plus any of *its* expanded spouses, connect
-      // down to the root's own children box.
-      connectors.push({ fromHandles: parentAndSpouseHandles(rootHandle, shared.spouseClustersByHandle), toBoxKey: `desc:${rootHandle}` });
+      // collectDescendantChildren pushes each family group's own connector
+      // itself (per-family loop), so no separate connector push is needed
+      // here the way a single flat box used to require.
       collectDescendantChildren(
         descendantTree.children, -1, rootHandle, sharedProps, handleExpandDown, expandingDownKeys,
         handleExpandUp, expandedUpKeys, expandingUpKeys, ROOT_VISITED, rows, connectors,
