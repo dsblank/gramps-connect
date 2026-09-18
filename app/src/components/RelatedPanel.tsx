@@ -5,6 +5,7 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, getCachedObjectDetail, setCachedObjectDetail, zipRefs } from "../store/objectDetail";
 import type { ObjectDetail } from "../store/objectDetail";
 import { fetchPlainObject } from "../store/objectsApi";
+import { subscribeTreeChange } from "../store/treeChangeBus";
 import type { ViewConfig } from "../store/views";
 import { RELATED_CONFIG } from "./related/config";
 import { DetailFields } from "./related/DetailFields";
@@ -400,6 +401,22 @@ export function RelatedPanel({
       if (!draftStack.error) setRefetchNonce((n) => n + 1);
     }
   }, [draftStack, draftStack?.saving, draftStack?.error]);
+
+  // viewStore.ts's applyLiveChange() only bumps `revision` for a live-sync
+  // notification matching *this panel's own* (view, handle) -- it has no
+  // way to know that a Note's text, an Event's date, or any other record
+  // this panel's extend=all/backlinks fetch happened to embed just changed
+  // under its own, different handle (see objectDetail.ts's cache doc
+  // comment on the identical gap for the stale-while-revalidate cache).
+  // Subscribing to every tree change here and refetching regardless of
+  // table/handle is the same "just refetch, don't try to be precise"
+  // tradeoff the draftStack effect above and getViewStore(type).
+  // requeryDebounced() already make: correctly refetching only when an
+  // embedded handle changes would mean re-deriving which handles are
+  // embedded from the last response's own extended/backlinks/ref-list
+  // shape, which varies by object type (RELATED_CONFIG) -- not worth it
+  // for what is, at most, one extra request per live-sync poll tick.
+  useEffect(() => subscribeTreeChange(() => setRefetchNonce((n) => n + 1)), []);
 
   useDocumentTitle(
     updateDocumentTitle && state.status === "ready"
