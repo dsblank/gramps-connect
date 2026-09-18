@@ -15,7 +15,10 @@
 // (useConnectorLines) rather than any manual coordinate math -- the
 // browser's own flex reflow still handles "make room for N siblings" for
 // free, same as before, just organized by row instead of by branch.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
+  type MouseEvent as ReactMouseEvent, type ReactNode,
+} from "react";
 import { ActionIcon, Avatar, Badge, Divider, Group, Paper, Stack, Text } from "@mantine/core";
 import {
   groupChildrenByFamily, groupSiblingsByParents, personThumbnailUrl,
@@ -328,6 +331,37 @@ function ExpandMarker({ position, onClick, expanding }: { position: "top" | "bot
   );
 }
 
+/** The collapse counterpart to ExpandMarker: same shape/position, but
+ * `color="gray"` (a muted, neutral tone -- deliberately not red, since this
+ * un-does a reveal rather than destroying anything; the underlying data
+ * stays cached, so a later "+" click re-shows it instantly) and a "−"
+ * instead of a "+", so the two read as opposites at a glance without either
+ * one looking alarming. */
+function CollapseMarker({ position, onClick }: { position: "top" | "bottom"; onClick: () => void }) {
+  return (
+    <ActionIcon
+      size="sm"
+      radius="xl"
+      variant="filled"
+      color="gray"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label={position === "top" ? t("Collapse parents and siblings") : t("Collapse children")}
+      style={{
+        position: "absolute",
+        [position]: -10,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 1,
+      }}
+    >
+      −
+    </ActionIcon>
+  );
+}
+
 interface FamilySquareCardProps {
   person: TreePersonRaw;
   token: string | null;
@@ -341,6 +375,13 @@ interface FamilySquareCardProps {
   onExpand?: () => void;
   canExpand?: boolean;
   expanding?: boolean;
+  /** The reverse of onExpand/canExpand -- shown instead, at the same
+   * position, once this card's own further descendants are actually being
+   * rendered (see ChildrenGroupBox's own `canCollapse`). Mutually exclusive
+   * with canExpand by construction: a node either still has more to reveal,
+   * or is currently showing what it already revealed, never both. */
+  onCollapse?: () => void;
+  canCollapse?: boolean;
   expandDirection?: "up" | "down";
   /** Every card registers itself under its own handle -- see
    * FamilyGraphView's own `getCardRef`/`scrollToAndPulse`, which is how
@@ -361,7 +402,8 @@ interface FamilySquareCardProps {
 }
 
 function FamilySquareCard({
-  person, token, selected, highlighted, relationText, onSelect, onExpand, canExpand, expanding, expandDirection, cardRef, pulse, compact,
+  person, token, selected, highlighted, relationText, onSelect, onExpand, canExpand, expanding,
+  onCollapse, canCollapse, expandDirection, cardRef, pulse, compact,
 }: FamilySquareCardProps) {
   const name = [person.profile?.name_given, person.profile?.name_surname].filter(Boolean).join(" ") || t("(unnamed person)");
   const thumb = !compact && token ? personThumbnailUrl(token, person, 100) : null;
@@ -420,6 +462,9 @@ function FamilySquareCard({
       )}
       {canExpand && onExpand && (
         <ExpandMarker position={expandDirection === "up" ? "top" : "bottom"} onClick={onExpand} expanding={expanding} />
+      )}
+      {canCollapse && onCollapse && (
+        <CollapseMarker position={expandDirection === "up" ? "top" : "bottom"} onClick={onCollapse} />
       )}
     </Paper>
   );
@@ -485,7 +530,7 @@ interface SharedProps {
  * this component -- collectAncestorCluster places each in its own
  * generation's row instead -- so this only ever draws the one box. */
 function SiblingGroupBox({
-  boxKey, group, label, canExpand, expanding, onExpand, shared,
+  boxKey, group, label, canExpand, expanding, onExpand, canCollapse, onCollapse, shared,
 }: {
   boxKey: string;
   group: SiblingGroup;
@@ -493,6 +538,8 @@ function SiblingGroupBox({
   canExpand: boolean;
   expanding: boolean;
   onExpand: () => void;
+  canCollapse: boolean;
+  onCollapse: () => void;
   shared: SharedProps;
 }) {
   return (
@@ -539,6 +586,7 @@ function SiblingGroupBox({
           </Group>
         )}
         {canExpand && <ExpandMarker position="top" onClick={onExpand} expanding={expanding} />}
+        {canCollapse && <CollapseMarker position="top" onClick={onCollapse} />}
       </div>
     </Stack>
   );
@@ -548,12 +596,14 @@ function SiblingGroupBox({
  * row of siblings-as-children -- all direct kids of whichever person this
  * level is about. */
 function ChildrenGroupBox({
-  boxKey, childNodes, onExpandDown, expandingDownKeys, shared,
+  boxKey, childNodes, onExpandDown, expandingDownKeys, onCollapseDown, expandedDownKeys, shared,
 }: {
   boxKey: string;
   childNodes: TreeNode[];
   onExpandDown: (label: string, handle: string) => void;
   expandingDownKeys: ReadonlySet<string>;
+  onCollapseDown: (label: string) => void;
+  expandedDownKeys: ReadonlySet<string>;
   shared: SharedProps;
 }) {
   return (
@@ -573,6 +623,8 @@ function ChildrenGroupBox({
               onExpand={() => onExpandDown(child.id!, child.person!.handle)}
               canExpand={!!child.hasMore}
               expanding={expandingDownKeys.has(`descendant:${child.person.handle}`)}
+              onCollapse={() => onCollapseDown(child.id!)}
+              canCollapse={expandedDownKeys.has(child.id!) && !!(child.children && child.children.length > 0)}
               expandDirection="down"
               cardRef={shared.getCardRef(child.person.handle)}
               pulse={shared.pulsingHandle === child.person.handle}
@@ -592,6 +644,8 @@ function ChildrenGroupBox({
               onExpand={() => onExpandDown(child.id!, child.person!.handle)}
               canExpand={!!child.hasMore}
               expanding={expandingDownKeys.has(`descendant:${child.person.handle}`)}
+              onCollapse={() => onCollapseDown(child.id!)}
+              canCollapse={expandedDownKeys.has(child.id!) && !!(child.children && child.children.length > 0)}
               expandDirection="down"
               cardRef={shared.getCardRef(child.person.handle)}
               pulse={shared.pulsingHandle === child.person.handle}
@@ -657,6 +711,7 @@ function collectAncestorCluster(
   onExpandUp: OnExpandUp,
   expandedUpKeys: ReadonlySet<string>,
   expandingUpKeys: ReadonlySet<string>,
+  onCollapseUp: (boxKey: string) => void,
   visited: ReadonlySet<string>,
   rows: Map<number, ReactNode[]>,
   connectors: ConnectorSpec[],
@@ -684,6 +739,8 @@ function collectAncestorCluster(
         canExpand={group.key !== "-:-" && !expandedUpKeys.has(boxKey)}
         expanding={expandingUpKeys.has(boxKey)}
         onExpand={() => onExpandUp(cluster.id, group.siblings[0].person)}
+        canCollapse={expandedUpKeys.has(boxKey) && parentClusters.length > 0}
+        onCollapse={() => onCollapseUp(boxKey)}
         shared={shared}
       />
     ));
@@ -694,13 +751,15 @@ function collectAncestorCluster(
         nextVisited.add(sib.person.handle);
         if (anchorHandle) nextVisited.add(anchorHandle);
         collectAncestorCluster(
-          spouseCluster, generation, shared, onExpandUp, expandedUpKeys, expandingUpKeys, nextVisited, rows, connectors,
+          spouseCluster, generation, shared, onExpandUp, expandedUpKeys, expandingUpKeys, onCollapseUp, nextVisited, rows, connectors,
         );
       }
     }
 
     for (const pc of parentClusters) {
-      collectAncestorCluster(pc, generation + 1, shared, onExpandUp, expandedUpKeys, expandingUpKeys, visited, rows, connectors);
+      collectAncestorCluster(
+        pc, generation + 1, shared, onExpandUp, expandedUpKeys, expandingUpKeys, onCollapseUp, visited, rows, connectors,
+      );
     }
   }
 }
@@ -719,9 +778,12 @@ function collectDescendantChildren(
   shared: SharedProps,
   onExpandDown: (label: string, handle: string) => void,
   expandingDownKeys: ReadonlySet<string>,
+  onCollapseDown: (label: string) => void,
+  expandedDownKeys: ReadonlySet<string>,
   onExpandUp: OnExpandUp,
   expandedUpKeys: ReadonlySet<string>,
   expandingUpKeys: ReadonlySet<string>,
+  onCollapseUp: (boxKey: string) => void,
   visited: ReadonlySet<string>,
   rows: Map<number, ReactNode[]>,
   connectors: ConnectorSpec[],
@@ -739,6 +801,8 @@ function collectDescendantChildren(
         childNodes={group.children}
         onExpandDown={onExpandDown}
         expandingDownKeys={expandingDownKeys}
+        onCollapseDown={onCollapseDown}
+        expandedDownKeys={expandedDownKeys}
         shared={shared}
       />
     ));
@@ -750,7 +814,7 @@ function collectDescendantChildren(
         nextVisited.add(child.person.handle);
         if (anchorHandle) nextVisited.add(anchorHandle);
         collectAncestorCluster(
-          spouseCluster, generation, shared, onExpandUp, expandedUpKeys, expandingUpKeys, nextVisited, rows, connectors,
+          spouseCluster, generation, shared, onExpandUp, expandedUpKeys, expandingUpKeys, onCollapseUp, nextVisited, rows, connectors,
         );
       }
     }
@@ -762,8 +826,8 @@ function collectDescendantChildren(
       // separate connector push needed here the way a single flat box used
       // to require.
       collectDescendantChildren(
-        child.children, generation - 1, child.person.handle, shared, onExpandDown, expandingDownKeys,
-        onExpandUp, expandedUpKeys, expandingUpKeys, visited, rows, connectors,
+        child.children, generation - 1, child.person.handle, shared, onExpandDown, expandingDownKeys, onCollapseDown, expandedDownKeys,
+        onExpandUp, expandedUpKeys, expandingUpKeys, onCollapseUp, visited, rows, connectors,
       );
     }
   }
@@ -790,6 +854,20 @@ export interface FamilyGraphViewProps extends Omit<SharedProps, "getCardRef" | "
   expandedUpKeys: ReadonlySet<string>;
   expandingUpKeys: ReadonlySet<string>;
   expandingDownKeys: ReadonlySet<string>;
+  /** Labels (buildDescendantTree's own "p"/"pc0"-style ids) actually
+   * revealed by a manual "+" click -- TreeView.tsx's own `expandedDescendant`
+   * -- as opposed to a node merely showing children because it's still
+   * within base depth (BASE_DESC) and was never clicked at all. Gates
+   * ChildrenGroupBox's own "-": only a branch the user *chose* to reveal
+   * gets an undo button, so a freshly-opened graph's base-depth rows (most
+   * of what's on screen) don't all sprout a "-" nobody asked for. */
+  expandedDownKeys: ReadonlySet<string>;
+  /** "-" markers, the reverse of onExpandUp/onExpandDown -- both just drop
+   * the relevant key/label back out of expanded state (see TreeView.tsx's
+   * own collapseFamilyUp/collapseFamilyDown), never touch `data` itself, so
+   * a later re-expand of the exact same branch is instant, no re-fetch. */
+  onCollapseUp: (boxKey: string) => void;
+  onCollapseDown: (label: string) => void;
 }
 
 /** Ancestors read top-to-bottom as physically "up," the root's own
@@ -799,8 +877,9 @@ export interface FamilyGraphViewProps extends Omit<SharedProps, "getCardRef" | "
  * one flat, generation-indexed set of rows rather than a nested per-branch
  * tree, so two boxes at the same generation always land on the same
  * full-width row, with a full-width divider between each row -- see this
- * file's own top doc comment. No pan/zoom for v1: a plain scrollable
- * wrapper handles a diagram that outgrows the viewport.
+ * file's own top doc comment. No zoom: a plain scrollable wrapper (native
+ * scrollbars, plus click-and-drag panning -- see the drag-state hooks
+ * below) handles a diagram that outgrows the viewport.
  *
  * Two things animate, both driven by `scrollToAndPulse` below -- smooth-
  * scroll a specific card into the center of the view and give it one brief
@@ -820,7 +899,8 @@ export interface FamilyGraphViewProps extends Omit<SharedProps, "getCardRef" | "
  * scrolled to and briefly highlighted in place, which is what makes the
  * motion visible at all instead of being masked by a hard redraw. */
 export function FamilyGraphView({
-  ancestorCluster, descendantTree, onExpandUp, onExpandDown, expandedUpKeys, expandingUpKeys, expandingDownKeys, rootHandle, ...shared
+  ancestorCluster, descendantTree, onExpandUp, onExpandDown, expandedUpKeys, expandingUpKeys, expandingDownKeys,
+  expandedDownKeys, onCollapseUp, onCollapseDown, rootHandle, ...shared
 }: FamilyGraphViewProps) {
   const cardNodes = useRef<Map<string, HTMLDivElement>>(new Map());
   const refCallbacks = useRef<Map<string, (el: HTMLDivElement | null) => void>>(new Map());
@@ -894,6 +974,65 @@ export function FamilyGraphView({
 
   const graphContainerRef = useRef<HTMLDivElement>(null);
 
+  // Click-and-drag panning for the plain scrollable wrapper below -- mouse
+  // only (touch already gets native scrolling for free). Deliberately *not*
+  // Pointer Events + setPointerCapture (an earlier version of this used
+  // that, matching TimelineChart.tsx's own canvas drag-pan): capturing the
+  // pointer on this container turned out to suppress the native `click`
+  // that's supposed to follow on a card or marker several DOM layers down,
+  // breaking selection and every "+"/"-" in the graph, not just during an
+  // actual drag -- a known pointer-capture-vs-descendant-click pitfall.
+  // Plain `mousedown` + `window`-level `mousemove`/`mouseup` listeners avoid
+  // it entirely: nothing here ever calls preventDefault/stopPropagation or
+  // retargets any event, so a real click is completely untouched, and a
+  // genuine drag naturally never produces one anyway -- panning moves the
+  // graph's own content out from under the cursor, so by the time the mouse
+  // is released, whatever the browser hit-tests there is no longer the
+  // element the drag started on. Scroll position is written directly to the
+  // DOM on every move rather than through React state -- there's nothing
+  // here that needs a re-render mid-drag, and the connector-line overlay
+  // (useConnectorLines) already measures everything relative to the
+  // container, so it stays correct through a plain scroll with no recompute
+  // needed.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dragStateRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number; moved: boolean } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleMouseDown = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const container = scrollRef.current;
+    if (!container) return;
+    dragStateRef.current = { x: e.clientX, y: e.clientY, scrollLeft: container.scrollLeft, scrollTop: container.scrollTop, moved: false };
+  }, []);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      const drag = dragStateRef.current;
+      const container = scrollRef.current;
+      if (!drag || !container) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) > 3) {
+        drag.moved = true;
+        setDragging(true);
+      }
+      if (drag.moved) {
+        container.scrollLeft = drag.scrollLeft - dx;
+        container.scrollTop = drag.scrollTop - dy;
+      }
+    }
+    function onMouseUp() {
+      dragStateRef.current = null;
+      setDragging(false);
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
   // Plain derived values, not hooks -- safe to compute after the hooks
   // above regardless of `ancestorCluster` (unlike a hook, a function call
   // being conditionally skipped some renders doesn't break React's "same
@@ -907,14 +1046,16 @@ export function FamilyGraphView({
   const rows = new Map<number, ReactNode[]>();
   const connectors: ConnectorSpec[] = [];
   if (ancestorCluster) {
-    collectAncestorCluster(ancestorCluster, 0, sharedProps, handleExpandUp, expandedUpKeys, expandingUpKeys, ROOT_VISITED, rows, connectors);
+    collectAncestorCluster(
+      ancestorCluster, 0, sharedProps, handleExpandUp, expandedUpKeys, expandingUpKeys, onCollapseUp, ROOT_VISITED, rows, connectors,
+    );
     if (rootHandle && descendantTree?.children && descendantTree.children.length > 0) {
       // collectDescendantChildren pushes each family group's own connector
       // itself (per-family loop), so no separate connector push is needed
       // here the way a single flat box used to require.
       collectDescendantChildren(
-        descendantTree.children, -1, rootHandle, sharedProps, handleExpandDown, expandingDownKeys,
-        handleExpandUp, expandedUpKeys, expandingUpKeys, ROOT_VISITED, rows, connectors,
+        descendantTree.children, -1, rootHandle, sharedProps, handleExpandDown, expandingDownKeys, onCollapseDown, expandedDownKeys,
+        handleExpandUp, expandedUpKeys, expandingUpKeys, onCollapseUp, ROOT_VISITED, rows, connectors,
       );
     }
   }
@@ -931,7 +1072,15 @@ export function FamilyGraphView({
   if (!ancestorCluster) return null;
 
   return (
-    <div style={{ width: "100%", height: "100%", overflow: "auto", padding: 24 }}>
+    <div
+      ref={scrollRef}
+      style={{
+        width: "100%", height: "100%", overflow: "auto", padding: 24,
+        cursor: dragging ? "grabbing" : "grab",
+        userSelect: dragging ? "none" : undefined,
+      }}
+      onMouseDown={handleMouseDown}
+    >
       <FamilyGraphKeyframes />
       <div ref={graphContainerRef} style={{ position: "relative" }}>
         <Stack gap={0} style={{ minWidth: "fit-content", margin: "0 auto" }}>

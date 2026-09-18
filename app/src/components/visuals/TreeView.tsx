@@ -645,6 +645,30 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     });
   }
 
+  // The Family graph's own "-" markers: the reverse of expandFamilyUp/
+  // expandNode(..., "descendant", ...) -- both just drop the key/label back
+  // out of expanded state (reusing buildFamilyClusterTree's own
+  // parentClustersByGroup gating, and buildDescendantTree's own collapsed
+  // override, respectively) rather than discarding anything from `data`, so
+  // a later re-expand of the exact same branch is instant, no re-fetch.
+  const collapseFamilyUp = useCallback((boxKey: string) => {
+    setExpandedFamilyUp((prev) => {
+      if (!prev.has(boxKey)) return prev;
+      const next = new Set(prev);
+      next.delete(boxKey);
+      return next;
+    });
+  }, []);
+  const collapseFamilyDown = useCallback((label: string) => {
+    setExpandedDescendant((prev) => {
+      if (!prev.has(label)) return prev;
+      const next = new Set(prev);
+      next.delete(label);
+      return next;
+    });
+    setCollapsedDescendant((prev) => (prev.has(label) ? prev : new Set(prev).add(label)));
+  }, []);
+
   // Whether the selected person actually has anything to collapse -- greys
   // out the option when this node isn't currently showing any children in
   // that direction (a true leaf, or already collapsed).
@@ -774,8 +798,8 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           familyAncestorCluster ? (
             <Group justify="space-between" wrap="wrap" gap="xs">
               <Text size="xs" c="dimmed">
-                click a person for details · "+ Up" reveals their parents and full sibling row (half/step/adopted
-                included) · "+ Down" reveals their own children
+                drag to pan · click a person for details · "+" reveals parents/siblings (up) or children (down) ·
+                "−" collapses a revealed branch back down (no data is lost -- "+" brings it right back)
               </Text>
               <Checkbox
                 size="xs"
@@ -815,6 +839,9 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           expandedUpKeys={expandedFamilyUp}
           expandingUpKeys={expandingFamilyUp}
           expandingDownKeys={expandingKeys}
+          expandedDownKeys={expandedDescendant}
+          onCollapseUp={collapseFamilyUp}
+          onCollapseDown={collapseFamilyDown}
           spouseClustersByHandle={spouseClustersByHandle}
           compact={familyCompact}
         />
