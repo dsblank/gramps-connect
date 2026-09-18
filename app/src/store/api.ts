@@ -4,7 +4,7 @@
 // removed, see git history).
 import { API_BASE } from "../config";
 import { toSelectEntry } from "./sql";
-import type { OrderBy, ViewConfig } from "./views";
+import type { ColumnConfig, OrderBy, ViewConfig } from "./views";
 
 // Server-side max (see QueryBodyArgs.limit's Range(min=1, max=1000) in
 // gramps-web-api's object_query.py) -- fewer round trips for a fixed
@@ -79,7 +79,14 @@ export async function fetchPage(
   // query) and don't care about `items` itself -- the server still requires
   // limit >= 1 (QueryBodyArgs.limit's Range(min=1, ...)), so this can't go
   // to 0, but 1 keeps that response payload minimal.
-  limit: number = PAGE_SIZE
+  limit: number = PAGE_SIZE,
+  // Overridable for a caller that only reads a handful of a view's columns
+  // (e.g. homeStats.ts's fetchRecentlyChanged, which never shows the rest of
+  // what DataTable would) -- selecting only what's actually read saves the
+  // server the JSON-extraction work for every other column, not just the
+  // response bytes. Defaults to every column, i.e. what a ViewStore/DataTable
+  // caller needs.
+  columns: ColumnConfig[] = view.columns
 ): Promise<{ page: QueryPage; totalCount: number | null }> {
   const res = await fetch(`${API_BASE}${view.endpoint}`, {
     method: "POST",
@@ -88,7 +95,7 @@ export async function fetchPage(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      select: ["handle", ...view.columns.map(toSelectEntry)],
+      select: ["handle", ...columns.map(toSelectEntry)],
       order_by: orderBy,
       limit,
       after: after ?? undefined,

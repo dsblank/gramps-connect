@@ -6,7 +6,7 @@
 // ten of it locally.
 import { fetchPage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
-import { VIEWS, TOPICS_VIEW, STORY_VIEW, formatChange, type ViewConfig } from "./views";
+import { VIEWS, TOPICS_VIEW, STORY_VIEW, formatChange, type ColumnConfig, type ViewConfig } from "./views";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -55,6 +55,38 @@ const RECENT_LABEL: Record<string, (view: ViewConfig, item: QueryItem) => string
   tag: (v, i) => cellText(v, i, "name") || "(tag)",
 };
 
+/** The columns RECENT_LABEL above actually reads for each type, beyond the
+ * gramps_id/change every view already carries. api.ts's fetchPage()
+ * otherwise selects every column a DataTable would show for that type --
+ * for Person that's also two json_path date columns and two hidden
+ * relationship-handle arrays this dashboard never reads, and Media's
+ * "category" column re-derives from a second json_path select of its own.
+ * Place's "title" keeps its fallback source ("name", see placeTitleOrName
+ * above STORY_VIEW/PLACE_VIEW in views.ts) alongside it, since dropping
+ * that field would blank out title-less places instead of falling back to
+ * their PlaceName -- every other field used here is a plain, unfallbacked
+ * select. */
+const RECENT_LABEL_FIELDS: Record<string, string[]> = {
+  person: ["given_name", "surname"],
+  family: ["father_name", "mother_name"],
+  event: ["description", "event_type"],
+  place: ["title", "name"],
+  repository: ["name"],
+  source: ["title"],
+  citation: ["source_title", "page"],
+  media: ["desc"],
+  note: ["text"],
+  tag: ["name"],
+};
+
+/** Restricts `view`'s full column set down to what fetchRecentlyChanged
+ * needs -- see RECENT_LABEL_FIELDS. fetchPage() always selects "handle"
+ * itself, so this only needs to cover the rest. */
+function recentColumns(view: ViewConfig): ColumnConfig[] {
+  const needed = new Set(["gramps_id", "change", ...(RECENT_LABEL_FIELDS[view.key] ?? [])]);
+  return view.columns.filter((c) => needed.has(c.key));
+}
+
 /** The where_expr actually sent for `view`: just its own fixed
  * `view.baseFilter`, if it has one. Needed here because these fetches call
  * api.ts's fetchPage() directly rather than going through a ViewStore --
@@ -101,7 +133,7 @@ export async function fetchRecentlyChanged(token: string, limit: number): Promis
       try {
         const { page } = await fetchPage(
           view, token, null, false, combinedFilter(view),
-          [{ column: "change", direction: "desc" }], limit
+          [{ column: "change", direction: "desc" }], limit, recentColumns(view)
         );
         return page.items.map((item) => toRecentItem(view, item));
       } catch {

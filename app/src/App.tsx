@@ -40,6 +40,7 @@ import { loadKnownUsersFromDirectory } from "./store/knownUsers";
 import { bumpTopicActivity } from "./store/topicWindows";
 import { fetchNoteRaw } from "./store/notesApi";
 import { fetchMetadata } from "./store/metadataApi";
+import { fetchServerState } from "./store/cacheMeta";
 import { classifyRemoteNoteChange } from "./store/topicInvite";
 import { FloatingTopicWindows } from "./components/FloatingTopicWindows";
 import { ConfirmDialogHost } from "./components/ConfirmDialogHost";
@@ -257,7 +258,17 @@ function AuthenticatedApp() {
     });
   }, []);
   useEffect(() => {
-    refreshTreeName();
+    // Reuses cacheMeta's own memoized /api/metadata/ fetch (every view's
+    // staleness check, and Home's counts, already pay for this one) instead
+    // of refreshTreeName's plain fetchMetadata() -- calling that here too
+    // would fire a second, near-simultaneous request for the same response.
+    // refreshTreeName itself still exists for the one case that needs a
+    // guaranteed-fresh read: right after an admin renames the active tree.
+    fetchServerState()
+      .then((state) => setTreeName(state.dbName || null))
+      .catch(() => {
+        // Best-effort -- the header just falls back to the plain wordmark.
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Lifted above MenuBar (rather than MenuBar calling this itself) because

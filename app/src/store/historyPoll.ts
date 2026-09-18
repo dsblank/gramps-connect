@@ -10,6 +10,7 @@
 // (sqlite included), not just Postgres.
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
+import { fetchLatestTransactionId } from "./cacheMeta";
 
 export type TreeChangeOp = "INSERT" | "UPDATE" | "DELETE";
 
@@ -130,13 +131,13 @@ export function pollHistory(
     try {
       const token = await getToken();
       if (!bootstrapped) {
-        const res = await fetch(
-          `${API_BASE}/api/transactions/history/?after_id=0&page=1&pagesize=1&sort=-id`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!res.ok) throw new Error(`history poll bootstrap failed: ${res.status}`);
-        const latest: HistoryTransaction[] = await res.json();
-        afterId = latest[0]?.id ?? 0;
+        // Shares cacheMeta.ts's own request for the same "newest transaction
+        // id" question -- see fetchLatestTransactionId's doc comment -- so a
+        // page load that also runs a cache-staleness check doesn't pay for
+        // this twice.
+        const result = await fetchLatestTransactionId(token);
+        if (!result.ok) throw new Error(`history poll bootstrap failed: ${result.status}`);
+        afterId = result.id;
         bootstrapped = true;
       }
       const res = await fetch(
