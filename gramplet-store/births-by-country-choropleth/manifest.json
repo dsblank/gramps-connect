@@ -1,0 +1,12 @@
+{
+  "id": "births-by-country-choropleth",
+  "name": "Births by Country (Choropleth)",
+  "description": "An interactive plotly choropleth map colored by how many people (across the tree, or the current filtered list) were born in each country -- no ISO codes needed, just each birthplace's own recorded enclosing country.",
+  "version": "1.1.0",
+  "author": "Gramps Connect",
+  "category": "chart",
+  "views": [
+    "person"
+  ],
+  "listensToFilter": true
+}
