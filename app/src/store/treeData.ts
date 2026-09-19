@@ -13,13 +13,25 @@ import { getViewStore } from "./registry";
 import { mediaThumbnailUrl } from "./mediaCrop";
 import type { VisualSubject } from "../hash";
 
+/** Shared shape for a family record as returned under a person's own
+ * `families` (families they parent) or `parent_family_list` (families
+ * they're a child in) extend -- same fields either way. */
+interface TreeFamilyRaw {
+  handle: string;
+  father_handle?: string;
+  mother_handle?: string;
+  child_ref_list?: { ref: string; frel?: string; mrel?: string }[];
+}
+
 /** Only the fields gramps-web's charts/util.js actually reads off a
- * profile=self&extend=primary_parent_family,family_list person. birth/death
- * dates arrive already formatted text, not raw GrampsDate structs.
- * `media_list` is a base Person field (present with no extend needed) --
- * same shape objectDetail.ts's own RawRef/RefMeta types describe, `rect`
- * a `[left, top, right, bottom]` percentage crop when the reference has
- * one. */
+ * profile=self&extend=primary_parent_family,family_list person, plus
+ * `parent_family_list` (this app's own addition -- see computeClusterSiblings'
+ * own doc comment on why `primary_parent_family` alone isn't enough for
+ * symmetric sibling discovery). birth/death dates arrive already formatted
+ * text, not raw GrampsDate structs. `media_list` is a base Person field
+ * (present with no extend needed) -- same shape objectDetail.ts's own
+ * RawRef/RefMeta types describe, `rect` a `[left, top, right, bottom]`
+ * percentage crop when the reference has one. */
 export interface TreePersonRaw {
   handle: string;
   gramps_id: string;
@@ -33,12 +45,12 @@ export interface TreePersonRaw {
   media_list?: { ref: string; rect?: number[] }[];
   extended?: {
     primary_parent_family?: { father_handle?: string; mother_handle?: string };
-    families?: {
-      handle: string;
-      father_handle?: string;
-      mother_handle?: string;
-      child_ref_list?: { ref: string; frel?: string; mrel?: string }[];
-    }[];
+    families?: TreeFamilyRaw[];
+    /** Every family this person is a *child* in -- their own birth family
+     * plus any step/foster/adopted family they were also added to (e.g. a
+     * widow's remarriage), unlike `primary_parent_family` which names only
+     * one of those. */
+    parent_family_list?: TreeFamilyRaw[];
   };
 }
 
@@ -235,7 +247,13 @@ export function buildDescendantTree(
  * read. `nAnc+1`/`nDesc+1`: IsLessThanNthGenerationAncestorOf/DescendantOf's
  * N counts generations including the root itself (N=1 is self only), so
  * "nAnc ancestor generations beyond the root" needs N = nAnc+1 -- same
- * arithmetic as gramps-web's own _getPersonRules. */
+ * arithmetic as gramps-web's own _getPersonRules. `parent_family_list` rides
+ * along on every call (not just the Family graph's own fetchPersonByHandle
+ * below) -- this is the root-keyed effect family mode's own focus-fetch
+ * shares with box/fan mode (TreeView.tsx), and ensureClusterLoaded only
+ * (re)fetches a person by handle when their row isn't in `data` *at all*;
+ * if this call had landed the root's row first without it, that row would
+ * never get a second chance to pick it up. */
 export async function fetchTreeData(token: string, grampsId: string, nAnc: number, nDesc: number): Promise<TreePersonRaw[]> {
   const rules = {
     function: "or",
@@ -244,7 +262,7 @@ export async function fetchTreeData(token: string, grampsId: string, nAnc: numbe
       { name: "IsLessThanNthGenerationDescendantOf", values: [grampsId, nDesc + 1] },
     ],
   };
-  const url = `${API_BASE}/api/people/?rules=${encodeURIComponent(JSON.stringify(rules))}&profile=self&extend=primary_parent_family,family_list`;
+  const url = `${API_BASE}/api/people/?rules=${encodeURIComponent(JSON.stringify(rules))}&profile=self&extend=primary_parent_family,parent_family_list,family_list`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
@@ -296,22 +314,71 @@ export interface FamilyClusterNode {
   parentClustersByGroup: Record<string, FamilyClusterNode[]>;
 }
 
-/** Every child of either of `person`'s two known parents, across *every*
- * marriage either parent is part of -- not just `person`'s own primary
- * family -- so half-siblings from a parent's other relationship are
- * included. Unlike descendantNode's own walk, every frel/mrel is kept (no
- * Birth-only filter): step/adopted siblings are exactly what the Family
- * graph exists to surface. Requires the father/mother TreePersonRaw rows (if
- * their handles are known) to already be in `data` with their own
- * `extended.families` populated, and each resulting sibling's own row to
- * already be in `data` too -- see missingParentHandles/missingSiblingHandles
- * and ensureClusterLoaded below, which guarantee this before calling here. */
+/** Every parent `person` is a child *of*, across every one of their own
+ * `parent_family_list` entries -- not just `primary_parent_family`'s one
+ * pair. A person who's a birth child in one family and a step/adopted child
+ * in another (e.g. a widow's remarriage) has more than two of these; using
+ * only `primary_parent_family` here is exactly what made sibling discovery
+ * direction-dependent before this function existed -- centering on a
+ * birth-family child found the step-family (it's one of the *father's* own
+ * `families`, discovered by walking outward from him), but centering on a
+ * step-family child never did, because that child's own *primary* family is
+ * their birth family, not the step one, so the step-parent was never even
+ * looked up. */
+function personParentHandles(person: TreePersonRaw): string[] {
+  const handles = new Set<string>();
+  for (const fam of person.extended?.parent_family_list ?? []) {
+    if (fam.father_handle) handles.add(fam.father_handle);
+    if (fam.mother_handle) handles.add(fam.mother_handle);
+  }
+  return Array.from(handles);
+}
+
+/** Rank used to keep the *strongest* relation found for a given sibling
+ * candidate, when the same person is reachable via more than one shared
+ * family (e.g. found once via their own true birth family as "full", and
+ * again via a step-family both anchor and candidate happen to also share --
+ * the first discovery order must never decide which sticks). */
+const RELATION_RANK: Record<ClusterSibling["relation"], number> = {
+  step: 0,
+  "half-father": 1,
+  "half-mother": 1,
+  full: 2,
+};
+
+/** Every child of any of `person`'s own parents (personParentHandles,
+ * above), across *every* marriage each of those parents is part of -- not
+ * just `person`'s own parent family/families -- so half/step-siblings from
+ * a parent's other relationship are included regardless of which of
+ * `person`'s own (possibly several) parent families is their "primary" one.
+ * Unlike descendantNode's own walk, every frel/mrel is kept (no Birth-only
+ * filter): step/adopted siblings are exactly what the Family graph exists
+ * to surface.
+ *
+ * A shared parent alone doesn't make two people "half" siblings -- both
+ * `person` and the candidate need a *blood* tie to that same parent, each
+ * checked independently (a step-parent's own birth children are still only
+ * "step" to `person`, never "half", even though the step-parent is
+ * genuinely a blood parent of *them*). `person`'s own blood ties are read
+ * once, up front, from their own child_ref entry in each of their parent
+ * families.
+ *
+ * Requires every handle personParentHandles(person) names to already be in
+ * `data` with its own `extended.families` populated, and each resulting
+ * sibling's own row to already be in `data` too -- see
+ * missingParentHandles/missingSiblingHandles and ensureClusterLoaded below,
+ * which guarantee this before calling here. */
 export function computeClusterSiblings(data: TreePersonRaw[], person: TreePersonRaw): ClusterSibling[] {
-  const fatherHandle = person.extended?.primary_parent_family?.father_handle;
-  const motherHandle = person.extended?.primary_parent_family?.mother_handle;
-  const father = findPerson(data, fatherHandle);
-  const mother = findPerson(data, motherHandle);
-  const families = [...(father?.extended?.families ?? []), ...(mother?.extended?.families ?? [])];
+  const parentHandles = new Set(personParentHandles(person));
+  const bloodParentHandles = new Set<string>();
+  for (const fam of person.extended?.parent_family_list ?? []) {
+    const ownRef = fam.child_ref_list?.find((ref) => ref.ref === person.handle);
+    if (!ownRef) continue;
+    if (fam.father_handle && isBloodChildRel(ownRef.frel)) bloodParentHandles.add(fam.father_handle);
+    if (fam.mother_handle && isBloodChildRel(ownRef.mrel)) bloodParentHandles.add(fam.mother_handle);
+  }
+  const parents = Array.from(parentHandles).map((h) => findPerson(data, h)).filter((p): p is TreePersonRaw => !!p);
+  const families = parents.flatMap((p) => p.extended?.families ?? []);
   const seenFamilyHandles = new Set<string>();
   const byHandle = new Map<string, ClusterSibling>();
   for (const fam of families) {
@@ -325,24 +392,31 @@ export function computeClusterSiblings(data: TreePersonRaw[], person: TreePerson
     // his wife's kids from a prior marriage as Step to him), so which
     // parent this specific child is a *blood* tie to has to be decided
     // per-child, below, not once for the family as a whole.
-    const matchesFather = !!fatherHandle && fam.father_handle === fatherHandle;
-    const matchesMother = !!motherHandle && fam.mother_handle === motherHandle;
+    const matchesFather = !!fam.father_handle && parentHandles.has(fam.father_handle);
+    const matchesMother = !!fam.mother_handle && parentHandles.has(fam.mother_handle);
     if (!matchesFather && !matchesMother) continue;
     for (const ref of fam.child_ref_list ?? []) {
-      if (byHandle.has(ref.ref)) continue;
       const siblingPerson = findPerson(data, ref.ref);
       if (!siblingPerson) continue; // not fetched yet -- missingSiblingHandles catches this
-      const bloodFather = matchesFather && isBloodChildRel(ref.frel);
-      const bloodMother = matchesMother && isBloodChildRel(ref.mrel);
-      const relation: ClusterSibling["relation"] =
-        bloodFather && bloodMother ? "full" : bloodFather ? "half-father" : bloodMother ? "half-mother" : "step";
-      byHandle.set(ref.ref, {
-        person: siblingPerson,
-        relation,
-        frel: ref.frel,
-        mrel: ref.mrel,
-        isAnchor: ref.ref === person.handle,
-      });
+      const isAnchor = ref.ref === person.handle;
+      // Both sides of the tie have to be blood for it to count as a shared
+      // blood parent -- `person`'s own tie to that parent (bloodParentHandles,
+      // computed once above) *and* this specific candidate's tie to them in
+      // *this* family (ref.frel/ref.mrel).
+      const fatherSideFull = matchesFather && bloodParentHandles.has(fam.father_handle!) && isBloodChildRel(ref.frel);
+      const motherSideFull = matchesMother && bloodParentHandles.has(fam.mother_handle!) && isBloodChildRel(ref.mrel);
+      const relation: ClusterSibling["relation"] = isAnchor
+        ? "full"
+        : fatherSideFull && motherSideFull
+          ? "full"
+          : fatherSideFull
+            ? "half-father"
+            : motherSideFull
+              ? "half-mother"
+              : "step";
+      const existing = byHandle.get(ref.ref);
+      if (existing && RELATION_RANK[relation] <= RELATION_RANK[existing.relation]) continue;
+      byHandle.set(ref.ref, { person: siblingPerson, relation, frel: ref.frel, mrel: ref.mrel, isAnchor });
     }
   }
   // `person` always belongs to their own cluster, even with no parents
@@ -353,28 +427,27 @@ export function computeClusterSiblings(data: TreePersonRaw[], person: TreePerson
   return Array.from(byHandle.values());
 }
 
-/** `person`'s own two parent handles not yet present in `data` -- the first
- * fetch ensureClusterLoaded needs before computeClusterSiblings can see
- * either parent's `extended.families`. */
+/** `person`'s own parent handles (personParentHandles, above) not yet
+ * present in `data` -- the first fetch ensureClusterLoaded needs before
+ * computeClusterSiblings can see any of those parents' `extended.families`. */
 export function missingParentHandles(data: TreePersonRaw[], person: TreePersonRaw): string[] {
-  const fatherHandle = person.extended?.primary_parent_family?.father_handle;
-  const motherHandle = person.extended?.primary_parent_family?.mother_handle;
-  return [fatherHandle, motherHandle].filter((h): h is string => !!h && !findPerson(data, h));
+  return personParentHandles(person).filter((h) => !findPerson(data, h));
 }
 
 /** Once `person`'s parents are loaded, every sibling handle
  * computeClusterSiblings would want to include but whose own row isn't in
  * `data` yet. */
 export function missingSiblingHandles(data: TreePersonRaw[], person: TreePersonRaw): string[] {
-  const fatherHandle = person.extended?.primary_parent_family?.father_handle;
-  const motherHandle = person.extended?.primary_parent_family?.mother_handle;
-  const father = findPerson(data, fatherHandle);
-  const mother = findPerson(data, motherHandle);
-  const families = [...(father?.extended?.families ?? []), ...(mother?.extended?.families ?? [])];
+  const parentHandles = new Set(personParentHandles(person));
+  const parents = Array.from(parentHandles).map((h) => findPerson(data, h)).filter((p): p is TreePersonRaw => !!p);
+  const families = parents.flatMap((p) => p.extended?.families ?? []);
+  const seenFamilyHandles = new Set<string>();
   const seenRefs = new Set<string>();
   const missing: string[] = [];
   for (const fam of families) {
-    const isRelevant = (!!fatherHandle && fam.father_handle === fatherHandle) || (!!motherHandle && fam.mother_handle === motherHandle);
+    if (seenFamilyHandles.has(fam.handle)) continue;
+    seenFamilyHandles.add(fam.handle);
+    const isRelevant = (!!fam.father_handle && parentHandles.has(fam.father_handle)) || (!!fam.mother_handle && parentHandles.has(fam.mother_handle));
     if (!isRelevant) continue;
     for (const ref of fam.child_ref_list ?? []) {
       if (seenRefs.has(ref.ref)) continue;
@@ -477,14 +550,14 @@ export function groupChildrenByFamily(children: TreeNode[]): ChildFamilyGroup[] 
 }
 
 /** GET /api/people/<handle>?profile=self&extend=primary_parent_family,
- * family_list -- same query shape/TreePersonRaw as fetchTreeData, just a
- * direct by-handle GET (the pattern objectDetail.ts's fetchObjectExtended
- * already uses elsewhere) rather than the rules-based by-gramps_id list
- * endpoint, since the Family graph only ever has handles (child_ref_list
- * entries, parent handles) to work from, never gramps_ids. Bare object, no
- * envelope -- same as objectDetail.ts's own by-handle GET. */
+ * parent_family_list,family_list -- same query shape/TreePersonRaw as
+ * fetchTreeData, just a direct by-handle GET (the pattern objectDetail.ts's
+ * fetchObjectExtended already uses elsewhere) rather than the rules-based
+ * by-gramps_id list endpoint, since the Family graph only ever has handles
+ * (child_ref_list entries, parent handles) to work from, never gramps_ids.
+ * Bare object, no envelope -- same as objectDetail.ts's own by-handle GET. */
 export async function fetchPersonByHandle(token: string, handle: string): Promise<TreePersonRaw> {
-  const url = `${API_BASE}/api/people/${encodeURIComponent(handle)}?profile=self&extend=primary_parent_family,family_list`;
+  const url = `${API_BASE}/api/people/${encodeURIComponent(handle)}?profile=self&extend=primary_parent_family,parent_family_list,family_list`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return (await res.json()) as TreePersonRaw;
