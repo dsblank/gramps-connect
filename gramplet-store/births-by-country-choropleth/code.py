@@ -8,6 +8,17 @@
 # against ordinary English country names ("France", "United States"), not
 # the ISO-3166 codes its other locationmode expects.
 #
+# Reads each Place's `name.value`, never its `title` -- a real user of an
+# earlier version of this Gramplet hit exactly this: `title` is a separate,
+# optional override field the Gramps Place editor leaves blank unless
+# someone manually overrides the displayed name, so most places (anything
+# entered the ordinary way, one Name + an "enclosed by" hierarchy) have an
+# empty `title` and a populated `name.value`. Confirmed directly against
+# gramps.gen.lib.Place: setting only `name.value` leaves `title == ''`.
+# (Two local test trees both happened to have `title` populated with old-
+# style full descriptive strings, which is how that dependency slipped
+# through the first pass -- see git history for that version.)
+#
 # The country itself is never stored on the person or the event -- only on
 # whichever Place their birth event points at. So this walks that place's
 # own `enclosed_by` chain (Place -> Place, the same generic relationship
@@ -15,25 +26,22 @@
 # MAX_HOPS levels, preferring the first ancestor typed PlaceType.COUNTRY.
 #
 # That preferred path needs a real Place hierarchy (enclosed_by links) with
-# accurate place_type values on it, which turns out to be the exception,
-# not the rule: checked against Gramps's own official example.gramps
-# sample data, all 1903 people with a recorded birthplace have it as one
-# flat, untyped Place record (place_type == -1, no enclosed_by at all) with
-# the whole hierarchy baked into the title string itself, e.g. "Norway,
-# Vestfold, Norway" or "Blois, Loir-et-Cher, Orleanais/Centre, France" --
-# so two more fallbacks, weakest last:
+# accurate place_type values on it, which isn't universal, so two more
+# fallbacks, weakest last:
 #   1. A Country-typed ancestor in the enclosed_by chain (most reliable,
 #      when a tree actually has one).
 #   2. No Country type found, but the chain does go up at least one level
-#      (enclosed_by is set) -- use the outermost title reached. Most
+#      (enclosed_by is set) -- use the outermost name reached. Most
 #      hand-built hierarchies put the country at the top even when nobody
 #      bothered setting each level's type.
-#   3. No enclosed_by at all -- split the place's own title on commas and
-#      use the last segment. Not always a real place name (trailing
-#      punctuation, "Orkney, Scotland." style regions Plotly won't
-#      recognize as a country) but it's what's actually in the data, and
-#      go.Choropleth silently skips any location string it can't match
-#      rather than erroring, so a wrong guess just doesn't color anything.
+#   3. No enclosed_by at all -- split the place's own name on commas and
+#      use the last segment. This only helps trees where a full descriptive
+#      string was dumped into one Place's name/title (some GEDCOM imports
+#      do this) rather than built into levels; an ordinary single-word
+#      Place name has no comma to split on and stays as-is. Not always a
+#      real place name Plotly recognizes, but go.Choropleth silently skips
+#      any location string it can't match rather than erroring, so a wrong
+#      guess just doesn't color anything.
 #
 # Demonstrates:
 #   - filter()'s `what` crossing a *chain* of relationships
@@ -67,11 +75,15 @@ for _ in range(MAX_HOPS):
 # and_filters(get_filter(), ...) layers this Gramplet's own "has a
 # birthplace" requirement on top of whatever filter is currently applied
 # on the People view -- so filtering down to one family branch narrows the
-# map the same way, instead of it always covering the whole tree.
+# map the same way, instead of it always covering the whole tree. Checked
+# via "handle" (always set whenever a Place is actually linked), not
+# "title" or "name.value" -- either of those can legitimately be blank on
+# a real Place, which would wrongly exclude it here rather than just
+# falling through to "skipped" below.
 rows = filter(
     "person",
-    where=and_filters(get_filter(), "birth.place.title is not None"),
-    what=[f"{hop}.title" for hop in hops] + [f"{hop}.place_type.value" for hop in hops],
+    where=and_filters(get_filter(), "birth.place.handle is not None"),
+    what=[f"{hop}.name.value" for hop in hops] + [f"{hop}.place_type.value" for hop in hops],
     limit=5000,
 )
 
@@ -79,26 +91,27 @@ counts = Counter()
 skipped = 0
 for r in rows:
     country = None
-    outermost_title = None
+    outermost_name = None
     for hop in hops:
-        title = r[f"{hop}.title"]
-        if not title:
+        name = r[f"{hop}.name.value"]
+        if not name:
             break
-        outermost_title = title
+        outermost_name = name
         if r[f"{hop}.place_type.value"] == PlaceType.COUNTRY:
-            country = title
+            country = name
             break
 
-    if country is None and outermost_title and outermost_title != r["birth.place.title"]:
+    if country is None and outermost_name and outermost_name != r["birth.place.name.value"]:
         # enclosed_by went somewhere, just never hit a Country type --
         # best guess is whatever's at the top of the chain.
-        country = outermost_title
+        country = outermost_name
 
-    if country is None:
+    if country is None and r["birth.place.name.value"]:
         # No enclosed_by at all -- the birthplace is one flat record, so
-        # fall back to its own title's last comma-separated segment
+        # fall back to its own name's last comma-separated segment
         # ("Blois, Loir-et-Cher, Orleanais/Centre, France" -> "France").
-        segment = r["birth.place.title"].rsplit(",", 1)[-1].strip().rstrip(".")
+        # A no-comma name (the ordinary case) just comes back unchanged.
+        segment = r["birth.place.name.value"].rsplit(",", 1)[-1].strip().rstrip(".")
         country = segment or None
 
     if country:
@@ -107,7 +120,7 @@ for r in rows:
         skipped += 1
 
 if not counts:
-    st.write("No birthplace text in the current list to plot.")
+    st.write("No birthplace name in the current list to plot.")
 else:
     fig = go.Figure(
         go.Choropleth(
@@ -120,7 +133,7 @@ else:
     )
     title = f"Births by country ({sum(counts.values())} people"
     if skipped:
-        title += f", {skipped} skipped -- no Country place in their chain"
+        title += f", {skipped} skipped -- no place name to go on"
     title += ")"
     fig.update_layout(
         title_text=title,
