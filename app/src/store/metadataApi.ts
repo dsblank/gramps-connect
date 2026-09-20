@@ -5,6 +5,7 @@
 // and Help > System Information, which reports the version block for a bug
 // report.
 import { API_BASE } from "../config";
+import { parseErrorMessage } from "./api";
 
 /** Only the fields this app reads -- the response carries a good deal more
  * (researcher, surnames, search-index state, OCR/chat availability), and
@@ -75,5 +76,43 @@ export async function fetchMetadata(token: string): Promise<Metadata> {
   // error envelope or an HTML error page, and neither says anything to the
   // reader that the status code doesn't say better.
   if (!res.ok) throw new Error(`metadata fetch failed: ${res.status}`);
+  return res.json();
+}
+
+/** GET/PUT /api/metadata/researcher/ -- the tree owner's own contact info
+ * (name/address/email/phone), conventionally what GEDCOM export headers
+ * (SOUR/SUBM) carry. Mirrors desktop Gramps' own "Edit Researcher
+ * Information" tool (`ownereditor.py`) field set: `addr` is one free-text
+ * street-address line, distinct from the structured locality/city/state/
+ * country/postal fields alongside it. GET needs no particular permission
+ * beyond being logged in; PUT requires EditTree, same tier as
+ * OwnerAdministrationDialog.tsx's tree-rename control. */
+export interface Researcher {
+  name?: string;
+  addr?: string;
+  locality?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal?: string;
+  phone?: string;
+  email?: string;
+}
+
+export async function fetchResearcher(token: string): Promise<Researcher> {
+  const res = await fetch(`${API_BASE}/api/metadata/researcher/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  return res.json();
+}
+
+export async function updateResearcher(token: string, data: Researcher): Promise<Researcher> {
+  const res = await fetch(`${API_BASE}/api/metadata/researcher/`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
   return res.json();
 }

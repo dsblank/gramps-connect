@@ -100,16 +100,6 @@ fields) — ranked roughly by value, most first:
   feed of upcoming birthdays/anniversaries for free; `gramps-web`'s
   `GrampsjsViewAnniversaries` is the equivalent view. `HomeView.tsx`'s
   stats only cover *recently* changed, not *upcoming* dates.
-- **Researcher / tree-owner info** — `/api/metadata/researcher/` (name,
-  address, email, phone) has full GET+PUT support server-side and zero UI.
-  This is the info GEDCOM export headers (SOUR/SUBM) conventionally carry —
-  a "Tree info" settings panel is a plausible small, real feature.
-- **Tree summary stats on Home/About** — `object_counts` (people/families/
-  events/... counts) is already fetched and typed in `metadataApi.ts` but
-  never rendered anywhere. Side finding: that file's own comment claims
-  `cacheMeta.ts` reads `object_counts` for staleness detection — it
-  doesn't (no match on grep) — fix the stale comment regardless of whether
-  the stats UI gets built.
 - **Stale-search-index nudge** — `search.sifts.semantic_index_stale` is
   fetched but `ReindexDialog.tsx` only checks the boolean
   `server.semantic_search` flag to decide whether to show a reindex

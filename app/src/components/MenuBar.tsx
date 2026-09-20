@@ -14,6 +14,7 @@ import { RestoreBackupDialog } from "./RestoreBackupDialog";
 import { checkRepairDatabase, upgradeSchema } from "../store/toolsApi";
 import { OverviewDialog } from "./OverviewDialog";
 import { SystemInfoDialog } from "./SystemInfoDialog";
+import { ResearcherDialog } from "./ResearcherDialog";
 import { AboutDialog } from "./AboutDialog";
 import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
@@ -254,6 +255,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const [reportId, setReportId] = useState<string | null>(null);
   const [overviewOpened, setOverviewOpened] = useState(false);
   const [systemInfoOpened, setSystemInfoOpened] = useState(false);
+  const [researcherOpened, setResearcherOpened] = useState(false);
   const [aboutOpened, setAboutOpened] = useState(false);
   const [grampletOpened, setGrampletOpened] = useState(false);
   const [grampletStoreOpened, setGrampletStoreOpened] = useState(false);
@@ -429,21 +431,27 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
           items={reportMenuItems(reports, setReportId)}
           onOpen={() => setReportsRequested(true)}
         />
-        {/* Overview, System Information and About need no permission:
-            Overview and About are prose about the app itself, the same for
-            every reader, and someone with the fewest privileges is the one
-            most likely to be new and want them. System Information reads
-            /api/metadata/, which every logged-in user may call (it's a
-            ProtectedResource, not a permissioned one) -- and reporting a bug
-            is exactly what a reader with no privileges still needs to be
-            able to do. Gramplet Store is the exception -- it's an authoring
-            action (installing/updating a Gramplet), gated the same as "Add
-            Gramplet…" over in the Add menu. */}
+        {/* Overview, System Information, Researcher and About need no
+            permission to open: Overview and About are prose about the app
+            itself, the same for every reader, and someone with the fewest
+            privileges is the one most likely to be new and want them.
+            System Information reads /api/metadata/, which every logged-in
+            user may call (it's a ProtectedResource, not a permissioned
+            one) -- and reporting a bug is exactly what a reader with no
+            privileges still needs to be able to do. Researcher
+            (ResearcherDialog.tsx) reads /api/metadata/researcher/, same
+            deal -- its Edit button is what's actually gated, on EditTree,
+            inside the dialog itself rather than here on the menu item, so
+            every user can still see who to contact about the tree even if
+            they can't change it. Gramplet Store is the exception -- it's
+            an authoring action (installing/updating a Gramplet), gated the
+            same as "Add Gramplet…" over in the Add menu. */}
         <AppMenu
           label={t("Help")}
           items={[
             { label: "Overview", onClick: () => setOverviewOpened(true) },
             { label: "System Information", onClick: () => setSystemInfoOpened(true) },
+            { label: "Researcher", onClick: () => setResearcherOpened(true) },
             { label: "About", onClick: () => setAboutOpened(true), separatorBefore: true },
             {
               // Browse/install/update/remove from gramplet-store/catalog.json
@@ -492,6 +500,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
       <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
       <OverviewDialog opened={overviewOpened} onClose={() => setOverviewOpened(false)} />
       <SystemInfoDialog opened={systemInfoOpened} onClose={() => setSystemInfoOpened(false)} />
+      <ResearcherDialog opened={researcherOpened} onClose={() => setResearcherOpened(false)} />
       {/* About's overview link hands over to the Overview dialog rather
           than stacking a second modal on top of the first. */}
       <AboutDialog
