@@ -434,6 +434,9 @@ describe("ViewStore picker filter + typed whereExpr combination", () => {
       totalCount: 1,
     });
     vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1"));
+    // findGlobalIndex()'s own "does H1 still match what's filtering the
+    // view now" check, ahead of the rank query below.
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [], next_after: null }, totalCount: 1 });
     mockRank(0);
 
     await store.clearFilter();
@@ -441,9 +444,10 @@ describe("ViewStore picker filter + typed whereExpr combination", () => {
     expect(store.getSnapshot().whereExpr).toBeNull();
     expect(store.getSnapshot().pickerExpr).toBe("priority == 1");
     const calls = vi.mocked(fetchPage).mock.calls;
-    // navigateToHandle's own requery (2nd-to-last call) must still carry
+    // navigateToHandle's own requery (3rd-to-last call, ahead of
+    // findGlobalIndex's membership check and rank query) must still carry
     // pickerExpr -- only whereExpr was dropped.
-    expect(calls[calls.length - 2][4]).toBe("(priority == 1)");
+    expect(calls[calls.length - 3][4]).toBe("(priority == 1)");
   });
 
   it("clearPickerFilter() drops only pickerExpr, leaving an active typed whereExpr applied", async () => {
@@ -465,6 +469,9 @@ describe("ViewStore picker filter + typed whereExpr combination", () => {
       totalCount: 1,
     });
     vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1"));
+    // findGlobalIndex()'s own "does H1 still match what's filtering the
+    // view now" check, ahead of the rank query below.
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [], next_after: null }, totalCount: 1 });
     mockRank(0);
 
     await store.clearPickerFilter();
@@ -472,7 +479,7 @@ describe("ViewStore picker filter + typed whereExpr combination", () => {
     expect(store.getSnapshot().pickerExpr).toBeNull();
     expect(store.getSnapshot().whereExpr).toBe("name == 'Chores'");
     const calls = vi.mocked(fetchPage).mock.calls;
-    expect(calls[calls.length - 2][4]).toBe("(name == 'Chores')");
+    expect(calls[calls.length - 3][4]).toBe("(name == 'Chores')");
     // globalRankOfItem()'s own rank query (the last call) must still
     // restrict ranking to the still-active whereExpr's matching subset --
     // regression: it used to rank against every row in the table,
@@ -507,6 +514,61 @@ describe("ViewStore picker filter + typed whereExpr combination", () => {
     expect(ok).toBe(true);
     expect(store.getSnapshot().whereExpr).toBeNull();
     expect(store.getSnapshot().pickerExpr).toBeNull();
+  });
+});
+
+describe("ViewStore.applyWhereExpr (FilterBar's search box, applying a new term rather than clearing)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("keeps the selected record selected when a new search term still matches it, rather than jumping to the new result set's row 0", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.select(1); // H2, not the default row
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+
+    // The typed search matches both rows, H2 first this time -- if
+    // selection just fell back to "row 0 of the new results" (the bug this
+    // guards against), it would land on H2 anyway by coincidence, so the
+    // seed order here is H2 then H1 specifically to catch that.
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H2"), tagRow("H1")], next_after: null },
+      totalCount: 2,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H2"));
+    // findGlobalIndex()'s membership check, confirming H2 still matches:
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [], next_after: null }, totalCount: 1 });
+    mockRank(0); // H2 sorts first among the matches
+
+    await store.applyWhereExpr("name == 'Chores'");
+
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+    expect(store.getSnapshot().selectedIndex).toBe(0);
+    expect(store.getSnapshot().selectionIsDefault).toBe(false);
+  });
+
+  it("falls back to the new result set's default (row 0) when the selected record is filtered out by the new search", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.select(1); // H2
+    expect(store.getSnapshot().selectedHandle).toBe("H2");
+
+    // The new search only matches H1 -- H2 no longer exists in the result
+    // set at all.
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [tagRow("H1")], next_after: null },
+      totalCount: 1,
+    });
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H2")); // H2 still exists as a record...
+    // ...but findGlobalIndex()'s membership check finds it doesn't match
+    // the new filter (0 rows: this filter and handle == "H2" together).
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [], next_after: null }, totalCount: 0 });
+
+    await store.applyWhereExpr("name == 'Errands'");
+
+    expect(store.getSnapshot().selectedHandle).toBe("H1");
+    expect(store.getSnapshot().selectedIndex).toBe(0);
+    expect(store.getSnapshot().selectionIsDefault).toBe(true);
   });
 });
 

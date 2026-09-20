@@ -344,13 +344,23 @@ export class ViewStore {
   clearSelection(): void {
     if (this.selectionIsDefault) return;
     if (this.selectedIndex === null && this.selectedHandle === null) return;
+    this.resetToDefaultSelection();
+    this.emit();
+  }
+
+  /** Drops whatever's currently selected and falls back to the default
+   * (row 0, if the cache has one) -- the shared "nothing survived" tail of
+   * clearSelection() and runQueryPreservingSelection()'s not-found branch.
+   * Sets fields only, never emits -- same convention as
+   * applyDefaultSelection(), which this calls. */
+  private resetToDefaultSelection(): void {
     this.selectedIndex = null;
     this.selectedHandle = null;
     this.selectedHandles = [];
     this.selectedIndices = [];
     this.rangeAnchorIndex = null;
+    this.selectionIsDefault = false;
     this.applyDefaultSelection();
-    this.emit();
   }
 
   /** Selects an (index, handle) pair the caller already knows to be
@@ -412,6 +422,15 @@ export class ViewStore {
         this.suppressSelectionClear = false;
       }
     }
+    return this.reselectIfStillVisible(handle);
+  }
+
+  /** Re-selects `handle` at its authoritative current position if it still
+   * matches whatever's now filtering the view (server round trip via
+   * findGlobalIndex()), leaving the existing selection untouched and
+   * reporting false otherwise -- the shared tail of navigateToHandle() and
+   * runQueryPreservingSelection() below. */
+  private async reselectIfStillVisible(handle: string): Promise<boolean> {
     const index = await this.findGlobalIndex(handle);
     if (index === null) return false;
     this.selectAt(index, handle);
@@ -452,6 +471,16 @@ export class ViewStore {
     }
   }
 
+  /** FilterBar.tsx's single entry point for submitting the typed search box
+   * -- an empty/cleared box goes through clearFilter() (see its own doc
+   * comment on why that's not just "run with whereExpr null"), anything
+   * else through runQueryPreservingSelection() so that a search which still
+   * covers the record currently selected doesn't yank the view away to
+   * result 0 just because it's a "new" query. */
+  applyWhereExpr(whereExpr: string | null): Promise<void> {
+    return whereExpr === null ? this.clearFilter() : this.runQueryPreservingSelection(whereExpr);
+  }
+
   /** The "Filters" picker's counterpart to clearFilter() -- same
    * position-preserving reselect, but drops only `pickerExpr`, leaving
    * `whereExpr` (FilterBar's own box) untouched. See
@@ -476,6 +505,22 @@ export class ViewStore {
     const token = await getToken();
     const item = await fetchByHandle(this.view, token, handle);
     if (!item) return null;
+    // fetchByHandle() above ignores whatever's currently filtering the view
+    // (it's a plain "does this record exist at all" lookup) -- confirm it
+    // still matches baseFilter/pickerExpr/whereExpr before trusting
+    // globalRankOfItem()'s "rows before this one" count below, which only
+    // means what it says for a row actually inside the filtered set. A
+    // filtered-out record can still return some count against the active
+    // filter (it just happens to sort somewhere among the rows that do
+    // match), which would otherwise silently reselect whatever row lands at
+    // that position instead of recognizing the record dropped out of view.
+    const activeFilter = this.combinedFilter(this.whereExpr);
+    if (activeFilter) {
+      const { totalCount } = await fetchPage(
+        this.view, token, null, true, `(${activeFilter}) and (handle == "${handle}")`, this.orderBy, 1,
+      );
+      if (!totalCount) return null;
+    }
     return this.globalRankOfItem(item, token);
   }
 
@@ -983,6 +1028,40 @@ export class ViewStore {
     });
   }
 
+  /** Runs `runQuery`, then keeps the current selection on the same record
+   * if it still matches the resulting filter/sort, falling back to the new
+   * result set's own default (row 0) only when it doesn't (filtered out,
+   * or deleted) -- the general form of the "stay on this record" treatment
+   * clearFilter()/navigateToHandle() already give a filter *clear*, applied
+   * to every other way the row set changes under the user: a new search
+   * term, a "Filters" picker change, a sort-column click. Without this,
+   * each of those unconditionally landed on whatever row 0 became in the
+   * new results (runQuery()'s own unconditional selection wipe, further up
+   * -- right for "this is a new dataset with nothing selected yet" in the
+   * general case, wrong when the caller already knows which record it
+   * wants to keep looking at). suppressSelectionClear keeps that wipe from
+   * ever being observed, same as navigateToHandle(). */
+  private async runQueryPreservingSelection(
+    whereExpr: string | null,
+    options?: { pickerExpr?: string | null },
+  ): Promise<void> {
+    const handle = this.selectedHandle;
+    if (handle === null) {
+      await this.runQuery(whereExpr, false, options);
+      return;
+    }
+    this.suppressSelectionClear = true;
+    try {
+      await this.runQuery(whereExpr, false, options);
+    } finally {
+      this.suppressSelectionClear = false;
+    }
+    if (!(await this.reselectIfStillVisible(handle))) {
+      this.resetToDefaultSelection();
+      this.emit();
+    }
+  }
+
   /** Applies (or refines) the "Filters" picker's own contribution --
    * AND-ed with `whereExpr`/`baseFilter` inside combinedFilter(), and
    * fully independent of both (see ViewSnapshot.pickerExpr's doc
@@ -993,7 +1072,7 @@ export class ViewStore {
    * position-preserving reselect (the same "stay on this record" treatment
    * clearFilter() gives the typed search box). */
   setPickerFilter(expr: string | null): Promise<void> {
-    return this.runQuery(this.whereExpr, false, { pickerExpr: expr });
+    return this.runQueryPreservingSelection(this.whereExpr, { pickerExpr: expr });
   }
 
   /** Clears backgroundFillActive and, if a requeryDebounced() trigger
@@ -1034,7 +1113,7 @@ export class ViewStore {
     // than leaving ties in a fixed order while everything else flips.
     const secondary = this.view.columns.find((c) => c.select === column)?.secondarySort;
     this.orderBy = secondary ? [{ column, direction }, { column: secondary, direction }] : [{ column, direction }];
-    return this.runQuery(this.whereExpr, false);
+    return this.runQueryPreservingSelection(this.whereExpr);
   }
 
   /** Live-sync reaction for a view with a fixed `baseFilter` (see

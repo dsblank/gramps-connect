@@ -123,14 +123,10 @@ export function FilterBar({ view }: FilterBarProps) {
     setApplying(true);
     try {
       const store = getViewStore(view.key);
-      // Going back to "no filter" keeps whatever's currently selected in
-      // view rather than jumping to the new result set's default row --
-      // see ViewStore.clearFilter's doc comment.
-      if (whereExpr === null) {
-        await store.clearFilter();
-      } else {
-        await store.runQuery(whereExpr, false);
-      }
+      // Keeps whatever's currently selected in view, whether this lands
+      // back on "no filter" or on a new search term it still matches --
+      // see ViewStore.applyWhereExpr's doc comment.
+      await store.applyWhereExpr(whereExpr);
       return true;
     } catch (err: any) {
       setError(err.message ?? String(err));
