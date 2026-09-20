@@ -42,7 +42,11 @@ WIKI_DIR = REPO_ROOT.parent / "gramps-connect.wiki"
 LOCALES_PATH = REPO_ROOT / "app" / "public" / "lang" / "index.json"
 
 # GitHub-recognized special pages, rendered on every wiki page automatically
-# -- not per-page content, so they're out of scope for per-page translation.
+# (DocumentationDialog.tsx also fetches "_Sidebar" directly, as in-app nav).
+# Still hash-tracked like any other page (report/stamp apply normally), but
+# skipped by sync_crosslinks -- injecting an "available in" banner into the
+# nav/footer chrome itself, rather than into a piece of content, would be
+# more confusing than useful.
 SPECIAL_PAGES = {"_Sidebar", "_Footer"}
 
 SHA_LEN = 12  # matches the marker hand-written for Home.de.md
@@ -73,7 +77,12 @@ def native_name(lang: str) -> str:
 
 
 def content_hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:SHA_LEN]
+    """Hashes the page's own prose, not its auto-generated cross-link banner
+    -- otherwise regenerating that banner (e.g. because a new language was
+    added to a *different* page) would spuriously mark every existing
+    translation of *this* page stale."""
+    text = strip_crosslink_block(path.read_text(encoding="utf-8"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:SHA_LEN]
 
 
 def english_pages(locales: set[str]) -> list[str]:
@@ -83,8 +92,6 @@ def english_pages(locales: set[str]) -> list[str]:
     pages = []
     for path in sorted(WIKI_DIR.glob("*.md")):
         stem = path.stem
-        if stem in SPECIAL_PAGES:
-            continue
         parts = stem.split(".")
         if len(parts) > 1 and parts[-1] in locales:
             continue
@@ -142,6 +149,10 @@ def insert_crosslink_block(text: str, block: str) -> str:
 
 
 def sync_crosslinks(page: str, locales: set[str]) -> None:
+    if page in SPECIAL_PAGES:
+        print(f"{page}: skipping cross-link banner (nav/footer chrome, not content)")
+        return
+
     translations = translations_for(page, locales)
     en_path = WIKI_DIR / f"{page}.md"
 

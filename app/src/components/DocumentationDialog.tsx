@@ -74,10 +74,8 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     if (!opened) return;
     setPage(HOME_PAGE);
     setHistory([]);
-    // Sidebar navigation stays English-only for now -- only content pages
-    // get translated as a proof of concept.
-    fetchWikiPage(SIDEBAR_PAGE).then((p) => setSidebar(p.markdown)).catch(() => setSidebar(null));
-  }, [opened]);
+    fetchWikiPage(SIDEBAR_PAGE, lang).then((p) => setSidebar(p.markdown)).catch(() => setSidebar(null));
+  }, [opened, lang]);
 
   useEffect(() => {
     if (!opened) return;
