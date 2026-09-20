@@ -11,9 +11,10 @@
 // English original in the same wiki repo -- no separate hosting, and they
 // stay real, browsable GitHub wiki pages in their own right. There's no
 // manifest of which (page, lang) pairs exist yet (only a handful do, as a
-// proof of concept) -- fetchWikiPage just tries the translated filename and
-// falls back to English on any failure (404, or no such language at all),
-// silently, so the caller never needs to know whether a translation existed.
+// proof of concept) -- fetchWikiPage just tries the translated filename
+// (falling back from a regional locale like "de_AT" to its base language
+// "de", then to English on any failure) silently, so the caller never needs
+// to know whether a translation existed.
 const WIKI_RAW_BASE = "https://raw.githubusercontent.com/wiki/dsblank/gramps-connect";
 
 export interface WikiPage {
@@ -54,21 +55,33 @@ export async function fetchWikiPage(page: string, lang = "en"): Promise<WikiPage
   const cached = pageCache.get(cacheKey);
   if (cached !== undefined) return cached;
 
-  if (lang !== "en") {
+  // Try the exact locale, then its base language (e.g. "de_AT" -> "de")
+  // before giving up to English -- same fallback order as i18n.ts's own
+  // detectBrowserLang(), since a wiki translation only ever exists per
+  // base language, never per region.
+  const base = lang.split("_")[0];
+  const candidates = base !== lang ? [lang, base] : [lang];
+  for (const candidate of candidates) {
+    if (candidate === "en") break;
     try {
-      const markdown = await fetchRaw(page, lang);
-      const result = { markdown, lang };
+      const markdown = await fetchRaw(page, candidate);
+      const result = { markdown, lang: candidate };
       pageCache.set(cacheKey, result);
       return result;
     } catch {
-      // No translation for this page/language yet -- fall through to
-      // English below, same as any other untranslated page.
+      // No translation for this page/language yet -- try the next
+      // candidate, or fall through to English below.
     }
   }
 
-  const markdown = await fetchRaw(page, "en");
-  const result = { markdown, lang: "en" };
-  pageCache.set(cacheKey, result);
+  const result = { markdown: await fetchRaw(page, "en"), lang: "en" };
+  // Cache only under the English key, not `cacheKey` -- caching the
+  // fallback under the requested language too would permanently "poison"
+  // that page/language pair for the rest of the session on any transient
+  // failure (or a request racing a not-yet-propagated wiki push), even
+  // once the translation becomes available. Retrying costs one extra
+  // request per view of an untranslated page, which is an acceptable
+  // trade-off at this scale.
   pageCache.set(`${page}:en`, result);
   return result;
 }
