@@ -85,6 +85,17 @@ export interface TreeNode {
    * TreeNode (ancestor nodes, the root itself). */
   familyHandle?: string;
   familySpouseHandle?: string;
+  /** Set only on a descendant-tree child node -- this child's own ChildRef
+   * relationship to its father/mother in `familyHandle` (Birth/Adopted/
+   * Stepchild/Foster/Sponsored/Unknown), read straight off the family's own
+   * child_ref_list. Same vocabulary ClusterSibling.frel/mrel already use for
+   * the "up" (sibling) direction -- this is that same data for "down"
+   * (children), which used to be read only to decide *whether* a child was
+   * included (descendantNode's Birth-only filter, dropped by `relaxed`) and
+   * then thrown away, leaving adoptive/step children shown with no visual
+   * distinction from birth ones at all. */
+  frel?: string;
+  mrel?: string;
 }
 
 function findPerson(data: TreePersonRaw[], handle: string | undefined): TreePersonRaw | undefined {
@@ -205,7 +216,9 @@ function descendantNode(
     // marriage produced them and who its other parent was, not just their
     // own handle. See TreeNode.familyHandle's own doc comment.
     const otherParentHandle = isFather ? fam.mother_handle : fam.father_handle;
-    return refs.map((ref) => ({ handle: ref.ref, familyHandle: fam.handle, otherParentHandle }));
+    return refs.map((ref) => ({
+      handle: ref.ref, familyHandle: fam.handle, otherParentHandle, frel: ref.frel, mrel: ref.mrel,
+    }));
   });
   // See ancestorNode's matching comment -- `collapsed` forces the same
   // boundary within base depth, unless a later re-expand of this exact
@@ -219,6 +232,8 @@ function descendantNode(
     const childNode = descendantNode(data, childRef.handle, i + 1, baseDepth, expanded, collapsed, relaxed, `${label}c${idx}`);
     childNode.familyHandle = childRef.familyHandle;
     childNode.familySpouseHandle = childRef.otherParentHandle;
+    childNode.frel = childRef.frel;
+    childNode.mrel = childRef.mrel;
     return childNode;
   });
   return node;

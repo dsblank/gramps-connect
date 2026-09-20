@@ -56,14 +56,21 @@ const ROOT_VISITED: ReadonlySet<string> = new Set();
  * vocabulary app/src/components/related/RefBadges.tsx's RelationBadge
  * already shows elsewhere, just inlined here rather than imported since
  * that component's props are the fuller RefMeta shape, not this graph's own
- * ClusterSibling. The "half via father/mother" half of this used to live
- * here too, per-card; it's now shown once per SiblingGroup instead (see
+ * ClusterSibling/TreeNode. Shared between both directions this graph draws:
+ * SiblingGroupBox (up) and ChildrenGroupBox (down) each read a different
+ * relation pair off their own node shape, but the same Birth-is-unremarkable
+ * rule applies either way. */
+function relationBadgeText(frel: string | undefined, mrel: string | undefined): string | null {
+  const relType = frel && frel === mrel ? frel : [frel, mrel].filter(Boolean).join("/");
+  return relType && relType !== "Birth" ? relType : null;
+}
+
+/** The "half via father/mother" half of this used to live here too,
+ * per-card; it's now shown once per SiblingGroup instead (see
  * groupRelationLabel) since every card in a group shares that same status
  * relative to the anchor -- no need to repeat it on every card. */
 function personRelationBadge(sib: ClusterSibling): string | null {
-  if (sib.isAnchor) return null;
-  const relType = sib.frel && sib.frel === sib.mrel ? sib.frel : [sib.frel, sib.mrel].filter(Boolean).join("/");
-  return relType && relType !== "Birth" ? relType : null;
+  return sib.isAnchor ? null : relationBadgeText(sib.frel, sib.mrel);
 }
 
 /** Every member of a group was found via the same family record and shares
@@ -619,6 +626,7 @@ function ChildrenGroupBox({
               person={child.person}
               token={shared.token}
               selected={child.person.handle === shared.selectedHandle}
+              relationText={relationBadgeText(child.frel, child.mrel)}
               onSelect={() => shared.onSelectPerson(child.person!.handle)}
               onExpand={() => onExpandDown(child.id!, child.person!.handle)}
               canExpand={!!child.hasMore}
@@ -640,6 +648,7 @@ function ChildrenGroupBox({
               person={child.person}
               token={shared.token}
               selected={child.person.handle === shared.selectedHandle}
+              relationText={relationBadgeText(child.frel, child.mrel)}
               onSelect={() => shared.onSelectPerson(child.person!.handle)}
               onExpand={() => onExpandDown(child.id!, child.person!.handle)}
               canExpand={!!child.hasMore}
