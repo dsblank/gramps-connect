@@ -349,9 +349,8 @@ export class ViewStore {
   }
 
   /** Drops whatever's currently selected and falls back to the default
-   * (row 0, if the cache has one) -- the shared "nothing survived" tail of
-   * clearSelection() and runQueryPreservingSelection()'s not-found branch.
-   * Sets fields only, never emits -- same convention as
+   * (row 0, if the cache has one) -- clearSelection()'s own "nothing
+   * survived" tail. Sets fields only, never emits -- same convention as
    * applyDefaultSelection(), which this calls. */
   private resetToDefaultSelection(): void {
     this.selectedIndex = null;
@@ -401,35 +400,51 @@ export class ViewStore {
     const dropPickerFilter = options?.dropPickerFilter ?? true;
     const isFiltered =
       (dropWhereExpr && this.whereExpr !== null) || (dropPickerFilter && this.pickerExpr !== null);
-    if (isFiltered) {
-      // runQuery() unconditionally nulls out the selection at its start --
-      // right for its other callers (the user directly typing/clearing a
-      // filter, where "no selection yet in the new results" is a real,
-      // observable state), wrong here: this call is purely an internal
-      // step to get the filter(s) out of the way before re-selecting a few
-      // lines down, and that transient null must never be observed
-      // in between -- useHistorySync.ts mirrors selectedHandle into the
-      // URL on every change, so an observed-then-reverted null would
-      // wrongly commit an extra "no selection" entry to browser history.
-      this.suppressSelectionClear = true;
-      try {
-        await this.runQuery(
-          dropWhereExpr ? null : this.whereExpr,
-          false,
-          dropPickerFilter ? { pickerExpr: null } : {},
-        );
-      } finally {
-        this.suppressSelectionClear = false;
-      }
+    if (!isFiltered) {
+      return this.reselectIfStillVisible(handle);
     }
-    return this.reselectIfStillVisible(handle);
+    const targetWhereExpr = dropWhereExpr ? null : this.whereExpr;
+    const targetPickerExpr = dropPickerFilter ? null : this.pickerExpr;
+    // Resolved *before* dropping the filter(s), against these explicit
+    // target values rather than `this.whereExpr`/`this.pickerExpr` (still
+    // the pre-drop ones at this point) -- a pure, side-effect-free server
+    // round trip. Threading the result into runQuery() as pendingSelection
+    // lets it land atomically inside swapIn(), the same instant the
+    // dropped-filter rows become the visible ones: resolving it only
+    // *after* awaiting runQuery() (as this used to) left a real gap where
+    // runQuery()'s own page-one swap already emitted -- with
+    // suppressSelectionClear keeping the *old* selectedIndex/selectedHandle
+    // untouched through it, now paired against the newly-dropped-filter
+    // rows they don't actually describe. DataTable highlights purely by
+    // index, so that gap could show a completely unrelated row as
+    // "selected" until this resolved a moment later -- exactly the
+    // reoccurring "wrong row highlighted" bug, just moved one level down
+    // (see [[project_selection_preserving_search_sort_fix]]).
+    const index = await this.findGlobalIndex(handle, targetWhereExpr, targetPickerExpr);
+    const pickerOption = dropPickerFilter ? { pickerExpr: targetPickerExpr } : {};
+    if (index === null) {
+      // Doesn't resolve even once the filter(s) are dropped (deleted, or a
+      // dangling reference) -- the drop itself still has to happen, just
+      // with the ordinary wipe-and-default-select every other "selection
+      // didn't survive" case gets.
+      await this.runQuery(targetWhereExpr, false, pickerOption);
+      return false;
+    }
+    this.suppressSelectionClear = true;
+    try {
+      await this.runQuery(targetWhereExpr, false, { ...pickerOption, pendingSelection: { index, handle } });
+    } finally {
+      this.suppressSelectionClear = false;
+    }
+    return true;
   }
 
   /** Re-selects `handle` at its authoritative current position if it still
-   * matches whatever's now filtering the view (server round trip via
+   * matches whatever's currently filtering the view (server round trip via
    * findGlobalIndex()), leaving the existing selection untouched and
-   * reporting false otherwise -- the shared tail of navigateToHandle() and
-   * runQueryPreservingSelection() below. */
+   * reporting false otherwise -- navigateToHandle()'s fast path when
+   * there's no filter to drop first, so no query (and no risk of an
+   * in-between frame) is involved at all. */
   private async reselectIfStillVisible(handle: string): Promise<boolean> {
     const index = await this.findGlobalIndex(handle);
     if (index === null) return false;
@@ -500,8 +515,21 @@ export class ViewStore {
    * Deliberately not computed by ranking within the local cache: that only
    * knows about whatever the background fill has reached so far (see
    * runQuery), which for a target near the end of a still-filling dataset
-   * would rank it far too early. */
-  private async findGlobalIndex(handle: string): Promise<number | null> {
+   * would rank it far too early.
+   *
+   * `whereExpr`/`pickerExpr` default to the currently active ones -- the
+   * right thing for every post-hoc caller (reselectIfStillVisible(),
+   * applyLiveChange()), which look a handle up under whatever's filtering
+   * the view *right now*. navigateToHandle()/runQueryPreservingSelection()
+   * instead pass the *target* values explicitly, to resolve a handle's
+   * position under a filter/sort that hasn't been applied yet -- see their
+   * own doc comments on why that has to happen before, not after, the
+   * query that applies it. */
+  private async findGlobalIndex(
+    handle: string,
+    whereExpr: string | null = this.whereExpr,
+    pickerExpr: string | null = this.pickerExpr,
+  ): Promise<number | null> {
     const token = await getToken();
     const item = await fetchByHandle(this.view, token, handle);
     if (!item) return null;
@@ -514,14 +542,14 @@ export class ViewStore {
     // filter (it just happens to sort somewhere among the rows that do
     // match), which would otherwise silently reselect whatever row lands at
     // that position instead of recognizing the record dropped out of view.
-    const activeFilter = this.combinedFilter(this.whereExpr);
+    const activeFilter = this.combinedFilter(whereExpr, pickerExpr);
     if (activeFilter) {
       const { totalCount } = await fetchPage(
         this.view, token, null, true, `(${activeFilter}) and (handle == "${handle}")`, this.orderBy, 1,
       );
       if (!totalCount) return null;
     }
-    return this.globalRankOfItem(item, token);
+    return this.globalRankOfItem(item, token, whereExpr, pickerExpr);
   }
 
   /** The 0-based rank `item` occupies among every row on the server under
@@ -538,7 +566,12 @@ export class ViewStore {
    * item (rather than a handle) so applyLiveChange() -- which has already
    * called fetchByHandle() to get the row's fresh post-edit data -- isn't
    * forced into a second, redundant fetch just to re-derive it. */
-  private async globalRankOfItem(item: Record<string, unknown> & { handle: string }, token: string): Promise<number> {
+  private async globalRankOfItem(
+    item: Record<string, unknown> & { handle: string },
+    token: string,
+    whereExpr: string | null = this.whereExpr,
+    pickerExpr: string | null = this.pickerExpr,
+  ): Promise<number> {
     // The full sort key "before" is decided on: every configured order_by
     // column (Person's surname+given_name secondarySort makes this two,
     // not just one) plus the server's own trailing tiebreak -- the same
@@ -582,7 +615,7 @@ export class ViewStore {
     // *other* one active (found live: clearing the "Filters" picker while
     // a FilterBar search was still active landed selectedIndex on some
     // unrelated row far outside the still-filtered result set).
-    const activeFilter = this.combinedFilter(this.whereExpr);
+    const activeFilter = this.combinedFilter(whereExpr, pickerExpr);
     const rankExpr = activeFilter ? `(${activeFilter}) and (${beforeExpr})` : beforeExpr;
     const { totalCount } = await fetchPage(this.view, token, null, true, rankExpr, this.orderBy, 1);
     return totalCount ?? 0;
@@ -830,7 +863,23 @@ export class ViewStore {
   async runQuery(
     whereExpr: string | null,
     persist: boolean,
-    options?: { preserveDisplayUntilCaughtUp?: boolean; pickerExpr?: string | null }
+    options?: {
+      preserveDisplayUntilCaughtUp?: boolean;
+      pickerExpr?: string | null;
+      // An (index, handle) already known -- via a server round trip run
+      // *before* this call -- to be where `handle` lands under this exact
+      // query. Applied inside swapIn(), atomically with the new rows
+      // becoming the visible ones, instead of the ordinary
+      // applyDefaultSelection() -- see navigateToHandle()'s and
+      // runQueryPreservingSelection()'s own doc comments on why
+      // resolving and applying this only *after* runQuery() returned used
+      // to leave a real gap (suppressSelectionClear keeping the *old*
+      // selectedIndex/selectedHandle intact through the new rows' own
+      // swap-in emit) where DataTable's purely-index-based highlight could
+      // point at a completely unrelated row until the async resolution
+      // caught up a moment later.
+      pendingSelection?: { index: number; handle: string };
+    }
   ): Promise<void> {
     const preserve = options?.preserveDisplayUntilCaughtUp ?? false;
     // `pickerExpr` absent entirely (the overwhelming majority of calls --
@@ -947,13 +996,26 @@ export class ViewStore {
       this.pickerExpr = newPickerExpr;
       this.loadedCount = loadedSoFar;
       this.status = "ready";
-      // Page one is what makes a default selection possible at all (it's
-      // the first moment there's a row 0 to name) -- a no-op when
-      // something is already selected, which covers both
-      // suppressSelectionClear callers: navigateToHandle is mid-flight
-      // toward a real selection here, and requeryDebounced is preserving
-      // one across a live-sync reload.
-      this.applyDefaultSelection();
+      if (options?.pendingSelection) {
+        // Already known correct for these exact new rows (see this
+        // option's own doc comment) -- apply it directly rather than
+        // through applyDefaultSelection(), which only ever picks row 0.
+        const { index, handle } = options.pendingSelection;
+        this.selectedIndex = index;
+        this.selectedHandle = handle;
+        this.selectedHandles = [handle];
+        this.selectedIndices = [index];
+        this.rangeAnchorIndex = index;
+        this.selectionIsDefault = false;
+      } else {
+        // Page one is what makes a default selection possible at all (it's
+        // the first moment there's a row 0 to name) -- a no-op when
+        // something is already selected, which covers both
+        // suppressSelectionClear callers without a pendingSelection: a
+        // requeryDebounced() live-sync reload preserving one across the
+        // reload.
+        this.applyDefaultSelection();
+      }
     };
 
     if (!preserve || loadedSoFar >= previousLoadedCount || after === null) {
@@ -1028,8 +1090,8 @@ export class ViewStore {
     });
   }
 
-  /** Runs `runQuery`, then keeps the current selection on the same record
-   * if it still matches the resulting filter/sort, falling back to the new
+  /** Runs `runQuery`, keeping the current selection on the same record if
+   * it still matches the resulting filter/sort, falling back to the new
    * result set's own default (row 0) only when it doesn't (filtered out,
    * or deleted) -- the general form of the "stay on this record" treatment
    * clearFilter()/navigateToHandle() already give a filter *clear*, applied
@@ -1039,8 +1101,16 @@ export class ViewStore {
    * new results (runQuery()'s own unconditional selection wipe, further up
    * -- right for "this is a new dataset with nothing selected yet" in the
    * general case, wrong when the caller already knows which record it
-   * wants to keep looking at). suppressSelectionClear keeps that wipe from
-   * ever being observed, same as navigateToHandle(). */
+   * wants to keep looking at).
+   *
+   * Resolves the record's position under the *target* filter/sort before
+   * calling runQuery(), the same "before, not after" ordering
+   * navigateToHandle() uses and for the same reason (see its own doc
+   * comment): resolving afterward left a gap, between runQuery()'s own
+   * page-one swap and this method's own follow-up reselect, where
+   * DataTable's index-based highlight showed whatever row the *old*
+   * selectedIndex now landed on among the *new* rows -- some unrelated
+   * record, not the one actually selected. */
   private async runQueryPreservingSelection(
     whereExpr: string | null,
     options?: { pickerExpr?: string | null },
@@ -1050,15 +1120,19 @@ export class ViewStore {
       await this.runQuery(whereExpr, false, options);
       return;
     }
+    const pickerExpr = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.pickerExpr;
+    const index = await this.findGlobalIndex(handle, whereExpr, pickerExpr);
+    if (index === null) {
+      // No longer matches -- the ordinary wipe-and-default-select every
+      // other new dataset gets is exactly right here too.
+      await this.runQuery(whereExpr, false, options);
+      return;
+    }
     this.suppressSelectionClear = true;
     try {
-      await this.runQuery(whereExpr, false, options);
+      await this.runQuery(whereExpr, false, { ...options, pendingSelection: { index, handle } });
     } finally {
       this.suppressSelectionClear = false;
-    }
-    if (!(await this.reselectIfStillVisible(handle))) {
-      this.resetToDefaultSelection();
-      this.emit();
     }
   }
 
