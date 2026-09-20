@@ -7,9 +7,6 @@ import { t } from "../i18n/i18n";
 interface AboutDialogProps {
   opened: boolean;
   onClose: () => void;
-  /** Opens Help > Overview, which is where the "what is this?" answer this
-   * dialog only gestures at actually lives. */
-  onShowOverview: () => void;
 }
 
 /** Help > About: what this is, in one paragraph, plus who and what it's
@@ -20,7 +17,7 @@ interface AboutDialogProps {
  * are deliberately elsewhere (Help > System Information) -- one line here
  * would tempt someone into reporting a bug with the frontend version and
  * nothing else, which is the least useful third of that block. */
-export function AboutDialog({ opened, onClose, onShowOverview }: AboutDialogProps) {
+export function AboutDialog({ opened, onClose }: AboutDialogProps) {
   // API_BASE is "" for a same-origin deployment (see config.ts), where the
   // page's own address is the honest answer.
   const server = API_BASE || window.location.origin;
@@ -46,7 +43,11 @@ export function AboutDialog({ opened, onClose, onShowOverview }: AboutDialogProp
           </Anchor>{" "}
           family tree in your browser, together with other people, built to stay quick on
           very large trees.{" "}
-          <Anchor component="button" type="button" onClick={onShowOverview}>
+          <Anchor
+            href="https://github.com/dsblank/gramps-connect/wiki/Overview"
+            target="_blank"
+            rel="noreferrer"
+          >
             {t("Read the overview")}
           </Anchor>{" "}
           for what it is trying to do differently.
