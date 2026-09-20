@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ActionIcon, Alert, Anchor, Box, Group, Loader, Modal, ScrollArea, TypographyStylesProvider } from "@mantine/core";
 import DOMPurify from "dompurify";
 import { Marked } from "marked";
 import { fetchWikiPage, wikiAssetUrl, wikiPageGithubUrl } from "../store/wikiDocsApi";
-import { t } from "../i18n/i18n";
+import { getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 
 interface DocumentationDialogProps {
   opened: boolean;
@@ -56,9 +56,15 @@ function renderWikiMarkdown(markdown: string): string {
 const SIDEBAR_PAGE = "_Sidebar";
 
 export function DocumentationDialog({ opened, onClose }: DocumentationDialogProps) {
+  const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
   const [page, setPage] = useState(HOME_PAGE);
   const [history, setHistory] = useState<string[]>([]);
   const [content, setContent] = useState<string | null>(null);
+  // Which language the currently-displayed content actually resolved to --
+  // "en" whenever this page has no "{page}.{lang}.md" translation yet, even
+  // if the UI itself is running in another language (fetchWikiPage falls
+  // back silently; the reader just sees English for that one page).
+  const [contentLang, setContentLang] = useState("en");
   const [sidebar, setSidebar] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,19 +74,24 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     if (!opened) return;
     setPage(HOME_PAGE);
     setHistory([]);
-    fetchWikiPage(SIDEBAR_PAGE).then(setSidebar).catch(() => setSidebar(null));
+    // Sidebar navigation stays English-only for now -- only content pages
+    // get translated as a proof of concept.
+    fetchWikiPage(SIDEBAR_PAGE).then((p) => setSidebar(p.markdown)).catch(() => setSidebar(null));
   }, [opened]);
 
   useEffect(() => {
     if (!opened) return;
     setLoading(true);
     setError(null);
-    fetchWikiPage(page)
-      .then((md) => setContent(md))
+    fetchWikiPage(page, lang)
+      .then((p) => {
+        setContent(p.markdown);
+        setContentLang(p.lang);
+      })
       .catch((err) => setError(err.message ?? String(err)))
       .finally(() => setLoading(false));
     contentRef.current?.scrollTo({ top: 0 });
-  }, [opened, page]);
+  }, [opened, page, lang]);
 
   function navigateTo(target: string) {
     if (target === page) return;
@@ -123,7 +134,7 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
             <ActionIcon variant="subtle" onClick={goBack} disabled={history.length === 0} aria-label={t("Back")}>
               ←
             </ActionIcon>
-            <Anchor href={wikiPageGithubUrl(page)} target="_blank" rel="noreferrer noopener" size="sm">
+            <Anchor href={wikiPageGithubUrl(page, contentLang)} target="_blank" rel="noreferrer noopener" size="sm">
               {t("Open on GitHub")} ↗
             </Anchor>
           </Group>
