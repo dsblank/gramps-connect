@@ -15,6 +15,7 @@ import { checkRepairDatabase, upgradeSchema } from "../store/toolsApi";
 import { SystemInfoDialog } from "./SystemInfoDialog";
 import { ResearcherDialog } from "./ResearcherDialog";
 import { AboutDialog } from "./AboutDialog";
+import { DocumentationDialog } from "./DocumentationDialog";
 import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
@@ -255,6 +256,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const [systemInfoOpened, setSystemInfoOpened] = useState(false);
   const [researcherOpened, setResearcherOpened] = useState(false);
   const [aboutOpened, setAboutOpened] = useState(false);
+  const [documentationOpened, setDocumentationOpened] = useState(false);
   const [grampletOpened, setGrampletOpened] = useState(false);
   const [grampletStoreOpened, setGrampletStoreOpened] = useState(false);
   const [reindexOpened, setReindexOpened] = useState(false);
@@ -452,10 +454,13 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               // The prose that used to live in an in-app Overview dialog
               // now lives in the wiki instead, so it can be edited (and
               // linked to) without a release -- see the wiki's own
-              // Overview.md.
+              // Overview.md. Rendered in-app (DocumentationDialog.tsx,
+              // fetched live from the wiki's raw content) rather than just
+              // opening github.com, so it reads like part of the app; an
+              // "Open on GitHub" link inside the dialog still reaches the
+              // real wiki for anyone who wants to edit or comment.
               label: "Documentation",
-              onClick: () =>
-                window.open("https://github.com/dsblank/gramps-connect/wiki", "_blank", "noreferrer"),
+              onClick: () => setDocumentationOpened(true),
             },
             { label: "System Information", onClick: () => setSystemInfoOpened(true) },
             { label: "Researcher", onClick: () => setResearcherOpened(true) },
@@ -508,6 +513,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
       <SystemInfoDialog opened={systemInfoOpened} onClose={() => setSystemInfoOpened(false)} />
       <ResearcherDialog opened={researcherOpened} onClose={() => setResearcherOpened(false)} />
       <AboutDialog opened={aboutOpened} onClose={() => setAboutOpened(false)} />
+      <DocumentationDialog opened={documentationOpened} onClose={() => setDocumentationOpened(false)} />
       {grampletOpened && (
         <Suspense
           fallback={
