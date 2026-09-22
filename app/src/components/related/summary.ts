@@ -67,6 +67,7 @@ function summaryText(type: string, obj: any): string {
     case "repository":
       return obj.name || "(repository)";
     case "source":
+    case "blog":
       return obj.title || "(source)";
     case "citation": {
       // Either shape, same reasoning as family's father/mother above: a

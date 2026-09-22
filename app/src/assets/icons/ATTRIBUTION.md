@@ -22,6 +22,10 @@ though, like `chat-message.svg`, it isn't sourced from Gramps or Tango.
 theme has no story/presentation glyph to source from either, so it follows
 `chat-message.svg`'s naming and style rather than the `gramps-*.svg` set.
 
+`blog-post.svg` is also original artwork (Blog view) -- Gramps' own icon
+theme has no blog/article glyph either, so it follows the same
+`chat-message.svg`/`story-book.svg` naming and style.
+
 `gramps-connect-logo.svg` is also original artwork: this app's own mark,
 and the reason the row above no longer includes a `gramps-logo.svg`. That
 file was Gramps' application icon (`org.gramps_project.Gramps.svg`), and

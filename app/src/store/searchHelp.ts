@@ -226,6 +226,18 @@ const REPOSITORY_HELP: SearchHelp = {
   collections: [NOTES, TAGS],
 };
 
+// Reused verbatim by BLOG_HELP below -- a blog post is an ordinary Source,
+// same fields, same reasoning GENERATED_HELP already reuses MEDIA_FIELDS.
+const SOURCE_FIELDS: HelpEntry[] = [
+  GRAMPS_ID,
+  { name: "title", description: "The source's title -- the Title column" },
+  { name: "author", description: "The author -- the Author column" },
+  { name: "abbrev", description: "The short form of the title" },
+  { name: "pubinfo", description: "Publication information" },
+  PRIVATE,
+  CHANGE,
+];
+
 const SOURCE_HELP: SearchHelp = {
   typeName: "Source",
   examples: [
@@ -234,15 +246,7 @@ const SOURCE_HELP: SearchHelp = {
     { expr: "author == ''", description: "No author recorded" },
     { expr: "any(r for r in repositories)", description: "Held by at least one repository" },
   ],
-  fields: [
-    GRAMPS_ID,
-    { name: "title", description: "The source's title -- the Title column" },
-    { name: "author", description: "The author -- the Author column" },
-    { name: "abbrev", description: "The short form of the title" },
-    { name: "pubinfo", description: "Publication information" },
-    PRIVATE,
-    CHANGE,
-  ],
+  fields: SOURCE_FIELDS,
   collections: [
     { name: "repositories", description: "Repositories holding this source" },
     NOTES, MEDIA, TAGS,
@@ -370,6 +374,25 @@ const STORY_HELP: SearchHelp = {
   collections: [TAGS],
 };
 
+// Source under a fixed tag filter (see BLOG_VIEW's baseFilter) -- same
+// fields as SOURCE_HELP above (reused verbatim, same reasoning
+// GENERATED_HELP already gives for reusing MEDIA_FIELDS); only the scope
+// note and examples are its own.
+const BLOG_HELP: SearchHelp = {
+  typeName: "Source",
+  scopeNote:
+    "This list already shows only the sources tagged \"Blog\" -- they are stored as ordinary " +
+    "sources (title/author and all), so a search here searches those same fields, and is " +
+    "narrowed down further within the list rather than reaching the rest of your sources.",
+  examples: [
+    { expr: "like(author, '%Smith%')", description: "Posts by an author named Smith" },
+    { expr: "'wedding' in title", description: "The title mentions a wedding" },
+    { expr: "author == ''", description: "No author recorded" },
+  ],
+  fields: SOURCE_FIELDS,
+  collections: [NOTES, MEDIA, TAGS],
+};
+
 /** Keyed by ViewConfig.key -- by view rather than by object type, since two
  * views over the same table (Media/Output, Notes/Topics) hold different
  * rows and want different examples. A view with no entry simply gets no
@@ -388,6 +411,7 @@ const SEARCH_HELP: Record<string, SearchHelp> = {
   generated: GENERATED_HELP,
   topics: TOPICS_HELP,
   story: STORY_HELP,
+  blog: BLOG_HELP,
 };
 
 export function getSearchHelp(view: ViewConfig): SearchHelp | undefined {

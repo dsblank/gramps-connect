@@ -5,23 +5,34 @@ import { fetchByHandle, type QueryItem } from "../store/api";
 import { formatHash } from "../hash";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
-  fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo,
-  type RecentItem, type StoryItem, type TopicItem,
+  fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchLatestBlogPosts, fetchRecentlyChanged, STAT_VIEWS, timeAgo,
+  type RecentItem, type StoryItem, type TopicItem, type BlogPostItem,
 } from "../store/homeStats";
 import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
 import { PERSON_VIEW } from "../store/views";
+import { BlogPostView } from "./BlogPostView";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { RecordPicker } from "./RecordPicker";
 import { personLabel } from "./RefPickerField";
 import iconChat from "../assets/icons/chat-message.svg";
 import iconStory from "../assets/icons/story-book.svg";
+import iconBlog from "../assets/icons/blog-post.svg";
 import { t } from "../i18n/i18n";
 
 const RECENT_LIMIT = 8;
 const TOPIC_LIMIT = 5;
 const STORY_LIMIT = 5;
+const BLOG_LIMIT = 3;
 
 type Stage = "loading" | "ready" | "error";
+
+/** BlogPostView's own onNavigate ("Show source details") from a context
+ * with no aside/reference-detail pane to preview into -- same plain hash
+ * assignment FloatingTopicWindow.tsx's own navigateAway already uses for
+ * the same reason. */
+function navigateAway(type: string, handle: string): void {
+  window.location.hash = formatHash({ viewKey: type, handle });
+}
 
 /** #/home -- the page the Home icon at the top of the sidebar rail opens
  * (see Sidebar.tsx). A dashboard-style landing page, not another object
@@ -37,6 +48,8 @@ export function HomeView() {
   const [recent, setRecent] = useState<RecentItem[]>([]);
   const [topics, setTopics] = useState<TopicItem[]>([]);
   const [stories, setStories] = useState<StoryItem[]>([]);
+  const [blogPosts, setBlogPosts] = useState<BlogPostItem[]>([]);
+  const [openBlogHandle, setOpenBlogHandle] = useState<string | null>(null);
   const [homePerson, setHomePerson] = useState<QueryItem | null>(null);
 
   useEffect(() => {
@@ -44,11 +57,12 @@ export function HomeView() {
     (async () => {
       const token = await getToken();
       const homeHandle = getHomePersonHandle();
-      const [countsResult, recentResult, topicsResult, storiesResult, homePersonResult] = await Promise.all([
+      const [countsResult, recentResult, topicsResult, storiesResult, blogResult, homePersonResult] = await Promise.all([
         fetchHomeCounts(),
         fetchRecentlyChanged(token, RECENT_LIMIT),
         fetchRecentTopics(token, TOPIC_LIMIT),
         fetchLatestStories(token, STORY_LIMIT),
+        fetchLatestBlogPosts(token, BLOG_LIMIT),
         homeHandle ? fetchByHandle(PERSON_VIEW, token, homeHandle) : Promise.resolve(null),
       ]);
       if (cancelled) return;
@@ -56,6 +70,7 @@ export function HomeView() {
       setRecent(recentResult);
       setTopics(topicsResult);
       setStories(storiesResult);
+      setBlogPosts(blogResult);
       setHomePerson(homePersonResult);
       setStage("ready");
     })().catch((err: any) => {
@@ -84,7 +99,7 @@ export function HomeView() {
       )}
 
       {stage === "ready" && (
-        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
           <Stack gap="lg">
             <Panel title={t("Home person")}>
               <HomePersonContent
@@ -93,6 +108,24 @@ export function HomeView() {
               />
             </Panel>
 
+            <Panel title={t("Statistics")}>
+              <Stack gap={6}>
+                {STAT_VIEWS.map((v) => (
+                  <Group key={v.key} justify="space-between" wrap="nowrap">
+                    <Anchor component="a" href={formatHash({ viewKey: v.key })} c="inherit" underline="never">
+                      <Group gap="xs" wrap="nowrap">
+                        <Image src={v.icon} alt="" w={20} h={20} />
+                        <Text>{t(v.label)}</Text>
+                      </Group>
+                    </Anchor>
+                    <Text fw={600}>{(counts[v.key] ?? 0).toLocaleString()}</Text>
+                  </Group>
+                ))}
+              </Stack>
+            </Panel>
+          </Stack>
+
+          <Stack gap="lg">
             <Panel title={t("Discussions")}>
               {topics.length === 0 ? (
                 <Text c="dimmed">{t("No discussions yet.")}</Text>
@@ -156,22 +189,6 @@ export function HomeView() {
           </Stack>
 
           <Stack gap="lg">
-            <Panel title={t("Statistics")}>
-              <Stack gap={6}>
-                {STAT_VIEWS.map((v) => (
-                  <Group key={v.key} justify="space-between" wrap="nowrap">
-                    <Anchor component="a" href={formatHash({ viewKey: v.key })} c="inherit" underline="never">
-                      <Group gap="xs" wrap="nowrap">
-                        <Image src={v.icon} alt="" w={20} h={20} />
-                        <Text>{t(v.label)}</Text>
-                      </Group>
-                    </Anchor>
-                    <Text fw={600}>{(counts[v.key] ?? 0).toLocaleString()}</Text>
-                  </Group>
-                ))}
-              </Stack>
-            </Panel>
-
             <Panel title={t("Stories")}>
               {stories.length === 0 ? (
                 <Text c="dimmed">{t("No stories yet.")}</Text>
@@ -203,9 +220,52 @@ export function HomeView() {
                 {t("See all Stories")}
               </Anchor>
             </Panel>
+
+            <Panel title={t("Blog")}>
+              {blogPosts.length === 0 ? (
+                <Text c="dimmed">{t("No blog posts yet.")}</Text>
+              ) : (
+                <Stack gap="sm">
+                  {blogPosts.map((post) => (
+                    <Anchor
+                      key={post.handle}
+                      component="button"
+                      type="button"
+                      onClick={() => setOpenBlogHandle(post.handle)}
+                      underline="never"
+                      c="inherit"
+                      style={{ textAlign: "left" }}
+                    >
+                      <Group gap="xs" wrap="nowrap" align="flex-start">
+                        <Image src={iconBlog} alt="" w={20} h={20} mt={2} />
+                        <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                          <Text truncate>{post.title}</Text>
+                          {post.author && <Text size="xs" c="dimmed" truncate>{post.author}</Text>}
+                        </Stack>
+                        <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(post.changeUnix)}</Text>
+                      </Group>
+                    </Anchor>
+                  ))}
+                </Stack>
+              )}
+              <Anchor
+                component="a"
+                href={formatHash({ viewKey: "blog" })}
+                mt="sm"
+                display="inline-block"
+              >
+                {t("See all blog posts")}
+              </Anchor>
+            </Panel>
           </Stack>
         </SimpleGrid>
       )}
+      <BlogPostView
+        handle={openBlogHandle}
+        opened={openBlogHandle !== null}
+        onClose={() => setOpenBlogHandle(null)}
+        onNavigate={navigateAway}
+      />
     </Box>
   );
 }

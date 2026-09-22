@@ -73,5 +73,11 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   // gate on *other* types' "notes" entry).
   topics: [],
   story: ["tags", "backlinks"],
+  // The Blog view (store/views.ts's BLOG_VIEW) is Source rows tagged
+  // "Blog", not a distinct object type -- same sections as the ordinary
+  // Source view, minus Repositories/Attributes (a blog post doesn't cite a
+  // repository or carry gramps attributes the way a genealogical Source
+  // might).
+  blog: ["tags", "media", "notes", "backlinks"],
   tag: ["backlinks"],
 };

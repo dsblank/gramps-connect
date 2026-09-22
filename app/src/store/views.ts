@@ -24,6 +24,7 @@ import iconTag from "../assets/icons/gramps-tag.svg";
 import iconReports from "../assets/icons/gramps-reports.svg";
 import iconChat from "../assets/icons/chat-message.svg";
 import iconStory from "../assets/icons/story-book.svg";
+import iconBlog from "../assets/icons/blog-post.svg";
 
 export interface ColumnConfig {
   /** Both the local SQLite column name and the API response key (the
@@ -819,6 +820,42 @@ export const STORY_VIEW: ViewConfig = {
   ],
 };
 
+// Gramps Connect blog posts: ordinary Source objects (title/author are
+// already real Source fields, nothing added) tagged "Blog" at creation
+// (see blogApi.ts's createBlogPost), with the post body as a separate Note
+// attached via the normal note_list mechanism -- same "existing object type
+// under a fixed tag filter" trick as GENERATED_VIEW above, just tag-based
+// like that one instead of type-based like TOPICS_VIEW/STORY_VIEW. Ported
+// from gramps-web's own blog feature (GrampsjsViewBlog.js), which used a
+// HasTag Rule for the same query this baseFilter compiles to directly.
+export const BLOG_VIEW: ViewConfig = {
+  key: "blog",
+  label: "Blog",
+  icon: iconBlog,
+  table: "source",
+  endpoint: "/api/sources/query/",
+  baseFilter: "any(t.name == 'Blog' for t in tags)",
+  // Continues the same "not an ordinary object type" sidebar group
+  // GENERATED_VIEW/TOPICS_VIEW/STORY_VIEW opened -- no separator of its own.
+  orderBy: [{ column: "change", direction: "desc" }],
+  opfsFilename: "app-cache-blog.sqlite",
+  wherePlaceholder: 'e.g. like(author, "%Smith%")',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, title, or author…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "title", "author"]),
+  },
+  columns: [
+    // hidden: true -- still selected/cached/searchable (this view's own
+    // simpleSearch above still matches against it), just not worth a
+    // column of its own: a blog post is identified by its title, not a
+    // Gramps ID no one assigned it for any reason of their own.
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", hidden: true },
+    { key: "title", label: "Title", select: "title", sqlType: "TEXT" },
+    { key: "author", label: "Author", select: "author", sqlType: "TEXT" },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+  ],
+};
+
 // One topic's chat posts: standalone Notes (never attached to any object's
 // note_list, and -- unlike TOPICS_VIEW/STORY_VIEW -- never added to the
 // VIEWS array below) whose Note.type is set to "topic-message" at creation
@@ -977,5 +1014,5 @@ export const TAG_VIEW: ViewConfig = {
 export const VIEWS: ViewConfig[] = [
   PERSON_VIEW, FAMILY_VIEW, EVENT_VIEW, PLACE_VIEW, REPOSITORY_VIEW,
   SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW, GENERATED_VIEW,
-  TOPICS_VIEW, STORY_VIEW,
+  TOPICS_VIEW, STORY_VIEW, BLOG_VIEW,
 ];

@@ -33,6 +33,7 @@ import { LinkObjectControl } from "./related/LinkObjectControl";
 import { parseTopicSpec } from "../store/topicsApi";
 import { getTopicActivityVersion, openTopicWindow, subscribeTopicActivity } from "../store/topicWindows";
 import { StoryActions } from "./related/StoryActions";
+import { BlogActions } from "./related/BlogActions";
 import { isCurrentPage, useCurrentPage } from "./related/CurrentPageContext";
 import type { OnNavigate, OnViewGallery } from "./related/types";
 import type { UseDraftStack } from "../store/draftStack";
@@ -566,30 +567,37 @@ export function RelatedPanel({
           are ways of *viewing* this record rather than actions on it --
           on their own row and at full size they read as an offer, which a
           compact icon tucked into a corner shared with the record's own
-          controls did not. */}
+          controls did not. Every synthetic "view over another table's
+          rows" type (Media/Output's own file, a Discussion's floating chat
+          window, a Blog post's own reading presentation) puts its "View"
+          trigger here, in the same spot, so the three read as the same
+          kind of control rather than each living wherever its own feature
+          happened to land historically (confirmed inconsistent live: a
+          Discussion's used to sit down past DetailFields, grouped with its
+          link-management controls instead). */}
       <VisualButtons view={view} detail={detail} />
       {(view.key === "media" || view.key === "generated") && <MediaViewButton detail={detail} />}
+      {view.key === "topics" && (
+        <Group gap="xs">
+          <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} />
+        </Group>
+      )}
+      {view.key === "blog" && <BlogActions detail={detail} onNavigate={onNavigate} />}
       <HistoryButton view={view} detail={detail} />
       {view.key === "media" && <MediaMapButton detail={detail} />}
       <DetailFields type={view.key} detail={detail} />
       {/* A Topic's body is bespoke, not SECTION_COMPONENTS-driven (see
           RELATED_CONFIG.topics' own doc comment): the actual chat thread
-          lives in a FloatingTopicWindow instead (opened from here, or from
-          DiscussButton/NotesSection elsewhere) rather than inline in this
-          shared pane -- a live conversation wants to stay open across
-          navigation, which this pane's own selection-driven lifetime can't
-          offer. This page is for managing the topic itself: its title/
-          description (the header above), and the "+ link an object"
-          control plus the linked-objects list those links produce. */}
+          lives in a FloatingTopicWindow instead (opened via the "View"
+          trigger above, or from DiscussButton/NotesSection elsewhere)
+          rather than inline in this shared pane -- a live conversation
+          wants to stay open across navigation, which this pane's own
+          selection-driven lifetime can't offer. This page is for managing
+          the topic itself: its title/description (the header above), and
+          the "+ link an object" control plus the linked-objects list those
+          links produce. */}
       {view.key === "topics" && (
         <>
-          {/* Group, not a bare ViewButton -- this Stack's default
-              align="stretch" would otherwise stretch a direct button child
-              to the full pane width the way VisualButtons' own Group
-              (a row, which doesn't stretch its children's width) doesn't. */}
-          <Group gap="xs">
-            <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} color="gray" />
-          </Group>
           <LinkObjectControl topicHandle={detail.handle} onLinked={() => setRefetchNonce((n) => n + 1)} />
           <TopicLinksSection detail={detail} onNavigate={onNavigate} onRefetch={() => setRefetchNonce((n) => n + 1)} />
         </>

@@ -6,7 +6,7 @@
 // ten of it locally.
 import { fetchPage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
-import { VIEWS, TOPICS_VIEW, STORY_VIEW, formatChange, type ColumnConfig, type ViewConfig } from "./views";
+import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ColumnConfig, type ViewConfig } from "./views";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -197,6 +197,33 @@ export async function fetchLatestStories(token: string, limit: number): Promise<
     handle: item.handle,
     grampsId: typeof item.gramps_id === "string" ? item.gramps_id : "",
     title: cellText(STORY_VIEW, item, "title"),
+    changeUnix: Number(item.change ?? 0),
+  }));
+}
+
+export interface BlogPostItem {
+  handle: string;
+  grampsId: string;
+  title: string;
+  author: string;
+  changeUnix: number;
+}
+
+/** The `limit` newest Blog posts -- same shape/query as fetchLatestStories
+ * above, just BLOG_VIEW instead of STORY_VIEW (its own "tagged Blog"
+ * baseFilter still applies -- see combinedFilter above). Ported from
+ * gramps-web's own dashboard widget (GrampsjsViewRecentBlogPosts.js), which
+ * ran the same "one newest tagged Source" query via a HasTag Rule. */
+export async function fetchLatestBlogPosts(token: string, limit: number): Promise<BlogPostItem[]> {
+  const { page } = await fetchPage(
+    BLOG_VIEW, token, null, false, combinedFilter(BLOG_VIEW),
+    [{ column: "change", direction: "desc" }], limit
+  );
+  return page.items.map((item) => ({
+    handle: item.handle,
+    grampsId: typeof item.gramps_id === "string" ? item.gramps_id : "",
+    title: cellText(BLOG_VIEW, item, "title"),
+    author: cellText(BLOG_VIEW, item, "author"),
     changeUnix: Number(item.change ?? 0),
   }));
 }
