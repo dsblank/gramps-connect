@@ -62,6 +62,7 @@ LEADING_COMMENTS_RE = re.compile(r"(?:[ \t]*<!--.*?-->[ \t]*\n)*", re.DOTALL)
 # which is still a correct (if plain) link label.
 NATIVE_NAMES = {
     "de": "Deutsch",
+    "fr": "Français",
 }
 
 
