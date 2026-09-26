@@ -24,9 +24,9 @@
 // ancestors on top) combined with each generation's angular span always
 // being a proper subset of its own child's, not any special-cased shape.
 import { arc as d3arc } from "d3-shape";
-import { create, select } from "d3-selection";
+import { create, pointer, select } from "d3-selection";
 import "d3-transition";
-import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
+import { zoom, zoomIdentity, zoomTransform, type ZoomTransform } from "d3-zoom";
 import type { TreeNode, TreePersonRaw } from "../store/treeData";
 
 const RING = 70;
@@ -612,6 +612,15 @@ export interface FanChartOptions {
    * handed back in, so panning/zooming survives a resize, selection change,
    * or expand -- same convention as renderTreeChart's own `initialZoom`. */
   initialZoom?: ZoomTransform | null;
+  /** Read off the previous render's SVG (its own `data-fan-rotation`
+   * attribute -- d3-zoom's `zoomTransform` has nothing for this, unlike
+   * pan/zoom) and handed back in, same "survive a rebuild" convention as
+   * `initialZoom` -- but never gated behind `shouldFit`
+   * (components/visuals/FanChart.tsx): a fresh root or a lifespan-mode flip
+   * changes the *geometry* enough to need a fresh fit, but rotation is a
+   * pure viewing preference orthogonal to that, so it carries over
+   * regardless. */
+  initialRotation?: number;
   /** A click *selects* a person, same "click selects, doesn't navigate" rule
    * as renderTreeChart's own onSelectPerson -- TreeView.tsx owns what
    * "selected" means (its shared PersonCard). */
@@ -650,7 +659,7 @@ export interface FanChartOptions {
 export function renderFanChart(
   ancestorTree: TreeNode | null,
   {
-    bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, sizeByLifespan, colorScheme,
+    bboxWidth, bboxHeight, initialZoom, initialRotation, onSelectPerson, selectedHandle, sizeByLifespan, colorScheme,
     centerHandle, centerOnSelect,
   }: FanChartOptions,
 ): SVGSVGElement {
@@ -685,10 +694,80 @@ export function renderFanChart(
   // yOffset below), with the chart free to pan in every direction -- no
   // resting-line floor to clamp against, unlike a half-dome layout's own
   // root-anchored-at-the-bottom convention.
+  //
+  // Rotation is a second, independent transform component layered on top of
+  // pan/zoom -- `rotate(deg)` as the innermost step (composeTransform's own
+  // ordering) turns the wedges around content-space (0,0), which is root's
+  // own center, before zoom's translate/scale ever apply, so root stays put
+  // under the pointer regardless of rotation. Plain `let`s (not React
+  // state): d3 already owns this render's whole imperative DOM, and every
+  // consumer of `rotation` below (composeTransform's default, the drag
+  // gesture's own onMove/onUp) is a closure over this same function scope,
+  // so no prop threading is needed the way FanChart.tsx's own
+  // zoomRef/rotationRef needs a ref *across* renders instead.
+  let rotation = initialRotation ?? 0;
+  svg.attr("data-fan-rotation", String(rotation));
+  const composeTransform = (t: ZoomTransform, rot: number = rotation): string => `${t.toString()} rotate(${rot})`;
+
   const zoomBehavior = zoom<SVGSVGElement, undefined>().on("zoom", (e) => {
-    chartContent.attr("transform", e.transform.toString());
+    chartContent.attr("transform", composeTransform(e.transform));
   });
   svg.call(zoomBehavior);
+
+  // Ctrl/Cmd+Click-and-drag rotates -- same modifier convention as
+  // DataTable.tsx's own range-select (e.ctrlKey || e.metaKey). Plain d3-
+  // selection mousedown/mousemove/mouseup rather than d3-drag (not already
+  // a dependency here): d3-zoom's own default `filter` already ignores any
+  // non-wheel event with `ctrlKey` set
+  // (https://d3js.org/d3-zoom#zoom_filter's own documented default), so a
+  // Ctrl-held mousedown never starts *its* pan gesture in the first place --
+  // this only has to layer a second, independent gesture on top, not
+  // negotiate with zoom's over the same one.
+  //
+  // The drag itself tracks the *angle* from root's own screen position
+  // (zoomTransform's translate -- content-space (0,0), same as
+  // composeTransform's own rotation center) to the pointer, in the svg's own
+  // coordinate system (d3.pointer already resolves screen coordinates
+  // through the element's CTM, so this holds regardless of the panel's own
+  // size/viewBox or the page's scroll position) -- so the wedge under the
+  // cursor keeps tracking it directly, like turning a physical dial, rather
+  // than a fixed px-of-drag-equals-degrees mapping that would feel
+  // disconnected from the pointer near the rim vs. near the center. Screen
+  // space (not content space) on purpose: it's what the pointer's own
+  // movement is actually measured in, and staying in it sidesteps having to
+  // account for the in-progress rotation while computing the *next* step of
+  // that same rotation.
+  //
+  // Degrees, not radians, throughout to match `rotation`/composeTransform's
+  // own unit. `rotation` itself is left unnormalized while dragging (only
+  // wrapped into [0,360) once the gesture ends) so crossing the 0°/360°
+  // seam mid-drag never has to special-cased -- atan2's own wraparound would
+  // otherwise show up as a sudden ±360° jump in the running total.
+  svg.on("mousedown", (startEvent: MouseEvent) => {
+    if (!(startEvent.ctrlKey || startEvent.metaKey) || startEvent.button !== 0) return;
+    startEvent.preventDefault();
+    const svgNode = svg.node()!;
+    const center = zoomTransform(svgNode);
+    const angleAt = (event: MouseEvent): number => {
+      const [px, py] = pointer(event, svgNode);
+      return (Math.atan2(py - center.y, px - center.x) * 180) / Math.PI;
+    };
+    const startAngle = angleAt(startEvent);
+    const startRotation = rotation;
+    const onMove = (moveEvent: MouseEvent): void => {
+      rotation = startRotation + (angleAt(moveEvent) - startAngle);
+      chartContent.attr("transform", composeTransform(zoomTransform(svgNode)));
+      svg.attr("data-fan-rotation", String(rotation));
+    };
+    const onUp = (): void => {
+      rotation = ((rotation % 360) + 360) % 360;
+      svg.attr("data-fan-rotation", String(rotation));
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
 
   const yearScale = sizeByLifespan ? computeYearScale(ancestorTree) : null;
   const radiiFor: (node: TreeNode | null, fallbackInnerR: number) => { innerR: number; outerR: number } = yearScale
@@ -813,6 +892,10 @@ export function renderFanChart(
     .attr("class", "wedge")
     .style("cursor", (d) => (d.node?.person ? "pointer" : "default"))
     .on("click", (event, d) => {
+      // A Ctrl/Cmd-held click is either the tail end of a rotate drag, or a
+      // no-op click with the same modifier held for no reason -- either
+      // way, not a select.
+      if (event.ctrlKey || event.metaKey) return;
       if (d.node?.person) {
         event.stopPropagation();
         onSelectPerson?.(d.node.person.handle);
@@ -1022,7 +1105,7 @@ export function renderFanChart(
   if (centerOnSelect && centerTarget) {
     if (initialZoom) {
       (svg.node() as unknown as { __zoom: ZoomTransform }).__zoom = initialZoom;
-      chartContent.attr("transform", initialZoom.toString());
+      chartContent.attr("transform", composeTransform(initialZoom));
     }
     let centered: ZoomTransform;
     if (centerTarget.depth === 0) {
@@ -1041,11 +1124,11 @@ export function renderFanChart(
     svg.transition().duration(300).call(zoomBehavior.transform, centered);
   } else if (initialZoom) {
     (svg.node() as unknown as { __zoom: ZoomTransform }).__zoom = initialZoom;
-    chartContent.attr("transform", initialZoom.toString());
+    chartContent.attr("transform", composeTransform(initialZoom));
   } else {
     const fit = computeFitTransform(wedges, bboxWidth, bboxHeight);
     (svg.node() as unknown as { __zoom: ZoomTransform }).__zoom = fit;
-    chartContent.attr("transform", fit.toString());
+    chartContent.attr("transform", composeTransform(fit));
   }
 
   return svg.node()!;

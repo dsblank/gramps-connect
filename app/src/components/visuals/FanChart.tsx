@@ -49,6 +49,7 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const zoomRef = useRef<ZoomTransform | null>(null);
+  const rotationRef = useRef(0);
   const prevRootHandleRef = useRef<string | null>(null);
   const prevMaxDepthRef = useRef(0);
   const prevSelectedHandleRef = useRef<string | null>(null);
@@ -72,7 +73,14 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
     const container = containerRef.current;
     if (!container || size.width <= 0 || size.height <= 0) return;
     const existing = container.querySelector("svg");
-    if (existing) zoomRef.current = zoomTransform(existing);
+    if (existing) {
+      zoomRef.current = zoomTransform(existing);
+      // fanChart.ts's own composeTransform has nothing built in to
+      // zoomTransform for this -- Ctrl+Click rotation lives in a plain
+      // `data-fan-rotation` attribute instead, read back the same way.
+      const rotationAttr = existing.getAttribute("data-fan-rotation");
+      if (rotationAttr !== null) rotationRef.current = Number(rotationAttr);
+    }
 
     const rootHandle = ancestorTree?.person?.handle ?? null;
     const maxDepth = treeMaxDepth(ancestorTree);
@@ -94,6 +102,10 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
       bboxWidth: size.width,
       bboxHeight: size.height,
       initialZoom: shouldFit ? null : zoomRef.current,
+      // Unlike initialZoom, never gated behind shouldFit -- rotation is a
+      // viewing preference orthogonal to the fit-triggering geometry changes
+      // (fanChart.ts's own doc comment on FanChartOptions.initialRotation).
+      initialRotation: rotationRef.current,
       selectedHandle,
       onSelectPerson,
       sizeByLifespan,
