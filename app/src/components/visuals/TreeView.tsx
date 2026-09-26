@@ -14,9 +14,10 @@ import {
 } from "../../store/treeData";
 import { isManualExpandEnabled, setManualExpandEnabled } from "../../store/treeExpandPreference";
 import { PERSON_VIEW } from "../../store/views";
+import { DownloadImageButton } from "./DownloadImageButton";
 import { FamilyGraphView } from "./FamilyGraphView";
-import { FanChart } from "./FanChart";
-import type { FanColorScheme } from "../../charts/fanChart";
+import { FanChart, type FanChartHandle } from "./FanChart";
+import { trimTreeToDepth, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
 import { TreeChart } from "./TreeChart";
 import { VisualFrame } from "./VisualFrame";
 import { t } from "../../i18n/i18n";
@@ -34,6 +35,10 @@ const BASE_DESC = 2;
 // so it can afford to open deeper up front. "+ Increase depth" (below) is
 // still there for whatever a tree runs past this.
 const FAN_BASE_ANC = 6;
+// "Decrease depth" (below) never goes below this -- a lone root disc with
+// no parents at all reads as a broken fan rather than a legitimately
+// zoomed-out one, so this keeps at least one generation on screen.
+const MIN_FAN_DISPLAY_DEPTH = 1;
 
 // Manual is the default and currently the only mode a user can reach --
 // this just hides the "Manual expand only" toggle itself (store/
@@ -102,6 +107,14 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // axis (fanChart.ts's own nodeRadii) instead of a fixed per-generation
   // width.
   const [sizeByLifespan, setSizeByLifespan] = useState(false);
+  // How many generations of the (possibly much deeper) fetched `fanTree`
+  // to actually render -- "+"/"− Increase/Decrease depth" (status bar,
+  // below) move this independently of what's been fetched, so decreasing
+  // never discards data: a later increase just re-reveals it, no re-fetch,
+  // same as box mode's own collapse/expand. Reset to FAN_BASE_ANC alongside
+  // every other per-root state below.
+  const [fanDisplayDepth, setFanDisplayDepth] = useState(FAN_BASE_ANC);
+  const fanChartRef = useRef<FanChartHandle>(null);
   // Fan mode's own wedge-color scheme -- "Age at death" is the only other
   // one wired up so far (fanChart.ts's own doc comment on why: harrywind.nl
   // has several more, but generation/age-at-death are the two computable
@@ -194,6 +207,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     setCollapsedDescendant(new Set());
     setExpandingKeys(new Set());
     setExpandCenterHandle(null);
+    setFanDisplayDepth(FAN_BASE_ANC);
     fetchedExpansionsRef.current = new Set();
     expandingRef.current = new Set();
     setFamilyFocusHandle(null);
@@ -350,13 +364,28 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
 
   // Every currently-loaded fan-mode node with real further ancestors not
   // yet fetched -- what "Increase depth" (below, in the status bar) expands
-  // all at once, rather than a marker per branch.
+  // all at once, rather than a marker per branch. Walks the *full* fanTree,
+  // not fanDisplayTree below -- what's really left to fetch doesn't depend
+  // on how many of those already-fetched generations are currently shown.
   const fanBoundaryNodes = useMemo(() => {
     if (!fanTree) return [];
     const acc: { label: string; handle: string }[] = [];
     collectBoundaryNodes(fanTree, acc);
     return acc;
   }, [fanTree]);
+
+  // How deep `fanTree` really goes, fetched-wise -- independent of
+  // `fanDisplayDepth`, so "Increase depth" (below) can tell whether the
+  // next generation is already sitting in `data` (just bump the display
+  // depth) or genuinely needs a fetch first.
+  const fanActualMaxDepth = useMemo(() => treeMaxDepth(fanTree), [fanTree]);
+
+  // What FanChart actually renders -- fanTree clipped to fanDisplayDepth
+  // (trimTreeToDepth's own doc comment).
+  const fanDisplayTree = useMemo(() => {
+    if (!fanTree) return null;
+    return trimTreeToDepth(fanTree, fanDisplayDepth);
+  }, [fanTree, fanDisplayDepth]);
 
   // Family mode's own ancestor-ward tree: a chain of sibling clusters, one
   // per generation expanded "up" so far -- see buildFamilyClusterTree's own
@@ -576,6 +605,14 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // fetchedExpansionsRef/expandingRef bookkeeping so the two mechanisms
   // never redundantly re-fetch the same person.
   async function increaseFanDepth() {
+    // A generation already sitting in `data` (from an earlier fetch, since
+    // clipped back down by "Decrease depth") just needs re-revealing --
+    // no network round trip, and no change to `expandedAncestor` either
+    // (that already covers whatever got this far).
+    if (fanDisplayDepth < fanActualMaxDepth) {
+      setFanDisplayDepth((d) => Math.min(fanActualMaxDepth, d + 1));
+      return;
+    }
     const targets = fanBoundaryNodes.filter(({ handle }) => !fetchedExpansionsRef.current.has(`ancestor:${handle}`));
     if (targets.length === 0) return;
     const keys = targets.map(({ handle }) => `ancestor:${handle}`);
@@ -606,6 +643,16 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       targets.forEach(({ label }) => next.add(label));
       return next;
     });
+    setFanDisplayDepth((d) => d + 1);
+  }
+
+  // The reverse of increaseFanDepth: never touches `data`/`expandedAncestor`
+  // at all, just hides the deepest currently-shown generation -- a later
+  // "Increase depth" click re-reveals it instantly (the fetch-skipping
+  // branch above), same "nothing is lost, it's just folded back down" deal
+  // as box mode's own collapseAncestors/collapseDescendants.
+  function decreaseFanDepth() {
+    setFanDisplayDepth((d) => Math.max(MIN_FAN_DISPLAY_DEPTH, d - 1));
   }
 
   function collapseDescendants(handle: string) {
@@ -684,6 +731,13 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     collectExpandableLabelsForHandle(trees.ancestorTree, selectedHandle, labels);
     return labels.length > 0;
   }, [trees, selectedHandle]);
+
+  // "+ Increase depth" stays enabled whenever there's a next generation to
+  // show, whether that's already fetched (fanDisplayDepth < fanActualMaxDepth,
+  // so a click just re-reveals it) or needs a fresh fetch (a real
+  // fanBoundaryNodes entry). "− Decrease depth" is just the display floor.
+  const canIncreaseFanDepth = fanDisplayDepth < fanActualMaxDepth || fanBoundaryNodes.length > 0;
+  const canDecreaseFanDepth = fanDisplayDepth > MIN_FAN_DISPLAY_DEPTH;
 
   // A subject that resolved to nothing: a family with neither parent set, or
   // a handle this cache doesn't have yet (stale link, still syncing).
@@ -785,12 +839,24 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
                 <Button
                   size="xs"
                   variant="default"
+                  onClick={decreaseFanDepth}
+                  disabled={!canDecreaseFanDepth}
+                >
+                  {t("− Decrease depth")}
+                </Button>
+                <Button
+                  size="xs"
+                  variant="default"
                   onClick={increaseFanDepth}
-                  disabled={fanBoundaryNodes.length === 0}
+                  disabled={!canIncreaseFanDepth}
                   loading={fanBoundaryNodes.some(({ handle }) => expandingKeys.has(`ancestor:${handle}`))}
                 >
                   {t("+ Increase depth")}
                 </Button>
+                <DownloadImageButton
+                  getSvg={() => fanChartRef.current?.getSvg() ?? null}
+                  filename={`fan-chart-${(root?.label ?? "tree").replace(/[^\p{L}\p{N}]+/gu, "-")}`}
+                />
               </Group>
             </Group>
           ) : undefined
@@ -817,9 +883,10 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         ) : undefined
       }
     >
-      {chartStyle === "fan" && fanTree && (
+      {chartStyle === "fan" && fanDisplayTree && (
         <FanChart
-          ancestorTree={fanTree}
+          ref={fanChartRef}
+          ancestorTree={fanDisplayTree}
           selectedHandle={selectedHandle}
           onSelectPerson={setSelectedHandle}
           sizeByLifespan={sizeByLifespan}

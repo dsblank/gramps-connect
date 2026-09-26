@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { zoomTransform, type ZoomTransform } from "d3-zoom";
 import { renderFanChart, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
 import type { TreeNode } from "../../store/treeData";
@@ -13,6 +13,14 @@ interface FanChartProps {
   sizeByLifespan: boolean;
   /** TreeView.tsx's own "Generation"/"Age at death" SegmentedControl. */
   colorScheme: FanColorScheme;
+}
+
+/** Imperative escape hatch for whatever needs the chart's own live `<svg>`
+ * without owning its render loop -- today that's TreeView.tsx's own
+ * DownloadImageButton (getSvg -- see store/exportSvgImage.ts's own doc
+ * comment on why this has to be a callback, not a ref captured once). */
+export interface FanChartHandle {
+  getSvg: () => SVGSVGElement | null;
 }
 
 /** Owns a plain `div` and hands its DOM to the d3 renderer -- same
@@ -34,7 +42,10 @@ interface FanChartProps {
  *    under it; re-fitting is the "reinit" the geometry actually needs;
  *  - a fresh *selection* (not just this handle being still-selected across
  *    an unrelated rebuild) asks renderFanChart to animate-center on it. */
-export function FanChart({ ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme }: FanChartProps) {
+export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanChart(
+  { ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const zoomRef = useRef<ZoomTransform | null>(null);
@@ -42,6 +53,10 @@ export function FanChart({ ancestorTree, selectedHandle, onSelectPerson, sizeByL
   const prevMaxDepthRef = useRef(0);
   const prevSelectedHandleRef = useRef<string | null>(null);
   const prevSizeByLifespanRef = useRef(sizeByLifespan);
+
+  useImperativeHandle(ref, () => ({
+    getSvg: () => containerRef.current?.querySelector("svg") ?? null,
+  }), []);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -90,4 +105,4 @@ export function FanChart({ ancestorTree, selectedHandle, onSelectPerson, sizeByL
   }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
-}
+});

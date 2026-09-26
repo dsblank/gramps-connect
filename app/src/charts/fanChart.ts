@@ -202,6 +202,24 @@ export function treeMaxDepth(node: TreeNode | null | undefined): number {
   return 1 + Math.max(treeMaxDepth(node.children[0]), treeMaxDepth(node.children[1]));
 }
 
+/** Clips a fetched ancestor tree down to at most `maxDepth` generations
+ * below the root (0 = root only), dropping deeper `children` without
+ * touching anything else -- TreeView.tsx's own "Decrease depth" button
+ * hides already-fetched generations this way rather than discarding them:
+ * a later "Increase depth" click just re-reveals the same nodes from
+ * `data`, no re-fetch. Doesn't (and shouldn't) touch `hasMore` on a
+ * clipped-away node -- collectBoundaryNodes (TreeView.tsx) always walks the
+ * *full*, un-clipped tree to decide what's really left to fetch, regardless
+ * of what's currently displayed. */
+export function trimTreeToDepth(node: TreeNode, maxDepth: number): TreeNode {
+  if (!node.children || maxDepth <= 0) {
+    if (!node.children) return node;
+    const { children: _children, ...rest } = node;
+    return rest;
+  }
+  return { ...node, children: node.children.map((child) => trimTreeToDepth(child, maxDepth - 1)) };
+}
+
 /** MIN_THICKNESS keeps a short life (or an infant death) visibly clickable
  * rather than collapsing to a sliver -- not part of the reference port
  * below, just a defensive floor on top of it. */
@@ -838,6 +856,20 @@ export function renderFanChart(
   const hasRoomForLabel = (d: Wedge): boolean =>
     d.depth === 0 || (d.drawA1 - d.drawA0) * ((d.innerR + d.outerR) / 2) >= MIN_LABEL_ARC_PX;
 
+  // A third on-wedge line (death date, alongside the existing birth-date
+  // line) only where there's real *radial* room for it -- fixed mode's
+  // wedges are always RING (70px) deep regardless of depth, ample for three
+  // shrunk-font lines, but "Show lifespan" mode's own wedges (nodeRadii)
+  // can be as thin as MIN_THICKNESS (20px), where a third line would just
+  // overlap the other two. hasRoomForLabel's own angular gate still applies
+  // on top -- this only adds a second, radial dimension to "enough room",
+  // not a replacement for it.
+  const MIN_RADIAL_PX_FOR_DEATH_LINE = 32;
+  const showsDeathLine = (d: Wedge): boolean =>
+    hasRoomForLabel(d) &&
+    d.outerR - d.innerR >= MIN_RADIAL_PX_FOR_DEATH_LINE &&
+    !!d.node?.person?.profile?.death?.date;
+
   // Root gets a plain upright label (it's not meaningfully "along a radius"
   // -- it's the center point) -- placed at half its own wedge's own height
   // rather than at y=0 (the flat bottom edge), so it reads as sitting
@@ -878,7 +910,7 @@ export function renderFanChart(
     .append("text")
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "middle")
-    .attr("y", -6)
+    .attr("y", (d) => (showsDeathLine(d) ? -9 : -6))
     .attr("fill", "var(--mantine-color-text)")
     .attr("font-size", (d) => nameFontSize(d.depth))
     .attr("font-weight", 600)
@@ -891,7 +923,7 @@ export function renderFanChart(
     .append("text")
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "middle")
-    .attr("y", 8)
+    .attr("y", (d) => (showsDeathLine(d) ? 2 : 8))
     // Fixed dark tone rather than var(--mantine-color-dimmed): the wedges'
     // own fills (GEN_COLORS/DEATH_COLORS above) are the same hex in both
     // themes, but dimmed is a theme-relative gray that goes light-on-light
@@ -901,6 +933,23 @@ export function renderFanChart(
     .text((d) => {
       const p = d.node!.person!;
       return clipString(p.profile?.birth?.date ? `*${p.profile.birth.date}` : "", labelWidth(d), dateFontSize(d.depth));
+    });
+
+  // Death date: a third on-wedge line, only where showsDeathLine allows it
+  // (its own doc comment) -- otherwise left blank, same "always appended,
+  // conditionally empty" convention the birth-date line above already uses,
+  // rather than a second filtered selection.
+  labelGroup
+    .append("text")
+    .attr("text-anchor", "middle")
+    .attr("dominant-baseline", "middle")
+    .attr("y", 13)
+    .attr("fill", "rgba(0, 0, 0, 0.65)")
+    .attr("font-size", (d) => dateFontSize(d.depth))
+    .text((d) => {
+      if (!showsDeathLine(d)) return "";
+      const p = d.node!.person!;
+      return clipString(`†${p.profile!.death!.date}`, labelWidth(d), dateFontSize(d.depth));
     });
 
   // Lifespan mode's own year axis: a horizontal rule at y=0 (root's own
