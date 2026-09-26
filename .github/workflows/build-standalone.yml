@@ -190,7 +190,7 @@ jobs:
           # otherwise resolve to. Bump here when a newer GOQL release is
           # needed (see deploy/Dockerfile for the same pin on the Docker
           # deploy build).
-          pip install "gramps-object-query-language>=0.5.3"
+          pip install "gramps-object-query-language>=0.5.4"
           # Opens the app in a native window (WebView2/WKWebView/GTK3+
           # WebKit2) instead of a browser tab. Its Windows (pythonnet) and
           # macOS (pyobjc-*) backend deps are pulled in automatically by
@@ -450,7 +450,7 @@ jobs:
           # otherwise resolve to. Bump here when a newer GOQL release is
           # needed (see deploy/Dockerfile for the same pin on the Docker
           # deploy build).
-          pip install "gramps-object-query-language>=0.5.3"
+          pip install "gramps-object-query-language>=0.5.4"
           pip install pywebview
           # Backs runtime_hooks/rthook_icu_shim.py -- see the other matrix
           # leg's "Install remaining Python dependencies" step for why.
