@@ -24,7 +24,7 @@
 import { API_BASE } from "../config";
 import { getToken, hasPermissions } from "../auth/auth";
 import { fetchPage, parseErrorMessage } from "../store/api";
-import { MEDIA_VIEW } from "../store/views";
+import { MEDIA_VIEW, type ColumnConfig } from "../store/views";
 import { uploadMedia, updateMediaFile, setMediaDesc, getOrCreateTagHandle, tagAndDescribeMedia } from "../store/jobsApi";
 import { OBJECT_TYPES } from "./objectEndpoints";
 import type { Gramplet } from "./types";
@@ -144,12 +144,51 @@ function normalizeGramplet(gramplet: Gramplet, handle: string): Gramplet {
   };
 }
 
+/** The only column fetchGramplets()'s tag query needs beyond `handle`
+ * (which fetchPage() always selects): the Media object's file checksum,
+ * which gramps-web-api recomputes on every file PUT (and serves as that
+ * file's own ETag) -- so (handle, checksum) identifies a manifest's exact
+ * content, unlike `change`, whose one-second resolution can miss a second
+ * edit in the same second. */
+const CHECKSUM_COLUMN: ColumnConfig = { key: "checksum", label: "Checksum", select: "checksum", sqlType: "TEXT" };
+
+/** Parsed manifests by Media handle, each with the checksum it was parsed
+ * from -- see fetchGramplets(). `gramplet: null` remembers a file that
+ * wasn't a valid manifest, so a bad upload isn't re-downloaded every load
+ * either. Module-level: shared by every PyodidePocPanel/dialog for the
+ * life of the page, and safe to keep across a user/tree switch since an
+ * entry is only ever reused for the same handle *and* content. */
+const manifestCache = new Map<string, { checksum: string; gramplet: Gramplet | null }>();
+
+let inFlight: Promise<Gramplet[]> | null = null;
+
 /** Every Media object tagged "Gramplet", with its raw file content parsed
  * as a Gramplet manifest. A tagged Media whose content isn't valid JSON in
  * that shape is skipped (logged, not thrown) rather than failing the whole
  * panel over one bad upload -- the same "don't let one bad row sink the
- * list" posture the rest of this app takes with cached data. */
-export async function fetchGramplets(): Promise<Gramplet[]> {
+ * list" posture the rest of this app takes with cached data.
+ *
+ * Always re-runs the tag query (one request), but only downloads the
+ * `/file` of a Gramplet that's new or whose checksum changed since it was
+ * last parsed -- so a PyodidePocPanel remount (e.g. People -> Home ->
+ * Families) or a reload triggered by some unrelated Media edit costs 1
+ * request instead of 1 + one per Gramplet. Concurrent callers share one
+ * in-flight load (React StrictMode's double mount, several panels/dialogs
+ * at once); pass `fresh` from a caller that's reacting to a change it knows
+ * happened *after* any load already in flight began (a live-sync "media"
+ * notification, the end of a save), so it can't be handed that older,
+ * possibly pre-change result. */
+export function fetchGramplets({ fresh = false }: { fresh?: boolean } = {}): Promise<Gramplet[]> {
+  if (!inFlight || fresh) {
+    const load = loadGramplets().finally(() => {
+      if (inFlight === load) inFlight = null;
+    });
+    inFlight = load;
+  }
+  return inFlight;
+}
+
+async function loadGramplets(): Promise<Gramplet[]> {
   const token = await getToken();
   const { page } = await fetchPage(
     MEDIA_VIEW,
@@ -158,24 +197,43 @@ export async function fetchGramplets(): Promise<Gramplet[]> {
     false,
     `any(t.name == ${JSON.stringify(GRAMPLET_TAG_NAME)} for t in tags)`,
     MEDIA_VIEW.orderBy,
-    100
+    100,
+    [CHECKSUM_COLUMN]
   );
+  const seen = new Set<string>();
   const gramplets = await Promise.all(
     page.items.map(async (item): Promise<Gramplet | null> => {
+      seen.add(item.handle);
+      const checksum = typeof item.checksum === "string" ? item.checksum : "";
+      const cached = manifestCache.get(item.handle);
+      if (cached && checksum && cached.checksum === checksum) return cached.gramplet;
+      let text: string;
       try {
         const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(await parseErrorMessage(res));
-        const manifest: unknown = JSON.parse(await res.text());
-        if (!isGramplet(manifest)) throw new Error("not a valid Gramplet manifest");
-        return normalizeGramplet(manifest, item.handle);
+        text = await res.text();
       } catch (err) {
+        // A failed download isn't cached -- it's retried next load.
         console.warn(`[gramplets] skipping ${item.handle}:`, err);
         return null;
       }
+      let gramplet: Gramplet | null = null;
+      try {
+        const manifest: unknown = JSON.parse(text);
+        if (!isGramplet(manifest)) throw new Error("not a valid Gramplet manifest");
+        gramplet = normalizeGramplet(manifest, item.handle);
+      } catch (err) {
+        console.warn(`[gramplets] skipping ${item.handle}:`, err);
+      }
+      if (checksum) manifestCache.set(item.handle, { checksum, gramplet });
+      return gramplet;
     })
   );
+  for (const handle of manifestCache.keys()) {
+    if (!seen.has(handle)) manifestCache.delete(handle);
+  }
   return gramplets.filter((g): g is Gramplet => g !== null);
 }
 

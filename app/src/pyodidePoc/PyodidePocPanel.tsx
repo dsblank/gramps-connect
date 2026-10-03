@@ -247,10 +247,12 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     return workerRef.current;
   }
 
-  async function loadGramplets() {
+  // `fresh` for a reload reacting to a change (live sync, a save) -- see
+  // fetchGramplets()'s doc comment.
+  async function loadGramplets(fresh = false) {
     setListStatus("loading");
     try {
-      setGramplets(await fetchGramplets());
+      setGramplets(await fetchGramplets({ fresh }));
       setListStatus("ready");
     } catch (err) {
       console.error("[gramplets] failed to load", err);
@@ -290,7 +292,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         if (reloadTimerRef.current) return;
         reloadTimerRef.current = setTimeout(() => {
           reloadTimerRef.current = null;
-          loadGramplets();
+          loadGramplets(true);
         }, 300);
         return;
       }
@@ -421,7 +423,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // handleNewGrampletSaved below does that for the "new" case, and editing
   // an existing tab shouldn't move it in or out of anyone's view at all.
   async function handleGrampletDialogSaved(gramplet: Gramplet) {
-    await loadGramplets();
+    await loadGramplets(true);
     setActiveId(gramplet.id);
   }
 
@@ -473,7 +475,19 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // `cancelled` guards only the getToken() gap in case 3: a real async
   // call (may silently refresh), so a fast tab switch away before it
   // resolves shouldn't register/post a run for a tab already abandoned.
+  // Nothing runs while the panel is collapsed -- a result nobody can see
+  // isn't worth booting Pyodide for (a first run downloads ~12MB of
+  // wasm/stdlib, plus any packages the Gramplet imports), the same
+  // reasoning the tree-change rerun above already skips collapsed panels
+  // by. `collapsed` is in the deps, so expanding the panel runs (or
+  // reattaches to/reuses) the active tab right then via the usual cases.
+  // The check itself reads the stored per-view value, not `collapsed`:
+  // on a view switch, `collapsed` is only re-read for the new view by the
+  // effect above, so for that one commit it still holds the *previous*
+  // view's value (toggleCollapsed() writes both together, so the stored
+  // value is never behind the state).
   useEffect(() => {
+    if (readStoredCollapsed(viewKey)) return;
     const gramplet = gramplets.find((g) => g.id === activeId);
     if (!gramplet) return;
     const cacheKey = gramplet.id;
@@ -592,7 +606,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, gramplets, runNonce, selectionNonce, viewKey]);
+  }, [activeId, gramplets, runNonce, selectionNonce, viewKey, collapsed]);
 
   // A click on an st.*-widget in the active tab's own rendered output (see
   // GrampletResultView's onWidgetEvent prop / stBootstrap.ts's st.button())
