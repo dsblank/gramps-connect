@@ -64,8 +64,7 @@ function AddFamilyControl({ personHandle, onAdded }: { personHandle: string; onA
     <>
       <CircleGlyphButton
         glyph="+"
-        label={t("Attach a family")}
-        textLabel="Add a family"
+        label={t("Add a family")}
         onClick={() => {
           setError(null);
           setOpened(true);
@@ -106,7 +105,10 @@ export function FamiliesSection({ type, detail, onNavigate, onRefetch }: Section
   }
 
   return (
-    <SectionShell label={t("Families")}>
+    <SectionShell
+      label={t("Families")}
+      action={canEdit && <AddFamilyControl personHandle={detail.handle} onAdded={() => onRefetch?.()} />}
+    >
       {families.map((fam) => {
         // Show the *other* member of the family (the spouse), not both --
         // father/mother is {} rather than absent when missing (see
@@ -129,7 +131,6 @@ export function FamiliesSection({ type, detail, onNavigate, onRefetch }: Section
           />
         );
       })}
-      {canEdit && <AddFamilyControl personHandle={detail.handle} onAdded={() => onRefetch?.()} />}
     </SectionShell>
   );
 }

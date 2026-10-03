@@ -35,16 +35,9 @@ export function PlaceSection({ view, detail, onNavigate, onRefetch }: SectionPro
   }
 
   return (
-    <SectionShell label={t("Place")}>
-      {place?.handle ? (
-        <RefRow
-          type="place"
-          handle={place.handle}
-          obj={place}
-          onNavigate={onNavigate}
-          onRemove={canEdit ? handleClear : undefined}
-        />
-      ) : (
+    <SectionShell
+      label={t("Place")}
+      action={!place?.handle && (
         <SetFieldControl
           targetView={view}
           targetHandle={detail.handle}
@@ -52,6 +45,17 @@ export function PlaceSection({ view, detail, onNavigate, onRefetch }: SectionPro
           field="place"
           itemLabel="a place"
           onSet={() => onRefetch?.()}
+          iconOnly
+        />
+      )}
+    >
+      {place?.handle && (
+        <RefRow
+          type="place"
+          handle={place.handle}
+          obj={place}
+          onNavigate={onNavigate}
+          onRemove={canEdit ? handleClear : undefined}
         />
       )}
     </SectionShell>

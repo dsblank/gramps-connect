@@ -28,10 +28,14 @@ interface EditingParticipant {
  * object. Defaults role to "Primary", same as EventsSection's own forward-
  * direction attach -- fixing it after the fact is this section's existing
  * edit icon (RefEditDialog refType="event"), unchanged by this. */
-function AddParticipantControl({ pickerView, eventHandle, itemLabel, onAdded }: {
+function AddParticipantControl({ pickerView, eventHandle, itemLabel, shortLabel, onAdded }: {
   pickerView: ViewConfig;
   eventHandle: string;
   itemLabel: string;
+  /** Visible text next to the "+" -- this section's header has two of
+   * them side by side (person/family), so unlike every other section's
+   * bare "+" each needs a word to tell them apart. */
+  shortLabel: string;
   onAdded: () => void;
 }) {
   const [opened, setOpened] = useState(false);
@@ -50,8 +54,8 @@ function AddParticipantControl({ pickerView, eventHandle, itemLabel, onAdded }: 
     <>
       <CircleGlyphButton
         glyph="+"
-        label={`Attach ${itemLabel}`}
-        textLabel={`Add ${itemLabel}`}
+        label={`Add ${itemLabel}`}
+        textLabel={shortLabel}
         onClick={() => setOpened(true)}
       />
       <Modal opened={opened} onClose={() => setOpened(false)} title={`Adding ${itemLabel}`} size="sm">
@@ -97,7 +101,27 @@ export function ParticipantsSection({ detail, onNavigate, onRefetch }: SectionPr
   }
 
   return (
-    <SectionShell label={t("Participants")}>
+    <SectionShell
+      label={t("Participants")}
+      action={canEdit && (
+        <>
+          <AddParticipantControl
+            pickerView={PERSON_VIEW}
+            eventHandle={detail.handle}
+            itemLabel="a person"
+            shortLabel={t("Person")}
+            onAdded={() => onRefetch?.()}
+          />
+          <AddParticipantControl
+            pickerView={FAMILY_VIEW}
+            eventHandle={detail.handle}
+            itemLabel="a family"
+            shortLabel={t("Family")}
+            onAdded={() => onRefetch?.()}
+          />
+        </>
+      )}
+    >
       {people.map(({ person, role }) => (
         <RefRow
           key={person.handle}
@@ -122,22 +146,6 @@ export function ParticipantsSection({ detail, onNavigate, onRefetch }: SectionPr
           onRemove={canEdit ? () => handleRemove(FAMILY_VIEW, family.handle, family) : undefined}
         />
       ))}
-      {canEdit && (
-        <>
-          <AddParticipantControl
-            pickerView={PERSON_VIEW}
-            eventHandle={detail.handle}
-            itemLabel="a person"
-            onAdded={() => onRefetch?.()}
-          />
-          <AddParticipantControl
-            pickerView={FAMILY_VIEW}
-            eventHandle={detail.handle}
-            itemLabel="a family"
-            onAdded={() => onRefetch?.()}
-          />
-        </>
-      )}
       {editing && (
         <RefEditDialog
           opened

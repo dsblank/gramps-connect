@@ -33,7 +33,20 @@ export function EventsSection({ view, detail, onNavigate, onRefetch }: SectionPr
   }
 
   return (
-    <SectionShell label={t("Events")}>
+    <SectionShell
+      label={t("Events")}
+      action={canEdit && (
+        <AttachControl
+          targetView={view}
+          targetHandle={detail.handle}
+          pickerView={EVENT_VIEW}
+          listField="event_ref_list"
+          buildEntry={(handle) => ({ _class: "EventRef", ref: handle, role: "Primary" })}
+          itemLabel="an event"
+          onAttached={() => onRefetch?.()}
+        />
+      )}
+    >
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}
@@ -45,17 +58,6 @@ export function EventsSection({ view, detail, onNavigate, onRefetch }: SectionPr
           onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
         />
       ))}
-      {canEdit && (
-        <AttachControl
-          targetView={view}
-          targetHandle={detail.handle}
-          pickerView={EVENT_VIEW}
-          listField="event_ref_list"
-          buildEntry={(handle) => ({ _class: "EventRef", ref: handle, role: "Primary" })}
-          itemLabel="an event"
-          onAttached={() => onRefetch?.()}
-        />
-      )}
     </SectionShell>
   );
 }

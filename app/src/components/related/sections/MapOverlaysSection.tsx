@@ -81,19 +81,9 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
   }
 
   return (
-    <SectionShell label={t("Map overlays")}>
-      {rows.map(({ ref, target }) => (
-        <RefRow
-          key={ref.ref}
-          type="media"
-          handle={ref.ref}
-          obj={target}
-          refMeta={ref}
-          onNavigate={onNavigate}
-          onRemove={canAttach ? () => handleRemove(ref.ref, target) : undefined}
-        />
-      ))}
-      {canAttach && (
+    <SectionShell
+      label={t("Map overlays")}
+      action={canAttach && (
         <AttachControl
           targetView={PLACE_VIEW}
           targetHandle={detail.handle}
@@ -106,6 +96,18 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
           createLabel="map overlay"
         />
       )}
+    >
+      {rows.map(({ ref, target }) => (
+        <RefRow
+          key={ref.ref}
+          type="media"
+          handle={ref.ref}
+          obj={target}
+          refMeta={ref}
+          onNavigate={onNavigate}
+          onRemove={canAttach ? () => handleRemove(ref.ref, target) : undefined}
+        />
+      ))}
       {adding && (
         <Suspense
           fallback={

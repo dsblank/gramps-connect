@@ -56,7 +56,20 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
   }
 
   return (
-    <SectionShell label={t("Media")}>
+    <SectionShell
+      label={t("Media")}
+      action={canAttach && (
+        <AttachControl
+          targetView={view}
+          targetHandle={detail.handle}
+          pickerView={MEDIA_VIEW}
+          listField="media_list"
+          buildEntry={(handle) => ({ _class: "MediaRef", ref: handle })}
+          itemLabel="media"
+          onAttached={() => onRefetch?.()}
+        />
+      )}
+    >
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}
@@ -79,17 +92,6 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
           initialRect={regionTarget.rect}
           onClose={() => setRegionTarget(null)}
           onSave={(rect) => handleSaveRegion(regionTarget.handle, rect)}
-        />
-      )}
-      {canAttach && (
-        <AttachControl
-          targetView={view}
-          targetHandle={detail.handle}
-          pickerView={MEDIA_VIEW}
-          listField="media_list"
-          buildEntry={(handle) => ({ _class: "MediaRef", ref: handle })}
-          itemLabel="media"
-          onAttached={() => onRefetch?.()}
         />
       )}
     </SectionShell>

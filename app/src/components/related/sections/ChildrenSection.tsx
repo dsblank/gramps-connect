@@ -32,7 +32,20 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
   }
 
   return (
-    <SectionShell label={t("Children")}>
+    <SectionShell
+      label={t("Children")}
+      action={canEdit && (
+        <AttachControl
+          targetView={view}
+          targetHandle={detail.handle}
+          pickerView={PERSON_VIEW}
+          listField="child_ref_list"
+          buildEntry={(handle) => ({ _class: "ChildRef", ref: handle, frel: "Birth", mrel: "Birth" })}
+          itemLabel="a child"
+          onAttached={() => onRefetch?.()}
+        />
+      )}
+    >
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}
@@ -45,17 +58,6 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
           onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
         />
       ))}
-      {canEdit && (
-        <AttachControl
-          targetView={view}
-          targetHandle={detail.handle}
-          pickerView={PERSON_VIEW}
-          listField="child_ref_list"
-          buildEntry={(handle) => ({ _class: "ChildRef", ref: handle, frel: "Birth", mrel: "Birth" })}
-          itemLabel="a child"
-          onAttached={() => onRefetch?.()}
-        />
-      )}
       {editingRef && (
         <RefEditDialog
           opened

@@ -22,7 +22,8 @@ interface CircleGlyphButtonProps {
   onClick: (e: SyntheticEvent) => void;
   size?: number;
   /** When set, the circle is followed by this text inside the *same*
-   * clickable button (AttachControl.tsx's "+ Add a note" style triggers)
+   * clickable button (ParticipantsSection.tsx's "+ Person"/"+ Family" pair,
+   * ParentsSection.tsx's "+ Add a father" placeholders)
    * instead of rendering as a bare icon with only a hover tooltip -- the
    * whole phrase is the click target, not just the small circle. */
   textLabel?: string;

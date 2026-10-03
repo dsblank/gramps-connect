@@ -20,10 +20,9 @@ export function SourceSection({ view, detail, onNavigate, onRefetch }: SectionPr
   if (!source?.handle && !canEdit) return null;
 
   return (
-    <SectionShell label={t("Source")}>
-      {source?.handle ? (
-        <RefRow type="source" handle={source.handle} obj={source} onNavigate={onNavigate} />
-      ) : (
+    <SectionShell
+      label={t("Source")}
+      action={!source?.handle && (
         <SetFieldControl
           targetView={view}
           targetHandle={detail.handle}
@@ -31,7 +30,12 @@ export function SourceSection({ view, detail, onNavigate, onRefetch }: SectionPr
           field="source_handle"
           itemLabel="a source"
           onSet={() => onRefetch?.()}
+          iconOnly
         />
+      )}
+    >
+      {source?.handle && (
+        <RefRow type="source" handle={source.handle} obj={source} onNavigate={onNavigate} />
       )}
     </SectionShell>
   );

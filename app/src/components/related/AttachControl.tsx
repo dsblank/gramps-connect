@@ -62,7 +62,9 @@ interface AttachControlProps {
   createLabel?: string;
 }
 
-/** A small circled "+" trigger (CircleGlyphButton.tsx) that opens a proper
+/** A small, bare circled "+" trigger (CircleGlyphButton.tsx -- meant for a
+ * SectionShell's header-row `action` slot, so "Add a note" is only its
+ * tooltip/aria-label, not visible text) that opens a proper
  * dialog (Modal, not a Popover) titled "Adding <itemLabel>", with a
  * RecordPicker search box inside scoped to `pickerView`'s own tuned
  * simpleSearch -- the exact same buildExpr *and* placeholder copy
@@ -112,8 +114,7 @@ export function AttachControl({
     <>
       <CircleGlyphButton
         glyph="+"
-        label={`Attach ${itemLabel}`}
-        textLabel={`Add ${itemLabel}`}
+        label={`Add ${itemLabel}`}
         onClick={() => setOpened(true)}
       />
       <Modal opened={opened} onClose={() => setOpened(false)} title={`Adding ${itemLabel}`} size="sm">
@@ -150,6 +151,11 @@ interface SetFieldControlProps {
    * AttachControl's itemLabel. */
   itemLabel: string;
   onSet: () => void;
+  /** A bare "+" (tooltip-only wording) for a SectionShell header-row
+   * `action` (Place/Source); omitted, it keeps its visible "+ Add a
+   * father" text -- ParentsSection's father/mother slots sit *in* the
+   * pair layout as placeholders, where the text says which slot is which. */
+  iconOnly?: boolean;
 }
 
 /** AttachControl's counterpart for a *singular* ref field (Family's
@@ -161,7 +167,7 @@ interface SetFieldControlProps {
  * clear, where the field isn't required) instead of this control, same as
  * every list section shows existing rows above its own AttachControl. */
 export function SetFieldControl({
-  targetView, targetHandle, pickerView, field, itemLabel, onSet,
+  targetView, targetHandle, pickerView, field, itemLabel, onSet, iconOnly,
 }: SetFieldControlProps) {
   const [opened, setOpened] = useState(false);
   if (!hasPermissions("EditObject")) return null;
@@ -177,8 +183,8 @@ export function SetFieldControl({
     <>
       <CircleGlyphButton
         glyph="+"
-        label={`Set ${itemLabel}`}
-        textLabel={`Add ${itemLabel}`}
+        label={iconOnly ? `Add ${itemLabel}` : `Set ${itemLabel}`}
+        textLabel={iconOnly ? undefined : `Add ${itemLabel}`}
         onClick={() => setOpened(true)}
       />
       <Modal opened={opened} onClose={() => setOpened(false)} title={`Setting ${itemLabel}`} size="sm">

@@ -100,7 +100,29 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
   }
 
   return (
-    <SectionShell label={t("Comparisons")}>
+    <SectionShell
+      label={t("Comparisons")}
+      action={canEdit && (
+        <>
+          <CircleGlyphButton
+            glyph="+"
+            label={t("Add a comparison")}
+            onClick={() => setPickerOpened(true)}
+          />
+          <Modal opened={pickerOpened} onClose={() => setPickerOpened(false)} title={t("Adding a comparison")} size="sm">
+            <RecordPicker
+              view={MEDIA_VIEW}
+              searchField="desc"
+              placeholder={MEDIA_VIEW.simpleSearch?.placeholder ?? "Search…"}
+              buildExpr={imageOnlyExpr(detail.handle)}
+              renderLabel={(item) => pickerResultLabel(MEDIA_VIEW.key, item)}
+              onPick={handlePick}
+              confirmWithButton
+            />
+          </Modal>
+        </>
+      )}
+    >
       {targets.map((handle) => {
         const target = targetObjs[handle];
         return (
@@ -121,27 +143,6 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
           />
         );
       })}
-      {canEdit && (
-        <>
-          <CircleGlyphButton
-            glyph="+"
-            label={t("Attach a comparison")}
-            textLabel="Add a comparison"
-            onClick={() => setPickerOpened(true)}
-          />
-          <Modal opened={pickerOpened} onClose={() => setPickerOpened(false)} title={t("Adding a comparison")} size="sm">
-            <RecordPicker
-              view={MEDIA_VIEW}
-              searchField="desc"
-              placeholder={MEDIA_VIEW.simpleSearch?.placeholder ?? "Search…"}
-              buildExpr={imageOnlyExpr(detail.handle)}
-              renderLabel={(item) => pickerResultLabel(MEDIA_VIEW.key, item)}
-              onPick={handlePick}
-              confirmWithButton
-            />
-          </Modal>
-        </>
-      )}
       {compareTarget && (
         <CompareModal
           opened

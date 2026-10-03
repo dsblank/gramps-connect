@@ -27,7 +27,19 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
   }
 
   return (
-    <SectionShell label={t("Citations")}>
+    <SectionShell
+      label={t("Citations")}
+      action={canAttach && (
+        <AttachControl
+          targetView={view}
+          targetHandle={detail.handle}
+          pickerView={CITATION_VIEW}
+          listField="citation_list"
+          itemLabel="a citation"
+          onAttached={() => onRefetch?.()}
+        />
+      )}
+    >
       {rows.map(({ handle, target }) => (
         <RefRow
           key={handle}
@@ -38,16 +50,6 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
           onRemove={canAttach ? () => handleRemove(handle, target) : undefined}
         />
       ))}
-      {canAttach && (
-        <AttachControl
-          targetView={view}
-          targetHandle={detail.handle}
-          pickerView={CITATION_VIEW}
-          listField="citation_list"
-          itemLabel="a citation"
-          onAttached={() => onRefetch?.()}
-        />
-      )}
     </SectionShell>
   );
 }

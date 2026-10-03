@@ -78,7 +78,6 @@ function AddStoryControl({ view, detail, onAttached }: { view: SectionProps["vie
       <CircleGlyphButton
         glyph="+"
         label={addStoryLabel}
-        textLabel={addStoryLabel}
         onClick={() => {
           setError(null);
           setDialogOpened(true);
@@ -145,7 +144,19 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   return (
     <>
       {(noteRows.length > 0 || canAttach) && (
-        <SectionShell label={t("Notes")}>
+        <SectionShell
+          label={t("Notes")}
+          action={canAttach && (
+            <AttachControl
+              targetView={view}
+              targetHandle={detail.handle}
+              pickerView={NOTE_VIEW}
+              listField="note_list"
+              itemLabel="a note"
+              onAttached={() => onRefetch?.()}
+            />
+          )}
+        >
           {noteRows.map(({ handle, target }) => (
             <RefRow
               key={handle}
@@ -156,16 +167,6 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
               onRemove={canAttach ? () => handleRemove(handle, target, "note") : undefined}
             />
           ))}
-          {canAttach && (
-            <AttachControl
-              targetView={view}
-              targetHandle={detail.handle}
-              pickerView={NOTE_VIEW}
-              listField="note_list"
-              itemLabel="a note"
-              onAttached={() => onRefetch?.()}
-            />
-          )}
         </SectionShell>
       )}
       {topicRows.length > 0 && (
@@ -189,7 +190,12 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
         </SectionShell>
       )}
       {(storyRows.length > 0 || canAddStory) && (
-        <SectionShell label={t("Stories")}>
+        <SectionShell
+          label={t("Stories")}
+          action={canAddStory && (
+            <AddStoryControl view={view} detail={detail} onAttached={() => onRefetch?.()} />
+          )}
+        >
           {storyRows.map(({ handle, target }) => (
             <RefRow
               key={handle}
@@ -201,9 +207,6 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
               onRemove={canAttach ? () => handleRemove(handle, target, "story") : undefined}
             />
           ))}
-          {canAddStory && (
-            <AddStoryControl view={view} detail={detail} onAttached={() => onRefetch?.()} />
-          )}
         </SectionShell>
       )}
     </>

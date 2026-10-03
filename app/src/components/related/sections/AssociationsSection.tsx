@@ -34,7 +34,20 @@ export function AssociationsSection({ view, detail, onNavigate, onRefetch }: Sec
   }
 
   return (
-    <SectionShell label={t("Associations")}>
+    <SectionShell
+      label={t("Associations")}
+      action={canEdit && (
+        <AttachControl
+          targetView={view}
+          targetHandle={detail.handle}
+          pickerView={PERSON_VIEW}
+          listField="person_ref_list"
+          buildEntry={(handle) => ({ _class: "PersonRef", ref: handle, rel: "" })}
+          itemLabel="an association"
+          onAttached={() => onRefetch?.()}
+        />
+      )}
+    >
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}
@@ -47,17 +60,6 @@ export function AssociationsSection({ view, detail, onNavigate, onRefetch }: Sec
           onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
         />
       ))}
-      {canEdit && (
-        <AttachControl
-          targetView={view}
-          targetHandle={detail.handle}
-          pickerView={PERSON_VIEW}
-          listField="person_ref_list"
-          buildEntry={(handle) => ({ _class: "PersonRef", ref: handle, rel: "" })}
-          itemLabel="an association"
-          onAttached={() => onRefetch?.()}
-        />
-      )}
       {editingRef && (
         <RefEditDialog
           opened

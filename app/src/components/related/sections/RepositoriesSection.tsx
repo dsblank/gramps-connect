@@ -31,7 +31,20 @@ export function RepositoriesSection({ view, detail, onNavigate, onRefetch }: Sec
   }
 
   return (
-    <SectionShell label={t("Repositories")}>
+    <SectionShell
+      label={t("Repositories")}
+      action={canEdit && (
+        <AttachControl
+          targetView={view}
+          targetHandle={detail.handle}
+          pickerView={REPOSITORY_VIEW}
+          listField="reporef_list"
+          buildEntry={(handle) => ({ _class: "RepoRef", ref: handle, call_number: "", media_type: "" })}
+          itemLabel="a repository"
+          onAttached={() => onRefetch?.()}
+        />
+      )}
+    >
       {rows.map(({ ref, target }) => (
         <RefRow
           key={ref.ref}
@@ -44,17 +57,6 @@ export function RepositoriesSection({ view, detail, onNavigate, onRefetch }: Sec
           onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
         />
       ))}
-      {canEdit && (
-        <AttachControl
-          targetView={view}
-          targetHandle={detail.handle}
-          pickerView={REPOSITORY_VIEW}
-          listField="reporef_list"
-          buildEntry={(handle) => ({ _class: "RepoRef", ref: handle, call_number: "", media_type: "" })}
-          itemLabel="a repository"
-          onAttached={() => onRefetch?.()}
-        />
-      )}
       {editingRef && (
         <RefEditDialog
           opened

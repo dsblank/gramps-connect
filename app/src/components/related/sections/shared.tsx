@@ -24,20 +24,41 @@ export const LINK_STYLE = { display: "inline", width: "auto", textAlign: "left" 
  * passed `defaultOpen` anyway (collapsed-by-default was never actually
  * used), and the pane this renders in already scrolls, so a toggle added
  * nothing. Just a static label over its children -- no item count either
- * (redundant now that the list underneath it is always visible), and no
- * header-right action slot (AttachControl.tsx's "+" lives inside the list
- * as its own trailing row instead -- see NotesSection.tsx/CitationsSection.tsx/
- * TagsSection.tsx -- rather than crowding this one-line header). */
-export function SectionShell({ label, children }: {
+ * (redundant now that the list underneath it is always visible).
+ *
+ * `action` sits on the label's own row, right after it (not right-aligned:
+ * on a wide pane that would strand it far from the label it belongs to) --
+ * each section's bare "+" (AttachControl.tsx & co.) goes here rather than
+ * as its own "+ Add a child" trailing row inside the list, which in a
+ * narrow pane cost a whole row per section, mostly empty space, and on a
+ * mostly-empty record roughly doubled the pane's height. The add action's
+ * wording survives as that "+"'s own tooltip/aria-label. Children are
+ * optional -- a section with nothing to list and only an `action` renders
+ * as just its header row, no empty body spacing under it. */
+export function SectionShell({ label, action, children }: {
   label: string;
-  children: ReactNode;
+  action?: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <div>
-      <Text size="md" fw={600}>{label}</Text>
-      <Stack gap="sm" pl="md" pt="xs">{children}</Stack>
+      <Group gap="xs" align="center" style={{ rowGap: 4 }}>
+        <Text size="md" fw={600}>{label}</Text>
+        {action}
+      </Group>
+      {hasContent(children) && <Stack gap="sm" pl="md" pt={4}>{children}</Stack>}
     </div>
   );
+}
+
+/** Whether `children` would actually render anything -- false for the
+ * `[]`/`false`/`null` a section produces when its list is empty and every
+ * conditional child is off, so SectionShell can skip its padded body Stack
+ * entirely instead of leaving a blank gap under the header. */
+function hasContent(children: ReactNode): boolean {
+  if (children == null || typeof children === "boolean" || children === "") return false;
+  if (Array.isArray(children)) return children.some(hasContent);
+  return true;
 }
 
 const TYPE_ICONS = new Map(VIEWS.map((v) => [v.key, { src: v.icon, label: v.label }]));
