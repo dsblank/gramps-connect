@@ -10,82 +10,110 @@ vi.mock("../cacheMeta", () => ({
 
 import { fetchPage, type QueryItem } from "../api";
 import { fetchServerState } from "../cacheMeta";
-import { fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchRecentlyChanged, STAT_VIEWS, timeAgo } from "../homeStats";
+import { fetchHomeCounts, fetchHomePerson, fetchRecentTopics, fetchLatestStories, fetchRecentlyChanged, timeAgo } from "../homeStats";
 
 function page(items: QueryItem[]) {
   return { page: { items, next_after: null }, totalCount: items.length };
 }
 
+function mockFetch(response: { ok: boolean; status?: number; body: unknown }) {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+    ok: response.ok,
+    status: response.status ?? (response.ok ? 200 : 500),
+    json: async () => response.body,
+    text: async () => JSON.stringify(response.body),
+  }) as unknown as Response);
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+/** A /api/search/ hit, shaped like gramps-web-api's response. */
+function hit(objectType: string, handle: string, change: number, object: Record<string, unknown>) {
+  return { object_type: objectType, handle, object: { handle, change, ...object } };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("fetchRecentlyChanged", () => {
-  beforeEach(() => {
-    vi.mocked(fetchPage).mockReset();
+  it("sends one /api/search/ request sorted by change, over-fetching", async () => {
+    const fetchMock = mockFetch({ ok: true, body: [] });
+
+    await fetchRecentlyChanged("tok", 10);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = new URL(String(fetchMock.mock.calls[0][0]), "http://x");
+    expect(url.pathname).toBe("/api/search/");
+    expect(url.searchParams.get("query")).toBe("*");
+    expect(url.searchParams.get("sort")).toBe("-change");
+    expect(url.searchParams.get("profile")).toBe("self");
+    expect(Number(url.searchParams.get("pagesize"))).toBeGreaterThan(10);
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ Authorization: "Bearer tok" });
   });
 
-  it("merges every type's own top rows into one newest-first list, capped at the limit", async () => {
-    vi.mocked(fetchPage).mockImplementation(async (view) => {
-      if (view.key === "person") {
-        return page([{ handle: "P1", gramps_id: "I0001", given_name: "Ada", surname: "Lovelace", change: 300 }]);
-      }
-      if (view.key === "place") {
-        return page([{ handle: "L1", gramps_id: "P0001", title: "London", change: 500 }]);
-      }
-      return page([]);
+  it("builds each type's everyday label from the raw object/profile", async () => {
+    mockFetch({
+      ok: true,
+      body: [
+        hit("person", "h1", 110, {
+          gramps_id: "I1",
+          primary_name: {
+            first_name: "Ann",
+            surname_list: [{ surname: "Maiden", primary: false }, { surname: "Smith", primary: true }],
+          },
+        }),
+        hit("family", "h2", 109, {
+          gramps_id: "F1",
+          profile: { father: { name_given: "Bob", name_surname: "Smith" }, mother: { name_given: "Ann", name_surname: "Jones" } },
+        }),
+        hit("event", "h3", 108, { gramps_id: "E1", description: "", type: "Birth" }),
+        hit("place", "h4", 107, { gramps_id: "P1", title: "", name: { value: "Springfield" } }),
+        hit("citation", "h5", 106, { gramps_id: "C1", page: "p. 4", profile: { source: { title: "Census" } } }),
+        hit("note", "h6", 105, { gramps_id: "N1", type: "General", text: { string: "Hello", tags: [] } }),
+        hit("tag", "h7", 104, { name: "ToDo" }),
+      ],
     });
 
-    const result = await fetchRecentlyChanged("tok", 5);
+    const items = await fetchRecentlyChanged("tok", 10);
 
-    expect(result).toEqual([
-      { viewKey: "place", handle: "L1", grampsId: "P0001", label: "London", changeUnix: 500 },
-      { viewKey: "person", handle: "P1", grampsId: "I0001", label: "Ada Lovelace", changeUnix: 300 },
+    expect(items.map((i) => [i.viewKey, i.grampsId, i.label])).toEqual([
+      ["person", "I1", "Ann Smith"],
+      ["family", "F1", "Bob Smith & Ann Jones"],
+      ["event", "E1", "Birth"],
+      ["place", "P1", "Springfield"],
+      ["citation", "C1", "Census, p. 4"],
+      ["note", "N1", "Hello"],
+      ["tag", "", "ToDo"],
     ]);
-    // One query per real object type (see STAT_VIEWS), each ordered by
-    // change desc and capped to the same limit passed in.
-    expect(vi.mocked(fetchPage)).toHaveBeenCalledTimes(STAT_VIEWS.length);
-    const personCall = vi.mocked(fetchPage).mock.calls.find(([view]) => view.key === "person")!;
-    expect(personCall[5]).toEqual([{ column: "change", direction: "desc" }]);
-    expect(personCall[6]).toBe(5);
   });
 
-  it("labels a Family from its resolved father/mother names, and drops rows with no change timestamp", async () => {
-    vi.mocked(fetchPage).mockImplementation(async (view) => {
-      if (view.key === "family") {
-        return page([
-          // Raw as the server sends it: father_name's json_path select
-          // resolves to the whole Name struct, which cellText() then runs
-          // through the column's own toSql (stringify) + toDisplay
-          // (displayName) -- the same two steps ViewStore's insertPage/
-          // DataTable would apply.
-          { handle: "F1", gramps_id: "F0001", father_name: { first_name: "Bob", surname_list: [{ surname: "Smith" }] }, mother_name: null, change: 700 },
-          { handle: "F2", gramps_id: "F0002", father_name: null, mother_name: null, change: null },
-        ]);
-      }
-      return page([]);
+  it("drops topic/story/topic-message notes (the Topics/Story panels cover those), unknown types, hits without an object or change timestamp, then caps at limit", async () => {
+    mockFetch({
+      ok: true,
+      body: [
+        hit("note", "t", 200, { gramps_id: "N1", type: "topic", text: { string: "{}" } }),
+        hit("note", "s", 199, { gramps_id: "N2", type: "story", text: { string: "{}" } }),
+        hit("note", "m", 198, { gramps_id: "N3", type: "topic-message", text: { string: "hi" } }),
+        { object_type: "person", handle: "gone" },
+        hit("unknown", "u", 197, {}),
+        hit("source", "nochange", 0, { gramps_id: "S0", title: "No timestamp" }),
+        hit("source", "a", 196, { gramps_id: "S1", title: "First" }),
+        hit("source", "b", 195, { gramps_id: "S2", title: "Second" }),
+        hit("source", "c", 194, { gramps_id: "S3", title: "Third" }),
+      ],
     });
 
-    const result = await fetchRecentlyChanged("tok", 5);
+    const items = await fetchRecentlyChanged("tok", 2);
 
-    expect(result).toEqual([{ viewKey: "family", handle: "F1", grampsId: "F0001", label: "Bob Smith", changeUnix: 700 }]);
+    expect(items.map((i) => i.handle)).toEqual(["a", "b"]);
   });
 
-  it("treats a type this user can't query as contributing nothing, rather than failing the page", async () => {
-    vi.mocked(fetchPage).mockImplementation(async (view) => {
-      if (view.key === "note") throw new Error("403 forbidden");
-      if (view.key === "tag") return page([{ handle: "T1", gramps_id: "", name: "Ancestors", change: 100 }]);
-      return page([]);
-    });
+  it("resolves to an empty list rather than throwing when the search fails", async () => {
+    mockFetch({ ok: false, status: 500, body: { error: { message: "boom" } } });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await fetchRecentlyChanged("tok", 5);
-
-    expect(result).toEqual([{ viewKey: "tag", handle: "T1", grampsId: "", label: "Ancestors", changeUnix: 100 }]);
-  });
-
-  it("excludes topic-, topic-message- and story-typed notes -- the Topics/Story panels already cover those", async () => {
-    vi.mocked(fetchPage).mockImplementation(async () => page([]));
-
-    await fetchRecentlyChanged("tok", 5);
-
-    const noteCall = vi.mocked(fetchPage).mock.calls.find(([view]) => view.key === "note")!;
-    expect(noteCall[4]).toBe("type.string != 'topic' and type.string != 'story' and type.string != 'topic-message'");
+    await expect(fetchRecentlyChanged("tok", 10)).resolves.toEqual([]);
   });
 });
 
@@ -173,5 +201,25 @@ describe("timeAgo", () => {
     expect(timeAgo(null)).toBe("");
     expect(timeAgo(undefined)).toBe("");
     expect(timeAgo(0)).toBe("");
+  });
+});
+
+describe("fetchHomePerson", () => {
+  it("GETs the person directly and maps it to personLabel's fields", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      body: { handle: "h1", gramps_id: "I7", primary_name: { first_name: "Eve", surname_list: [{ surname: "Doe" }] } },
+    });
+
+    const person = await fetchHomePerson("tok", "h1");
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/people/h1?keys=handle,gramps_id,primary_name");
+    expect(person).toEqual({ handle: "h1", gramps_id: "I7", given_name: "Eve", surname: "Doe" });
+  });
+
+  it("resolves to null on 404 (deleted, or private to this user)", async () => {
+    mockFetch({ ok: false, status: 404, body: {} });
+
+    await expect(fetchHomePerson("tok", "gone")).resolves.toBeNull();
   });
 });

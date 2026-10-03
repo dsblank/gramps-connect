@@ -4,9 +4,10 @@
 // reads -- none of them touch a ViewStore or its OPFS cache, since the
 // point of a dashboard is a cheap glance at the whole tree, not loading all
 // ten of it locally.
-import { fetchPage, type QueryItem } from "./api";
+import { API_BASE } from "../config";
+import { fetchPage, parseErrorMessage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
-import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ColumnConfig, type ViewConfig } from "./views";
+import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ViewConfig } from "./views";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -34,58 +35,72 @@ function cellText(view: ViewConfig, item: QueryItem, key: string): string {
   return typeof displayed === "string" ? displayed : String(stored);
 }
 
-/** One-line label per type for the Recently Changed list -- deliberately
- * not summary.ts's summaryLine(): that switch reads a *raw* fetched object
- * (Person.primary_name, Family.extended.father/mother, ...), while this
- * reads a query-projected QueryItem, whose keys and shapes are each view's
- * own ColumnConfig list instead. Picks the same field(s) that view's own
- * simpleSearch/DataTable columns already treat as "the everyday label" for
- * that type. */
-const RECENT_LABEL: Record<string, (view: ViewConfig, item: QueryItem) => string> = {
-  person: (v, i) => [cellText(v, i, "given_name"), cellText(v, i, "surname")].filter(Boolean).join(" ") || "(unnamed)",
-  family: (v, i) =>
-    [cellText(v, i, "father_name"), cellText(v, i, "mother_name")].filter(Boolean).join(" & ") || "(family)",
-  event: (v, i) => cellText(v, i, "description") || cellText(v, i, "event_type") || "(event)",
-  place: (v, i) => cellText(v, i, "title") || "(place)",
-  repository: (v, i) => cellText(v, i, "name") || "(repository)",
-  source: (v, i) => cellText(v, i, "title") || "(source)",
-  citation: (v, i) => [cellText(v, i, "source_title"), cellText(v, i, "page")].filter(Boolean).join(", ") || "(citation)",
-  media: (v, i) => cellText(v, i, "desc") || "(media)",
-  note: (v, i) => cellText(v, i, "text") || "(note)",
-  tag: (v, i) => cellText(v, i, "name") || "(tag)",
-};
-
-/** The columns RECENT_LABEL above actually reads for each type, beyond the
- * gramps_id/change every view already carries. api.ts's fetchPage()
- * otherwise selects every column a DataTable would show for that type --
- * for Person that's also two json_path date columns and two hidden
- * relationship-handle arrays this dashboard never reads, and Media's
- * "category" column re-derives from a second json_path select of its own.
- * Place's "title" keeps its fallback source ("name", see placeTitleOrName
- * above STORY_VIEW/PLACE_VIEW in views.ts) alongside it, since dropping
- * that field would blank out title-less places instead of falling back to
- * their PlaceName -- every other field used here is a plain, unfallbacked
- * select. */
-const RECENT_LABEL_FIELDS: Record<string, string[]> = {
-  person: ["given_name", "surname"],
-  family: ["father_name", "mother_name"],
-  event: ["description", "event_type"],
-  place: ["title", "name"],
-  repository: ["name"],
-  source: ["title"],
-  citation: ["source_title", "page"],
-  media: ["desc"],
-  note: ["text"],
-  tag: ["name"],
-};
-
-/** Restricts `view`'s full column set down to what fetchRecentlyChanged
- * needs -- see RECENT_LABEL_FIELDS. fetchPage() always selects "handle"
- * itself, so this only needs to cover the rest. */
-function recentColumns(view: ViewConfig): ColumnConfig[] {
-  const needed = new Set(["gramps_id", "change", ...(RECENT_LABEL_FIELDS[view.key] ?? [])]);
-  return view.columns.filter((c) => needed.has(c.key));
+/** Raw-object shapes the Recently Changed labels below read -- whatever
+ * gramps-web-api's /api/search/ hit carries as `object` (the plain Gramps
+ * JSON, plus `profile` when one was asked for), not a /query/ projection. */
+interface RawSurname {
+  surname?: string;
+  primary?: boolean;
 }
+
+interface RawName {
+  first_name?: string;
+  surname_list?: RawSurname[];
+}
+
+type RawObject = Record<string, any>;
+
+/** "Given Surname", the same everyday label personLabel()/displayName()
+ * build -- `surname` mirrors the server's flat `surname` column
+ * (Name.get_surname(): the primary Surname, else the first). */
+function nameParts(name: RawName | undefined): { given: string; surname: string } {
+  const surnames = name?.surname_list ?? [];
+  const primary = surnames.find((s) => s.primary) ?? surnames[0];
+  return { given: name?.first_name ?? "", surname: primary?.surname ?? "" };
+}
+
+function joinName(given: string | undefined, surname: string | undefined): string {
+  return [given, surname].filter(Boolean).join(" ");
+}
+
+/** One-line label per type for the Recently Changed list, from a search
+ * hit's raw object. Picks the same field(s) each view's own DataTable
+ * columns treat as "the everyday label" for that type. Family and Citation
+ * read `profile` (requested as profile=self) since the raw object only
+ * carries the parents'/source's handles. */
+const RECENT_LABEL: Record<string, (obj: RawObject) => string> = {
+  person: (o) => {
+    const { given, surname } = nameParts(o.primary_name);
+    return joinName(given, surname) || "(unnamed)";
+  },
+  family: (o) =>
+    [o.profile?.father, o.profile?.mother]
+      .map((p) => joinName(p?.name_given, p?.name_surname))
+      .filter(Boolean)
+      .join(" & ") || "(family)",
+  event: (o) => o.description || (typeof o.type === "string" ? o.type : o.type?.string) || "(event)",
+  place: (o) => o.title || o.name?.value || "(place)",
+  repository: (o) => o.name || "(repository)",
+  source: (o) => o.title || "(source)",
+  citation: (o) => [o.profile?.source?.title, o.page].filter(Boolean).join(", ") || "(citation)",
+  media: (o) => o.desc || "(media)",
+  note: (o) => (typeof o.text === "string" ? o.text : o.text?.string) || "(note)",
+  tag: (o) => o.name || "(tag)",
+};
+
+/** Note types Recently Changed leaves out -- the same three NOTE_VIEW's own
+ * baseFilter excludes (topics, stories and topic messages each have their
+ * own Home panel or view), applied client-side here since /api/search/ has
+ * no where_expr to push it into. */
+const RECENT_EXCLUDED_NOTE_TYPES = new Set(["topic", "story", "topic-message"]);
+
+/** How many search hits to ask for per wanted Recently Changed row. Covers
+ * the excluded note types above, plus a gramps-web-api bug where a user
+ * without PERM_VIEW_PRIVATE gets short pages: the public search index still
+ * contains private objects, and /api/search/ drops them only *after*
+ * paginating (one page of 10 came back with 3 on a tree whose newest edits
+ * were private notes). */
+const RECENT_OVERFETCH = 3;
 
 /** The where_expr actually sent for `view`: just its own fixed
  * `view.baseFilter`, if it has one. Needed here because these fetches call
@@ -94,9 +109,7 @@ function recentColumns(view: ViewConfig): ColumnConfig[] {
  * view like TOPICS_VIEW/STORY_VIEW/NOTE_VIEW carries a baseFilter of its
  * own (that combining is normally viewStore.ts's combinedFilter());
  * skipping it here silently turned "Latest topics" into "latest notes of
- * any kind", and (before NOTE_VIEW's own baseFilter excluded them) let
- * topics/stories double up in Recently Changed under NOTE_VIEW's plain,
- * convention-blind `text` column. */
+ * any kind". */
 function combinedFilter(view: ViewConfig): string | null {
   return view.baseFilter ?? null;
 }
@@ -109,40 +122,56 @@ export interface RecentItem {
   changeUnix: number;
 }
 
-function toRecentItem(view: ViewConfig, item: QueryItem): RecentItem {
-  const build = RECENT_LABEL[view.key];
-  return {
-    viewKey: view.key,
-    handle: item.handle,
-    grampsId: typeof item.gramps_id === "string" ? item.gramps_id : "",
-    label: build ? build(view, item) : cellText(view, item, "gramps_id"),
-    changeUnix: Number(item.change ?? 0),
-  };
+interface SearchHit {
+  object_type: string;
+  handle: string;
+  object?: RawObject;
 }
 
 /** The `limit` most recently changed records across every type in
- * STAT_VIEWS, newest first. Each type is asked for its own top `limit`
- * (an ordinary /query/ POST, order_by change desc -- no different from
- * what DataTable itself sends) in parallel, then the ~10*limit results are
- * merged and cut down to `limit`; a type this user can't query at all (a
- * restrictive role) just contributes nothing rather than failing the whole
- * page. */
+ * STAT_VIEWS, newest first -- one GET /api/search/ (query `*`, sorted by
+ * `change` desc), the same call gramps-web's own Recently Changed widget
+ * (GrampsjsViewRecentlyChanged.js) makes. This replaced one /query/ POST per
+ * type: for a user without PERM_VIEW_PRIVATE (e.g. the Public guest) every
+ * /query/ runs gramps-web-api's proxied path, deserializing that whole
+ * table in Python just to return its top 10 -- ~5s of Home's load on a
+ * 4.7k-person tree, versus ~0.1s for the search index, which keeps
+ * `change` alongside every entry. A failed search (e.g. a server without a
+ * search index) just leaves the panel empty rather than failing Home. */
 export async function fetchRecentlyChanged(token: string, limit: number): Promise<RecentItem[]> {
-  const results = await Promise.all(
-    STAT_VIEWS.map(async (view) => {
-      try {
-        const { page } = await fetchPage(
-          view, token, null, false, combinedFilter(view),
-          [{ column: "change", direction: "desc" }], limit, recentColumns(view)
-        );
-        return page.items.map((item) => toRecentItem(view, item));
-      } catch {
-        return [] as RecentItem[];
-      }
+  const viewKeys = new Set(STAT_VIEWS.map((v) => v.key));
+  const params = new URLSearchParams({
+    query: "*",
+    sort: "-change",
+    profile: "self",
+    page: "1",
+    pagesize: String(limit * RECENT_OVERFETCH),
+  });
+  let hits: SearchHit[];
+  try {
+    const res = await fetch(`${API_BASE}/api/search/?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(await parseErrorMessage(res));
+    hits = await res.json();
+  } catch (err) {
+    console.warn("[home] recently changed: search failed", err);
+    return [];
+  }
+  return hits
+    .filter((hit) => viewKeys.has(hit.object_type) && hit.object)
+    .filter((hit) => !(hit.object_type === "note" && RECENT_EXCLUDED_NOTE_TYPES.has(String(hit.object!.type))))
+    .map((hit) => {
+      const obj = hit.object!;
+      const build = RECENT_LABEL[hit.object_type];
+      return {
+        viewKey: hit.object_type,
+        handle: hit.handle,
+        grampsId: typeof obj.gramps_id === "string" ? obj.gramps_id : "",
+        label: build ? build(obj) : String(obj.gramps_id ?? ""),
+        changeUnix: Number(obj.change ?? 0),
+      };
     })
-  );
-  return results
-    .flat()
     .filter((item) => item.changeUnix > 0)
     .sort((a, b) => b.changeUnix - a.changeUnix)
     .slice(0, limit);
@@ -226,6 +255,35 @@ export async function fetchLatestBlogPosts(token: string, limit: number): Promis
     author: cellText(BLOG_VIEW, item, "author"),
     changeUnix: Number(item.change ?? 0),
   }));
+}
+
+interface RawHomePerson {
+  handle: string;
+  gramps_id?: string;
+  primary_name?: RawName;
+}
+
+/** The Home-person panel's one record, as the QueryItem shape
+ * RefPickerField.tsx's personLabel() reads (handle/gramps_id/given_name/
+ * surname) -- via a plain GET /api/people/<handle>, not api.ts's
+ * fetchByHandle(). That one is a /query/ POST with a `handle == "..."`
+ * where_expr, which for a user without PERM_VIEW_PRIVATE (e.g. the Public
+ * guest) runs gramps-web-api's proxied query path: every Person in the tree
+ * deserialized and privacy-checked in Python, ~2.5s on a 4.7k-person tree,
+ * just to find one row. The GET is a direct lookup (~50ms) even through the
+ * private proxy. Resolves to
+ * null on 404 -- the person was deleted, or is private to this user --
+ * same as fetchByHandle's empty result did. */
+export async function fetchHomePerson(token: string, handle: string): Promise<QueryItem | null> {
+  const res = await fetch(
+    `${API_BASE}/api/people/${encodeURIComponent(handle)}?keys=handle,gramps_id,primary_name`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  const person: RawHomePerson = await res.json();
+  const { given, surname } = nameParts(person.primary_name);
+  return { handle: person.handle, gramps_id: person.gramps_id ?? "", given_name: given, surname };
 }
 
 /** Per-type row counts, keyed by STAT_VIEWS' own `key`s. Reuses cacheMeta's

@@ -1,11 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Anchor, Box, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { getToken } from "../auth/auth";
-import { fetchByHandle, type QueryItem } from "../store/api";
+import type { QueryItem } from "../store/api";
 import { formatHash } from "../hash";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
-  fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchLatestBlogPosts, fetchRecentlyChanged, STAT_VIEWS, timeAgo,
+  fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchLatestBlogPosts, fetchRecentlyChanged, fetchHomePerson, STAT_VIEWS, timeAgo,
   type RecentItem, type StoryItem, type TopicItem, type BlogPostItem,
 } from "../store/homeStats";
 import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
@@ -63,7 +63,7 @@ export function HomeView() {
         fetchRecentTopics(token, TOPIC_LIMIT),
         fetchLatestStories(token, STORY_LIMIT),
         fetchLatestBlogPosts(token, BLOG_LIMIT),
-        homeHandle ? fetchByHandle(PERSON_VIEW, token, homeHandle) : Promise.resolve(null),
+        homeHandle ? fetchHomePerson(token, homeHandle) : Promise.resolve(null),
       ]);
       if (cancelled) return;
       setCounts(countsResult);
