@@ -137,6 +137,22 @@ hiddenimports = collect_submodules("gramps") + collect_submodules("celery") + [
 
 datas += collect_data_files("gramps_webapi")
 
+# gramps-web-api's user-database migrations, for launcher.migrate_user_db():
+# alembic.ini and alembic_users/ sit at its source root, next to the
+# gramps_webapi package rather than in it, so collect_data_files() above
+# never sees them. Needs gramps-web-api installed from a checkout (pip -e);
+# failing here beats a build that can't upgrade its users' databases.
+import gramps_webapi as _gramps_webapi
+
+_webapi_root = os.path.dirname(os.path.dirname(os.path.abspath(_gramps_webapi.__file__)))
+for _name in ("alembic.ini", "alembic_users"):
+    if not os.path.exists(os.path.join(_webapi_root, _name)):
+        raise SystemExit(
+            f"{_name} not found in {_webapi_root}: install gramps-web-api from a checkout"
+        )
+datas.append((os.path.join(_webapi_root, "alembic.ini"), "gramps-webapi-alembic"))
+datas.append((os.path.join(_webapi_root, "alembic_users"), "gramps-webapi-alembic/alembic_users"))
+
 # pywebview locates its injected JS bridge (webview/js/*.js) and, on
 # Windows, its WebView2 interop DLLs (webview/lib/**) via paths relative to
 # its own package __file__ at runtime -- collect_data_files preserves that

@@ -282,6 +282,143 @@ def install_avif_transcoder(app) -> None:
         return response
 
 
+# gramps-web-api's user-database migrations (alembic.ini + alembic_users/)
+# live at its source root, outside the gramps_webapi package, so
+# collect_data_files("gramps_webapi") doesn't pick them up -- the spec
+# bundles them under this name instead.
+ALEMBIC_BUNDLE_DIR = "gramps-webapi-alembic"
+
+# Each user-database schema a pre-migration standalone build's create_all()
+# can have left behind with no alembic_version row, newest first, as
+# (revision, test). The first standalone build (2026-08-05) shipped
+# 6d8f3cb50b71, and later ones d4e9a1c7b3f2 or 7b2e9f4c1a63. c1d2e3f4a5b6,
+# one older, is there in case a build came from an older gramps-web-api
+# checkout. migrate_user_db() writes the version row from now on, so this
+# list never needs a newer entry.
+_UNVERSIONED_SCHEMAS = [
+    ("7b2e9f4c1a63", lambda i: "label" in _columns(i, "access_tokens")),
+    ("d4e9a1c7b3f2", lambda i: "access_tokens" in i.get_table_names()
+        and {"email"} not in [set(u["column_names"]) for u in i.get_unique_constraints("users")]),
+    ("6d8f3cb50b71", lambda i: "access_tokens" in i.get_table_names()),
+    ("c1d2e3f4a5b6", lambda i: "task_tree" in i.get_table_names() and "config" in _columns(i, "trees")),
+]
+
+
+def _columns(inspector, table: str) -> set[str]:
+    if table not in inspector.get_table_names():
+        return set()
+    return {column["name"] for column in inspector.get_columns(table)}
+
+
+def alembic_dir() -> str:
+    """Where alembic.ini and alembic_users/ are: bundled into a frozen
+    build (see ALEMBIC_BUNDLE_DIR), or the gramps-web-api checkout the
+    installed gramps_webapi package comes from when running from source."""
+    bundled = resource_path(ALEMBIC_BUNDLE_DIR)
+    if os.path.isfile(os.path.join(bundled, "alembic.ini")):
+        return bundled
+    import gramps_webapi
+
+    return os.path.dirname(os.path.dirname(os.path.abspath(gramps_webapi.__file__)))
+
+
+def migrate_user_db(db_file: str) -> None:
+    """Bring users.sqlite to gramps-web-api's current schema, via the same
+    alembic migrations its Docker entrypoint runs (`gramps_webapi user
+    migrate`) -- in-process, since a frozen build has no python to run
+    `-m alembic` with.
+
+    - No database yet (or an empty file left by a crashed first run):
+      `upgrade head` creates it, version row included.
+    - A database from a build before this existed: created by
+      user_db.create_all(), so it has tables but no alembic_version row.
+      Its schema is matched against _UNVERSIONED_SCHEMAS, stamped with that
+      revision, then upgraded. An unrecognised one stops startup rather
+      than guess.
+    - Otherwise: `upgrade head`, a no-op when already current.
+
+    Whenever an existing database is about to change, it's copied to
+    users.sqlite.bak-<timestamp> first.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import create_engine, inspect
+
+    url = f"sqlite:///{db_file}"
+    root = alembic_dir()
+    cfg = Config(os.path.join(root, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(root, "alembic_users"))
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+
+    stamp = None
+    current = None
+    has_tables = False
+    if os.path.isfile(db_file):
+        engine = create_engine(url)
+        try:
+            with engine.connect() as conn:
+                current = MigrationContext.configure(conn).get_current_revision()
+            inspector = inspect(engine)
+            has_tables = bool(inspector.get_table_names())
+            if has_tables and current is None:
+                stamp = next((rev for rev, test in _UNVERSIONED_SCHEMAS if test(inspector)), None)
+                if stamp is None:
+                    raise RuntimeError(
+                        f"{db_file} has no schema version and doesn't match any schema a "
+                        "gramps-connect-desktop build has created, so it can't be upgraded "
+                        "safely. Move it aside to start with a fresh user database."
+                    )
+        finally:
+            engine.dispose()
+
+    if has_tables and (current or stamp) == head:
+        if stamp:  # current schema, just never recorded as such
+            _run_alembic(command.stamp, cfg, url, stamp)
+        return
+    if has_tables:
+        backup = f"{db_file}.bak-{time.strftime('%Y%m%d-%H%M%S')}"
+        with open(db_file, "rb") as src, open(backup, "wb") as dst:
+            dst.write(src.read())
+        print(f"Upgrading the user database (backup at {backup}) ...")
+    if stamp:
+        _run_alembic(command.stamp, cfg, url, stamp)
+    _run_alembic(command.upgrade, cfg, url, "head")
+
+
+def _run_alembic(fn, cfg, url: str, revision: str) -> None:
+    """Run one alembic command against `url` and only `url`.
+
+    gramps-web-api's alembic_users/env.py picks the database from, in
+    order, the config file named by GRAMPS_API_CONFIG, then USER_DB_URI,
+    then GRAMPSWEB_USER_DB_URI -- so a tester's own shell setting either of
+    the first two would otherwise point the migration at some other
+    database. It also calls logging.config.fileConfig(), which by default
+    disables every logger that already exists -- harmless in Docker's
+    separate `python -m alembic` process, but here it would silence the app
+    for the rest of the run -- so that's made a no-op for the duration.
+    """
+    import logging.config
+
+    from gramps_webapi.const import ENV_CONFIG_FILE
+
+    saved = {key: os.environ.get(key) for key in (ENV_CONFIG_FILE, "USER_DB_URI")}
+    os.environ.pop(ENV_CONFIG_FILE, None)
+    os.environ["USER_DB_URI"] = url
+    file_config = logging.config.fileConfig
+    logging.config.fileConfig = lambda *args, **kwargs: None
+    try:
+        fn(cfg, revision)
+    finally:
+        logging.config.fileConfig = file_config
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def ensure_setup(app) -> None:
     """Idempotently ensure the admin user and tree exist.
 
@@ -293,18 +430,18 @@ def ensure_setup(app) -> None:
     behind a boolean computed from one file's existence made every later
     launch wrongly conclude setup had already finished and skip the rest
     forever, with no way to recover short of deleting the whole data
-    directory by hand. Each step here is safe to repeat instead:
-    user_db.create_all() is a no-op once the tables exist; add_user()
+    directory by hand. Each step here is safe to repeat instead: the user
+    database itself is created/upgraded by migrate_user_db() before the
+    app is built (see main()); add_user()
     raises ValueError("User already exists") if it does, caught below;
     WebDbManager's create_if_missing just opens an existing tree by that
     name rather than recreating it.
     """
-    from gramps_webapi.auth import add_user, user_db
+    from gramps_webapi.auth import add_user
     from gramps_webapi.auth.const import ROLE_OWNER
     from gramps_webapi.dbmanager import WebDbManager
 
     with app.app_context():
-        user_db.create_all()
         try:
             add_user(
                 ADMIN_USER,
@@ -329,6 +466,10 @@ def main() -> None:
     check_port_available()
     ensure_gramps_dirs()
     config = build_config()
+
+    # Before create_app(), which may already read tables a pending
+    # migration changes.
+    migrate_user_db(data_path("users.sqlite"))
 
     from gramps_webapi.app import create_app
 
