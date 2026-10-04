@@ -3,7 +3,13 @@
 // Media" section. Driven by store/jobsPoll.ts once a tracked task reaches
 // Celery SUCCESS.
 import { API_BASE } from "../config";
-import { downloadProcessedFile, uploadMedia, getOrCreateTagHandle, tagAndDescribeMedia } from "./jobsApi";
+import {
+  createJobReportNote,
+  downloadProcessedFile,
+  getOrCreateTagHandle,
+  tagAndDescribeMedia,
+  uploadMedia,
+} from "./jobsApi";
 import { clickDownloadLink } from "./downloadFile";
 
 export type JobKind = "report" | "export";
@@ -11,6 +17,21 @@ export type JobKind = "report" | "export";
 export interface PromoteResult {
   handle: string;
   desc: string;
+  // true when the job came back with a report (see promoteJob), now
+  // attached to the Media as a Note
+  hasReport: boolean;
+}
+
+/** A finished job's report lines -- the `messages` an export task result
+ * (or a sync export's 201 body) carries since gramps-web-api v3.23.0
+ * (#1034), naming what the exporter left out. Absent for reports, for
+ * exporters that report nothing (all but GEDCOM 7), and on older servers,
+ * all of which read as no report. */
+export function jobResultMessages(resultObject: unknown): string[] {
+  if (!resultObject || typeof resultObject !== "object") return [];
+  const messages = (resultObject as { messages?: unknown }).messages;
+  if (!Array.isArray(messages)) return [];
+  return messages.filter((m): m is string => typeof m === "string" && m.trim() !== "");
 }
 
 const REPORT_URL_RE = /^\/api\/reports\/([^/]+)\/file\/processed\//;
@@ -195,18 +216,30 @@ export async function describeGenericJob(token: string, kind: JobKind, url: stri
  * (see describeGenericJob for the orphan-recovery case, or a caller-built
  * subject-specific one for the live dispatch-scoped case).
  *
+ * `messages` (jobResultMessages) non-empty means the job reported what it
+ * left out; that goes on the new Media as a Note in its own note_list,
+ * so the report travels with the file for everyone who opens it in the
+ * Output view rather than as a second, unconnected Output row.
+ *
  * Returns null if the processed file was already claimed -- an earlier
  * poll tick, or another tab/session of the same user, racing to promote
  * the same job -- a normal, silent outcome of the endpoint's own
  * delete-on-read behavior (see jobsApi.ts's downloadProcessedFile), not a
  * failure. */
-export async function promoteJob(token: string, kind: JobKind, url: string, desc: string): Promise<PromoteResult | null> {
+export async function promoteJob(
+  token: string,
+  kind: JobKind,
+  url: string,
+  desc: string,
+  messages: string[] = []
+): Promise<PromoteResult | null> {
   const file = await downloadProcessedFile(token, url);
   if (!file) return null;
   const handle = await uploadMedia(token, file.blob, file.contentType);
   const tagHandle = await getOrCreateTagHandle(token, kind);
-  await tagAndDescribeMedia(token, handle, desc, tagHandle, downloadFileName(desc, url));
-  return { handle, desc };
+  const noteHandle = messages.length > 0 ? await createJobReportNote(token, desc, messages) : undefined;
+  await tagAndDescribeMedia(token, handle, desc, tagHandle, downloadFileName(desc, url), noteHandle);
+  return { handle, desc, hasReport: noteHandle !== undefined };
 }
 
 /** A media-archive export's alternative to promoteJob(): the file goes

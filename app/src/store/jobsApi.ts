@@ -189,8 +189,9 @@ export async function getOrCreateTagHandle(token: string, name: string): Promise
 export const FILE_NAME_ATTRIBUTE = "File name";
 
 /** Sets `desc`, appends `tagHandle` to `tag_list`, and (when given) records
- * `fileName` as the FILE_NAME_ATTRIBUTE attribute, on an existing Media
- * object. Generic object PUT is a full replace (base.py's _parse_object/
+ * `fileName` as the FILE_NAME_ATTRIBUTE attribute and appends `noteHandle`
+ * to `note_list` (an export report, see createJobReportNote), on an
+ * existing Media object. Generic object PUT is a full replace (base.py's _parse_object/
  * update_object take a whole object, not a partial patch), so this fetches
  * the current object first rather than sending just the changed fields. */
 export async function tagAndDescribeMedia(
@@ -198,7 +199,8 @@ export async function tagAndDescribeMedia(
   handle: string,
   desc: string,
   tagHandle: string,
-  fileName?: string
+  fileName?: string,
+  noteHandle?: string
 ): Promise<void> {
   const getRes = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -213,12 +215,72 @@ export async function tagAndDescribeMedia(
       { _class: "Attribute", type: FILE_NAME_ATTRIBUTE, value: fileName },
     ];
   }
+  if (noteHandle) {
+    obj.note_list = [...(((obj.note_list as string[]) ?? [])), noteHandle];
+  }
   const putRes = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(obj),
   });
   if (!putRes.ok) throw new Error(await parseErrorMessage(putRes));
+}
+
+// A job report note's stock Gramps NoteType (NoteType.MEDIA) plus the
+// fixed first line it always starts with -- together they're how
+// findJobReportNotes() tells the report apart from any other Media Note
+// someone attached to the same Media by hand. Stored tree data, so plain
+// English rather than translated, like the Media desc next to it.
+const JOB_REPORT_NOTE_TYPE = "Media Note";
+export const JOB_REPORT_NOTE_HEADER = "Export report: ";
+
+/** POSTs the Note holding an export's report (gramps-web-api v3.23.0's
+ * ExportResultSchema.messages -- what the exporter had to leave out, one
+ * line each) and returns its handle. Not private: it's about the export
+ * file, so whoever can see that Media should see what it's missing. */
+export async function createJobReportNote(token: string, desc: string, messages: string[]): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/notes/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      text: { string: `${JOB_REPORT_NOTE_HEADER}${desc}\n\n${messages.join("\n")}` },
+      type: JOB_REPORT_NOTE_TYPE,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  const trans = (await res.json()) as { type: string; handle: string }[];
+  const added = trans.find((t) => t.type === "add");
+  if (!added) throw new Error("expected an 'add' transaction entry, got none");
+  return added.handle;
+}
+
+/** Of `noteHandles` (a generated Media's note_list), the ones that are its
+ * job report note -- see JOB_REPORT_NOTE_HEADER. A note that can't be
+ * fetched is skipped rather than failing the caller. */
+export async function findJobReportNotes(token: string, noteHandles: string[]): Promise<string[]> {
+  const found: string[] = [];
+  for (const handle of noteHandles) {
+    const res = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) continue;
+    const note = await res.json();
+    const type = typeof note.type === "string" ? note.type : note.type?.string;
+    if (type === JOB_REPORT_NOTE_TYPE && note.text?.string?.startsWith(JOB_REPORT_NOTE_HEADER)) {
+      found.push(handle);
+    }
+  }
+  return found;
+}
+
+/** DELETE /api/notes/{handle} -- for a job report note going away with the
+ * export Media it belonged to. */
+export async function deleteNote(token: string, handle: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
 }
 
 /** DELETE /api/media/{handle} -- per the plan's known limitation, this only

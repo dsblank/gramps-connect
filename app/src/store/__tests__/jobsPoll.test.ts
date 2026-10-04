@@ -8,7 +8,8 @@ vi.mock("../jobsApi", () => ({
   getTaskStatus: vi.fn(),
   listOwnTasks: vi.fn(),
 }));
-vi.mock("../jobsPromote", () => ({
+vi.mock("../jobsPromote", async (importOriginal) => ({
+  jobResultMessages: (await importOriginal<typeof import("../jobsPromote")>()).jobResultMessages,
   promoteJob: vi.fn(),
   downloadArchiveLocally: vi.fn(),
   describeGenericJob: vi.fn().mockResolvedValue("desc"),
@@ -40,7 +41,7 @@ describe("sweepOnce", () => {
     vi.mocked(getCurrentUsername).mockReturnValue("alice");
     vi.mocked(getTaskStatus).mockReset();
     vi.mocked(listOwnTasks).mockReset();
-    vi.mocked(promoteJob).mockReset().mockResolvedValue({ handle: "h1", desc: "d" });
+    vi.mocked(promoteJob).mockReset().mockResolvedValue({ handle: "h1", desc: "d", hasReport: false });
     vi.mocked(downloadArchiveLocally).mockReset().mockResolvedValue(true);
   });
 
@@ -53,6 +54,29 @@ describe("sweepOnce", () => {
 
     expect(getTaskStatus).toHaveBeenCalledWith("test-token", "mine");
     expect(onPromoted).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes an export's report messages through to promoteJob", async () => {
+    vi.mocked(listOwnTasks).mockResolvedValue([task({ task_id: "mine", name: "export_db" })]);
+    vi.mocked(getTaskStatus).mockResolvedValue({
+      state: "SUCCESS",
+      result_object: { url: "/api/exporters/ged/file/processed/y.ged", messages: ["Dropped attribute X", " "] },
+    } as TaskStatus);
+
+    await sweepOnce({ onPromoted: vi.fn(), onDownloaded: vi.fn(), onFailed: vi.fn() });
+
+    expect(promoteJob).toHaveBeenCalledWith(
+      "test-token", "export", "/api/exporters/ged/file/processed/y.ged", "desc", ["Dropped attribute X"]
+    );
+  });
+
+  it("passes no messages for a result without any (reports, older servers)", async () => {
+    vi.mocked(listOwnTasks).mockResolvedValue([task({ task_id: "mine" })]);
+    vi.mocked(getTaskStatus).mockResolvedValue(successStatus("/api/reports/x/file/processed/y.pdf"));
+
+    await sweepOnce({ onPromoted: vi.fn(), onDownloaded: vi.fn(), onFailed: vi.fn() });
+
+    expect(promoteJob).toHaveBeenCalledWith("test-token", "report", "/api/reports/x/file/processed/y.pdf", "desc", []);
   });
 
   // F5: TaskListResource only scopes to the caller server-side for a user

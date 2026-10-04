@@ -7,6 +7,7 @@
 // shape as reportsApi.ts's wrappers around the report endpoints.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { jobResultMessages } from "./jobsPromote";
 
 export interface ExporterSummary {
   /** Plugin display name, still carrying its GTK mnemonic marker
@@ -34,7 +35,7 @@ export async function listExporters(token: string): Promise<ExporterSummary[]> {
 
 export type RunExportResult =
   | { kind: "task"; taskId: string }
-  | { kind: "done"; url: string };
+  | { kind: "done"; url: string; messages: string[] };
 
 /** POST /api/exporters/<extension>/file?<options>.
  *
@@ -61,7 +62,7 @@ export async function runExport(
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
   if (res.status === 202) return { kind: "task", taskId: body.task.id };
-  return { kind: "done", url: body.url };
+  return { kind: "done", url: body.url, messages: jobResultMessages(body) };
 }
 
 /** How living people are handled, as the API's `living` enum (mapped

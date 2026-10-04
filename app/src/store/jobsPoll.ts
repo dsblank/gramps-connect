@@ -12,6 +12,7 @@ import {
   promoteJob,
   downloadArchiveLocally,
   describeGenericJob,
+  jobResultMessages,
   MEDIA_ARCHIVE_URL_RE,
   type JobKind,
   type PromoteResult,
@@ -93,7 +94,7 @@ export function trackJob(taskId: string, kind: JobKind, callbacks: JobsPollCallb
         if (await downloadArchiveLocally(token, url, desc)) callbacks.onDownloaded(desc, kind);
         return;
       }
-      const result = await promoteJob(token, kind, url, desc);
+      const result = await promoteJob(token, kind, url, desc, jobResultMessages(status.result_object));
       // A null result means the file was already claimed -- e.g. the
       // catch-up sweep won the race -- which already toasted (or will).
       if (result) callbacks.onPromoted(result, kind);
@@ -137,7 +138,7 @@ export async function sweepOnce(callbacks: JobsPollCallbacks): Promise<void> {
       if (await downloadArchiveLocally(token, url, desc)) callbacks.onDownloaded(desc, kind);
       continue;
     }
-    const result = await promoteJob(token, kind, url, desc);
+    const result = await promoteJob(token, kind, url, desc, jobResultMessages(status.result_object));
     if (result) callbacks.onPromoted(result, kind);
   }
 }

@@ -25,21 +25,28 @@ export function notifyJobStarted(kind: JobKind, what: string): void {
 export const jobsPollCallbacks: JobsPollCallbacks = {
   onPromoted: (result, kind) => {
     const title = kind === "report" ? "Report ready" : "Export ready";
+    const reportHint = "Some data couldn't be exported — see the report attached to it.";
     // Links into the Output view (GENERATED_VIEW, key "generated") at the
     // promoted Media object itself -- same formatHash-Anchor shape as
     // EditDialogs.tsx's own save toast. notifyBrowser gets the plain desc:
     // an OS notification has no room for a link, and clicking one doesn't
     // focus this tab/route anyway.
+    // A job that came back with a report (promoteJob attached it as a
+    // Note) toasts yellow and says so, so it isn't mistaken for a clean run.
     notifications.show({
-      color: "green",
+      color: result.hasReport ? "yellow" : "green",
       title,
+      autoClose: result.hasReport ? false : undefined,
       message: (
-        <Anchor component="a" href={formatHash({ viewKey: "generated", handle: result.handle })} underline="never">
-          {result.desc}
-        </Anchor>
+        <>
+          <Anchor component="a" href={formatHash({ viewKey: "generated", handle: result.handle })} underline="never">
+            {result.desc}
+          </Anchor>
+          {result.hasReport && <div>{reportHint}</div>}
+        </>
       ),
     });
-    notifyBrowser(title, result.desc);
+    notifyBrowser(title, result.hasReport ? `${result.desc} — ${reportHint}` : result.desc);
   },
   onDownloaded: (desc, kind) => {
     // Media archives never reach onPromoted -- see

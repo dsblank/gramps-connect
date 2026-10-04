@@ -3,7 +3,7 @@ import { Alert, Button } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { confirmDialog } from "../../store/confirmDialog";
-import { deleteMedia, FILE_NAME_ATTRIBUTE } from "../../store/jobsApi";
+import { deleteMedia, deleteNote, FILE_NAME_ATTRIBUTE, findJobReportNotes } from "../../store/jobsApi";
 import { clickDownloadLink } from "../../store/downloadFile";
 import { notifyBrowser } from "../../store/browserNotifications";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
@@ -107,7 +107,14 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
           confirmVariant: "default",
         }))
       ) {
+        // An export's report Note (jobsPromote.ts's promoteJob) is about
+        // this file only, so it goes with it -- Gramps never cascades a
+        // Media delete to its notes, which would leave it orphaned in the
+        // Notes view. Looked up before the delete, while note_list still
+        // points at it.
+        const reportNotes = await findJobReportNotes(token, (detail.note_list as string[] | undefined) ?? []);
         await deleteMedia(token, detail.handle);
+        for (const note of reportNotes) await deleteNote(token, note);
         setDeleted(true);
       }
     } catch (err: any) {

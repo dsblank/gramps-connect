@@ -144,7 +144,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
       }
       // Ran inline, so the finished file is already there -- same
       // promotion, just with no task to watch first.
-      const promoted = await promoteJob(token, "export", result.url, desc);
+      const promoted = await promoteJob(token, "export", result.url, desc, result.messages);
       if (promoted) jobsPollCallbacks.onPromoted(promoted, "export");
     })().catch((err: any) => {
       jobsPollCallbacks.onFailed("export", err.message ?? String(err));
