@@ -53,7 +53,17 @@ export async function parseErrorMessage(res: Response): Promise<string> {
   // envelope, falling back to the raw body if it's not that shape.
   const body = await res.text();
   try {
-    return JSON.parse(body)?.error?.message ?? body;
+    const parsed = JSON.parse(body);
+    if (typeof parsed?.error?.message === "string") return parsed.error.message;
+    // A bare flask abort(422) etc. carries no message, just flask-smorest's
+    // default {"code": 422, "status": "Unprocessable Entity"} -- a status
+    // line reads better than that envelope (e.g. report options the server
+    // rejects without saying why, gramps-web-api >= v3.23.0's #1007).
+    if (typeof parsed?.message === "string") return parsed.message;
+    if (typeof parsed?.status === "string") {
+      return `Request rejected by the server (${res.status} ${parsed.status})`;
+    }
+    return body;
   } catch {
     // A gateway/app-server failure (e.g. gunicorn killing a worker mid
     // request on a slow/large upload -- see deploy/docker-compose.yml's
