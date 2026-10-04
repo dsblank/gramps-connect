@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { Alert, Button, FileButton, Group, List, Loader, Modal, Stack, Text } from "@mantine/core";
+import { Alert, Button, Code, CopyButton, FileButton, Group, List, Loader, Modal, ScrollArea, Stack, Text } from "@mantine/core";
 import { getToken } from "../auth/auth";
-import { IMPORT_EXTENSIONS, previewImport, runImport, type ImportCounts } from "../store/importApi";
+import {
+  IMPORT_EXTENSIONS,
+  formatImportMessages,
+  parseImportResult,
+  previewImport,
+  runImport,
+  type ImportCounts,
+  type ImportResult,
+} from "../store/importApi";
 import { clearAllOpfs } from "../store/opfs";
 import { describeTaskFailure, waitForTask } from "../store/taskApi";
 import { t } from "../i18n/i18n";
 
-type Stage = "select" | "previewing" | "preview" | "importing" | "error";
+type Stage = "select" | "previewing" | "preview" | "importing" | "done" | "error";
 
 // ObjectCountsSchema's fixed field set (gramps-web-api's schemas.py).
 const COUNT_LABELS: Record<string, string> = {
@@ -29,30 +37,84 @@ interface ImportDialogProps {
   onClose: () => void;
 }
 
+function CountList({ counts }: { counts: ImportCounts }) {
+  return (
+    <List size="sm">
+      {Object.entries(counts)
+        .filter(([, n]) => n > 0)
+        .map(([key, n]) => (
+          <List.Item key={key}>
+            {COUNT_LABELS[key] ?? key}: {n}
+          </List.Item>
+        ))}
+    </List>
+  );
+}
+
+/** The importer's diagnostics (e.g. GEDCOM lines it couldn't parse) as a
+ * scrollable monospace block -- the GEDCOM report is one message with a
+ * line per problem, so it can run long; the server already truncates it at
+ * 100k chars with a closing "[Report truncated: ...]" line. */
+function ImportReport({ messages, intro }: { messages: string[]; intro: string }) {
+  const text = formatImportMessages(messages);
+  return (
+    <Alert color="yellow" title={t("Import report")}>
+      <Stack gap="xs">
+        <Text size="sm">{intro}</Text>
+        <ScrollArea.Autosize mah={300} type="auto">
+          <Code block style={{ whiteSpace: "pre" }}>
+            {text}
+          </Code>
+        </ScrollArea.Autosize>
+        <Group justify="flex-end">
+          <CopyButton value={text}>
+            {({ copied, copy }) => (
+              <Button size="xs" variant="subtle" onClick={copy}>
+                {copied ? t("Copied") : t("Copy report")}
+              </Button>
+            )}
+          </CopyButton>
+        </Group>
+      </Stack>
+    </Alert>
+  );
+}
+
 function extensionOf(file: File): string {
   return file.name.split(".").pop()?.toLowerCase() ?? "";
 }
 
 /** Family Trees -> Import... flow: pick a file, preview its object counts
- * via a dry run, then confirm to run the real import. Both preview and the
+ * (plus any importer report, e.g. unparseable GEDCOM lines) via a dry run,
+ * then confirm to run the real import. A real import that itself reports
+ * problems stops on a "done" stage showing them before reloading; one that
+ * doesn't reloads straight away. Both preview and the
  * real import dispatch the same Celery task (import_file) gramps-web-api
  * already runs for gramps-web's own import screen, so this just drives that
  * existing endpoint rather than adding anything server-side. */
 export function ImportDialog({ opened, onClose }: ImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [stage, setStage] = useState<Stage>("select");
-  const [counts, setCounts] = useState<ImportCounts | null>(null);
+  const [preview, setPreview] = useState<ImportResult | null>(null);
+  const [imported, setImported] = useState<ImportResult | null>(null);
   const [error, setError] = useState("");
 
   function reset() {
     setFile(null);
     setStage("select");
-    setCounts(null);
+    setPreview(null);
+    setImported(null);
     setError("");
   }
 
   function handleClose() {
     if (BUSY_STAGES.has(stage)) return;
+    if (stage === "done") {
+      // the import landed -- every view's cache is already cleared, so
+      // closing has to reload just like the Reload button does
+      window.location.reload();
+      return;
+    }
     reset();
     onClose();
   }
@@ -69,13 +131,11 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
     try {
       const token = await getToken();
       const result = await previewImport(token, ext, file);
-      const finalCounts =
+      setPreview(
         result.kind === "task"
-          ? ((await waitForTask(result.task.id)).result_object as ImportCounts)
-          : result.kind === "counts"
-            ? result.counts
-            : {};
-      setCounts(finalCounts);
+          ? parseImportResult((await waitForTask(result.task.id)).result_object)
+          : result.result
+      );
       setStage("preview");
     } catch (err: any) {
       setError(err.message ?? String(err));
@@ -90,18 +150,27 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
     try {
       const token = await getToken();
       const result = await runImport(token, ext, file);
+      let outcome: ImportResult;
       if (result.kind === "task") {
         const status = await waitForTask(result.task.id);
         if (status.state !== "SUCCESS") {
           throw new Error(describeTaskFailure(status));
         }
+        outcome = parseImportResult(status.result_object);
+      } else {
+        outcome = result.result;
       }
       // Every view's local cache is now stale (it's missing the newly
-      // imported rows) -- see clearAllOpfs()'s doc comment. Nothing left
-      // to confirm at this point, so reload straight away rather than
-      // making the user click through a second dialog.
+      // imported rows) -- see clearAllOpfs()'s doc comment. With nothing
+      // to report, reload straight away rather than making the user click
+      // through a second dialog; otherwise show the report first.
       await clearAllOpfs();
-      window.location.reload();
+      if (outcome.messages.length === 0) {
+        window.location.reload();
+        return;
+      }
+      setImported(outcome);
+      setStage("done");
     } catch (err: any) {
       setError(err.message ?? String(err));
       setStage("error");
@@ -113,6 +182,7 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
       opened={opened}
       onClose={handleClose}
       title={t("Import Family Tree")}
+      size={(stage === "preview" && preview?.messages.length) || stage === "done" ? "lg" : "md"}
       closeOnClickOutside={!BUSY_STAGES.has(stage)}
       closeOnEscape={!BUSY_STAGES.has(stage)}
     >
@@ -145,18 +215,16 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
           </Group>
         )}
 
-        {stage === "preview" && counts && (
+        {stage === "preview" && preview && (
           <>
             <Text size="sm">{t("This file contains:")}</Text>
-            <List size="sm">
-              {Object.entries(counts)
-                .filter(([, n]) => n > 0)
-                .map(([key, n]) => (
-                  <List.Item key={key}>
-                    {COUNT_LABELS[key] ?? key}: {n}
-                  </List.Item>
-                ))}
-            </List>
+            <CountList counts={preview.counts} />
+            {preview.messages.length > 0 && (
+              <ImportReport
+                messages={preview.messages}
+                intro={t("The importer reported problems reading this file. Importing anyway will skip or approximate the data below.")}
+              />
+            )}
             <Text size="sm" c="dimmed">
               {t("Importing adds this data to the current family tree and locks it for writes by everyone else until it finishes. This cannot be undone from here.")}
             </Text>
@@ -174,6 +242,20 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
             <Loader size="sm" />
             <Text size="sm">{t("Importing… this may take a while.")}</Text>
           </Group>
+        )}
+
+        {stage === "done" && imported && (
+          <>
+            <Text size="sm">{t("Import finished. Imported:")}</Text>
+            <CountList counts={imported.counts} />
+            <ImportReport
+              messages={imported.messages}
+              intro={t("Some of the file could not be imported as-is:")}
+            />
+            <Group justify="flex-end">
+              <Button onClick={() => window.location.reload()}>{t("Reload")}</Button>
+            </Group>
+          </>
         )}
 
         {stage === "error" && (
