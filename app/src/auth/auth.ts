@@ -176,8 +176,10 @@ function base64url(value: string): string {
  * That means the key IS this session's refresh token, which is
  * password-equivalent: gramps-web-api's JWT_REFRESH_TOKEN_EXPIRES is False,
  * nothing revokes it (no JWT blocklist is configured), and signing out only
- * clears it locally. Changing the account password is the only way to
- * retire a copy, so the UI offering this must say so. */
+ * clears it locally. A password change doesn't retire a copy either --
+ * /token/refresh/ (issue_access_token) only checks that the user still
+ * exists -- so only deleting the account or rotating the server's
+ * SECRET_KEY does, and the UI offering this must say so. */
 export function getApiKey(): string | null {
   if (!cachedRefreshToken) return null;
   // gramps-api-client needs an absolute URL, and API_BASE is empty for a

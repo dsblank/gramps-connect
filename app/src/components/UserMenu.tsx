@@ -133,8 +133,9 @@ function BrowserNotificationsToggle() {
  * gramps-api-client (`Client.from_env()`) or any other script that speaks the
  * same key format -- saving a separate `gramps-api-client generate-key` login.
  * The key is the session's non-expiring refresh token (see getApiKey()), so
- * the notification says out loud that it's password-equivalent and that only
- * a password change retires a leaked copy. */
+ * the notification says out loud that it's password-equivalent and that
+ * nothing short of deleting the account retires a leaked copy -- not even a
+ * password change. */
 async function copyApiKey() {
   const apiKey = getApiKey();
   if (!apiKey) return;
@@ -155,8 +156,8 @@ async function copyApiKey() {
     title: "API key copied",
     message:
       "Set it as GRAMPS_WEB_API_KEY. It grants full access to your account " +
-      "and never expires -- treat it like a password; changing your password " +
-      "is the only way to revoke it.",
+      "and never expires -- treat it like a password. Changing your password " +
+      "does not revoke it.",
     autoClose: 10000,
   });
 }
