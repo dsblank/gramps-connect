@@ -66,10 +66,35 @@ export async function fetchPlainObject(
   return await res.json();
 }
 
+/** Repairs the one known way a fetched object fails gramps-web-api's own
+ * schema check on the way back in: an LDS ordinance (Person or Family
+ * `lds_ord_list`) whose `place` is null. Gramps core writes that null
+ * itself -- Person/Family._remove_handle_references set `ordinance.place =
+ * None` when the place it pointed at is deleted (gramps/gen/lib/person.py,
+ * family.py) -- yet LdsOrd's schema types `place` as a plain string, so an
+ * unchanged GET->PUT of such a record 400s ("$.lds_ord_list[0].place: None
+ * is not of type 'string'"). "" is Gramps' own "no place" (PlaceBase's
+ * default, what the XML importer writes), so this loses nothing; the other
+ * fields that code nulls (Family father/mother_handle, LdsOrd.famc) are
+ * schema-nullable and left alone. Returns `data` itself when there's
+ * nothing to repair, else a copy -- callers like draftStack.ts keep the
+ * fetched dict around to diff against. */
+export function repairForSave(data: Record<string, unknown>): Record<string, unknown> {
+  const ords = data.lds_ord_list;
+  if (!Array.isArray(ords) || !ords.some((o) => o && typeof o === "object" && o.place === null)) {
+    return data;
+  }
+  return {
+    ...data,
+    lds_ord_list: ords.map((o) => (o && typeof o === "object" && o.place === null ? { ...o, place: "" } : o)),
+  };
+}
+
 /** PUTs a full object dict back -- gramps-web-api's generic object PUT is a
  * full replace, not a partial patch (same reasoning as jobsApi.ts's
  * tagAndDescribeMedia and notesApi.ts's toggleMessageDone), so callers must
- * have started from fetchPlainObject's result and mutated it in place. */
+ * have started from fetchPlainObject's result and mutated it in place.
+ * Passes through repairForSave() first. */
 export async function updateObject(
   token: string,
   view: ViewConfig,
@@ -79,7 +104,7 @@ export async function updateObject(
   const res = await fetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(data),
+    body: JSON.stringify(repairForSave(data)),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
 }
