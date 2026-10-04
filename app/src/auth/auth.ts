@@ -182,11 +182,21 @@ function base64url(value: string): string {
  * SECRET_KEY does, and the UI offering this must say so. */
 export function getApiKey(): string | null {
   if (!cachedRefreshToken) return null;
+  return composeApiKey(cachedRefreshToken);
+}
+
+/** `<token>*<base64url of this server's API URL>` -- the GRAMPS_WEB_API_KEY
+ * shape gramps-api-client's parse_api_key() reads. `token` is either a
+ * refresh token (getApiKey() above) or a sync token from the API keys
+ * section (store/apiKeysApi.ts); the client tells them apart by shape, a
+ * JWT always containing "." and a sync token
+ * (secrets.token_urlsafe) never. */
+export function composeApiKey(token: string): string {
   // gramps-api-client needs an absolute URL, and API_BASE is empty for a
   // same-origin deployment -- resolve against the current page either way.
   // The `/api` suffix matches what the client appends to a bare host itself.
   const url = new URL(`${API_BASE}/api`, window.location.href).href;
-  return `${cachedRefreshToken}*${base64url(url)}`;
+  return `${token}*${base64url(url)}`;
 }
 
 /** Decodes a JWT's claims payload without pulling in a jwt-decode

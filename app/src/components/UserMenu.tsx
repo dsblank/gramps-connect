@@ -9,10 +9,10 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { getApiKey, getCurrentUsername, hasPermissions, logout } from "../auth/auth";
 import { openHandoffWindow } from "../auth/windowHandoff";
 import { ProfileDialog } from "./ProfileDialog";
+import { ApiKeysDialog } from "./ApiKeysDialog";
 import { AdministrationDialog } from "./AdministrationDialog";
 import { OwnerAdministrationDialog } from "./OwnerAdministrationDialog";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "../i18n/i18n";
@@ -129,39 +129,6 @@ function BrowserNotificationsToggle() {
  * closes the dropdown on Menu.Item clicks -- flipping a Switch or
  * SegmentedControl shouldn't dismiss the menu. More account-level items
  * (profile, preferences, ...) land here later. */
-/** Puts this session's GRAMPS_WEB_API_KEY on the clipboard, for pasting into
- * gramps-api-client (`Client.from_env()`) or any other script that speaks the
- * same key format -- saving a separate `gramps-api-client generate-key` login.
- * The key is the session's non-expiring refresh token (see getApiKey()), so
- * the notification says out loud that it's password-equivalent and that
- * nothing short of deleting the account retires a leaked copy -- not even a
- * password change. */
-async function copyApiKey() {
-  const apiKey = getApiKey();
-  if (!apiKey) return;
-  try {
-    await navigator.clipboard.writeText(apiKey);
-  } catch {
-    // Clipboard access needs a secure context (https or localhost); on a
-    // plain-http deployment there's nothing to fall back to.
-    notifications.show({
-      color: "red",
-      title: "Couldn't copy API key",
-      message: "The clipboard is unavailable in this browser context.",
-    });
-    return;
-  }
-  notifications.show({
-    color: "yellow",
-    title: "API key copied",
-    message:
-      "Set it as GRAMPS_WEB_API_KEY. It grants full access to your account " +
-      "and never expires -- treat it like a password. Changing your password " +
-      "does not revoke it.",
-    autoClose: 10000,
-  });
-}
-
 export function UserMenu() {
   const username = getCurrentUsername();
   // Re-renders once the own user's full name resolves (userDirectory.ts's
@@ -169,8 +136,11 @@ export function UserMenu() {
   // initials upgrade from the raw username without fetching anything here.
   useSyncExternalStore(subscribeUserDirectory, getUserDirectoryVersion);
   const initials = username ? initialsFor(displayName(username)) : "?";
-  const hasApiKey = getApiKey() !== null;
+  // New keys need EditOwnUser (every role has it); the old-server fallback
+  // inside the dialog needs a session refresh token instead.
+  const showApiKeys = hasPermissions("EditOwnUser") || getApiKey() !== null;
   const [profileOpened, setProfileOpened] = useState(false);
+  const [apiKeysOpened, setApiKeysOpened] = useState(false);
   const [adminOpened, setAdminOpened] = useState(false);
   // ViewSettings is ROLE_ADMIN-only; ViewOtherUser is granted from
   // ROLE_OWNER up (and Admin has it too, since PERMISSIONS[ROLE_ADMIN] is a
@@ -208,12 +178,13 @@ export function UserMenu() {
           {(isSiteAdmin || isOwner) && (
             <Menu.Item onClick={() => setAdminOpened(true)}>{t("Administration")}</Menu.Item>
           )}
-          {hasApiKey && <Menu.Item onClick={copyApiKey}>{t("Copy API key")}</Menu.Item>}
+          {showApiKeys && <Menu.Item onClick={() => setApiKeysOpened(true)}>{t("API keys…")}</Menu.Item>}
           <Menu.Item onClick={openHandoffWindow}>{t("Open another window")}</Menu.Item>
           <Menu.Item onClick={logout}>{t("Sign out")}</Menu.Item>
         </Menu.Dropdown>
       </Menu>
       <ProfileDialog opened={profileOpened} onClose={() => setProfileOpened(false)} />
+      <ApiKeysDialog opened={apiKeysOpened} onClose={() => setApiKeysOpened(false)} />
       {isSiteAdmin ? (
         <AdministrationDialog opened={adminOpened} onClose={() => setAdminOpened(false)} />
       ) : (
