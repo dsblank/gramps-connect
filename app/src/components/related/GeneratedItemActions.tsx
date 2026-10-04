@@ -114,8 +114,12 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
         // points at it.
         const reportNotes = await findJobReportNotes(token, (detail.note_list as string[] | undefined) ?? []);
         await deleteMedia(token, detail.handle);
-        for (const note of reportNotes) await deleteNote(token, note);
         setDeleted(true);
+        // Best-effort: the export itself is already gone, so a failed note
+        // delete mustn't surface as if the whole delete had failed.
+        for (const note of reportNotes) {
+          await deleteNote(token, note).catch((err) => console.error(`report note ${note} delete failed`, err));
+        }
       }
     } catch (err: any) {
       setError(err.message ?? String(err));

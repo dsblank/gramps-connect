@@ -191,9 +191,10 @@ export const FILE_NAME_ATTRIBUTE = "File name";
 /** Sets `desc`, appends `tagHandle` to `tag_list`, and (when given) records
  * `fileName` as the FILE_NAME_ATTRIBUTE attribute and appends `noteHandle`
  * to `note_list` (an export report, see createJobReportNote), on an
- * existing Media object. Generic object PUT is a full replace (base.py's _parse_object/
- * update_object take a whole object, not a partial patch), so this fetches
- * the current object first rather than sending just the changed fields. */
+ * existing Media object. Generic object PUT is a full replace (base.py's
+ * _parse_object/update_object take a whole object, not a partial patch),
+ * so this fetches the current object first rather than sending just the
+ * changed fields. */
 export async function tagAndDescribeMedia(
   token: string,
   handle: string,

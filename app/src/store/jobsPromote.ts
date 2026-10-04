@@ -5,6 +5,7 @@
 import { API_BASE } from "../config";
 import {
   createJobReportNote,
+  deleteNote,
   downloadProcessedFile,
   getOrCreateTagHandle,
   tagAndDescribeMedia,
@@ -238,7 +239,14 @@ export async function promoteJob(
   const handle = await uploadMedia(token, file.blob, file.contentType);
   const tagHandle = await getOrCreateTagHandle(token, kind);
   const noteHandle = messages.length > 0 ? await createJobReportNote(token, desc, messages) : undefined;
-  await tagAndDescribeMedia(token, handle, desc, tagHandle, downloadFileName(desc, url), noteHandle);
+  try {
+    await tagAndDescribeMedia(token, handle, desc, tagHandle, downloadFileName(desc, url), noteHandle);
+  } catch (err) {
+    // The note was created first so this one PUT can attach it; if that
+    // PUT fails, don't leave the note orphaned in the Notes view.
+    if (noteHandle) await deleteNote(token, noteHandle).catch(() => {});
+    throw err;
+  }
   return { handle, desc, hasReport: noteHandle !== undefined };
 }
 
