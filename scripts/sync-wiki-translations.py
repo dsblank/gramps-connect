@@ -17,11 +17,14 @@ What this script does do:
   - `stamp PAGE LANG`: after writing/updating {PAGE}.{LANG}.md, recompute
     the English source's content hash and (re)write the leading
     `<!-- translated-from-sha: ... -->` marker, then regenerate that page's
-    heading anchors and cross-link header block.
+    heading anchors and cross-link header block, and that language's links.
   - `anchors [PAGE ...]`: give every translated heading an explicit
     `<a id="english-slug"></a>`, so links written against the English
     headings (`Overview#speed`) still land on the translated section.
     Also run by `stamp`. Idempotent.
+  - `links [LANG ...]`: point each translated page's links to other wiki
+    pages at that language's version when one exists ("Overview.es"), so
+    GitHub readers stay in their language. Also run by `stamp`. Idempotent.
   - `crosslinks [PAGE ...]`: regenerate the "available in"/"back to
     English" header block for the given pages (all of them if none given),
     without touching any hash marker. Idempotent -- safe to re-run.
@@ -31,6 +34,7 @@ Usage:
     python3 scripts/sync-wiki-translations.py stamp Home de
     python3 scripts/sync-wiki-translations.py crosslinks [PAGE ...]
     python3 scripts/sync-wiki-translations.py anchors [PAGE ...]
+    python3 scripts/sync-wiki-translations.py links [LANG ...]
 
 Requires ../gramps-connect.wiki checked out as a sibling of this repo.
 """
@@ -257,6 +261,51 @@ def sync_anchors(page: str, lang: str) -> None:
     print(f"{path.name}: {added} heading anchor(s) synced")
 
 
+WIKI_LINK_RE = re.compile(r"\]\(([A-Za-z0-9_-]+(?:\.[A-Za-z_]+)?)(#[^)\s]*)?\)")
+
+
+def sync_links(lang: str, locales: set[str]) -> None:
+    """Point every translated page's links to other wiki pages at that same
+    language's version (`](Overview#speed)` -> `](Overview.es#speed)`)
+    whenever one exists, and back at English when it doesn't -- so a reader
+    on GitHub stays in their language. The in-app viewer strips the suffix
+    again and resolves the language itself. Only links in the page body:
+    the cross-link banner deliberately points at other languages, fenced
+    code isn't a link, and _Sidebar/_Footer are skipped since GitHub only
+    ever renders the English _Sidebar.md (the translated ones are in-app
+    nav only). Idempotent."""
+    pages = english_pages(locales)
+    has_translation = {page for page in pages if (WIKI_DIR / f"{page}.{lang}.md").is_file()}
+
+    def localize(match: re.Match) -> str:
+        target, anchor = match.group(1), match.group(2) or ""
+        base, _, suffix = target.partition(".")
+        if suffix and suffix not in locales:
+            return match.group(0)
+        if base not in pages:
+            return match.group(0)
+        localized = f"{base}.{lang}" if base in has_translation else base
+        return f"]({localized}{anchor})"
+
+    for page in sorted(has_translation - SPECIAL_PAGES):
+        path = WIKI_DIR / f"{page}.{lang}.md"
+        text = path.read_text(encoding="utf-8")
+        banner = CROSSLINK_RE.search(text)
+        head, body = (text[: banner.end()], text[banner.end():]) if banner else ("", text)
+        # Odd-numbered pieces of a split on fence lines are inside code blocks.
+        pieces = re.split(r"(^[ \t]*(?:```|~~~).*$)", body, flags=re.M)
+        in_fence = False
+        for k, piece in enumerate(pieces):
+            if k % 2 == 1:
+                in_fence = not in_fence
+            elif not in_fence:
+                pieces[k] = WIKI_LINK_RE.sub(localize, piece)
+        new_text = head + "".join(pieces)
+        if new_text != text:
+            path.write_text(new_text, encoding="utf-8")
+            print(f"{path.name}: links localized")
+
+
 def stamp(page: str, lang: str, locales: set[str]) -> None:
     en_path = WIKI_DIR / f"{page}.md"
     translated_path = WIKI_DIR / f"{page}.{lang}.md"
@@ -274,6 +323,9 @@ def stamp(page: str, lang: str, locales: set[str]) -> None:
 
     sync_anchors(page, lang)
     sync_crosslinks(page, locales)
+    # A new translation changes where every other page in this language
+    # should link to, not just this one.
+    sync_links(lang, locales)
 
 
 def main() -> None:
@@ -287,6 +339,8 @@ def main() -> None:
     crosslinks_parser.add_argument("pages", nargs="*")
     anchors_parser = sub.add_parser("anchors", help="Regenerate English heading anchors in translations (default: all pages)")
     anchors_parser.add_argument("pages", nargs="*")
+    links_parser = sub.add_parser("links", help="Point translated pages' links at same-language pages (default: all languages)")
+    links_parser.add_argument("langs", nargs="*")
     args = parser.parse_args()
 
     if not WIKI_DIR.is_dir():
@@ -308,6 +362,9 @@ def main() -> None:
         for page in args.pages or english_pages(locales):
             for lang in sorted(translations_for(page, locales)):
                 sync_anchors(page, lang)
+    elif command == "links":
+        for lang in args.langs or sorted({l for p in english_pages(locales) for l in translations_for(p, locales)}):
+            sync_links(lang, locales)
 
 
 if __name__ == "__main__":

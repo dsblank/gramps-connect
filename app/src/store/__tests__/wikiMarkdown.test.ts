@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { findWikiAnchor, githubSlug, renderWikiMarkdown } from "../wikiMarkdown";
+import { basePageName, findWikiAnchor, githubSlug, renderWikiMarkdown } from "../wikiMarkdown";
 
 function render(markdown: string): HTMLDivElement {
   const div = document.createElement("div");
@@ -45,6 +45,14 @@ describe("renderWikiMarkdown", () => {
     const link = render("[x](Architecture#live-sync)").querySelector("a");
     expect(link?.getAttribute("data-wiki-page")).toBe("Architecture");
     expect(link?.getAttribute("data-wiki-anchor")).toBe("live-sync");
+  });
+
+  it("drops a translated link's language suffix, leaving the language to the app", () => {
+    const link = render("[x](Data-Model-and-Editing.es#merging-duplicate-records)").querySelector("a");
+    expect(link?.getAttribute("data-wiki-page")).toBe("Data-Model-and-Editing");
+    expect(link?.getAttribute("data-wiki-anchor")).toBe("merging-duplicate-records");
+    expect(basePageName("Home.pt_BR")).toBe("Home");
+    expect(basePageName("Under-the-Hood")).toBe("Under-the-Hood");
   });
 
   it("treats a bare #fragment as a jump within the current page", () => {

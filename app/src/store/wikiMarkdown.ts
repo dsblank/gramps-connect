@@ -17,6 +17,15 @@ function escapeAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
+/** Translated wiki pages link to their own language's siblings
+ * ("Overview.es") so GitHub readers stay in that language; here the
+ * language is resolved by fetchWikiPage from the app's current locale
+ * instead, so the suffix comes back off. No English page name contains a
+ * ".", so anything after one is a locale ("es", "pt_BR"). */
+export function basePageName(target: string): string {
+  return target.replace(/\.[a-z]{2,3}(_[A-Za-z]{2,4})?$/, "");
+}
+
 function safeDecode(s: string): string {
   try {
     return decodeURIComponent(s);
@@ -49,7 +58,8 @@ export function renderWikiMarkdown(markdown: string): string {
       link({ href, title, text }) {
         const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
         if (href.startsWith("#") || isInternalWikiLink(href)) {
-          const [page, anchor = ""] = href.split("#", 2);
+          const [target, anchor = ""] = href.split("#", 2);
+          const page = basePageName(target);
           const anchorAttr = anchor ? ` data-wiki-anchor="${escapeAttr(safeDecode(anchor))}"` : "";
           return `<a href="#" data-wiki-page="${escapeAttr(page)}"${anchorAttr}${titleAttr}>${text}</a>`;
         }
