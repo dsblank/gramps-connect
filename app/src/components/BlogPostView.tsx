@@ -102,6 +102,14 @@ export function BlogPostView({ handle, opened, onClose, onNavigate }: {
   const [hero, ...rest] = mediaRows;
   const note = detail ? noteTextOf(detail) : null;
 
+  // Close before navigating: in the Blog view onNavigate only previews into
+  // AsideSplit's bottom Reference-detail pane, which this fullscreen Modal
+  // would otherwise keep covering -- the click looked like it did nothing.
+  const navigate: OnNavigate = (type, target, refMeta) => {
+    onClose();
+    onNavigate(type, target, refMeta);
+  };
+
   return (
     <Modal opened={opened} onClose={onClose} fullScreen title={detail ? (detail.title as string) : t("Blog post")}>
       <ScrollArea.Autosize mah="calc(100vh - 120px)">
@@ -124,7 +132,7 @@ export function BlogPostView({ handle, opened, onClose, onNavigate }: {
                 <HeroImage handle={hero.ref.ref} mime={hero.target?.mime} rect={hero.ref.rect} />
               )}
               <Box style={{ fontSize: "1.1rem", lineHeight: 1.7 }}>
-                {note ? <NoteText text={note} onNavigate={onNavigate} /> : (
+                {note ? <NoteText text={note} onNavigate={navigate} /> : (
                   <Text c="dimmed" fs="italic">{t("This post has no content yet.")}</Text>
                 )}
               </Box>
@@ -135,7 +143,7 @@ export function BlogPostView({ handle, opened, onClose, onNavigate }: {
                   ))}
                 </SimpleGrid>
               )}
-              <Anchor component="button" type="button" onClick={() => onNavigate("source", detail.handle)}>
+              <Anchor component="button" type="button" onClick={() => navigate("source", detail.handle)}>
                 {t("Show source details")}
               </Anchor>
             </Stack>
