@@ -14,9 +14,21 @@ import { fetchTranslations } from "../store/translationsApi";
 
 const STORAGE_KEY = "gramps-connect.lang";
 
+/** Codes SUPPORTED_LANGUAGES below used to list by mistake -- Weblate's own
+ * tags, which neither app/public/lang/ nor gramps-core's locale directories
+ * (and so /api/translations/<lang>) use. A browser that matched one stored
+ * it as a sticky preference, so map it to the real code on the way back in. */
+const LEGACY_LANGUAGE_CODES: Record<string, string> = {
+  nb_NO: "nb",
+  zh_Hans: "zh_CN",
+  zh_Hant: "zh_TW",
+  zh_Hant_HK: "zh_HK",
+};
+
 function readStoredLang(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === null ? null : (LEGACY_LANGUAGE_CODES[stored] ?? stored);
   } catch {
     return null;
   }
@@ -60,28 +72,52 @@ const desktopStrings = [
 ];
 
 // Locale codes actually bootstrapped by scripts/bootstrap-translations.py
-// (keep this in sync with that script's LOCALES) -- the same duplication
-// gramps-web accepts between its own hardcoded frontendLanguages (src/
-// strings.js) and its lang/*.json directory, used the same way below.
+// (app/public/lang/index.json) -- the same duplication gramps-web accepts
+// between its own hardcoded frontendLanguages (src/strings.js) and its
+// lang/*.json directory, used the same way below. Like that script (and
+// gramps-web, and gramps-core's own locale names), this uses "nb"/"zh_CN",
+// not Weblate's raw "nb_NO"/"zh_Hans" -- see LEGACY_LANGUAGE_CODES above.
 const SUPPORTED_LANGUAGES = [
   "ar", "ba", "bg", "br", "ca", "cs", "da", "de", "de_AT", "el", "en_GB",
   "eo", "es", "fi", "fr", "ga", "he", "hr", "hu", "id", "is", "it", "ja",
-  "ka", "ko", "lt", "lv", "mk", "mn", "nb_NO", "ne", "nl", "nn", "oc", "pl",
+  "ka", "ko", "lt", "lv", "mk", "mn", "nb", "ne", "nl", "nn", "oc", "pl",
   "pt_BR", "pt_PT", "ro", "ru", "sk", "sl", "sq", "sr", "sv", "ta", "tr",
-  "uk", "vi", "zh_Hans", "zh_Hant", "zh_Hant_HK",
+  "uk", "vi", "zh_CN", "zh_HK", "zh_TW",
 ];
+
+/** A Chinese BCP 47 tag (already split on "_") -> zh_CN/zh_TW/zh_HK.
+ * Browsers report Chinese with a script subtag, a region, both, or neither
+ * ("zh-CN", "zh-Hans", "zh-Hans-CN", "zh-SG", "zh-TW", "zh-Hant-HK", "zh"),
+ * so neither a full-code nor a base-language match finds our codes. The
+ * script decides Simplified vs Traditional when given; otherwise the
+ * region does, defaulting to Simplified. */
+function chineseLocale(subtags: string[]): string {
+  const lower = subtags.map((s) => s.toLowerCase());
+  const hongKongOrMacau = lower.includes("hk") || lower.includes("mo");
+  if (lower.includes("hans")) return "zh_CN";
+  if (lower.includes("hant")) return hongKongOrMacau ? "zh_HK" : "zh_TW";
+  if (hongKongOrMacau) return "zh_HK";
+  if (lower.includes("tw")) return "zh_TW";
+  return "zh_CN";
+}
 
 /** navigator.language ("de-AT") -> one of our locale codes ("de_AT"), or
  * null if nothing bootstrapped matches. Mirrors gramps-web's own
- * getBrowserLanguage() (src/util.js:541) exactly: normalize hyphens to
- * underscores, try the full code, then just the base language. */
-function detectBrowserLang(): string | null {
-  if (typeof navigator === "undefined" || !navigator.language) return null;
-  const browserLang = navigator.language.replace(/-/g, "_");
+ * getBrowserLanguage() (src/util.js:541): normalize hyphens to underscores,
+ * try the full code, then just the base language -- plus Chinese, whose
+ * script/region subtags that match can't map (see chineseLocale()). */
+export function browserLangToLocale(navigatorLang: string): string | null {
+  const browserLang = navigatorLang.replace(/-/g, "_");
+  const [base, ...subtags] = browserLang.split("_");
+  if (base.toLowerCase() === "zh") return chineseLocale(subtags);
   if (SUPPORTED_LANGUAGES.includes(browserLang)) return browserLang;
-  const base = browserLang.split("_")[0];
   if (SUPPORTED_LANGUAGES.includes(base)) return base;
   return null;
+}
+
+function detectBrowserLang(): string | null {
+  if (typeof navigator === "undefined" || !navigator.language) return null;
+  return browserLangToLocale(navigator.language);
 }
 
 // useSyncExternalStore requires getSnapshot to return the same reference
