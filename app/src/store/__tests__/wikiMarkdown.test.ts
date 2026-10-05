@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { basePageName, findWikiAnchor, githubSlug, renderWikiMarkdown } from "../wikiMarkdown";
+import { findWikiAnchor, githubSlug, renderWikiMarkdown, splitWikiTarget } from "../wikiMarkdown";
 
 function render(markdown: string): HTMLDivElement {
   const div = document.createElement("div");
@@ -47,12 +47,25 @@ describe("renderWikiMarkdown", () => {
     expect(link?.getAttribute("data-wiki-anchor")).toBe("live-sync");
   });
 
-  it("drops a translated link's language suffix, leaving the language to the app", () => {
+  it("carries a translated link's language explicitly", () => {
     const link = render("[x](Data-Model-and-Editing.es#merging-duplicate-records)").querySelector("a");
     expect(link?.getAttribute("data-wiki-page")).toBe("Data-Model-and-Editing");
+    expect(link?.getAttribute("data-wiki-lang")).toBe("es");
     expect(link?.getAttribute("data-wiki-anchor")).toBe("merging-duplicate-records");
-    expect(basePageName("Home.pt_BR")).toBe("Home");
-    expect(basePageName("Under-the-Hood")).toBe("Under-the-Hood");
+    expect(splitWikiTarget("Home.zh_CN")).toEqual({ page: "Home", lang: "zh_CN" });
+    expect(splitWikiTarget("Under-the-Hood")).toEqual({ page: "Under-the-Hood", lang: null });
+  });
+
+  it("makes the banner's bare English link explicit, but not body links", () => {
+    const div = render(
+      "<!-- wiki-i18n:available-in:start -->\n🌐 *[English](Home) · [Deutsch](Home.de)*\n<!-- wiki-i18n:available-in:end -->\n\n[Overview](Overview)\n",
+    );
+    const [english, deutsch, body] = div.querySelectorAll("a");
+    expect(english.getAttribute("data-wiki-page")).toBe("Home");
+    expect(english.getAttribute("data-wiki-lang")).toBe("en");
+    expect(deutsch.getAttribute("data-wiki-lang")).toBe("de");
+    expect(body.getAttribute("data-wiki-page")).toBe("Overview");
+    expect(body.hasAttribute("data-wiki-lang")).toBe(false);
   });
 
   it("treats a bare #fragment as a jump within the current page", () => {

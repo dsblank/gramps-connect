@@ -18,14 +18,19 @@ const SIDEBAR_PAGE = "_Sidebar";
 export function DocumentationDialog({ opened, onClose }: DocumentationDialogProps) {
   const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
   const [page, setPage] = useState(HOME_PAGE);
-  const [history, setHistory] = useState<string[]>([]);
+  // Language the reader picked from a page's "available in" banner (or
+  // reached through a link naming one), overriding the app's own language
+  // until the dialog reopens or the app language changes. null = follow it.
+  const [docLang, setDocLang] = useState<string | null>(null);
+  const viewLang = docLang ?? lang;
+  const [history, setHistory] = useState<{ page: string; docLang: string | null }[]>([]);
   // Heading to scroll to once `page` has rendered -- set by a link with a
   // "#fragment", cleared once the jump has happened.
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
-  // Which page `content` belongs to, so a pending anchor waits for the new
-  // page instead of jumping within the one still on screen.
-  const [contentPage, setContentPage] = useState<string | null>(null);
+  // Which page+language `content` belongs to, so a pending anchor waits for
+  // the new page instead of jumping within the one still on screen.
+  const [contentKey, setContentKey] = useState<string | null>(null);
   // Which language the currently-displayed content actually resolved to --
   // "en" whenever this page has no "{page}.{lang}.md" translation yet, even
   // if the UI itself is running in another language (fetchWikiPage falls
@@ -39,29 +44,36 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
   useEffect(() => {
     if (!opened) return;
     setPage(HOME_PAGE);
+    setDocLang(null);
     setHistory([]);
-    fetchWikiPage(SIDEBAR_PAGE, lang).then((p) => setSidebar(p.markdown)).catch(() => setSidebar(null));
   }, [opened, lang]);
+
+  useEffect(() => {
+    if (!opened) return;
+    fetchWikiPage(SIDEBAR_PAGE, viewLang).then((p) => setSidebar(p.markdown)).catch(() => setSidebar(null));
+  }, [opened, viewLang]);
 
   useEffect(() => {
     if (!opened) return;
     setLoading(true);
     setError(null);
-    fetchWikiPage(page, lang)
+    fetchWikiPage(page, viewLang)
       .then((p) => {
         setContent(p.markdown);
-        setContentPage(page);
+        setContentKey(`${page}|${viewLang}`);
         setContentLang(p.lang);
       })
       .catch((err) => setError(err.message ?? String(err)))
       .finally(() => setLoading(false));
     contentRef.current?.scrollTo({ top: 0 });
-  }, [opened, page, lang]);
+  }, [opened, page, viewLang]);
 
-  function navigateTo(target: string, anchor: string | null) {
-    if (target !== page) {
-      setHistory((h) => [...h, page]);
+  function navigateTo(target: string, anchor: string | null, linkLang: string | null) {
+    const nextDocLang = linkLang ?? docLang;
+    if (target !== page || nextDocLang !== docLang) {
+      setHistory((h) => [...h, { page, docLang }]);
       setPage(target);
+      setDocLang(nextDocLang);
     }
     setPendingAnchor(anchor);
   }
@@ -69,7 +81,9 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
   function goBack() {
     setHistory((h) => {
       if (h.length === 0) return h;
-      setPage(h[h.length - 1]);
+      const previous = h[h.length - 1];
+      setPage(previous.page);
+      setDocLang(previous.docLang);
       return h.slice(0, -1);
     });
   }
@@ -79,7 +93,11 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     if (!link) return;
     e.preventDefault();
     // An empty data-wiki-page is a same-page "#fragment" link.
-    navigateTo(link.getAttribute("data-wiki-page") || page, link.getAttribute("data-wiki-anchor"));
+    navigateTo(
+      link.getAttribute("data-wiki-page") || page,
+      link.getAttribute("data-wiki-anchor"),
+      link.getAttribute("data-wiki-lang"),
+    );
   }
 
   const contentHtml = useMemo(() => (content ? renderWikiMarkdown(content) : ""), [content]);
@@ -90,7 +108,7 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
   // scripts/sync-wiki-translations.py), so the same anchor works in every
   // language; an anchor that isn't found just leaves the page at the top.
   useEffect(() => {
-    if (!pendingAnchor || loading || contentPage !== page) return;
+    if (!pendingAnchor || loading || contentKey !== `${page}|${viewLang}`) return;
     const viewport = contentRef.current;
     const target = viewport && findWikiAnchor(viewport, pendingAnchor);
     if (viewport && target) {
@@ -98,7 +116,7 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
       viewport.scrollTo({ top: viewport.scrollTop + offset });
     }
     setPendingAnchor(null);
-  }, [pendingAnchor, loading, contentPage, page, contentHtml]);
+  }, [pendingAnchor, loading, contentKey, page, viewLang, contentHtml]);
 
   return (
     <Modal opened={opened} onClose={onClose} title={t("Documentation")} size="90%" styles={{ body: { height: "80vh", padding: 0 } }}>
