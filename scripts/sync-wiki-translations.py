@@ -17,7 +17,11 @@ What this script does do:
   - `stamp PAGE LANG`: after writing/updating {PAGE}.{LANG}.md, recompute
     the English source's content hash and (re)write the leading
     `<!-- translated-from-sha: ... -->` marker, then regenerate that page's
-    cross-link header block.
+    heading anchors and cross-link header block.
+  - `anchors [PAGE ...]`: give every translated heading an explicit
+    `<a id="english-slug"></a>`, so links written against the English
+    headings (`Overview#speed`) still land on the translated section.
+    Also run by `stamp`. Idempotent.
   - `crosslinks [PAGE ...]`: regenerate the "available in"/"back to
     English" header block for the given pages (all of them if none given),
     without touching any hash marker. Idempotent -- safe to re-run.
@@ -26,6 +30,7 @@ Usage:
     python3 scripts/sync-wiki-translations.py [report]
     python3 scripts/sync-wiki-translations.py stamp Home de
     python3 scripts/sync-wiki-translations.py crosslinks [PAGE ...]
+    python3 scripts/sync-wiki-translations.py anchors [PAGE ...]
 
 Requires ../gramps-connect.wiki checked out as a sibling of this repo.
 """
@@ -63,6 +68,7 @@ LEADING_COMMENTS_RE = re.compile(r"(?:[ \t]*<!--.*?-->[ \t]*\n)*", re.DOTALL)
 NATIVE_NAMES = {
     "de": "Deutsch",
     "fr": "Français",
+    "es": "Español",
 }
 
 
@@ -174,6 +180,83 @@ def sync_crosslinks(page: str, locales: set[str]) -> None:
     print(f"{page}: cross-links synced ({len(translations)} translation(s))")
 
 
+HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
+FENCE_RE = re.compile(r"^[ \t]*(```|~~~)")
+ANCHOR_SUFFIX_RE = re.compile(r'[ \t]*<a id="[^"]*"></a>[ \t]*$')
+
+
+def github_slug(text: str) -> str:
+    """GitHub's heading-anchor slug (github-slugger): strip inline markup,
+    lowercase, drop punctuation, spaces -> hyphens. The in-app viewer
+    (app/src/store/wikiMarkdown.ts) computes the same thing."""
+    text = re.sub(r"<[^>]*>", "", text)
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = text.replace("`", "").replace("*", "")
+    text = text.strip().lower()
+    text = re.sub(r"[^\w\- ]", "", text)
+    return text.replace(" ", "-")
+
+
+def heading_lines(lines: list[str]) -> list[tuple[int, int, str]]:
+    """(line index, level, heading text) for every ATX heading outside a
+    fenced code block -- a `# comment` inside ```sh is not a heading."""
+    result = []
+    in_fence = False
+    for i, line in enumerate(lines):
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        match = HEADING_RE.match(line)
+        if match:
+            result.append((i, len(match.group(1)), ANCHOR_SUFFIX_RE.sub("", match.group(2))))
+    return result
+
+
+def unique_slugs(texts: list[str]) -> list[str]:
+    """Slugs with GitHub's "-1", "-2", ... suffixes for repeated headings."""
+    seen: dict[str, int] = {}
+    slugs = []
+    for text in texts:
+        slug = github_slug(text)
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        slugs.append(slug if count == 0 else f"{slug}-{count}")
+    return slugs
+
+
+def sync_anchors(page: str, lang: str) -> None:
+    """Give each translated heading an explicit `<a id="english-slug"></a>`,
+    so a link written against the English page (`Overview#speed`, or a
+    same-page `#tls`) still lands on the right section of the translation --
+    translated heading text slugs differently. Headings are paired by
+    position, which only works while the translation has the same heading
+    outline as its source; a mismatch (usually a stale translation) is
+    reported and the page is left alone. Level-1 page titles are skipped."""
+    en_lines = (WIKI_DIR / f"{page}.md").read_text(encoding="utf-8").split("\n")
+    path = WIKI_DIR / f"{page}.{lang}.md"
+    lines = path.read_text(encoding="utf-8").split("\n")
+
+    en_headings = heading_lines(en_lines)
+    tr_headings = heading_lines(lines)
+    if [lvl for _, lvl, _ in en_headings] != [lvl for _, lvl, _ in tr_headings]:
+        print(f"{path.name}: heading outline differs from {page}.md -- anchors not synced")
+        return
+
+    en_slugs = unique_slugs([text for _, _, text in en_headings])
+    tr_slugs = unique_slugs([text for _, _, text in tr_headings])
+    added = 0
+    for (i, level, text), en_slug, tr_slug in zip(tr_headings, en_slugs, tr_slugs):
+        line = f"{'#' * level} {text}"
+        if level > 1 and en_slug != tr_slug:
+            line += f' <a id="{en_slug}"></a>'
+            added += 1
+        lines[i] = line
+    path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"{path.name}: {added} heading anchor(s) synced")
+
+
 def stamp(page: str, lang: str, locales: set[str]) -> None:
     en_path = WIKI_DIR / f"{page}.md"
     translated_path = WIKI_DIR / f"{page}.{lang}.md"
@@ -189,6 +272,7 @@ def stamp(page: str, lang: str, locales: set[str]) -> None:
     translated_path.write_text(marker_line + text, encoding="utf-8")
     print(f"{translated_path.relative_to(WIKI_DIR)}: stamped with {new_hash}")
 
+    sync_anchors(page, lang)
     sync_crosslinks(page, locales)
 
 
@@ -201,6 +285,8 @@ def main() -> None:
     stamp_parser.add_argument("lang")
     crosslinks_parser = sub.add_parser("crosslinks", help="Regenerate cross-link header blocks (default: all pages)")
     crosslinks_parser.add_argument("pages", nargs="*")
+    anchors_parser = sub.add_parser("anchors", help="Regenerate English heading anchors in translations (default: all pages)")
+    anchors_parser.add_argument("pages", nargs="*")
     args = parser.parse_args()
 
     if not WIKI_DIR.is_dir():
@@ -218,6 +304,10 @@ def main() -> None:
         pages = args.pages or english_pages(locales)
         for page in pages:
             sync_crosslinks(page, locales)
+    elif command == "anchors":
+        for page in args.pages or english_pages(locales):
+            for lang in sorted(translations_for(page, locales)):
+                sync_anchors(page, lang)
 
 
 if __name__ == "__main__":

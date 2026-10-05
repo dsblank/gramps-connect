@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ActionIcon, Alert, Anchor, Box, Group, Loader, Modal, ScrollArea, TypographyStylesProvider } from "@mantine/core";
-import DOMPurify from "dompurify";
-import { Marked } from "marked";
-import { fetchWikiPage, wikiAssetUrl, wikiPageGithubUrl } from "../store/wikiDocsApi";
+import { fetchWikiPage, wikiPageGithubUrl } from "../store/wikiDocsApi";
+import { findWikiAnchor, renderWikiMarkdown } from "../store/wikiMarkdown";
 import { getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 
 interface DocumentationDialogProps {
@@ -12,45 +11,6 @@ interface DocumentationDialogProps {
 
 const HOME_PAGE = "Home";
 
-/** Bare page name ("Overview", "Data-Model-and-Editing") -> wiki-internal
- * navigation; anything with a scheme, a leading "#"/"/", or a "/" in it
- * (asset paths like "images/x.png", or a real external URL) is left as a
- * normal link/asset reference instead. Matches how every page in
- * ../../../gramps-connect.wiki actually writes its links (checked: no
- * `[[wiki-link]]` syntax anywhere, just plain markdown). */
-function isInternalWikiLink(href: string): boolean {
-  return !/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(href) && !href.includes("/");
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-}
-
-/** Fresh Marked instance per render so the link/image overrides can close
- * over the sanitize step below rather than mutating shared global state. */
-function renderWikiMarkdown(markdown: string): string {
-  const marked = new Marked({
-    renderer: {
-      link({ href, title, text }) {
-        const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
-        if (isInternalWikiLink(href)) {
-          const page = href.split("#")[0];
-          return `<a href="#" data-wiki-page="${escapeAttr(page)}"${titleAttr}>${text}</a>`;
-        }
-        const url = /^[a-z][a-z0-9+.-]*:/i.test(href) ? href : wikiAssetUrl(href);
-        return `<a href="${escapeAttr(url)}" target="_blank" rel="noreferrer noopener"${titleAttr}>${text}</a>`;
-      },
-      image({ href, title, text }) {
-        const url = /^[a-z][a-z0-9+.-]*:/i.test(href) ? href : wikiAssetUrl(href);
-        const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
-        return `<img src="${escapeAttr(url)}" alt="${escapeAttr(text)}"${titleAttr} style="max-width:100%" />`;
-      },
-    },
-  });
-  const html = marked.parse(markdown, { async: false }) as string;
-  return DOMPurify.sanitize(html, { ADD_ATTR: ["target"] });
-}
-
 /** GitHub-recognized _Sidebar.md, reused as the in-app nav so the page list
  * never needs to be duplicated -- it's already what every wiki reader sees. */
 const SIDEBAR_PAGE = "_Sidebar";
@@ -59,7 +19,13 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
   const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
   const [page, setPage] = useState(HOME_PAGE);
   const [history, setHistory] = useState<string[]>([]);
+  // Heading to scroll to once `page` has rendered -- set by a link with a
+  // "#fragment", cleared once the jump has happened.
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
+  // Which page `content` belongs to, so a pending anchor waits for the new
+  // page instead of jumping within the one still on screen.
+  const [contentPage, setContentPage] = useState<string | null>(null);
   // Which language the currently-displayed content actually resolved to --
   // "en" whenever this page has no "{page}.{lang}.md" translation yet, even
   // if the UI itself is running in another language (fetchWikiPage falls
@@ -84,6 +50,7 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     fetchWikiPage(page, lang)
       .then((p) => {
         setContent(p.markdown);
+        setContentPage(page);
         setContentLang(p.lang);
       })
       .catch((err) => setError(err.message ?? String(err)))
@@ -91,10 +58,12 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     contentRef.current?.scrollTo({ top: 0 });
   }, [opened, page, lang]);
 
-  function navigateTo(target: string) {
-    if (target === page) return;
-    setHistory((h) => [...h, page]);
-    setPage(target);
+  function navigateTo(target: string, anchor: string | null) {
+    if (target !== page) {
+      setHistory((h) => [...h, page]);
+      setPage(target);
+    }
+    setPendingAnchor(anchor);
   }
 
   function goBack() {
@@ -109,11 +78,27 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     const link = (e.target as HTMLElement).closest("a[data-wiki-page]");
     if (!link) return;
     e.preventDefault();
-    navigateTo(link.getAttribute("data-wiki-page") || HOME_PAGE);
+    // An empty data-wiki-page is a same-page "#fragment" link.
+    navigateTo(link.getAttribute("data-wiki-page") || page, link.getAttribute("data-wiki-anchor"));
   }
 
   const contentHtml = useMemo(() => (content ? renderWikiMarkdown(content) : ""), [content]);
   const sidebarHtml = useMemo(() => (sidebar ? renderWikiMarkdown(sidebar) : ""), [sidebar]);
+
+  // Runs after the new page's HTML is in the DOM. Translated pages carry the
+  // English heading slugs as explicit <a id> anchors (see
+  // scripts/sync-wiki-translations.py), so the same anchor works in every
+  // language; an anchor that isn't found just leaves the page at the top.
+  useEffect(() => {
+    if (!pendingAnchor || loading || contentPage !== page) return;
+    const viewport = contentRef.current;
+    const target = viewport && findWikiAnchor(viewport, pendingAnchor);
+    if (viewport && target) {
+      const offset = target.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+      viewport.scrollTo({ top: viewport.scrollTop + offset });
+    }
+    setPendingAnchor(null);
+  }, [pendingAnchor, loading, contentPage, page, contentHtml]);
 
   return (
     <Modal opened={opened} onClose={onClose} title={t("Documentation")} size="90%" styles={{ body: { height: "80vh", padding: 0 } }}>
