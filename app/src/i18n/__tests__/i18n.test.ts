@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { browserLangToLocale } from "../i18n";
+import bootstrappedLocales from "../../../public/lang/index.json";
+import { browserLangToLocale, setLanguage, t } from "../i18n";
+
+// setLanguage() also asks gramps-web-api for the desktop vocabulary; these
+// tests only exercise the static lang/*.json side.
+vi.mock("../../store/translationsApi", () => ({ fetchTranslations: async () => ({}) }));
 
 describe("browserLangToLocale", () => {
   it("maps every common Chinese tag onto our zh_CN/zh_TW/zh_HK codes", () => {
@@ -18,6 +23,17 @@ describe("browserLangToLocale", () => {
   it("matches Norwegian Bokmål as nb, the code its lang file and gramps-core use", () => {
     expect(browserLangToLocale("nb-NO")).toBe("nb");
     expect(browserLangToLocale("nb")).toBe("nb");
+  });
+
+  it("only detects languages the app has bootstrapped strings for", () => {
+    // gramps-core has catalogs for these, but gramps-web has no translated
+    // UI strings, so neither does lang/ -- and the picker doesn't offer them.
+    for (const tag of ["ne", "oc", "ln", "ln-CD"]) {
+      expect(browserLangToLocale(tag), tag).toBeNull();
+    }
+    for (const locale of bootstrappedLocales) {
+      expect(browserLangToLocale(locale.replace("_", "-")), locale).toBe(locale);
+    }
   });
 
   it("keeps the full-code-then-base matching for everything else", () => {
@@ -46,5 +62,18 @@ describe("stored language preference", () => {
     vi.resetModules();
     const { getI18nSnapshot } = await import("../i18n");
     expect(getI18nSnapshot().lang).toBe("zh_TW");
+  });
+});
+
+describe("t", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to English for an entry exported untranslated", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ Save: "", Cancel: "Abbrechen" })));
+    await setLanguage("de");
+    expect(t("Save")).toBe("Save");
+    expect(t("Cancel")).toBe("Abbrechen");
   });
 });

@@ -11,10 +11,11 @@
 //    existing /api/translations/<lang>/ endpoint (translationsApi.ts) -- no
 //    static copy, always as fresh as the server's installed `gramps` version
 import { fetchTranslations } from "../store/translationsApi";
+import bootstrappedLocales from "../../public/lang/index.json";
 
 const STORAGE_KEY = "gramps-connect.lang";
 
-/** Codes SUPPORTED_LANGUAGES below used to list by mistake -- Weblate's own
+/** Codes the language list below used to hold by mistake -- Weblate's own
  * tags, which neither app/public/lang/ nor gramps-core's locale directories
  * (and so /api/translations/<lang>) use. A browser that matched one stored
  * it as a sticky preference, so map it to the real code on the way back in. */
@@ -71,19 +72,13 @@ const desktopStrings = [
   "Years", "new", "to",
 ];
 
-// Locale codes actually bootstrapped by scripts/bootstrap-translations.py
-// (app/public/lang/index.json) -- the same duplication gramps-web accepts
-// between its own hardcoded frontendLanguages (src/strings.js) and its
-// lang/*.json directory, used the same way below. Like that script (and
-// gramps-web, and gramps-core's own locale names), this uses "nb"/"zh_CN",
-// not Weblate's raw "nb_NO"/"zh_Hans" -- see LEGACY_LANGUAGE_CODES above.
-const SUPPORTED_LANGUAGES = [
-  "ar", "ba", "bg", "br", "ca", "cs", "da", "de", "de_AT", "el", "en_GB",
-  "eo", "es", "fi", "fr", "ga", "he", "hr", "hu", "id", "is", "it", "ja",
-  "ka", "ko", "lt", "lv", "mk", "mn", "nb", "ne", "nl", "nn", "oc", "pl",
-  "pt_BR", "pt_PT", "ro", "ru", "sk", "sl", "sq", "sr", "sv", "ta", "tr",
-  "uk", "vi", "zh_CN", "zh_HK", "zh_TW",
-];
+// Locale codes actually bootstrapped by scripts/bootstrap-translations.py --
+// read straight from the app/public/lang/index.json it writes, the same list
+// UserMenu.tsx's language picker offers from, rather than a hand-copied
+// duplicate (gramps-web keeps one in src/strings.js; ours drifted, picking
+// up Weblate's raw "nb_NO"/"zh_Hans" and languages with no strings at all).
+// Those codes are "nb"/"zh_CN" -- also gramps-core's own locale names.
+const SUPPORTED_LANGUAGES: readonly string[] = bootstrappedLocales;
 
 /** A Chinese BCP 47 tag (already split on "_") -> zh_CN/zh_TW/zh_HK.
  * Browsers report Chinese with a script subtag, a region, both, or neither
@@ -190,5 +185,7 @@ export async function addDesktopTranslations(strings: string[]): Promise<void> {
  * -- translations sourced from the same gettext catalog carry the same
  * syntax, and gramps-connect has no keyboard-accelerator use for it. */
 export function t(s: string): string {
-  return (snapshot.strings[s] ?? s).replace("_", "");
+  // `||`, not `??`: an untranslated entry exported as "" falls back to the
+  // English instead of rendering as blank text.
+  return (snapshot.strings[s] || s).replace("_", "");
 }

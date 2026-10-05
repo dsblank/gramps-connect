@@ -53,11 +53,15 @@ def available_locales() -> list[str]:
 
 
 def fetch_web_strings(locale: str) -> dict[str, str]:
-    """Already {english: translated} JSON -- use directly."""
+    """Already {english: translated} JSON -- use directly, minus untranslated
+    entries: Weblate exports those as "" (gramps-web's ln.json is nothing
+    else), and an empty string would render as blank text rather than
+    falling back to English -- same as fetch_addons_strings() skipping them."""
     path = GRAMPS_WEB_LANG_DIR / f"{locale}.json"
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    strings = json.loads(path.read_text(encoding="utf-8"))
+    return {english: translated for english, translated in strings.items() if translated}
 
 
 def fetch_addons_strings(locale: str) -> dict[str, str]:
