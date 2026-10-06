@@ -16,6 +16,8 @@ interface FanChartProps {
   sizeByLifespan: boolean;
   /** TreeView.tsx's own "Generation"/"Age at death" SegmentedControl. */
   colorScheme: FanColorScheme;
+  /** TreeView.tsx's own "Flip labels" checkbox. */
+  flipLabels: boolean;
 }
 
 /** Imperative escape hatch for whatever needs the chart's own live `<svg>`
@@ -46,7 +48,7 @@ export interface FanChartHandle {
  *  - a fresh *selection* (not just this handle being still-selected across
  *    an unrelated rebuild) asks renderFanChart to animate-center on it. */
 export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanChart(
-  { ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme },
+  { ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, flipLabels },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -121,11 +123,12 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
       onSelectPerson,
       sizeByLifespan,
       colorScheme,
+      flipLabels,
       centerHandle: selectedHandle,
       centerOnSelect: justSelected && !shouldFit,
     });
     container.replaceChildren(svg);
-  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, displayVersion]);
+  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, flipLabels, displayVersion]);
 
   const wrapped = ((rotation % 360) + 360) % 360;
   const rotated = wrapped > 0.01 && wrapped < 359.99;

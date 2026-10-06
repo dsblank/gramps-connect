@@ -24,7 +24,7 @@
 // ancestors on top) combined with each generation's angular span always
 // being a proper subset of its own child's, not any special-cased shape.
 import { arc as d3arc } from "d3-shape";
-import { create, pointer, select } from "d3-selection";
+import { create, pointer, select, type Selection } from "d3-selection";
 import "d3-transition";
 import { zoom, zoomIdentity, zoomTransform, type ZoomTransform } from "d3-zoom";
 import type { TreeNode, TreePersonRaw } from "../store/treeData";
@@ -141,24 +141,74 @@ function fitsWidth(s: string, widthPx: number, fontSize: number): boolean {
   return s.length * fontSize * 0.6 <= widthPx;
 }
 
-/** First given name (no middle names) + surname, falling back to surname
- * alone once the full pair doesn't fit the wedge's own width -- rather than
- * clipString's usual mid-word "…" truncation, which could just as easily
- * lop off the surname as the given name. Only falls through to a literal
- * character truncation (clipString, on the surname if there is one) once
- * even the surname alone doesn't fit -- a real edge case, not the normal
- * path. */
-function nameLabel(
-  given: string | null | undefined,
-  surname: string | null | undefined,
+/** One on-wedge text line -- wedgeLabelLines' own output, stacked by
+ * renderFanChart in order (first line nearest the wedge's outer edge when
+ * unflipped). */
+export interface WedgeLabelLine {
+  text: string;
+  size: number;
+  kind: "name" | "date";
+}
+
+/** Line height as a multiple of font size. */
+const LINE_HEIGHT = 1.2;
+
+/** The given-name text that fits `widthPx`: all given names, else just the
+ * first, else that first one truncated. */
+function givenLabel(given: string, widthPx: number, fontSize: number): string {
+  if (fitsWidth(given, widthPx, fontSize)) return given;
+  const first = given.split(/\s+/)[0];
+  return fitsWidth(first, widthPx, fontSize) ? first : clipString(first, widthPx, fontSize);
+}
+
+/** What text a person's wedge shows, given its usable text box -- `widthPx`
+ * along each line, `heightPx` across the stacked lines (fanChart's own
+ * orientation choice decides which wedge dimension is which). Names come
+ * first, then the birth and death dates while there's room:
+ *  - the whole name on one line when it fits (all given names, else the
+ *    first one plus the surname);
+ *  - otherwise given name(s) and surname on two separate lines, as Gramps'
+ *    own fan chart does, rather than dropping either;
+ *  - with room for only one name line, the given name -- it's what tells
+ *    generations apart, where the surname usually repeats down a line.
+ * Returns no lines at all when not even one name line fits, so the wedge
+ * carries no text and its tooltip alone identifies it. */
+export function wedgeLabelLines(
+  person: TreePersonRaw,
   widthPx: number,
-  fontSize: number,
-): string {
-  const firstGiven = given?.trim().split(/\s+/)[0] || "";
-  const full = [firstGiven, surname].filter(Boolean).join(" ");
-  if (full && fitsWidth(full, widthPx, fontSize)) return full;
-  if (surname && fitsWidth(surname, widthPx, fontSize)) return surname;
-  return clipString(surname || full, widthPx, fontSize);
+  heightPx: number,
+  nameSize: number,
+  dateSize: number,
+): WedgeLabelLine[] {
+  const given = person.profile?.name_given?.trim() || "";
+  const surname = person.profile?.name_surname?.trim() || "";
+  const nameH = nameSize * LINE_HEIGHT;
+  const dateH = dateSize * LINE_HEIGHT;
+  if (heightPx < nameSize || widthPx < nameSize) return [];
+
+  let names: string[];
+  const full = [given, surname].filter(Boolean).join(" ");
+  const firstFull = [given.split(/\s+/)[0], surname].filter(Boolean).join(" ");
+  if (full && fitsWidth(full, widthPx, nameSize)) names = [full];
+  else if (firstFull && fitsWidth(firstFull, widthPx, nameSize)) names = [firstFull];
+  else if (given && surname && heightPx >= 2 * nameH) {
+    names = [givenLabel(given, widthPx, nameSize), clipString(surname, widthPx, nameSize)];
+  } else if (given) names = [givenLabel(given, widthPx, nameSize)];
+  else names = [clipString(surname, widthPx, nameSize)];
+  names = names.filter(Boolean);
+  if (names.length === 0) return [];
+
+  const lines: WedgeLabelLine[] = names.map((text) => ({ text, size: nameSize, kind: "name" }));
+  let budget = heightPx - names.length * nameH;
+  for (const [event, mark] of [["birth", "*"], ["death", "†"]] as const) {
+    const date = lifeEventDate(person, event);
+    if (!date || budget < dateH) continue;
+    const text = clipString(`${mark}${date}`, widthPx, dateSize);
+    if (!text) continue;
+    lines.push({ text, size: dateSize, kind: "date" });
+    budget -= dateH;
+  }
+  return lines;
 }
 
 /** The native-tooltip text for one wedge's own `<title>` -- name plus
@@ -672,6 +722,10 @@ export interface FanChartOptions {
    * changed (a fresh click), not on every rebuild while it stays the
    * same. */
   centerOnSelect?: boolean;
+  /** Keep wedge text readable: turn labels that would otherwise read upside
+   * down (lower half, or left half for radial text) a half-turn, like
+   * Gramps' own fan chart "flip" option. Defaults to true. */
+  flipLabels?: boolean;
 }
 
 /** Draws the ancestor fan into a fresh SVG sized to bboxWidth/bboxHeight and
@@ -686,7 +740,7 @@ export function renderFanChart(
   ancestorTree: TreeNode | null,
   {
     bboxWidth, bboxHeight, initialZoom, initialRotation, onRotationChange, onSelectPerson, selectedHandle, sizeByLifespan, colorScheme,
-    centerHandle, centerOnSelect,
+    centerHandle, centerOnSelect, flipLabels = true,
   }: FanChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 12);
@@ -738,6 +792,10 @@ export function renderFanChart(
   svg.attr("data-fan-rotation", String(rotation));
   chartContent.attr("data-export-transform", `rotate(${rotation})`);
   const composeTransform = (t: ZoomTransform, rot: number = rotation): string => `${t.toString()} rotate(${rot})`;
+  // Set once the wedge labels exist (below) -- their flip state depends on
+  // the current rotation.
+  let labelGroups: Selection<SVGGElement, Wedge, SVGGElement, undefined> | null = null;
+  let updateLabelOrientation = (): void => {};
   // The one place `rotation` changes after setup -- keeps the drawn
   // transform, the `data-fan-rotation` attribute FanChart.tsx reads back
   // on rebuild, and onRotationChange all in step.
@@ -746,6 +804,7 @@ export function renderFanChart(
     chartContent.attr("transform", composeTransform(zoomTransform(svg.node()!)));
     svg.attr("data-fan-rotation", String(rotation));
     chartContent.attr("data-export-transform", `rotate(${rotation})`);
+    updateLabelOrientation();
     onRotationChange?.(rotation);
   };
   // A named transition so it never cancels (or is cancelled by) d3-zoom's
@@ -988,112 +1047,77 @@ export function renderFanChart(
 
   withPerson.append("title").text((d) => personTooltip(d.node!.person!));
 
-  // Below this rendered arc width, even a single truncated character plus
-  // clipString's own "…" reads as clutter rather than information -- skip
-  // the on-wedge name/date text entirely rather than force a fit. The
-  // native <title> tooltip above still covers every wedge regardless, so
-  // hovering one still surfaces who it is. Root is always labeled (its own
-  // labelWidth below uses radial thickness, not this angular measure, and
-  // it's never anywhere near this small in practice).
-  const MIN_LABEL_ARC_PX = 22;
-  const hasRoomForLabel = (d: Wedge): boolean =>
-    d.depth === 0 || (d.drawA1 - d.drawA0) * ((d.innerR + d.outerR) / 2) >= MIN_LABEL_ARC_PX;
+  // Each wedge's text box, in one of two orientations, whichever gives the
+  // longer line: *tangential* (lines follow the ring's curve, stacked
+  // across its depth -- a wide inner-generation wedge) or *radial* (lines
+  // run center-outward, stacked across the wedge's width -- the narrow,
+  // deep wedges of distant generations, where turning the text 90° fits far
+  // more of a name, as Gramps' own fan chart does). Root is always upright,
+  // a box inside its own disc. Widths/heights carry a few px of padding
+  // off the wedge's own edges; the radial box's height uses the arc a
+  // quarter of the way out, since the stack's outer lines narrow toward
+  // the center.
+  const labelBox = (d: Wedge): { radial: boolean; width: number; height: number } => {
+    const thickness = d.outerR - d.innerR;
+    if (d.depth === 0) return { radial: false, width: thickness * 1.6, height: thickness * 1.2 };
+    const span = d.drawA1 - d.drawA0;
+    const tangential = { radial: false, width: span * ((d.innerR + d.outerR) / 2) - 8, height: thickness - 6 };
+    const radial = { radial: true, width: thickness - 8, height: span * (d.innerR + thickness / 4) - 2 };
+    return radial.width > tangential.width ? radial : tangential;
+  };
+  const labelLines = new Map<Wedge, WedgeLabelLine[]>();
+  for (const d of withPerson.data()) {
+    const box = labelBox(d);
+    labelLines.set(d, wedgeLabelLines(d.node!.person!, box.width, box.height, nameFontSize(d.depth), dateFontSize(d.depth)));
+  }
 
-  // A third on-wedge line (death date, alongside the existing birth-date
-  // line) only where there's real *radial* room for it -- fixed mode's
-  // wedges are always RING (70px) deep regardless of depth, ample for three
-  // shrunk-font lines, but "Show lifespan" mode's own wedges (nodeRadii)
-  // can be as thin as MIN_THICKNESS (20px), where a third line would just
-  // overlap the other two. hasRoomForLabel's own angular gate still applies
-  // on top -- this only adds a second, radial dimension to "enough room",
-  // not a replacement for it.
-  const MIN_RADIAL_PX_FOR_DEATH_LINE = 32;
-  const showsDeathLine = (d: Wedge): boolean =>
-    hasRoomForLabel(d) &&
-    d.outerR - d.innerR >= MIN_RADIAL_PX_FOR_DEATH_LINE &&
-    !!lifeEventDate(d.node?.person, "death");
-
-  // Root gets a plain upright label (it's not meaningfully "along a radius"
-  // -- it's the center point) -- placed at half its own wedge's own height
-  // rather than at y=0 (the flat bottom edge), so it reads as sitting
-  // inside root's own area rather than pinned to the very bottom of the
-  // panel. Every other ring gets a label rotated to run *tangentially* --
-  // perpendicular to the center-to-edge line through its own mid-angle,
-  // i.e. following the ring's own curve, the way
-  // harrywind.nl's own labels do. `rotate(θ-90) translate(midR,0)` is the
-  // *positioning* step alone -- it's what puts the label group's own origin
-  // at the wedge's actual midpoint (θ-90 is the local rotation whose
-  // "local +x" happens to point radially at that spot, which is what makes
-  // `translate(midR,0)` walk out along the radius rather than sideways) --
-  // ported over unchanged from this label's original radial version. The
-  // trailing `rotate(90)` is the only thing that actually changes reading
-  // direction: applied *after* the translate, it re-orients the local frame
-  // around the point already placed, without moving it, from "local +x
-  // reads radially" to "local +x reads tangentially" (a further 90°
-  // clockwise turn: (sinθ,-cosθ) -> (cosθ,sinθ)). No conditional flip
-  // needed anywhere in this chart's -90..+90 domain (unlike a full-circle
-  // sunburst's usual radial-label idiom, which does need one): that tangent
-  // direction (cosθ, sinθ) is exactly the direction of increasing θ -- the
-  // father-to-mother reading order the wedges are already laid out in -- so
-  // it stays upright and consistently ordered from the west edge, through
-  // top-center, to the east edge with no discontinuity to correct for.
-  const labelGroup = withPerson.filter(hasRoomForLabel).append("g").attr("transform", (d) => {
-    if (d.depth === 0) return `translate(0,${-(d.innerR + d.outerR) / 2})`;
+  // `rotate(θ-90) translate(midR,0)` puts the group's origin at the wedge's
+  // midpoint with local +x pointing outward along the radius -- the radial
+  // orientation as-is; a further `rotate(90)` turns local +x to follow the
+  // ring instead (tangential). With flipLabels, text that would otherwise
+  // read upside down -- tangential labels in the lower half, radial ones in
+  // the left half, judged by where the wedge sits *on screen*, so after
+  // the user's own rotation -- gets an extra half-turn, and root counter-
+  // rotates to stay level. Recomputed on every rotation change (setRotation
+  // above), since a drag can carry a wedge across that line.
+  const labelTransform = (d: Wedge): string => {
+    if (d.depth === 0) return flipLabels ? `rotate(${-rotation})` : "";
     const thetaDeg = (((d.drawA0 + d.drawA1) / 2) * 180) / Math.PI;
     const midR = (d.innerR + d.outerR) / 2;
-    return `rotate(${thetaDeg - 90}) translate(${midR},0) rotate(90)`;
+    const radial = labelBox(d).radial;
+    const onScreen = (((thetaDeg + rotation) % 360) + 360) % 360;
+    const flip = flipLabels && (radial ? onScreen > 180 : onScreen > 90 && onScreen < 270);
+    return `rotate(${thetaDeg - 90}) translate(${midR},0)${radial ? "" : " rotate(90)"}${flip ? " rotate(180)" : ""}`;
+  };
+  labelGroups = withPerson
+    .filter((d) => (labelLines.get(d)?.length ?? 0) > 0)
+    .append("g")
+    .attr("transform", labelTransform);
+  updateLabelOrientation = () => labelGroups?.attr("transform", labelTransform);
+
+  // Lines stack centered on the group's origin. Names in the theme's text
+  // color; dates in a fixed dark tone rather than var(--mantine-color-dimmed):
+  // the wedges' own fills (GEN_COLORS/DEATH_COLORS above) are the same hex in
+  // both themes, but dimmed is a theme-relative gray that goes light-on-light
+  // in dark mode -- too low-contrast against these mid-toned fills.
+  labelGroups.each(function (d) {
+    const lines = labelLines.get(d)!;
+    const total = lines.reduce((sum, l) => sum + l.size * LINE_HEIGHT, 0);
+    let y = -total / 2;
+    const g = select(this);
+    for (const line of lines) {
+      const h = line.size * LINE_HEIGHT;
+      g.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "middle")
+        .attr("y", y + h / 2)
+        .attr("fill", line.kind === "name" ? "var(--mantine-color-text)" : "rgba(0, 0, 0, 0.65)")
+        .attr("font-size", line.size)
+        .attr("font-weight", line.kind === "name" ? 600 : null)
+        .text(line.text);
+      y += h;
+    }
   });
-
-  const labelWidth = (d: Wedge): number =>
-    d.depth === 0
-      ? (d.outerR - d.innerR) * 1.6
-      : Math.max(30, (d.drawA1 - d.drawA0) * ((d.innerR + d.outerR) / 2) - 8);
-
-  labelGroup
-    .append("text")
-    .attr("text-anchor", "middle")
-    .attr("dominant-baseline", "middle")
-    .attr("y", (d) => (showsDeathLine(d) ? -9 : -6))
-    .attr("fill", "var(--mantine-color-text)")
-    .attr("font-size", (d) => nameFontSize(d.depth))
-    .attr("font-weight", 600)
-    .text((d) => {
-      const p = d.node!.person!;
-      return nameLabel(p.profile?.name_given, p.profile?.name_surname, labelWidth(d), nameFontSize(d.depth));
-    });
-
-  labelGroup
-    .append("text")
-    .attr("text-anchor", "middle")
-    .attr("dominant-baseline", "middle")
-    .attr("y", (d) => (showsDeathLine(d) ? 2 : 8))
-    // Fixed dark tone rather than var(--mantine-color-dimmed): the wedges'
-    // own fills (GEN_COLORS/DEATH_COLORS above) are the same hex in both
-    // themes, but dimmed is a theme-relative gray that goes light-on-light
-    // in dark mode -- too low-contrast against these mid-toned fills.
-    .attr("fill", "rgba(0, 0, 0, 0.65)")
-    .attr("font-size", (d) => dateFontSize(d.depth))
-    .text((d) => {
-      const p = d.node!.person!;
-      return clipString(lifeEventDate(p, "birth") ? `*${lifeEventDate(p, "birth")}` : "", labelWidth(d), dateFontSize(d.depth));
-    });
-
-  // Death date: a third on-wedge line, only where showsDeathLine allows it
-  // (its own doc comment) -- otherwise left blank, same "always appended,
-  // conditionally empty" convention the birth-date line above already uses,
-  // rather than a second filtered selection.
-  labelGroup
-    .append("text")
-    .attr("text-anchor", "middle")
-    .attr("dominant-baseline", "middle")
-    .attr("y", 13)
-    .attr("fill", "rgba(0, 0, 0, 0.65)")
-    .attr("font-size", (d) => dateFontSize(d.depth))
-    .text((d) => {
-      if (!showsDeathLine(d)) return "";
-      const p = d.node!.person!;
-      return clipString(`†${lifeEventDate(p, "death")}`, labelWidth(d), dateFontSize(d.depth));
-    });
 
   // Lifespan mode's own year axis: a horizontal rule at y=0 (root's own
   // line -- the same line the pan clamp above keeps anchored near the

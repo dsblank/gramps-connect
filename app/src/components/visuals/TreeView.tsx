@@ -109,6 +109,9 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // axis (fanChart.ts's own nodeRadii) instead of a fixed per-generation
   // width.
   const [sizeByLifespan, setSizeByLifespan] = useState(false);
+  // Fan mode's "Flip labels" toggle -- turns text that would read upside
+  // down a half-turn (fanChart.ts's own FanChartOptions.flipLabels).
+  const [fanFlipLabels, setFanFlipLabels] = useState(true);
   // How many generations of the (possibly much deeper) fetched `fanTree`
   // to actually render -- "+"/"− Increase/Decrease depth" (status bar,
   // below) move this independently of what's been fetched, so decreasing
@@ -839,6 +842,12 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
                   checked={sizeByLifespan}
                   onChange={(e) => setSizeByLifespan(e.currentTarget.checked)}
                 />
+                <Checkbox
+                  size="xs"
+                  label={t("Flip labels")}
+                  checked={fanFlipLabels}
+                  onChange={(e) => setFanFlipLabels(e.currentTarget.checked)}
+                />
                 <Button
                   size="xs"
                   variant="default"
@@ -900,6 +909,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           onSelectPerson={setSelectedHandle}
           sizeByLifespan={sizeByLifespan}
           colorScheme={colorScheme}
+          flipLabels={fanFlipLabels}
         />
       )}
       {chartStyle === "family" && familyAncestorCluster && (
