@@ -605,6 +605,26 @@ function computeAxisData(pxPerYear: number): AxisData {
   return { maxR, ticks, tickRadii };
 }
 
+/** Ctrl+Shift+drag rotates in steps of this many degrees. */
+const SHIFT_SNAP_STEP = 15;
+/** A rotation drag released within this many degrees of upright snaps to
+ * exactly 0°. */
+const UPRIGHT_SNAP = 3;
+const ROTATE_TRANSITION = "fan-rotate";
+
+/** Per-SVG "animate back to upright" hook, registered by renderFanChart --
+ * a side table rather than a return-value change so renderFanChart keeps
+ * renderTreeChart's own plain "returns the SVG" contract. A WeakMap so a
+ * replaced SVG's entry goes away with it. */
+const fanRotationResetters = new WeakMap<SVGSVGElement, () => void>();
+
+/** Animates a fan chart SVG rendered by renderFanChart back to 0° rotation
+ * (FanChart.tsx's own compass button). A no-op if it's already upright or
+ * isn't a fan chart SVG. */
+export function resetFanRotation(svg: SVGSVGElement): void {
+  fanRotationResetters.get(svg)?.();
+}
+
 export interface FanChartOptions {
   bboxWidth: number;
   bboxHeight: number;
@@ -621,6 +641,11 @@ export interface FanChartOptions {
    * pure viewing preference orthogonal to that, so it carries over
    * regardless. */
   initialRotation?: number;
+  /** Called with the current rotation (degrees, unnormalized mid-drag,
+   * wrapped into [0,360) once a gesture or reset settles) whenever it
+   * changes -- what FanChart.tsx's own compass button reads to decide
+   * whether to show itself and which way to tilt its needle. */
+  onRotationChange?: (degrees: number) => void;
   /** A click *selects* a person, same "click selects, doesn't navigate" rule
    * as renderTreeChart's own onSelectPerson -- TreeView.tsx owns what
    * "selected" means (its shared PersonCard). */
@@ -659,7 +684,7 @@ export interface FanChartOptions {
 export function renderFanChart(
   ancestorTree: TreeNode | null,
   {
-    bboxWidth, bboxHeight, initialZoom, initialRotation, onSelectPerson, selectedHandle, sizeByLifespan, colorScheme,
+    bboxWidth, bboxHeight, initialZoom, initialRotation, onRotationChange, onSelectPerson, selectedHandle, sizeByLifespan, colorScheme,
     centerHandle, centerOnSelect,
   }: FanChartOptions,
 ): SVGSVGElement {
@@ -708,6 +733,28 @@ export function renderFanChart(
   let rotation = initialRotation ?? 0;
   svg.attr("data-fan-rotation", String(rotation));
   const composeTransform = (t: ZoomTransform, rot: number = rotation): string => `${t.toString()} rotate(${rot})`;
+  // The one place `rotation` changes after setup -- keeps the drawn
+  // transform, the `data-fan-rotation` attribute FanChart.tsx reads back
+  // on rebuild, and onRotationChange all in step.
+  const setRotation = (degrees: number): void => {
+    rotation = degrees;
+    chartContent.attr("transform", composeTransform(zoomTransform(svg.node()!)));
+    svg.attr("data-fan-rotation", String(rotation));
+    onRotationChange?.(rotation);
+  };
+  // A named transition so it never cancels (or is cancelled by) d3-zoom's
+  // own unnamed click-to-center transition on this same svg. Animates the
+  // short way round: 350° goes forward 10°, not back 350°.
+  fanRotationResetters.set(svg.node()!, () => {
+    const wrapped = ((rotation % 360) + 360) % 360;
+    const from = wrapped > 180 ? wrapped - 360 : wrapped;
+    if (from === 0) return;
+    svg
+      .transition(ROTATE_TRANSITION)
+      .duration(400)
+      .tween("rotate", () => (eased: number) => setRotation(from * (1 - eased)))
+      .on("end", () => setRotation(0));
+  });
 
   const zoomBehavior = zoom<SVGSVGElement, undefined>().on("zoom", (e) => {
     chartContent.attr("transform", composeTransform(e.transform));
@@ -754,14 +801,21 @@ export function renderFanChart(
     };
     const startAngle = angleAt(startEvent);
     const startRotation = rotation;
+    // Any in-flight reset animation would otherwise keep overwriting
+    // `rotation` underneath the drag.
+    svg.interrupt(ROTATE_TRANSITION);
     const onMove = (moveEvent: MouseEvent): void => {
-      rotation = startRotation + (angleAt(moveEvent) - startAngle);
-      chartContent.attr("transform", composeTransform(zoomTransform(svgNode)));
-      svg.attr("data-fan-rotation", String(rotation));
+      const raw = startRotation + (angleAt(moveEvent) - startAngle);
+      // Shift is read per move (not just at mousedown) so it can be pressed
+      // or released mid-drag, same as most drawing apps' own angle snap.
+      setRotation(moveEvent.shiftKey ? Math.round(raw / SHIFT_SNAP_STEP) * SHIFT_SNAP_STEP : raw);
     };
     const onUp = (): void => {
-      rotation = ((rotation % 360) + 360) % 360;
-      svg.attr("data-fan-rotation", String(rotation));
+      const wrapped = ((rotation % 360) + 360) % 360;
+      // Landing a free-hand drag *exactly* back on 0° is near impossible
+      // (the original "is it actually upright?" complaint), so a release
+      // close enough to upright counts as upright.
+      setRotation(wrapped < UPRIGHT_SNAP || wrapped > 360 - UPRIGHT_SNAP ? 0 : wrapped);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };

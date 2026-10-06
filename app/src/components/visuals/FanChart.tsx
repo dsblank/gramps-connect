@@ -1,6 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { zoomTransform, type ZoomTransform } from "d3-zoom";
-import { renderFanChart, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
+import { ActionIcon, Tooltip } from "@mantine/core";
+import { renderFanChart, resetFanRotation, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
+import { t } from "../../i18n/i18n";
 import type { TreeNode } from "../../store/treeData";
 
 interface FanChartProps {
@@ -50,6 +52,10 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
   const [size, setSize] = useState({ width: 0, height: 0 });
   const zoomRef = useRef<ZoomTransform | null>(null);
   const rotationRef = useRef(0);
+  // Mirrors fanChart.ts's own live `rotation` for the compass button only --
+  // the render effect below never depends on it, so a drag updating it
+  // every mousemove doesn't rebuild the chart.
+  const [rotation, setRotation] = useState(0);
   const prevRootHandleRef = useRef<string | null>(null);
   const prevMaxDepthRef = useRef(0);
   const prevSelectedHandleRef = useRef<string | null>(null);
@@ -106,6 +112,7 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
       // viewing preference orthogonal to the fit-triggering geometry changes
       // (fanChart.ts's own doc comment on FanChartOptions.initialRotation).
       initialRotation: rotationRef.current,
+      onRotationChange: setRotation,
       selectedHandle,
       onSelectPerson,
       sizeByLifespan,
@@ -116,5 +123,44 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
     container.replaceChildren(svg);
   }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme]);
 
-  return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
+  const wrapped = ((rotation % 360) + 360) % 360;
+  const rotated = wrapped > 0.01 && wrapped < 359.99;
+
+  // The compass sits *beside* containerRef's div rather than inside it --
+  // the render effect's replaceChildren would otherwise wipe it out on
+  // every rebuild.
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+      {rotated && (
+        <Tooltip label={t("Reset rotation")} withArrow position="left">
+          <ActionIcon
+            variant="default"
+            size="lg"
+            radius="xl"
+            aria-label={t("Reset rotation")}
+            style={{ position: "absolute", top: 8, right: 8 }}
+            onClick={() => {
+              const svg = containerRef.current?.querySelector("svg");
+              if (svg) resetFanRotation(svg);
+            }}
+          >
+            <CompassNeedle degrees={rotation} />
+          </ActionIcon>
+        </Tooltip>
+      )}
+    </div>
+  );
 });
+
+/** A two-tone compass needle (red end = the chart's own "up"), tilted by
+ * the same angle the chart is -- so it shows at a glance which way and how
+ * far the fan is turned, Google Maps compass style. */
+function CompassNeedle({ degrees }: { degrees: number }) {
+  return (
+    <svg width="18" height="18" viewBox="-10 -10 20 20" style={{ transform: `rotate(${degrees}deg)` }} aria-hidden>
+      <path d="M0 -9 L4 0 L-4 0 Z" fill="var(--mantine-color-red-6)" />
+      <path d="M0 9 L4 0 L-4 0 Z" fill="var(--mantine-color-dimmed)" />
+    </svg>
+  );
+}

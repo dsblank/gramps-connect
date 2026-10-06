@@ -817,7 +817,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
             // is meant to keep growing rather than staying single-purpose.
             <Group justify="space-between" wrap="wrap" gap="xs">
               <Text size="xs" c="dimmed">
-                drag to pan · scroll to zoom · click a wedge for details · ctrl+drag to rotate
+                drag to pan · scroll to zoom · click a wedge for details · ctrl+drag to rotate (add shift for 15° steps)
               </Text>
               <Group gap="sm" wrap="nowrap">
                 <Text size="xs" c="dimmed">{t("Color:")}</Text>
