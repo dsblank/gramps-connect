@@ -18,8 +18,13 @@
 - Two production targets, with different backends: Desktop (the
   standalone build) runs gramps-core's stock SQLite backend; Docker runs
   the `SharedPostgreSQL` addon against a Postgres container.
-- Every object is stored as a JSON blob (`json_data` column: `TEXT` in
-  SQLite, `jsonb` in Postgres). GOQL resolves any dotted field path
-  generically via `json_extract`/`->`, so every field on every schema —
-  including deeply nested ones, e.g. `birth.date.modifier` — is queryable
-  without per-field wiring.
+- Every object is stored as a JSON blob in a `json_data` column, `TEXT`
+  on both backends (SharedPostgreSQL creates it as `TEXT` too, not
+  `jsonb`). GOQL resolves any dotted field path generically via
+  `json_extract` on SQLite and a `::jsonb` cast plus `->` on Postgres, so
+  every field on every schema — including deeply nested ones, e.g.
+  `birth.date.modifier` — is queryable without per-field wiring. Nothing
+  indexes inside `json_data`: filtering or sorting by a path reads and
+  parses every row, and a path through another record (`birth.date.sortval`)
+  adds a lookup per row. Only the flat secondary columns (`surname`,
+  `given_name`, `gramps_id`, ...) are indexed.
