@@ -181,6 +181,118 @@ export function swedishYmd(sdn: number): [number, number, number] {
   return julianYmd(sdn);
 }
 
+
+// -- Hebrew and Persian: ports of gen/lib/gcalendar.py's hebrew_sdn (with
+// its molad/Tishri helpers) and persian_sdn. Python's // and % floor toward
+// negative infinity, hence pyDiv/pyMod.
+
+function pyDiv(a: number, b: number): number {
+  return Math.floor(a / b);
+}
+
+function pyMod(a: number, b: number): number {
+  return ((a % b) + b) % b;
+}
+
+const HBR_HALAKIM_PER_HOUR = 1080;
+const HBR_HALAKIM_PER_DAY = 25920;
+const HBR_HALAKIM_PER_LUNAR_CYCLE = 29 * HBR_HALAKIM_PER_DAY + 13753;
+const HBR_HALAKIM_PER_METONIC_CYCLE = HBR_HALAKIM_PER_LUNAR_CYCLE * (12 * 19 + 7);
+const HBR_SDN_OFFSET = 347997;
+const HBR_NEW_MOON_OF_CREATION = 31524;
+const HBR_NOON = 18 * HBR_HALAKIM_PER_HOUR;
+const HBR_AM3_11_20 = 9 * HBR_HALAKIM_PER_HOUR + 204;
+const HBR_AM9_32_43 = 15 * HBR_HALAKIM_PER_HOUR + 589;
+const HBR_SUNDAY = 0;
+const HBR_MONDAY = 1;
+const HBR_TUESDAY = 2;
+const HBR_WEDNESDAY = 3;
+const HBR_FRIDAY = 5;
+const HBR_MONTHS_PER_YEAR = [12, 12, 13, 12, 12, 13, 12, 13, 12, 12, 13, 12, 12, 13, 12, 12, 13, 12, 13];
+const HBR_YEAR_OFFSET = [0, 12, 24, 37, 49, 61, 74, 86, 99, 111, 123, 136, 148, 160, 173, 185, 197, 210, 222];
+
+function tishri1(metonicYear: number, moladDay: number, moladHalakim: number): number {
+  let day = moladDay;
+  let dow = day % 7;
+  const leapYear = [2, 5, 7, 10, 13, 16, 18].includes(metonicYear);
+  const lastWasLeapYear = [3, 6, 8, 11, 14, 17, 0].includes(metonicYear);
+  if (
+    moladHalakim >= HBR_NOON ||
+    (!leapYear && dow === HBR_TUESDAY && moladHalakim >= HBR_AM3_11_20) ||
+    (lastWasLeapYear && dow === HBR_MONDAY && moladHalakim >= HBR_AM9_32_43)
+  ) {
+    day += 1;
+    dow += 1;
+    if (dow === 7) dow = 0;
+  }
+  if (dow === HBR_WEDNESDAY || dow === HBR_FRIDAY || dow === HBR_SUNDAY) day += 1;
+  return day;
+}
+
+function moladOfMetonicCycle(metonicCycle: number): [number, number] {
+  // Same 16-bit-split arithmetic as the original (values stay < 2^31).
+  let r1 = HBR_NEW_MOON_OF_CREATION;
+  r1 = r1 + metonicCycle * (HBR_HALAKIM_PER_METONIC_CYCLE & 0xffff);
+  let r2 = Math.floor(r1 / 65536);
+  r2 = r2 + metonicCycle * (Math.floor(HBR_HALAKIM_PER_METONIC_CYCLE / 65536) & 0xffff);
+  const d2 = pyDiv(r2, HBR_HALAKIM_PER_DAY);
+  r2 -= d2 * HBR_HALAKIM_PER_DAY;
+  r1 = (r2 << 16) | (r1 & 0xffff);
+  const d1 = pyDiv(r1, HBR_HALAKIM_PER_DAY);
+  r1 -= d1 * HBR_HALAKIM_PER_DAY;
+  return [(d2 << 16) | d1, r1];
+}
+
+function startOfYear(year: number): { metonicYear: number; moladDay: number; moladHalakim: number; tishri1: number } {
+  const metonicCycle = pyDiv(year - 1, 19);
+  const metonicYear = pyMod(year - 1, 19);
+  let [moladDay, moladHalakim] = moladOfMetonicCycle(metonicCycle);
+  moladHalakim = moladHalakim + HBR_HALAKIM_PER_LUNAR_CYCLE * HBR_YEAR_OFFSET[metonicYear];
+  moladDay = moladDay + pyDiv(moladHalakim, HBR_HALAKIM_PER_DAY);
+  moladHalakim = pyMod(moladHalakim, HBR_HALAKIM_PER_DAY);
+  return { metonicYear, moladDay, moladHalakim, tishri1: tishri1(metonicYear, moladDay, moladHalakim) };
+}
+
+/** hebrew_sdn: months 1 (Tishri) .. 13 (Elul), 6/7 = Adar I/II. */
+export function hebrewSdn(year: number, month: number, day: number): number {
+  let sdn: number;
+  if (month === 1 || month === 2) {
+    const start = startOfYear(year);
+    sdn = month === 1 ? start.tishri1 + day - 1 : start.tishri1 + day + 29;
+  } else if (month === 3) {
+    const start = startOfYear(year);
+    let moladHalakim = start.moladHalakim + HBR_HALAKIM_PER_LUNAR_CYCLE * HBR_MONTHS_PER_YEAR[start.metonicYear];
+    const moladDay = start.moladDay + pyDiv(moladHalakim, HBR_HALAKIM_PER_DAY);
+    moladHalakim = pyMod(moladHalakim, HBR_HALAKIM_PER_DAY);
+    const after = tishri1(pyMod(start.metonicYear + 1, 19), moladDay, moladHalakim);
+    const yearLength = after - start.tishri1;
+    sdn = yearLength === 355 || yearLength === 385 ? start.tishri1 + day + 59 : start.tishri1 + day + 58;
+  } else if (month === 4 || month === 5 || month === 6) {
+    const after = startOfYear(year + 1).tishri1;
+    const adarLength = HBR_MONTHS_PER_YEAR[pyMod(year - 1, 19)] === 12 ? 29 : 59;
+    sdn = after + day - adarLength - (month === 4 ? 237 : month === 5 ? 208 : 178);
+  } else {
+    const after = startOfYear(year + 1).tishri1;
+    const offsets: Record<number, number> = { 7: 207, 8: 178, 9: 148, 10: 119, 11: 89, 12: 60, 13: 30 };
+    if (!(month in offsets)) return 0;
+    sdn = after + day - offsets[month];
+  }
+  return sdn + HBR_SDN_OFFSET;
+}
+
+const PRS_EPOCH = 1948320.5;
+
+/** persian_sdn. */
+export function persianSdn(year: number, month: number, day: number): number {
+  const epbase = year >= 0 ? year - 474 : year - 473;
+  const epyear = 474 + pyMod(epbase, 2820);
+  const v1 = month <= 7 ? (month - 1) * 31 : (month - 1) * 30 + 6;
+  const v2 = pyDiv(epyear * 682 - 110, 2816);
+  const v3 = (epyear - 1) * 365 + day;
+  const v4 = pyDiv(epbase, 2820) * 1029983;
+  return Math.trunc(Math.ceil(v1 + v2 + v3 + v4 + PRS_EPOCH - 1));
+}
+
 /** Convert (year, month, day) to an SDN, for any of the seven Gramps
  * calendars. Zero-adjusts partial dates (year/month/day unset -> 1) so a
  * partial date still round-trips through a real SDN for validation
@@ -211,8 +323,9 @@ export function dateToSdn(calendar: Calendar, year: number, month: number, day: 
     case Calendar.SWEDISH:
       return swedishSdn(y, m, d);
     case Calendar.HEBREW:
+      return hebrewSdn(y, m, d);
     case Calendar.PERSIAN:
-      return 0;
+      return persianSdn(y, m, d);
     default:
       throw new Error(`Calendar ${calendar} not implemented`);
   }
@@ -227,12 +340,31 @@ export function dateToSdn(calendar: Calendar, year: number, month: number, day: 
  * as a valid day-of-month regardless of the actual year.
  *
  * Hebrew and Persian (Calendar.HEBREW / Calendar.PERSIAN) always return
- * true: this port, like gramps-web's, doesn't implement their SDN
- * conversion, so there's nothing to validate against.
+ * true, as in Gramps: its parser has no validity check for them either
+ * (_parse_hebrew/_parse_persian pass check=None).
  *
  * Uses the round-trip SDN method: convert to an SDN and back; valid iff
  * the result equals the input.
  */
+const MAX_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const LEAP_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** _dateparser.py's julian_valid: every fourth year is a leap year. */
+function julianValid(year: number, month: number, day: number): boolean {
+  if (month > 12) return false;
+  return day <= (year % 4 === 0 ? LEAP_DAYS : MAX_DAYS)[month - 1];
+}
+
+/** _dateparser.py's swedish_valid: the Swedish calendar only existed from
+ * 1700-03-01 to 1712-02-30 (its extra day), skipping 1700's leap day. */
+function swedishValid(year: number, month: number, day: number): boolean {
+  const key = year * 10000 + month * 100 + day;
+  if (key < 17000229 || key >= 17120301) return false;
+  if (key === 17120230) return true;
+  if (!julianValid(year, month, day)) return false;
+  return key !== 17000229;
+}
+
 export function isValidCalendarDate(
   calendar: Calendar,
   year: number,
@@ -258,8 +390,7 @@ export function isValidCalendarDate(
       roundTrip = islamicYmd(islamicSdn(y, month, day));
       break;
     case Calendar.SWEDISH:
-      roundTrip = swedishYmd(swedishSdn(y, month, day));
-      break;
+      return swedishValid(year, month, day);
     default:
       return true;
   }

@@ -128,7 +128,9 @@ test("year only", () => {
 test("dual-dated (slash) year, numeric", () => {
   const d = parseDate("1745/6");
   assert.deepEqual(d.dateval, [0, 0, 1746, true]);
-  assert.equal(formatDate(d), "1745/6");
+  // Gramps' Date.set() marks any slash date Julian (values unchanged).
+  assert.equal(d.calendar, Calendar.JULIAN);
+  assert.equal(formatDate(d), "1745/6 (Julian)");
 });
 
 test("dual-dated (slash) year, with a month name", () => {
@@ -184,10 +186,14 @@ test("unparseable text falls back to Text only", () => {
   assert.equal(d.text, "this is not a date at all");
 });
 
-test("blank input parses to an empty (non-text-only) date", () => {
+test("blank input parses to an empty text-only date, as in Gramps", () => {
+  // Date.set() refuses an empty value (DateError) and DateParser.parse()
+  // keeps the original input as text -- "" stays "".
   const d = parseDate("");
-  assert.equal(d.modifier, Modifier.NONE);
+  assert.equal(d.modifier, Modifier.TEXTONLY);
+  assert.equal(d.text, "");
   assert.deepEqual(d.dateval, [0, 0, 0, false]);
+  assert.equal(formatDate(d), "");
 });
 
 test("round-trips through formatDate for a representative sample", () => {

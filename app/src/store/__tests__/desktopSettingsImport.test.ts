@@ -122,6 +122,15 @@ describe("buildImportItems / applyImport", () => {
     expect(result.place.active).toBe(2);
   });
 
+  it("takes a ported language's own format exactly, including one only it has", () => {
+    const ini = parseGrampsIni("[preferences]\ndate-format=6\n");
+    const [item] = buildImportItems(input({ ini, desktopLanguage: "de" }));
+    expect(item.usable).toBe(true);
+    expect(item.desktop).toContain("12.03.1854");
+    const result = applyImport(DEFAULT_DISPLAY_SETTINGS, [item], new Set(["date"]));
+    expect(result.date).toEqual({ format: DEFAULT_DISPLAY_SETTINGS.date.format, byLanguage: { de: 6 } });
+  });
+
   it("needs place_formats.xml for a non-Full active format", () => {
     const items = buildImportItems(input({ placeFormats: null }));
     const active = items.find((i) => i.key === "placeActive")!;

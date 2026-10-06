@@ -20,7 +20,7 @@ import {
   type NewYearValue,
 } from "@gramps-connect/gramps-date";
 import { t } from "../i18n/i18n";
-import { formatDisplayDate, useDisplayFormatVersion } from "../store/placeIndex";
+import { dateLocaleCode, formatDisplayDate, useDisplayFormatVersion } from "../store/placeIndex";
 
 interface DateInputProps {
   label: string;
@@ -477,7 +477,8 @@ function QuickEntryField({
       onChange(null);
       return;
     }
-    onChange(parseDate(trimmed));
+    // In the interface language, the same one the buffer is shown in.
+    onChange(parseDate(trimmed, { locale: dateLocaleCode() }));
   }
 
   return (

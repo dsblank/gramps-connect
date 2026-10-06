@@ -8,9 +8,12 @@
 // imported: place-auto, place-format (+ place_formats.xml), date-format,
 // name-format, and the ID templates (iprefix..nprefix, see grampsIds.ts).
 // See DISPLAY_SETTINGS_PLAN.md, Phase 3.
-import { DateFormat } from "@gramps-connect/gramps-date";
+import { DateFormat, formatDate, getLocale, isLocaleRegistered, parseDate } from "@gramps-connect/gramps-date";
+
+const SAMPLE_DATE = parseDate("1854-03-12");
 import {
   BUILTIN_NAME_FORMATS,
+  chooseGrampsFormat,
   FULL_PLACE_FORMAT,
   type CustomNameFormat,
   isValidIdTemplate,
@@ -98,7 +101,9 @@ const BASE = [D.ISO, D.NUMERIC, D.LONG_MONTH_DAY_YEAR, D.SHORT_MONTH_DAY_YEAR, D
 
 /** Desktop language -> its date-format list (gen/datehandler/_date_*.py,
  * each displayer's `formats`), mapped entry by entry to the nearest of the
- * six formats gramps-connect has, or null when there is none (year-first
+ * six shared formats, or null when there is none -- the fallback for
+ * languages gramps-date doesn't port yet; ported ones (isLocaleRegistered)
+ * take desktop's number exactly (year-first
  * orders, Roman-numeral months). A numeric format maps to NUMERIC even
  * when desktop's is day-first, since NUMERIC is the only numeric one we
  * have -- the import preview shows the result, so that's visible. */
@@ -208,7 +213,19 @@ export function buildImportItems(input: ImportInput): ImportItem[] {
 
   const dateValue = ini.get("preferences.date-format");
   const dateIndex = intValue(dateValue);
-  if (dateValue && dateIndex !== null) {
+  const exactLocale = isLocaleRegistered(desktopLanguage) ? getLocale(desktopLanguage) : null;
+  if (dateValue && dateIndex !== null && exactLocale && dateIndex >= 0 && dateIndex < exactLocale.formatNames.length) {
+    // A language gramps-date ports exactly: desktop's number *is* that
+    // language's format number -- including formats only it has, which
+    // then apply to that language alone (chooseGrampsFormat).
+    items.push({
+      key: "date",
+      desktop: `${exactLocale.formatNames[dateIndex]}  —  ${formatDate(SAMPLE_DATE, { grampsFormat: dateIndex, locale: exactLocale })}`,
+      usable: true,
+      isDefault: dateValue.isDefault,
+      apply: (s) => chooseGrampsFormat(s, desktopLanguage, dateIndex),
+    });
+  } else if (dateValue && dateIndex !== null) {
     const table = DESKTOP_DATE_FORMATS[desktopLanguage] ?? DESKTOP_DATE_FORMATS.en;
     const mapped = table.formats[dateIndex] ?? null;
     items.push({
@@ -217,7 +234,7 @@ export function buildImportItems(input: ImportInput): ImportItem[] {
       usable: mapped !== null,
       reason: mapped === null ? "No matching date format in Gramps Connect" : undefined,
       isDefault: dateValue.isDefault,
-      apply: (s) => (mapped === null ? s : { ...s, date: { format: mapped } }),
+      apply: (s) => (mapped === null ? s : { ...s, date: { format: mapped, byLanguage: s.date.byLanguage } }),
     });
   }
 

@@ -115,10 +115,25 @@ function toDatePart(part: DateInput["start"]): DatePart {
   return [day, month, year, slash ?? false];
 }
 
+/** Date._adjust_newyear: with a non-January new year, a date on or after
+ * the split (e.g. Mar 25 for "Mar25") still belongs to the year that
+ * *started* then, so it sorts one year earlier. -1 or 0. */
+function newyearYearDelta(newyear: NewYearValue, start: DatePart): number {
+  if (!newyear) return 0;
+  const split: [number, number] = Array.isArray(newyear)
+    ? [newyear[0], newyear[1]]
+    : newyear === NewYear.MAR1 ? [3, 1] : newyear === NewYear.MAR25 ? [3, 25] : newyear === NewYear.SEP1 ? [9, 1] : [0, 0];
+  if (split[0] === 0 && split[1] === 0) return 0;
+  const [day, month] = start;
+  return month > split[0] || (month === split[0] && day >= split[1]) ? -1 : 0;
+}
+
 export function makeDate(input: DateInput): GrampsDate {
   const modifier = input.modifier ?? Modifier.NONE;
-  const calendar = input.calendar ?? Calendar.GREGORIAN;
   const start = toDatePart(input.start);
+  // Date.set(): a dual-dated (slash) year is a Julian-calendar notion, so
+  // Gramps marks any such date Julian -- the field only, values unchanged.
+  const calendar = start[3] && input.calendar !== Calendar.JULIAN ? Calendar.JULIAN : input.calendar ?? Calendar.GREGORIAN;
 
   let dateval: GrampsDate["dateval"] = start;
   if (modifier === Modifier.RANGE || modifier === Modifier.SPAN) {
@@ -127,10 +142,11 @@ export function makeDate(input: DateInput): GrampsDate {
   }
 
   const isEmptyStart = start[0] === 0 && start[1] === 0 && start[2] === 0;
+  const newyear = input.newyear ?? NewYear.JAN1;
   const sortval =
     modifier === Modifier.TEXTONLY || isEmptyStart
       ? 0
-      : dateToSdn(calendar, start[2], start[1], start[0]);
+      : dateToSdn(calendar, start[2] + newyearYearDelta(newyear, start), start[1], start[0]);
 
   return {
     _class: "Date",
@@ -139,7 +155,7 @@ export function makeDate(input: DateInput): GrampsDate {
     calendar,
     dateval,
     text: input.text ?? "",
-    newyear: input.newyear ?? NewYear.JAN1,
+    newyear,
     sortval,
   };
 }

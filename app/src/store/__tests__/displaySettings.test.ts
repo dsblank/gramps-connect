@@ -3,8 +3,11 @@ import { DateFormat } from "@gramps-connect/gramps-date";
 import {
   DEFAULT_DISPLAY_SETTINGS,
   FULL_PLACE_FORMAT,
+  chooseGrampsFormat,
+  grampsFormatFor,
   isValidIdTemplate,
   isValidNameFormat,
+  sharedFormatFor,
   nameKeywordsToCodes,
   normalizeDisplaySettings,
   saveDisplaySettings,
@@ -27,7 +30,7 @@ describe("normalizeDisplaySettings", () => {
     });
     expect(settings).toEqual({
       version: 1,
-      date: { format: DateFormat.ISO },
+      date: { format: DateFormat.ISO, byLanguage: {} },
       name: { format: "%l, %f" },
       place: { auto: false, active: 1, formats: [FULL_PLACE_FORMAT, custom] },
       ids: DEFAULT_DISPLAY_SETTINGS.ids,
@@ -52,6 +55,31 @@ describe("normalizeDisplaySettings", () => {
   it("always pins Full as format 0", () => {
     const settings = normalizeDisplaySettings({ place: { formats: [{ name: "Edited", levels: "0", language: "", street: 0, reverse: false }] } });
     expect(settings.place.formats).toEqual([FULL_PLACE_FORMAT]);
+  });
+});
+
+describe("per-language date formats", () => {
+  it("a format every language has becomes the shared one; a language-only one stays with that language", () => {
+    // German 4 "Tag. Monat Jahr" is the shared DAY_LONG_MONTH_YEAR.
+    let s = chooseGrampsFormat(DEFAULT_DISPLAY_SETTINGS, "de", 4);
+    expect(s.date).toEqual({ format: DateFormat.DAY_LONG_MONTH_YEAR, byLanguage: {} });
+    expect(grampsFormatFor(s, "fr")).toBe(2); // French writes it as its format 2
+
+    // German 6 (leading zeros) exists only in German.
+    s = chooseGrampsFormat(s, "de", 6);
+    expect(s.date).toEqual({ format: DateFormat.DAY_LONG_MONTH_YEAR, byLanguage: { de: 6 } });
+    expect(grampsFormatFor(s, "de")).toBe(6);
+    expect(grampsFormatFor(s, "fr")).toBe(2);
+    expect(sharedFormatFor("de", 6)).toBeUndefined();
+
+    // Picking a shared one again clears German's own choice.
+    s = chooseGrampsFormat(s, "de", 0);
+    expect(s.date).toEqual({ format: DateFormat.ISO, byLanguage: {} });
+  });
+
+  it("normalizes the stored per-language map", () => {
+    const s = normalizeDisplaySettings({ date: { format: 1, byLanguage: { de: 6, "bad key": 1, fr: -1, es: "x" } } });
+    expect(s.date.byLanguage).toEqual({ de: 6 });
   });
 });
 
@@ -86,7 +114,7 @@ describe("saveDisplaySettings", () => {
       return new Response(JSON.stringify({ other: { keep: 1 }, display: { version: 1 } }), { status: 200 });
     });
     vi.stubGlobal("fetch", fetchMock);
-    const next = { ...DEFAULT_DISPLAY_SETTINGS, date: { format: DateFormat.ISO } };
+    const next = { ...DEFAULT_DISPLAY_SETTINGS, date: { format: DateFormat.ISO, byLanguage: {} } };
     await saveDisplaySettings(next);
     const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
     expect(put[0]).toMatch(/\/api\/trees\/-\/config$/);

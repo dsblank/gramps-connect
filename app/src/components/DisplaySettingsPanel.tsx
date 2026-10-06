@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActionIcon, Alert, Button, Checkbox, Group, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import type { DateFormat } from "@gramps-connect/gramps-date";
-import { DATE_FORMAT_LABELS, describeDateFormat } from "./displayFormatLabels";
+import { getLocale } from "@gramps-connect/gramps-date";
+import { describeDateFormat, describeGrampsFormat } from "./displayFormatLabels";
 import { ImportDesktopSettingsDialog } from "./ImportDesktopSettingsDialog";
 import { formatGrampsId } from "../store/grampsIds";
 import { hasPermissions } from "../auth/auth";
-import { formatPlaceWith, samplePlaceHandle, useDisplayFormatVersion } from "../store/placeIndex";
+import { dateLocaleCode, formatPlaceWith, samplePlaceHandle, useDisplayFormatVersion } from "../store/placeIndex";
 import {
   BUILTIN_NAME_FORMATS,
+  chooseGrampsFormat,
+  grampsFormatFor,
+  sharedFormatFor,
   GRAMPS_DEFAULT_ID_TEMPLATES,
   ID_TYPES,
   isValidIdTemplate,
@@ -104,6 +107,10 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
   if (!draft || !saved) return null;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  // The picker lists the interface language's own formats (as desktop's
+  // Preferences does); see chooseGrampsFormat for how a pick is stored.
+  const localeCode = dateLocaleCode();
+  const dateIndex = grampsFormatFor(draft, localeCode);
   // Save would silently drop an invalid template (normalizeDisplaySettings).
   const idsValid = ID_TYPES.every((type) => draft.ids[type] === "" || isValidIdTemplate(draft.ids[type]));
   // A stored format string that matches no listed option (e.g. a custom
@@ -185,12 +192,17 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
         label={t("Date format")}
         disabled={!canEdit}
         allowDeselect={false}
-        value={String(draft.date.format)}
-        onChange={(value) => value != null && update((d) => ({ ...d, date: { format: Number(value) as DateFormat } }))}
-        data={Object.keys(DATE_FORMAT_LABELS).map((fmt) => ({
-          value: fmt,
-          label: describeDateFormat(Number(fmt) as DateFormat),
+        value={String(dateIndex)}
+        onChange={(value) => value != null && update((d) => chooseGrampsFormat(d, localeCode, Number(value)))}
+        data={getLocale(localeCode).formatNames.map((_, index) => ({
+          value: String(index),
+          label: describeGrampsFormat(localeCode, index),
         }))}
+        description={
+          sharedFormatFor(localeCode, dateIndex) === undefined
+            ? `${t("This format only exists in this language, so only people using Gramps Connect in it see it. Everyone else gets:")} ${describeDateFormat(draft.date.format)}`
+            : undefined
+        }
       />
 
       <Title order={5}>{t("Names")}</Title>

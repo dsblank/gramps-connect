@@ -3,18 +3,32 @@
 // the handful of DateDisplay/DateParser subclass hooks locales actually
 // override (see _datedisplay.py's DateDisplay and _dateparser.py's
 // DateParser base classes), enough to plug in a new language's strings
-// without touching display.ts/parse.ts. Only "en" ships in this package
-// (registered below, unconditionally -- it's this package's
-// always-available default, not an opt-in extra); add more the same way
-// (a new locales/<code>.ts implementing DateLocale, registered via
-// registerLocale()).
+// without touching display.ts/parse.ts. "en", "en_GB", "de", "fr" and "es" ship
+// here (registered below); their strings are generated from a real Gramps
+// by scripts/generate_gramps_locales.py and checked against Gramps' own
+// output by __tests__/locales.test.ts. Add more the same way: run the
+// script for the language, write locales/<code>.ts with its layouts, and
+// register it below.
 
 import type { Calendar, Modifier, NewYear, Quality } from "./types";
+import type { GregorianLayout } from "./layouts";
+export { BASE_LAYOUTS, type GregorianLayout } from "./layouts";
 
 /** A month-name table, index 0 unused (Gramps' own 1-based month
  * convention) -- 13 entries for calendars with an intercalary/leap month
  * (Hebrew's AdarII, French's "Extra" day-name slot). */
 export type MonthNames = readonly string[];
+
+/** Display templates, extracted from Gramps' own output (see
+ * scripts/generate_gramps_locales.py): placeholders {quality} {start}
+ * {stop} {date} {calendar}. `modifiers` is indexed by Modifier, with that
+ * modifier's word already in place ("{quality}vor {date}{calendar}");
+ * RANGE/SPAN/TEXTONLY slots are unused. */
+export interface DateTemplates {
+  span: string;
+  range: string;
+  modifiers: readonly string[];
+}
 
 export interface DateLocale {
   /** BCP-47-ish tag, e.g. "en". Matched against gramps-web-api's own
@@ -104,6 +118,38 @@ export interface DateLocale {
    * existing US-ordering simplification (see `numericFormat` above and
    * display.ts's own doc comment). */
   numericOrder: "dmy" | "mdy" | "ymd";
+
+  /** Gregorian layout for each of the language's numbered formats -- the
+   * same numbering as desktop's Preferences list (`formatNames`). */
+  gregorianLayouts: readonly GregorianLayout[];
+
+  /** The language's own names for those formats, as desktop shows them. */
+  formatNames: readonly string[];
+
+  /** Which numbered format each of this package's six DateFormat values
+   * means in this language (e.g. DAY_LONG_MONTH_YEAR is German format 4,
+   * "Tag. Monat Jahr"). */
+  formatIndex: Readonly<Record<number, number>>;
+
+  templates: DateTemplates;
+
+  /** Parser: span/range patterns (JS regex source, anchored, with named
+   * groups `start` and `stop`) -- ports of DateParser._span/_range. */
+  spanPattern: string;
+  rangePattern: string;
+
+  /** Parser: every month word Gramps' parser accepts -> month number.
+   * Gramps' parsers all share one table that every language adds to, so
+   * this includes other languages' names too -- kept that way to accept
+   * exactly what Gramps does. Added to the long/short month names. */
+  monthWords: Readonly<Record<string, number>>;
+
+  /** Parser: each calendar's two text-date patterns (month name first /
+   * day first) -- Gramps' own, as JS regex source with `{months}` where the
+   * month alternation goes. Languages differ in more than words here:
+   * German and French allow any one character after the day ("12. März"),
+   * forbid a dot after the month, and leave the end unanchored. */
+  textPatterns: Readonly<Record<"gregorian" | "swedish" | "hebrew" | "french" | "persian" | "islamic", { text: string; text2: string }>>;
 }
 
 const registry = new Map<string, DateLocale>();
@@ -130,4 +176,12 @@ export function isLocaleRegistered(code: string): boolean {
 // downstream barrel file some callers (and this package's own test
 // files) may never import.
 import { en } from "./locales/en";
+import { en_GB } from "./locales/en_GB";
+import { de } from "./locales/de";
+import { fr } from "./locales/fr";
+import { es } from "./locales/es";
 registerLocale(en);
+registerLocale(en_GB);
+registerLocale(de);
+registerLocale(fr);
+registerLocale(es);

@@ -12,10 +12,11 @@
 // with the formatted one once the cache catches up, via
 // useDisplayFormatVersion().
 import { useEffect, useSyncExternalStore } from "react";
-import { formatDate, type GrampsDate } from "@gramps-connect/gramps-date";
+import { formatDate, isLocaleRegistered, type GrampsDate } from "@gramps-connect/gramps-date";
+import { getI18nSnapshot, subscribe as subscribeI18n } from "../i18n/i18n";
 import type { ViewStore } from "./viewStore";
 import { formatPlace, locationList, type PlaceRecord } from "./placeDisplay";
-import { getDisplaySettings, loadDisplaySettings, subscribeDisplaySettings, type PlaceFormatDef } from "./displaySettings";
+import { getDisplaySettings, grampsFormatFor, loadDisplaySettings, subscribeDisplaySettings, type PlaceFormatDef } from "./displaySettings";
 
 // The Places ViewStore, handed in by registry.ts as it creates the stores
 // (attachPlaceStore) rather than imported from there: views.ts imports this
@@ -155,10 +156,24 @@ export function samplePlaceHandle(): string | null {
 }
 
 /** A Gramps date as the display settings say to show it. */
+/** The gramps-date locale for the interface language: the exact code when
+ * it's registered ("en_GB"), else its base language ("de" for "de_AT"),
+ * else English. Every locale shipped there matches Gramps' own display
+ * and parsing for that language. */
+export function dateLocaleCode(): string {
+  const lang = getI18nSnapshot().lang;
+  if (isLocaleRegistered(lang)) return lang;
+  const base = lang.split(/[_-]/)[0];
+  return isLocaleRegistered(base) ? base : "en";
+}
+
+/** A Gramps date as the display settings say to show it, in the interface
+ * language. */
 export function formatDisplayDate(date: GrampsDate | null | undefined): string {
   if (!date) return "";
   try {
-    return formatDate(date, { format: getDisplaySettings().date.format });
+    const locale = dateLocaleCode();
+    return formatDate(date, { grampsFormat: grampsFormatFor(getDisplaySettings(), locale), locale });
   } catch {
     return "";
   }
@@ -176,6 +191,8 @@ function wire() {
   if (wired) return;
   wired = true;
   subscribeDisplaySettings(bump);
+  // Dates are written in the interface language (dateLocaleCode).
+  subscribeI18n(bump);
   // Place cache changes only matter while automatic titles are on.
   const watchStores = () => {
     placeStore!.subscribe(() => {
@@ -207,7 +224,8 @@ function subscribe(listener: () => void): () => void {
 }
 
 /** Re-render whenever formatted dates/places could have changed: the
- * display settings were loaded or saved, or the Places cache gained rows.
+ * display settings were loaded or saved, the interface language changed,
+ * or the Places cache gained rows.
  * The return value is a cache key for memoized renders. */
 export function useDisplayFormatVersion(): number {
   useEffect(() => {

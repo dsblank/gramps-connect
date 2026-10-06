@@ -111,24 +111,14 @@ interface CalendarMonthTables {
  * not optional, whitespace before the day); folded into the same style
  * here as a small, documented simplification -- "en" has no distinct
  * Swedish month names anyway (see locales/en.ts). */
-function buildGregorianStyleTables(toIndex: Map<string, number>): CalendarMonthTables {
+/** A calendar's month table plus its two text patterns, compiled from the
+ * language's own (Gramps') patterns -- see DateLocale.textPatterns. */
+function buildTextTables(toIndex: Map<string, number>, patterns: { text: string; text2: string }): CalendarMonthTables {
   const alt = reLongestFirst([...toIndex.keys()]);
   return {
     toIndex,
-    textRe: new RegExp(`^${alt}\\.?(\\s+\\d+)?\\s*,?\\s+((\\d+)(/\\d+)?)?\\s*$`, "i"),
-    text2Re: new RegExp(`^(\\d+)?\\s+?${alt}\\.?\\s*((\\d+)(/\\d+)?)?\\s*$`, "i"),
-  };
-}
-
-/** Hebrew/French/Persian/Islamic: `Month day[,] [year][/slash]` -- no
- * trailing-dot abbreviation, mandatory space after the month name instead
- * of an optional leading space on the day. */
-function buildOtherCalendarTables(toIndex: Map<string, number>): CalendarMonthTables {
-  const alt = reLongestFirst([...toIndex.keys()]);
-  return {
-    toIndex,
-    textRe: new RegExp(`^${alt}\\s+(\\d+)?\\s*,?\\s*((\\d+)(/\\d+)?)?\\s*$`, "i"),
-    text2Re: new RegExp(`^(\\d+)?\\s+?${alt}\\s*((\\d+)(/\\d+)?)?\\s*$`, "i"),
+    textRe: new RegExp(patterns.text.replace("{months}", alt), "i"),
+    text2Re: new RegExp(patterns.text2.replace("{months}", alt), "i"),
   };
 }
 
@@ -163,19 +153,26 @@ function compileLocale(locale: DateLocale): CompiledLocale {
   if (cached) return cached;
 
   const gregorianTable = buildMonthTable(locale.longMonths, locale.shortMonths);
+  // Gramps' parser also accepts every word in its (shared, cross-language)
+  // month_to_int table; added after the prefix expansion so they don't
+  // claim prefixes of the language's own names.
+  for (const [word, month] of Object.entries(locale.monthWords)) {
+    if (!gregorianTable.has(word.toLowerCase())) gregorianTable.set(word.toLowerCase(), month);
+  }
   const hebrewTable = buildMonthTable(locale.hebrewMonths);
   const frenchTable = buildMonthTable(locale.frenchMonths);
   const islamicTable = buildMonthTable(locale.islamicMonths);
   const persianTable = buildMonthTable(locale.persianMonths);
 
   const months: Record<Calendar, CalendarMonthTables> = {
-    [Calendar.GREGORIAN]: buildGregorianStyleTables(gregorianTable),
-    [Calendar.JULIAN]: buildGregorianStyleTables(gregorianTable),
-    [Calendar.SWEDISH]: buildGregorianStyleTables(gregorianTable),
-    [Calendar.HEBREW]: buildOtherCalendarTables(hebrewTable),
-    [Calendar.FRENCH]: buildOtherCalendarTables(frenchTable),
-    [Calendar.ISLAMIC]: buildOtherCalendarTables(islamicTable),
-    [Calendar.PERSIAN]: buildOtherCalendarTables(persianTable),
+    // Julian shares the Gregorian patterns, as in _parse_julian.
+    [Calendar.GREGORIAN]: buildTextTables(gregorianTable, locale.textPatterns.gregorian),
+    [Calendar.JULIAN]: buildTextTables(gregorianTable, locale.textPatterns.gregorian),
+    [Calendar.SWEDISH]: buildTextTables(gregorianTable, locale.textPatterns.swedish),
+    [Calendar.HEBREW]: buildTextTables(hebrewTable, locale.textPatterns.hebrew),
+    [Calendar.FRENCH]: buildTextTables(frenchTable, locale.textPatterns.french),
+    [Calendar.ISLAMIC]: buildTextTables(islamicTable, locale.textPatterns.islamic),
+    [Calendar.PERSIAN]: buildTextTables(persianTable, locale.textPatterns.persian),
   };
 
   const calAlt = reLongestFirst(Object.keys(locale.calendarWords));
@@ -196,8 +193,9 @@ function compileLocale(locale: DateLocale): CompiledLocale {
     nyRe: new RegExp(`^(.*)\\s+\\(${nyAlt}\\)( ?.*)`, "i"),
     nyIsoRe: /^(.*)\s+\((\d{1,2}-\d{1,2})\)( ?.*)/,
     qualRe: new RegExp(`^(.* ?)${qualAlt}\\s+(.+)`, "i"),
-    spanRe: /^(from)\s+(.+)\s+to\s+(.+)/i,
-    rangeRe: /^(bet|bet\.|between)\s+(.+)\s+and\s+(.+)/i,
+    // The language's own _span/_range (named groups start/stop).
+    spanRe: new RegExp(locale.spanPattern, "i"),
+    rangeRe: new RegExp(locale.rangePattern, "i"),
     quarterRe: /^[qQ]([1-4])\s+(.+)/,
     modifierRe: new RegExp(`^${modAlt}\\s+(.*)`, "i"),
     modifierAfterRe: modAfterWords.length ? new RegExp(`^(.*)\\s+${reLongestFirst(modAfterWords)}`, "i") : null,
@@ -451,13 +449,13 @@ function invertYear(part: DatePart): DatePart {
 function matchSpan(text: string, cal: Calendar, ny: NewYearValue, qual: Quality, tables: CompiledLocale): MatchResult | null {
   const m = tables.spanRe.exec(text);
   if (!m) return null;
-  const [text1, bc1] = matchBce(m[2], tables);
+  const [text1, bc1] = matchBce(m.groups!.start, tables);
   let start = parseSubdate(text1, tables, cal);
   if (!start && text1 !== "") return null;
   start = start ?? NO_MATCH;
   if (bc1) start = invertYear(start);
 
-  const [text2, bc2] = matchBce(m[3], tables);
+  const [text2, bc2] = matchBce(m.groups!.stop, tables);
   let stop = parseSubdate(text2, tables, cal);
   if (!stop && text2 !== "") return null;
   stop = stop ?? NO_MATCH;
@@ -469,13 +467,13 @@ function matchSpan(text: string, cal: Calendar, ny: NewYearValue, qual: Quality,
 function matchRange(text: string, cal: Calendar, ny: NewYearValue, qual: Quality, tables: CompiledLocale): MatchResult | null {
   const m = tables.rangeRe.exec(text);
   if (!m) return null;
-  const [text1, bc1] = matchBce(m[2], tables);
+  const [text1, bc1] = matchBce(m.groups!.start, tables);
   let start = parseSubdate(text1, tables, cal);
   if (!start && text1 !== "") return null;
   start = start ?? NO_MATCH;
   if (bc1) start = invertYear(start);
 
-  const [text2, bc2] = matchBce(m[3], tables);
+  const [text2, bc2] = matchBce(m.groups!.stop, tables);
   let stop = parseSubdate(text2, tables, cal);
   if (!stop && text2 !== "") return null;
   stop = stop ?? NO_MATCH;
@@ -575,7 +573,9 @@ function setDateFromText(rawText: string, tables: CompiledLocale): MatchResult {
 
   let subdate = parseSubdate(textNoBce, tables, cal);
   if (!subdate && textNoBce !== "") {
-    return { modifier: Modifier.TEXTONLY, calendar: Calendar.GREGORIAN, newyear: 0, quality: Quality.NONE, dateval: NO_MATCH, text: text0 };
+    // set_as_text(text) with the text as left after the calendar, quality
+    // and BCE parts were stripped -- not the original input -- as Gramps does.
+    return { modifier: Modifier.TEXTONLY, calendar: Calendar.GREGORIAN, newyear: 0, quality: Quality.NONE, dateval: NO_MATCH, text: textNoBce };
   }
   subdate = subdate ?? NO_MATCH;
   if (bc) subdate = invertYear(subdate);
@@ -604,8 +604,11 @@ export function parseDate(text: string, options: ParseDateOptions = {}): GrampsD
   const isCompound = result.modifier === Modifier.RANGE || result.modifier === Modifier.SPAN;
   const start = result.dateval.slice(0, 4) as DatePart;
   const stop = isCompound ? (result.dateval.slice(4, 8) as DatePart) : undefined;
+  // Nothing to set (empty or all-zero): Gramps' Date.set() refuses an
+  // empty value with DateError, and parse() then keeps the *original*
+  // input as text-only -- "" and "   " included.
   if (!isCompound && isNoMatch(start)) {
-    return makeDate({});
+    return makeDate({ modifier: Modifier.TEXTONLY, text });
   }
   return makeDate({
     modifier: result.modifier,

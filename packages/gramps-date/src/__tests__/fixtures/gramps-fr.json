@@ -1,0 +1,7377 @@
+{
+ "lang": "fr",
+ "formatNames": [
+  "AAAA-MM-JJ (ISO)",
+  "Défaut système (J/M/A)",
+  "Jour Mois Année",
+  "Jour MOI Année",
+  "Jour. Mois Année",
+  "Jour. MOI Année",
+  "Mois Jour, Année",
+  "MOI Jour, Année",
+  "JJ/MM/AAAA"
+ ],
+ "vectors": [
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "1854-03-12",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12/3/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12. mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12. mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 12, 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 12, 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12/03/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398279
+   },
+   "formats": [
+    {
+     "text": "1854-03",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "0/3/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "00/03/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398220
+   },
+   "formats": [
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     1,
+     1,
+     1900,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2415021
+   },
+   "formats": [
+    {
+     "text": "1900-01-01",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1/1/1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 janvier 1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 janv 1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1. janvier 1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1. janv 1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "janvier 1, 1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "janv 1, 1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "01/01/1900",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       1900,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2415021
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     31,
+     12,
+     1999,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2451544
+   },
+   "formats": [
+    {
+     "text": "1999-12-31",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "31/12/1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "31 décembre 1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "31 déc 1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "31. décembre 1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "31. déc 1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "décembre 31, 1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "déc 31, 1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "31/12/1999",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       31,
+       12,
+       1999,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2451544
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 1,
+    "dateval": [
+     11,
+     2,
+     1745,
+     true
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2358461
+   },
+   "formats": [
+    {
+     "text": "1744/5-02-11 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1744/5-02-11 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "février 11, 1744/5 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "févr 11, 1744/5 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 février 1744/5 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1744/5 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1744/5 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1744/5 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1744/5 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       true
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     5,
+     10,
+     1582,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2299151
+   },
+   "formats": [
+    {
+     "text": "1582-10-05",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "5/10/1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "5 octobre 1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "5 oct 1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "5. octobre 1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "5. oct 1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "octobre 5, 1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "oct 5, 1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "05/10/1582",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       5,
+       10,
+       1582,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2299151
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     1,
+     1,
+     -100,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 1684901
+   },
+   "formats": [
+    {
+     "text": "100-01-01 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "100-01-01 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 janvier 100 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 janv 100 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1. janvier 100 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1. janv 100 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "janvier 1, 100 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "janv 1, 100 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "100-01-01 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       1,
+       -100,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1684901
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     -44,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 1705355
+   },
+   "formats": [
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "44 avant le calendrier",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       -44,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 1705355
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 1,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "avant 1854-03-12",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 12/3/1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 12 mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 12 mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 12. mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 12. mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 12, 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 12, 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 12/03/1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 1,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398279
+   },
+   "formats": [
+    {
+     "text": "avant 1854-03",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 0/3/1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant mars 1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 00/03/1854",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 2,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "après 1854-03-12",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 12/3/1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 12 mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 12 mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 12. mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 12. mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 12, 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 12, 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 12/03/1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 2,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398279
+   },
+   "formats": [
+    {
+     "text": "après 1854-03",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 0/3/1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après mars 1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "après 00/03/1854",
+     "parsed": {
+      "modifier": 2,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 3,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "vers 1854-03-12",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 12/3/1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 12 mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 12 mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 12. mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 12. mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 12, 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 12, 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 12/03/1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 3,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398279
+   },
+   "formats": [
+    {
+     "text": "vers 1854-03",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 0/3/1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers mars 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "vers 00/03/1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 7,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "de 1854-03-12",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 12/3/1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 12 mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 12 mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 12. mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 12. mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 12, 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 12, 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 12/03/1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 7,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398279
+   },
+   "formats": [
+    {
+     "text": "de 1854-03",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 0/3/1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de mars 1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 00/03/1854",
+     "parsed": {
+      "modifier": 7,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 8,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "à 1854-03-12",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 12/3/1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 12 mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 12 mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 12. mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 12. mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 12, 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 12, 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 12/03/1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 8,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398279
+   },
+   "formats": [
+    {
+     "text": "à 1854-03",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 0/3/1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à mars 1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "à 00/03/1854",
+     "parsed": {
+      "modifier": 8,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398279
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 1,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "estimée 1854-03-12",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée 12/3/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée 12 mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée 12 mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée 12. mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée 12. mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée mars 12, 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée mars 12, 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée 12/03/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 3,
+    "quality": 1,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398220
+   },
+   "formats": [
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 2,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   },
+   "formats": [
+    {
+     "text": "calculée 1854-03-12",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée 12/3/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée 12 mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée 12 mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée 12. mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée 12. mars 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée mars 12, 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée mars 12, 1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée 12/03/1854",
+     "parsed": {
+      "modifier": 0,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       12,
+       3,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398290
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 3,
+    "quality": 2,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398220
+   },
+   "formats": [
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "calculée vers 1854",
+     "parsed": {
+      "modifier": 3,
+      "quality": 2,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1854,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2398220
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 5,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     1,
+     2,
+     1890,
+     false,
+     3,
+     3,
+     1910,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2411400
+   },
+   "formats": [
+    {
+     "text": "de 1890-02-01 à 1910-03-03",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 1/2/1890 à 3/3/1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 1 février 1890 à 3 mars 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 1 févr 1890 à 3 mars 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 1. février 1890 à 3. mars 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 1. févr 1890 à 3. mars 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de février 1, 1890 à mars 3, 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de févr 1, 1890 à mars 3, 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "de 01/02/1890 à 03/03/1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 5,
+    "quality": 1,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1890,
+     false,
+     0,
+     0,
+     1910,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2411369
+   },
+   "formats": [
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée de 1890 à 1910",
+     "parsed": {
+      "modifier": 5,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 4,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     1,
+     2,
+     1890,
+     false,
+     3,
+     3,
+     1910,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2411400
+   },
+   "formats": [
+    {
+     "text": "entre 1890-02-01 et 1910-03-03",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre 1/2/1890 et 3/3/1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre 1 février 1890 et 3 mars 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre 1 févr 1890 et 3 mars 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre 1. février 1890 et 3. mars 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre 1. févr 1890 et 3. mars 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre février 1, 1890 et mars 3, 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre févr 1, 1890 et mars 3, 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "entre 01/02/1890 et 03/03/1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       1,
+       2,
+       1890,
+       false,
+       3,
+       3,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411400
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 4,
+    "quality": 1,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1890,
+     false,
+     0,
+     0,
+     1910,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2411369
+   },
+   "formats": [
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "estimée entre 1890 et 1910",
+     "parsed": {
+      "modifier": 4,
+      "quality": 1,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       1890,
+       false,
+       0,
+       0,
+       1910,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2411369
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 1,
+    "dateval": [
+     12,
+     1,
+     1700,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2341994
+   },
+   "formats": [
+    {
+     "text": "1700-01-12 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12/1/1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "janvier 12, 1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "janv 12, 1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 janvier 1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 janv 1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 janv 1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 janv 1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 janv 1700 (Julien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       12,
+       1,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341994
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 1,
+    "dateval": [
+     11,
+     2,
+     1745,
+     false
+    ],
+    "newyear": 2,
+    "text": "",
+    "sortval": 2358461
+   },
+   "formats": [
+    {
+     "text": "1745-02-11 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11/2/1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "février 11, 1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "févr 11, 1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 février 1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "11 févr 1745 (Julien, Mar25)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       11,
+       2,
+       1745,
+       false
+      ],
+      "newyear": 2,
+      "text": "",
+      "sortval": 2358461
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 1,
+    "quality": 0,
+    "calendar": 1,
+    "dateval": [
+     0,
+     0,
+     1700,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2341983
+   },
+   "formats": [
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "avant 1700 (Julien)",
+     "parsed": {
+      "modifier": 1,
+      "quality": 0,
+      "calendar": 1,
+      "dateval": [
+       0,
+       0,
+       1700,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2341983
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 6,
+    "dateval": [
+     1,
+     3,
+     1712,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2346426
+   },
+   "formats": [
+    {
+     "text": "1712-03-01 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "1712-03-01",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "1/3/1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "1/3/1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "mars 1, 1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "mars 1, 1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "mars 1, 1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "mars 1, 1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "1 mars 1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "1 mars 1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "1 mars 1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "1 mars 1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "1 mars 1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "1 mars 1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "1 mars 1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "1 mars 1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    },
+    {
+     "text": "1 mars 1712 (Suédois)",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "1 mars 1712",
+      "sortval": 0
+     },
+     "grampsRoundTrips": false
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 2,
+    "dateval": [
+     1,
+     1,
+     5600,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2392992
+   },
+   "formats": [
+    {
+     "text": "5600-01-01 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1/1/5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Tishri 1, 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Tishri 1, 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Tishri 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Tishri 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Tishri 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Tishri 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Tishri 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       1,
+       1,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2392992
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 2,
+    "dateval": [
+     0,
+     7,
+     5600,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2393171
+   },
+   "formats": [
+    {
+     "text": "5600-07 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "7/5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Adar II 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Adar II 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Adar II 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Adar II 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Adar II 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Adar II 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Adar II 5600 (Hébraïque)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 2,
+      "dateval": [
+       0,
+       7,
+       5600,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2393171
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 3,
+    "dateval": [
+     1,
+     1,
+     10,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2379127
+   },
+   "formats": [
+    {
+     "text": "10-01-01 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1/1/10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Vendémiaire 1, 10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Vendémiaire 1, 10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Vendémiaire 10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Vendémiaire 10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Vendémiaire 10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Vendémiaire 10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Vendémiaire 10 (Républicain)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 3,
+      "dateval": [
+       1,
+       1,
+       10,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2379127
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 5,
+    "dateval": [
+     12,
+     9,
+     1300,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2409009
+   },
+   "formats": [
+    {
+     "text": "1300-09-12 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12/9/1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Ramadan 12, 1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Ramadan 12, 1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 Ramadan 1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 Ramadan 1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 Ramadan 1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 Ramadan 1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "12 Ramadan 1300 (Hégirien)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 5,
+      "dateval": [
+       12,
+       9,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2409009
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 4,
+    "dateval": [
+     1,
+     1,
+     1300,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2422770
+   },
+   "formats": [
+    {
+     "text": "1300-01-01 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1/1/1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Farvardin 1, 1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "Farvardin 1, 1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Farvardin 1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Farvardin 1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Farvardin 1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Farvardin 1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "1 Farvardin 1300 (Persan)",
+     "parsed": {
+      "modifier": 0,
+      "quality": 0,
+      "calendar": 4,
+      "dateval": [
+       1,
+       1,
+       1300,
+       false
+      ],
+      "newyear": 0,
+      "text": "",
+      "sortval": 2422770
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  },
+  {
+   "date": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "around the war",
+    "sortval": 0
+   },
+   "formats": [
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    },
+    {
+     "text": "around the war",
+     "parsed": {
+      "modifier": 6,
+      "quality": 0,
+      "calendar": 0,
+      "dateval": [
+       0,
+       0,
+       0,
+       false
+      ],
+      "newyear": 0,
+      "text": "around the war",
+      "sortval": 0
+     },
+     "grampsRoundTrips": true
+    }
+   ]
+  }
+ ],
+ "typed": [
+  {
+   "text": "1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398220
+   }
+  },
+  {
+   "text": "Mar 1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398279
+   }
+  },
+  {
+   "text": "12 March 1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   }
+  },
+  {
+   "text": "March 12, 1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   }
+  },
+  {
+   "text": "1854-03-12",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   }
+  },
+  {
+   "text": "12/3/1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   }
+  },
+  {
+   "text": "3/12/1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     3,
+     12,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398556
+   }
+  },
+  {
+   "text": "about 1854",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "about 1854",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "abt 1854",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "abt 1854",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "before 1900",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "before 1900",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "after 1900",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "after 1900",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "between 1850 and 1860",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "between 1850 and 1860",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "from 1850 to 1860",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "from 1850 to 1860",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "1745/6",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 1,
+    "dateval": [
+     0,
+     0,
+     1746,
+     true
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2358785
+   }
+  },
+  {
+   "text": "12 Jan 1700 (Julian)",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 1,
+    "dateval": [
+     12,
+     1,
+     1700,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2341994
+   }
+  },
+  {
+   "text": "est 1800",
+   "parsed": {
+    "modifier": 0,
+    "quality": 1,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1800,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2378497
+   }
+  },
+  {
+   "text": "100 BC",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     -100,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 1684901
+   }
+  },
+  {
+   "text": "Q2 1900",
+   "parsed": {
+    "modifier": 4,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     1,
+     4,
+     1900,
+     false,
+     30,
+     6,
+     1900,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2415111
+   }
+  },
+  {
+   "text": "hello world",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "hello world",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "vers 1850",
+   "parsed": {
+    "modifier": 3,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1850,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2396759
+   }
+  },
+  {
+   "text": "env. 1850",
+   "parsed": {
+    "modifier": 3,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1850,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2396759
+   }
+  },
+  {
+   "text": "avant mars 1900",
+   "parsed": {
+    "modifier": 1,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     3,
+     1900,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2415080
+   }
+  },
+  {
+   "text": "après 1900",
+   "parsed": {
+    "modifier": 2,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1900,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2415021
+   }
+  },
+  {
+   "text": "entre 1850 et 1860",
+   "parsed": {
+    "modifier": 4,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1850,
+     false,
+     0,
+     0,
+     1860,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2396759
+   }
+  },
+  {
+   "text": "de 1850 à 1860",
+   "parsed": {
+    "modifier": 5,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1850,
+     false,
+     0,
+     0,
+     1860,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2396759
+   }
+  },
+  {
+   "text": "12/3/1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   }
+  },
+  {
+   "text": "12 mars 1854",
+   "parsed": {
+    "modifier": 0,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     12,
+     3,
+     1854,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2398290
+   }
+  },
+  {
+   "text": "1er mars 1854",
+   "parsed": {
+    "modifier": 6,
+    "quality": 0,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     0,
+     false
+    ],
+    "newyear": 0,
+    "text": "1er mars 1854",
+    "sortval": 0
+   }
+  },
+  {
+   "text": "estimée 1800",
+   "parsed": {
+    "modifier": 0,
+    "quality": 1,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1800,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2378497
+   }
+  },
+  {
+   "text": "calculée 1800",
+   "parsed": {
+    "modifier": 0,
+    "quality": 2,
+    "calendar": 0,
+    "dateval": [
+     0,
+     0,
+     1800,
+     false
+    ],
+    "newyear": 0,
+    "text": "",
+    "sortval": 2378497
+   }
+  }
+ ]
+}

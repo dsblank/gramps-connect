@@ -371,3 +371,40 @@ the file locations per OS.
   `title` ~50 ms vs `name.value` ~58 ms; people `surname` 0.31 s vs
   `birth.date.sortval` **4.2 s**. So Birth/Death (and other
   relationship-path) sorting stays off.
+
+## Localized dates: gramps-date matches Gramps exactly (2026-10-06)
+
+- `packages/gramps-date` ships en, en_GB, de, fr, es. Strings are
+  generated from a live Gramps by `scripts/generate_gramps_locales.py`
+  (`locales/<lang>.generated.ts`). Layouts are hand-written per language
+  (`locales/<lang>.ts`).
+- Verified against Gramps' own output: `fixtures/gramps-<lang>.json` (every
+  format number, display + Gramps' parse of it, typed input) and
+  `fixtures/gramps-tests-<lang>.json`, which reuses the date sets Gramps'
+  own unit tests build (date_test.py, datehandler_test.py), about 47k
+  checks. Hand-written Gramps tests are ported in `grampsUnit.test.ts`.
+- Fixed along the way to match Gramps: language layouts apply only to
+  Gregorian dates (other calendars use base layouts); German/French
+  numeric quirks; text patterns per language (day dot, no month dot,
+  unanchored end); Swedish calendar validity range; text-only text after
+  stripping; empty input becomes text-only ""; slash dates become Julian;
+  `_adjust_newyear` in sort values; Hebrew and Persian sort values
+  (previously 0).
+- One deliberate environment fix: the generator sets each parser's
+  numeric order from the language's display pattern, because Gramps takes
+  it from the *process* locale (en_GB parsed month-first under a US
+  process).
+- The app writes dates in the interface language (`dateLocaleCode()` in
+  placeIndex.ts) and parses DateInput in it. Preferences labels use
+  Gramps' own format names in that language.
+- Open: Preferences still offers six formats. A language's extra ones
+  (German 6, French 4/5/8) are reachable via `grampsFormat` but not
+  selectable. Inflected languages (ru, uk, cs, hr, sl) need the Lexeme
+  port.
+- **Per-language formats in Preferences (2026-10-06).** The picker lists
+  the interface language's own Gramps formats. Stored as `date.format`
+  (shared DateFormat) plus `date.byLanguage[localeCode] = index` for a
+  language-only pick (`chooseGrampsFormat`, `grampsFormatFor`,
+  `sharedFormatFor` in displaySettings.ts). The desktop import maps a
+  ported language's format number exactly; other languages use the old
+  nearest-match table.

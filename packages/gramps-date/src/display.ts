@@ -28,21 +28,22 @@
 
 import { Calendar, Modifier, NewYearValue, type DatePart, type GrampsDate, getStartDate, getStopDate } from "./types";
 import { type DateLocale, getLocale } from "./locale";
+import { BASE_LAYOUTS, type GregorianLayout } from "./layouts";
 
-export enum DateFormat {
-  ISO = 0,
-  NUMERIC = 1,
-  LONG_MONTH_DAY_YEAR = 2,
-  SHORT_MONTH_DAY_YEAR = 3,
-  DAY_LONG_MONTH_YEAR = 4,
-  DAY_SHORT_MONTH_YEAR = 5,
-}
+// In its own module so locale files can use it without a display.ts <->
+// locale.ts import cycle; re-exported here for existing importers.
+import { DateFormat } from "./formats";
+export { DateFormat };
 
 export interface FormatDateOptions {
   /** Locale code (see locale.ts's registry) or a DateLocale object
    * directly. Defaults to "en". */
   locale?: string | DateLocale;
   format?: DateFormat;
+  /** One of the locale's own numbered formats (DateLocale.formatNames),
+   * overriding `format` -- for the formats a language has beyond the six
+   * (German 6, "numeric with leading zeros"; French 4/5/8). */
+  grampsFormat?: number;
 }
 
 // Not locale-translated in the original either -- a plain class attribute
@@ -95,7 +96,9 @@ export function displayIso(datePart: DatePart, locale: DateLocale): string {
 function formatNumeric(datePart: DatePart, locale: DateLocale): string {
   const [day, month, year, slash] = datePart;
   if (slash) return displayIso(datePart, locale);
-  if (day === 0 && month === 0) return String(Math.abs(year));
+  // Year only: str(year) in dd_dformat01 -- signed, so a BCE year shows as
+  // "-44 B.C.E." (Gramps' own output, quirk included).
+  if (day === 0 && month === 0) return String(year);
 
   let value = locale.numericFormat.replace("%m", String(month));
   if (day === 0) {
@@ -133,7 +136,7 @@ function monthTablesFor(calendar: Calendar, locale: DateLocale): { long: readonl
   }
 }
 
-function monthDayYear(datePart: DatePart, months: readonly string[], locale: DateLocale, dayFirst: boolean): string {
+function monthDayYear(datePart: DatePart, months: readonly string[], locale: DateLocale, dayFirst: boolean, dayDot = false): string {
   const [day, month, year, slash] = datePart;
   const y = slashYear(year, slash);
   if (day === 0) {
@@ -141,58 +144,76 @@ function monthDayYear(datePart: DatePart, months: readonly string[], locale: Dat
     return `${months[month]} ${y}`;
   }
   if (month === 0) return displayIso(datePart, locale); // day set, month not -- gramps bug 8477
-  return dayFirst ? `${day} ${months[month]} ${y}` : `${months[month]} ${day}, ${y}`;
+  return dayFirst ? `${day}${dayDot ? "." : ""} ${months[month]} ${y}` : `${months[month]} ${day}, ${y}`;
 }
 
-/** `_display_calendar`: dispatches to the right month table + format for
- * one DatePart -- the piece shared by a plain date and each half of a
- * span/range. */
+/** The layout one date part is drawn with: the language's own for a
+ * Gregorian date, Gramps' base ones for every other calendar (see
+ * GregorianLayout) -- where a format number past the base list means the
+ * base's last one, as `_display_calendar`'s `else` does. */
+function layoutFor(calendar: Calendar, locale: DateLocale, index: number): GregorianLayout {
+  if (calendar === Calendar.GREGORIAN) return locale.gregorianLayouts[index] ?? BASE_LAYOUTS[0];
+  return BASE_LAYOUTS[Math.min(index, BASE_LAYOUTS.length - 1)];
+}
+
+/** A language's own numeric format (German/French `_display_gregorian`
+ * formats 1 and 6/8): the pattern filled in as-is, with the raw signed
+ * year and any zero day kept. */
+function formatLocaleNumeric(datePart: DatePart, locale: DateLocale, pad: boolean, isoWhenBce: boolean): string {
+  const [day, month, year, slash] = datePart;
+  if (slash || (isoWhenBce && year < 0)) return displayIso(datePart, locale);
+  let value: string;
+  if (day === 0 && month === 0) {
+    value = String(year);
+  } else {
+    const two = (n: number) => (pad ? String(n).padStart(2, "0") : String(n));
+    value = locale.numericFormat.replace("%m", two(month)).replace("%d", two(day)).replace("%Y", String(year));
+  }
+  return formatBce(value, datePart, locale);
+}
+
+/** `_display_calendar` / a language's `_display_gregorian`: one date part
+ * in the locale's numbered format `index`. */
+function displayDatePartAt(datePart: DatePart, calendar: Calendar, locale: DateLocale, index: number): string {
+  const layout = layoutFor(calendar, locale, index);
+  switch (layout.kind) {
+    case "iso":
+      return displayIso(datePart, locale);
+    case "baseNumeric":
+      return formatBce(formatNumeric(datePart, locale), datePart, locale);
+    case "numeric":
+      return formatLocaleNumeric(datePart, locale, layout.pad, layout.isoWhenBce);
+    case "text": {
+      const tables = monthTablesFor(calendar, locale);
+      const months = layout.months === "long" ? tables.long : tables.short;
+      return formatBce(monthDayYear(datePart, months, locale, layout.order === "dmy", layout.dayDot), datePart, locale);
+    }
+  }
+}
+
+/** One date part in one of this package's six formats. */
 export function displayDatePart(
   datePart: DatePart,
   calendar: Calendar,
   locale: DateLocale,
   format: DateFormat
 ): string {
-  if (format === DateFormat.ISO) return displayIso(datePart, locale);
-  const { long, short } = monthTablesFor(calendar, locale);
-  let value: string;
-  switch (format) {
-    case DateFormat.NUMERIC:
-      value = formatNumeric(datePart, locale);
-      break;
-    case DateFormat.LONG_MONTH_DAY_YEAR:
-      value = monthDayYear(datePart, long, locale, false);
-      break;
-    case DateFormat.SHORT_MONTH_DAY_YEAR:
-      value = monthDayYear(datePart, short, locale, false);
-      break;
-    case DateFormat.DAY_LONG_MONTH_YEAR:
-      value = monthDayYear(datePart, long, locale, true);
-      break;
-    case DateFormat.DAY_SHORT_MONTH_YEAR:
-    default:
-      value = monthDayYear(datePart, short, locale, true);
-      break;
-  }
-  return formatBce(value, datePart, locale);
+  return displayDatePartAt(datePart, calendar, locale, locale.formatIndex[format] ?? format);
 }
 
-/** `dd_span`: "from X to Y". */
-function displaySpan(date: GrampsDate, locale: DateLocale, format: DateFormat): string {
-  const qualStr = locale.qualityStrings[date.quality] ?? "";
-  const scal = formatExtras(date.calendar, date.newyear, locale);
-  const d1 = displayDatePart(getStartDate(date), date.calendar, locale, format);
-  const d2 = displayDatePart(getStopDate(date), date.calendar, locale, format);
-  return `${qualStr}from ${d1} to ${d2}${scal}`;
+function fillTemplate(template: string, values: Record<string, string>): string {
+  return template.replace(/\{(quality|start|stop|date|calendar)\}/g, (_m, key: string) => values[key] ?? "");
 }
 
-/** `dd_range`: "between X and Y". */
-function displayRange(date: GrampsDate, locale: DateLocale, format: DateFormat): string {
-  const qualStr = locale.qualityStrings[date.quality] ?? "";
-  const scal = formatExtras(date.calendar, date.newyear, locale);
-  const d1 = displayDatePart(getStartDate(date), date.calendar, locale, format);
-  const d2 = displayDatePart(getStopDate(date), date.calendar, locale, format);
-  return `${qualStr}between ${d1} and ${d2}${scal}`;
+/** `dd_span` / `dd_range` (or a language's own display() wording for
+ * them): "from X to Y", "zwischen X und Y", ... */
+function displayCompound(date: GrampsDate, locale: DateLocale, index: number, template: string): string {
+  return fillTemplate(template, {
+    quality: locale.qualityStrings[date.quality] ?? "",
+    start: displayDatePartAt(getStartDate(date), date.calendar, locale, index),
+    stop: displayDatePartAt(getStopDate(date), date.calendar, locale, index),
+    calendar: formatExtras(date.calendar, date.newyear, locale),
+  });
 }
 
 /**
@@ -204,24 +225,19 @@ function displayRange(date: GrampsDate, locale: DateLocale, format: DateFormat):
 export function formatDate(date: GrampsDate, options: FormatDateOptions = {}): string {
   const locale = resolveLocale(options.locale);
   const format = options.format ?? DateFormat.DAY_SHORT_MONTH_YEAR;
+  const index = options.grampsFormat ?? locale.formatIndex[format] ?? format;
 
   const start = getStartDate(date);
-  const qualStr = locale.qualityStrings[date.quality] ?? "";
-
   if (date.modifier === Modifier.TEXTONLY) return date.text;
   if (start[0] === 0 && start[1] === 0 && start[2] === 0) return "";
-  if (date.modifier === Modifier.SPAN) return displaySpan(date, locale, format);
-  if (date.modifier === Modifier.RANGE) return displayRange(date, locale, format);
+  if (date.modifier === Modifier.SPAN) return displayCompound(date, locale, index, locale.templates.span);
+  if (date.modifier === Modifier.RANGE) return displayCompound(date, locale, index, locale.templates.range);
 
-  const text = displayDatePart(start, date.calendar, locale, format);
-  let modifier = locale.modifierStrings[date.modifier] ?? "";
-  let displayText = text;
-  if (modifier.startsWith(" ")) {
-    // A handful of locales (Finnish) put the modifier *after* the date --
-    // marked by a leading (not trailing) space in modifierStrings.
-    displayText = text + modifier;
-    modifier = "";
-  }
-  const scal = formatExtras(date.calendar, date.newyear, locale);
-  return `${qualStr}${modifier}${displayText}${scal}`;
+  // The modifier's word (and its position -- Finnish puts it after the
+  // date) is part of the template, extracted from Gramps' own output.
+  return fillTemplate(locale.templates.modifiers[date.modifier] ?? "{quality}{date}{calendar}", {
+    quality: locale.qualityStrings[date.quality] ?? "",
+    date: displayDatePartAt(start, date.calendar, locale, index),
+    calendar: formatExtras(date.calendar, date.newyear, locale),
+  });
 }

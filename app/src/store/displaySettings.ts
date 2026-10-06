@@ -17,7 +17,7 @@
 // tsx, UserManagementPanel.tsx), so there's no tree-switch invalidation to
 // do. Plain-module + useSyncExternalStore, same shape as i18n.ts.
 import { useEffect, useSyncExternalStore } from "react";
-import { DateFormat } from "@gramps-connect/gramps-date";
+import { DateFormat, getLocale } from "@gramps-connect/gramps-date";
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { parseErrorMessage } from "./api";
@@ -41,7 +41,16 @@ export const ID_TYPES: IdType[] = ["person", "family", "event", "place", "source
 
 export interface DisplaySettings {
   version: 1;
-  date: { format: DateFormat };
+  date: {
+    /** One of the six formats every language has (DateFormat), each
+     * language writing it its own way. */
+    format: DateFormat;
+    /** Formats only one language has (German 6, "Numerisch mit führenden
+     * Nullen"; French 4/5/8): gramps-date locale code -> that language's
+     * own format number. Applies to that language only; everyone else keeps
+     * `format`. */
+    byLanguage: Readonly<Record<string, number>>;
+  };
   /** A Gramps name format *string* ("%f %l %s"), sent as gramps-web-api's
    * `name_format` request arg -- which takes a string, not a format number.
    * "" means "don't send it": the server's own preferences.name-format. */
@@ -71,7 +80,7 @@ export const FULL_PLACE_FORMAT: PlaceFormatDef = { name: "Full", levels: ":", la
  * already gets by not sending name_format. */
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   version: 1,
-  date: { format: DateFormat.DAY_SHORT_MONTH_YEAR },
+  date: { format: DateFormat.DAY_SHORT_MONTH_YEAR, byLanguage: {} },
   name: { format: "" },
   place: { auto: true, active: 0, formats: [FULL_PLACE_FORMAT] },
   ids: Object.fromEntries(ID_TYPES.map((type) => [type, ""])) as Record<IdType, string>,
@@ -147,7 +156,13 @@ export function normalizeDisplaySettings(raw: unknown): DisplaySettings {
   const r = raw as Record<string, any>;
 
   const dateFormat = r.date?.format;
+  const byLanguage = Object.fromEntries(
+    Object.entries((r.date?.byLanguage ?? {}) as Record<string, unknown>).filter(
+      ([lang, index]) => /^[a-z]{2,3}(_[A-Z]{2})?$/.test(lang) && Number.isInteger(index) && (index as number) >= 0,
+    ),
+  ) as Record<string, number>;
   const date = {
+    byLanguage,
     format: typeof dateFormat === "number" && dateFormat in DateFormat ? (dateFormat as DateFormat) : d.date.format,
   };
 
@@ -174,6 +189,38 @@ export function normalizeDisplaySettings(raw: unknown): DisplaySettings {
   ) as Record<IdType, string>;
 
   return { version: 1, date, name, place, ids };
+}
+
+// -- Date format per language --
+
+/** The language's own format number in effect for `localeCode`: its
+ * language-only choice if it has one, else the shared format as that
+ * language numbers it. */
+export function grampsFormatFor(settings: DisplaySettings, localeCode: string): number {
+  const own = settings.date.byLanguage[localeCode];
+  const locale = getLocale(localeCode);
+  if (own !== undefined && own < locale.formatNames.length) return own;
+  return locale.formatIndex[settings.date.format] ?? settings.date.format;
+}
+
+/** The shared DateFormat a language's format number stands for, if it's one
+ * of the six every language has; undefined for a language-only format. */
+export function sharedFormatFor(localeCode: string, index: number): DateFormat | undefined {
+  const entry = Object.entries(getLocale(localeCode).formatIndex).find(([, i]) => i === index);
+  return entry ? (Number(entry[0]) as DateFormat) : undefined;
+}
+
+/** Picking the language's format number `index`: one of the six becomes the
+ * shared format (everyone gets it, in their own language) and clears this
+ * language's own choice; a language-only one is kept for this language
+ * alone. */
+export function chooseGrampsFormat(settings: DisplaySettings, localeCode: string, index: number): DisplaySettings {
+  const { [localeCode]: _previous, ...others } = settings.date.byLanguage;
+  const shared = sharedFormatFor(localeCode, index);
+  return {
+    ...settings,
+    date: shared !== undefined ? { format: shared, byLanguage: others } : { format: settings.date.format, byLanguage: { ...others, [localeCode]: index } },
+  };
 }
 
 // -- REST --
