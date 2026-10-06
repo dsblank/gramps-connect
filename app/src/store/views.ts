@@ -61,6 +61,14 @@ export interface ColumnConfig {
    * foreign key, but "a5af0eb667015e355db" is noise in a table that
    * already shows the place's title next to it. */
   hidden?: boolean;
+  /** What clicking this column's header sorts by, when that isn't its own
+   * `select` -- a GOQL path (see ViewConfig.orderBy), whose value some
+   * column must cache via `orderPath`. Makes a json_path-backed column
+   * sortable. */
+  sortBy?: string;
+  /** This column caches the value of GOQL path `orderPath`, so that path
+   * can be an order_by key (see ViewConfig.orderBy). */
+  orderPath?: string;
   /** Another plain column's `key` to break ties on when sorting by this
    * one -- e.g. Person's surname/given_name pair, so clicking "Surname"
    * doesn't leave same-surname rows in whatever order the server happens
@@ -119,12 +127,17 @@ export interface ViewConfig {
    * Output, a fixed-filter window onto other views' own Media rows). */
   sidebarSeparatorBefore?: boolean;
   /** Default sort, used until the user clicks a sortable column header
-   * (see ViewStore.setSort). Only ever a plain-column ColumnConfig.select
-   * value -- gramps-web-api's order_by validates its column against the
-   * object type's flat secondary columns and never resolves a json_path
-   * reference for it (unlike select/where), so a column backed by a
-   * json_path select (birth_date, place_title, ...) can never appear here
-   * or be passed to setSort. */
+   * (see ViewStore.setSort). Each entry's `column` is sent verbatim as
+   * gramps-web-api's order_by, which takes a flat column ("surname") or,
+   * since gramps-web-api #962, a dotted path ("name.value"). Whichever it
+   * is, some ColumnConfig in this view must cache its value -- a plain
+   * column via `select`, a path via `orderPath` -- because
+   * ViewStore.globalRankOfItem() compares against that value to find a
+   * row's position. Mind the cost of a path: nothing indexes inside a
+   * record, so the server reads every row for each page (measured on the
+   * 100k Postgres fixture: name.value over 1.2k places ~58 ms/page, but
+   * birth.date.sortval over 101k people ~4.2 s/page, vs 0.3 s for
+   * surname). */
   orderBy: OrderBy[];
   opfsFilename: string;
   columns: ColumnConfig[];
@@ -486,7 +499,12 @@ export const PLACE_VIEW: ViewConfig = {
   label: "Places",
   icon: iconPlace,
   endpoint: "/api/places/query/",
-  orderBy: [{ column: "title", direction: "asc" }],
+  // By the place's own name, then its stored title: with automatic titles
+  // (desktop's default) the title is computed and the stored one is often
+  // empty or stale, so sorting by it scattered places. The name is what a
+  // computed title usually starts with; the stored title then separates
+  // same-named places (it typically includes the county/state).
+  orderBy: [{ column: "name.value", direction: "asc" }, { column: "title", direction: "asc" }],
   opfsFilename: "app-cache-place.sqlite",
   wherePlaceholder: 'e.g. like(title, "%, TX")',
   simpleSearch: {
@@ -499,7 +517,7 @@ export const PLACE_VIEW: ViewConfig = {
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
-      key: "title", label: "Title", select: "title", sqlType: "TEXT",
+      key: "title", label: "Title", select: "title", sqlType: "TEXT", sortBy: "name.value", secondarySort: "title",
       toSql: (title, item) => placeTitleOrName(title, item, "name"),
       toDisplay: (title, row) => displayPlaceCell(title, row?.("handle")),
     },
@@ -537,6 +555,11 @@ export const PLACE_VIEW: ViewConfig = {
     // placeIndex.ts) need beyond `name` -- the type (populated place /
     // house number), the other names (by date and language), and the
     // enclosing places *with their dates*, which enclosed_by drops.
+    // Hidden: the sort key for "name.value" (see PLACE_VIEW.orderBy).
+    {
+      key: "name_value", label: "Name", select: { json_path: ["name", "value"] },
+      sqlType: "TEXT", hidden: true, orderPath: "name.value",
+    },
     {
       key: "place_type", label: "Place type", select: { json_path: ["place_type", "value"] },
       // Comes back as "3" from the SQLite backend, 3 from Postgres.
@@ -697,9 +720,9 @@ export const MEDIA_VIEW: ViewConfig = {
     // category"): DataTable.tsx treats any string-select column as
     // sortable and sends it verbatim as order_by, which a bare column name
     // like "mime" would tolerate but an aliased expression doesn't parse
-    // as. A json_path select is never offered as sortable in the first
-    // place (see ViewConfig.orderBy's own doc comment), which is right
-    // here anyway -- there's no server-side column to sort a *computed*
+    // as. A json_path select isn't offered as sortable unless the column
+    // opts in with `sortBy` (see ViewConfig.orderBy), which is right here
+    // anyway -- there's no server-side column to sort a *computed*
     // category by.
     {
       key: "category", label: "Type", select: { json_path: ["mime"] }, sqlType: "TEXT",

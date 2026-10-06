@@ -362,3 +362,12 @@ the file locations per OS.
     `createObjects()` retries once with fresh IDs.
   - Differs from desktop: no gap-filling (desktop's counter restarts at 0
     on each tree open).
+- **Places sort by `name.value`, then `title`** (2026-10-06). gramps-web-api's
+  `order_by` accepts paths since #962. The stale "flat columns only"
+  comment in views.ts was what blocked this. New `ColumnConfig.sortBy`
+  (what a header click sorts by) and `orderPath` (this column caches that
+  path's value, for `globalRankOfItem`'s "before" comparisons).
+  Measured on the 100k Postgres fixture, per 1000-row page: places
+  `title` ~50 ms vs `name.value` ~58 ms; people `surname` 0.31 s vs
+  `birth.date.sortval` **4.2 s**. So Birth/Death (and other
+  relationship-path) sorting stays off.

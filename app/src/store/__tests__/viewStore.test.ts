@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import type { TreeChangeNotification } from "../historyPoll";
-import { PERSON_VIEW, TAG_VIEW } from "../views";
+import { PERSON_VIEW, PLACE_VIEW, TAG_VIEW } from "../views";
 
 vi.mock("../api", () => ({
   fetchPage: vi.fn(),
@@ -1086,5 +1086,45 @@ describe("ViewStore selection consistency across every emitted frame (not just t
     expect(badFrames).toEqual([]);
     expect(store.getSnapshot().selectedHandle).toBe("H3");
     expect(store.getSnapshot().selectedIndex).toBe(2);
+  });
+});
+
+describe("ViewStore path sort keys (orderPath)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  function placeRow(handle: string, name: string, title: string) {
+    return { handle, gramps_id: handle, title, name_value: name, name: JSON.stringify({ value: name }) };
+  }
+
+  it("ranks by a GOQL path using the column that caches it, with the stored title as tiebreak", async () => {
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [placeRow("P1", "Aurora", ""), placeRow("P2", "Springfield", "Springfield, IL")], next_after: null },
+      totalCount: 2,
+    });
+    const store = new ViewStore(PLACE_VIEW, getSql);
+    await store.runQuery(null, false);
+    expect(store.getSnapshot().orderBy).toEqual({ column: "name.value", direction: "asc" });
+
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(placeRow("P1", "Zion", "Zion, IL"));
+    mockRank(1);
+    await store.applyLiveChange({ table: "place", handle: "P1", op: "UPDATE", changedBy: null });
+
+    const rankExpr = vi.mocked(fetchPage).mock.calls[vi.mocked(fetchPage).mock.calls.length - 1][4] as string;
+    expect(rankExpr).toContain('name.value < "Zion"');
+    expect(rankExpr).toContain('name.value == "Zion" and title < "Zion, IL"');
+    expect(store.getRows(0, 10).map((row) => row[PLACE_VIEW.columns.findIndex((c) => c.key === "name_value")])).toEqual(["Springfield", "Zion"]);
+  });
+
+  it("clicking the Title header sorts by name, then title", async () => {
+    vi.mocked(fetchPage).mockResolvedValue({ page: { items: [], next_after: null }, totalCount: 0 });
+    const store = new ViewStore(PLACE_VIEW, getSql);
+    await store.runQuery(null, false);
+    await store.setSort("name.value");
+    // Already ascending by default -> the click reverses it, title tiebreak too.
+    const orderBy = vi.mocked(fetchPage).mock.calls[vi.mocked(fetchPage).mock.calls.length - 1][5];
+    expect(orderBy).toEqual([{ column: "name.value", direction: "desc" }, { column: "title", direction: "desc" }]);
   });
 });

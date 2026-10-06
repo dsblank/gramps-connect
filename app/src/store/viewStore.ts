@@ -582,11 +582,15 @@ export class ViewStore {
     // gramps-object-query-language's query_lang.py) -- JSON's string
     // escaping is a safe subset of Python's, so JSON.stringify doubles as
     // a correct, injection-safe Python string literal here.
+    // An order_by key is a flat column (cached under its own name) or a
+    // GOQL path, cached by whichever column declares it as `orderPath`.
+    const columnFor = (column: string) =>
+      this.view.columns.find((c) => c.orderPath === column) ?? this.view.columns.find((c) => c.key === column);
     const literalFor = (column: string, value: unknown) => {
-      const sqlType = this.view.columns.find((c) => c.key === column)?.sqlType;
+      const sqlType = columnFor(column)?.sqlType;
       return sqlType === "INTEGER" ? String(value) : JSON.stringify(String(value ?? ""));
     };
-    const valueFor = (column: string) => (column === "handle" ? item.handle : item[column]);
+    const valueFor = (column: string) => (column === "handle" ? item.handle : item[columnFor(column)?.key ?? column]);
     // Standard multi-key "before" decomposition: item is before a row if,
     // for some key index i, they're tied on every earlier key and item is
     // strictly before on key i. Bug this replaced: comparing only the
@@ -1187,7 +1191,7 @@ export class ViewStore {
     // along at the same direction as the column just clicked -- so
     // reversing "Surname" also reverses the given-name tiebreak, rather
     // than leaving ties in a fixed order while everything else flips.
-    const secondary = this.view.columns.find((c) => c.select === column)?.secondarySort;
+    const secondary = this.view.columns.find((c) => (c.sortBy ?? c.select) === column)?.secondarySort;
     this.orderBy = secondary ? [{ column, direction }, { column: secondary, direction }] : [{ column, direction }];
     return this.runQueryPreservingSelection(this.whereExpr);
   }

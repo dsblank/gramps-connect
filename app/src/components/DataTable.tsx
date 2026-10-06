@@ -244,11 +244,11 @@ export function DataTable({ view }: DataTableProps) {
     <div className={classes.tableWrapper} ref={scrollRef}>
       <div ref={headerRef} className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: rowWidth }}>
         {columns.map(({ column: col }, index) => {
-          // gramps-web-api's order_by only ever accepts a flat, same-table
-          // column (see ViewConfig.orderBy's doc comment) -- a column
-          // whose select is a json_path (birth_date, place_title, ...)
-          // can't be sorted server-side, so it isn't made clickable.
-          const sortColumn = typeof col.select === "string" ? col.select : null;
+          // A flat column sorts by itself; a json_path-backed one only when
+          // it names what to sort by (`sortBy`, a cached GOQL path -- see
+          // ViewConfig.orderBy for why each such path is opted into
+          // individually rather than by default).
+          const sortColumn = col.sortBy ?? (typeof col.select === "string" ? col.select : null);
           const activeSort = snapshot.orderBy;
           const isSorted = sortColumn !== null && activeSort.column === sortColumn;
           return (
