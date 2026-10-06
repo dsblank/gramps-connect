@@ -13,7 +13,8 @@
 // once did here.
 import { useEffect, useState } from "react";
 import { Checkbox, Collapse, Group, Paper, ScrollArea, Slider, Stack, Text, UnstyledButton } from "@mantine/core";
-import { formatDate, type GrampsDate } from "@gramps-connect/gramps-date";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { formatDisplayDate } from "../../store/placeIndex";
 import type { MapPlace } from "../../store/visualData";
 import { fetchAllKmlImageOverlays, fetchAllKmlRegions, type KmlImageOverlay, type KmlRegion } from "../../store/kmlMedia";
 import { overlayDateVisible } from "./mapStyles";
@@ -182,7 +183,7 @@ export function OverlayLayersPanel({
                       </Text>
                       <Text size="xs" c="dimmed" truncate>
                         {row.placeTitle}
-                        {nameDate ? ` · ${formatDate(nameDate)}` : ""}
+                        {nameDate ? ` · ${formatDisplayDate(nameDate)}` : ""}
                         {!visibleNow ? ` (${t("hidden now")})` : ""}
                       </Text>
                     </UnstyledButton>

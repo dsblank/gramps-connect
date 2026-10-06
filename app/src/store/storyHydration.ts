@@ -66,7 +66,9 @@ function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<
   // one from the file itself.
   const pending = !place && placeHandle
     ? visualData.pendingKmlPlaces.find((p) => p.handle === placeHandle) : undefined;
-  const placeTitle = place?.title ?? pending?.title;
+  // The event's own place title (as of the event's date, per the display
+  // settings -- see visualData.ts) when there is one.
+  const placeTitle = record?.placeTitle || (place?.title ?? pending?.title);
   // A generated point carries its own seeded heading (storyText.ts's
   // momentTitle), which is what makes a family story's slides read "Birth
   // of Josef Meyer" rather than five cards all headed "Birth". Falling back

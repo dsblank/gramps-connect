@@ -649,8 +649,8 @@ export class ViewStore {
   /** Windowed read against the local cache, mirroring the original
    * renderVisible()'s single LIMIT/OFFSET query per scroll frame -- one
    * query for the whole visible range rather than one per row. Returns raw
-   * column values in view.columns order; callers apply each column's
-   * toDisplay themselves.
+   * column values in view.columns order, then the row's handle; callers
+   * apply each column's toDisplay themselves.
    *
    * Reads back by `rowid` (SQLite's own implicit, insertion-order column)
    * rather than re-sorting by the order column, on purpose -- a fresh
@@ -682,8 +682,10 @@ export class ViewStore {
    * with whatever moves by reconcileSelection(), for the same reason. */
   getRows(startIndex: number, count: number): unknown[][] {
     if (!this.db) return [];
+    // `handle` rides along after the columns (so view.columns indexes are
+    // unchanged) for toDisplay's row accessor -- see DataTable.tsx.
     const res = this.db.exec(
-      `SELECT ${this.view.columns.map((c) => c.key).join(", ")} FROM ${this.view.key} ` +
+      `SELECT ${this.view.columns.map((c) => c.key).join(", ")}, handle FROM ${this.view.key} ` +
       `ORDER BY rowid LIMIT ? OFFSET ?;`,
       [count, startIndex]
     );

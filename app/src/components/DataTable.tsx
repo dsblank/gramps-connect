@@ -5,6 +5,7 @@ import { useViewStore } from "../hooks/useViewStore";
 import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
 import { getViewStore } from "../store/registry";
 import { visibleColumns, type ViewConfig } from "../store/views";
+import { useDisplayFormatVersion } from "../store/placeIndex";
 import { t } from "../i18n/i18n";
 import classes from "./DataTable.module.css";
 
@@ -53,6 +54,18 @@ export function DataTable({ view }: DataTableProps) {
   // full list, since that's the order the cache table and its SELECT are
   // built in.
   const columns = useMemo(() => visibleColumns(view), [view]);
+  // Stored-value lookup by column key, for toDisplay's `row` accessor (see
+  // views.ts ColumnConfig.toDisplay). getRows() appends `handle` after the
+  // columns.
+  const columnIndexByKey = useMemo(() => {
+    const map = new Map(view.columns.map((column, index) => [column.key, index]));
+    map.set("handle", view.columns.length);
+    return map;
+  }, [view]);
+  // Dates and place titles format per the tree's display settings at render
+  // time; this re-renders the table when those (or the Places cache that
+  // automatic titles read) change.
+  useDisplayFormatVersion();
   // Column widths are pure display state, so nothing here affects the
   // virtualizer's vertical math -- but this component is remounted per view
   // (see App.tsx's key={`table-${...}`}), so the initial value is read back
@@ -317,7 +330,11 @@ export function DataTable({ view }: DataTableProps) {
                     className={classes.cell}
                     title={col.toTitle ? col.toTitle(rawRow[index]) : undefined}
                   >
-                    {col.toDisplay ? col.toDisplay(rawRow[index]) : rawRow[index] == null ? "" : String(rawRow[index])}
+                    {col.toDisplay
+                      ? col.toDisplay(rawRow[index], (key) => rawRow[columnIndexByKey.get(key) ?? -1])
+                      : rawRow[index] == null
+                        ? ""
+                        : String(rawRow[index])}
                   </div>
                 ))
               ) : (

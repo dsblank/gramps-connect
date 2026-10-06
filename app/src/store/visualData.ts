@@ -14,11 +14,13 @@
 // prefix of the tree cached, which is why loadVisualData() waits on
 // ensureLoaded() and callers watch loadedCount/totalCount to say so.
 import {
-  DateFormat, formatDate, getStartDate, gregorianSdn, gregorianYmd, Modifier, Quality,
+  getStartDate, gregorianSdn, gregorianYmd, Modifier, Quality,
   type GrampsDate,
 } from "@gramps-connect/gramps-date";
 import { getViewStore } from "./registry";
 import { formatEventType, parseHandleList } from "./views";
+import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
+import { loadDisplaySettings } from "./displaySettings";
 
 /** The one MIME type this app overlays on the map -- a place's attached
  * KML file (a field boundary, a route, ...), drawn as its own vector shape
@@ -191,11 +193,11 @@ export function datePrepositionFor(date: GrampsDate | null): "" | "on" | "in" {
   return day ? "on" : "in";
 }
 
-/** Same formatting the Events table's own Date column uses, so a dot's
- * tooltip and its table row agree. */
+/** Same formatting the Events table's own Date column uses (the tree's
+ * display settings), so a dot's tooltip and its table row agree. */
 function formatStoredDate(dateJson: string | null): string {
   if (!dateJson) return "";
-  return formatDate(JSON.parse(dateJson) as GrampsDate, { format: DateFormat.DAY_SHORT_MONTH_YEAR });
+  return formatDisplayDate(JSON.parse(dateJson) as GrampsDate);
 }
 
 /** Loads (if needed) and reads both caches. Awaits ensureLoaded() on each
@@ -206,7 +208,12 @@ export async function loadVisualData(): Promise<VisualData> {
   const placeStore = getViewStore("place");
   const eventStore = getViewStore("event");
   const mediaStore = getViewStore("media");
-  await Promise.all([placeStore.ensureLoaded(), eventStore.ensureLoaded(), mediaStore.ensureLoaded()]);
+  await Promise.all([
+    placeStore.ensureLoaded(), eventStore.ensureLoaded(), mediaStore.ensureLoaded(),
+    // Titles and dates below are formatted per these; a failed load just
+    // means the defaults.
+    loadDisplaySettings().catch(() => {}),
+  ]);
   return readVisualData();
 }
 
@@ -269,7 +276,8 @@ export function readVisualData(): VisualData {
       grampsId: grampsId ?? "",
       type: formatEventType(typeJson) || "Unknown",
       description: description ?? "",
-      placeTitle: placeTitle ?? "",
+      // Automatic title as of the event's date, like the Events table.
+      placeTitle: displayPlaceTitle(placeHandle, date) ?? placeTitle ?? "",
       dateText: formatStoredDate(dateJson),
       year,
       datePreposition: datePrepositionFor(date),
@@ -290,6 +298,7 @@ export function readVisualData(): VisualData {
       string, string | null, string | null, string | null, string | null, string | null, string | null, string | null,
     ];
     const name = nameJson ? (JSON.parse(nameJson) as { date?: GrampsDate }) : null;
+    const shownTitle = displayPlaceTitle(handle) ?? title ?? "";
     const nameDate = name?.date ?? undefined;
     // Before the coordinate check below, not after: a country or county
     // usually has no coordinates of its own but is exactly the level a
@@ -310,7 +319,7 @@ export function readVisualData(): VisualData {
       // that succeed into `places` alongside these.
       if (kmlMedia.length > 0) {
         pendingKmlPlaces.push({
-          handle, grampsId: grampsId ?? "", title: title ?? "",
+          handle, grampsId: grampsId ?? "", title: shownTitle,
           eventCount: countByPlace.get(handle) ?? 0, years: yearsByPlace.get(handle) ?? [],
           kmlMedia, nameDate,
         });
@@ -320,7 +329,7 @@ export function readVisualData(): VisualData {
     places.push({
       handle,
       grampsId: grampsId ?? "",
-      title: title ?? "",
+      title: shownTitle,
       lat: coords[0],
       long: coords[1],
       eventCount: countByPlace.get(handle) ?? 0,

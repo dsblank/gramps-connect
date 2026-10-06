@@ -21,6 +21,8 @@ import { trimTreeToDepth, treeMaxDepth, type FanColorScheme } from "../../charts
 import { TreeChart, type TreeChartHandle } from "./TreeChart";
 import { VisualFrame } from "./VisualFrame";
 import { t } from "../../i18n/i18n";
+import { lifeEventDate } from "../../store/lifeEventDates";
+import { useDisplayFormatVersion } from "../../store/placeIndex";
 
 // Small on purpose: auto-expand-on-reveal (TreeChart.tsx's own
 // IntersectionObserver) grows the tree to fill whatever's visible anyway, so
@@ -1001,6 +1003,7 @@ function PersonCard({
   canMakeRoot, showCollapseControls, canCollapseDescendants, canCollapseAncestors,
   showSpouseControl, onExpandSpouses, canExpandSpouses, expandingSpouses,
 }: PersonCardProps) {
+  useDisplayFormatVersion();
   const name = [person.profile?.name_given, person.profile?.name_surname].filter(Boolean).join(" ") || "(unnamed person)";
   return (
     <Paper
@@ -1015,8 +1018,8 @@ function PersonCard({
       </Group>
       <Group gap="xs" mb="xs">
         <Badge size="xs" variant="light" color="gray">{person.gramps_id}</Badge>
-        {person.profile?.birth?.date && <Badge size="xs" variant="light">*{person.profile.birth.date}</Badge>}
-        {person.profile?.death?.date && <Badge size="xs" variant="light">†{person.profile.death.date}</Badge>}
+        {lifeEventDate(person, "birth") && <Badge size="xs" variant="light">*{lifeEventDate(person, "birth")}</Badge>}
+        {lifeEventDate(person, "death") && <Badge size="xs" variant="light">†{lifeEventDate(person, "death")}</Badge>}
       </Group>
       <Stack gap={4} mb={4}>
         <Button size="xs" fullWidth variant="default" onClick={onMakeRoot} disabled={!canMakeRoot}>

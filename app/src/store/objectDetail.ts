@@ -11,6 +11,7 @@
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import type { ViewConfig } from "./views";
+import { getDisplaySettings } from "./displaySettings";
 
 /** The subset of ref-wrapper fields any of gramps-web-api's *ReferenceSchema
  * classes (ChildReferenceSchema, EventReferenceSchema, PersonReferenceSchema,
@@ -70,7 +71,12 @@ export async function fetchObjectExtended(
   handle: string,
   signal?: AbortSignal
 ): Promise<ObjectDetail> {
-  const url = `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1`;
+  // Every profile name_display (this person, spouses, parents, children...)
+  // follows the tree's name format; "" = leave it to the server.
+  const nameFormat = getDisplaySettings().name.format;
+  const url =
+    `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1` +
+    (nameFormat ? `&name_format=${encodeURIComponent(nameFormat)}` : "");
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
@@ -98,8 +104,10 @@ export async function fetchObjectExtended(
 const DETAIL_CACHE_LIMIT = 50;
 const detailCache = new Map<string, ObjectDetail>();
 
+// Includes the name format: a cached detail's profile names were rendered
+// with whatever format was set when it was fetched.
 function detailCacheKey(view: ViewConfig, handle: string): string {
-  return `${view.key}:${handle}`;
+  return `${view.key}:${handle}:${getDisplaySettings().name.format}`;
 }
 
 export function getCachedObjectDetail(view: ViewConfig, handle: string): ObjectDetail | undefined {

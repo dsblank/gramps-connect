@@ -4,6 +4,7 @@ import { ActionIcon, Tooltip } from "@mantine/core";
 import { renderFanChart, resetFanRotation, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
 import { t } from "../../i18n/i18n";
 import type { TreeNode } from "../../store/treeData";
+import { useDisplayFormatVersion } from "../../store/placeIndex";
 
 interface FanChartProps {
   ancestorTree: TreeNode | null;
@@ -50,6 +51,9 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  // Wedge dates format per the display settings (lifeEventDates.ts); redraw
+  // when those, or the Events cache they read from, change.
+  const displayVersion = useDisplayFormatVersion();
   const zoomRef = useRef<ZoomTransform | null>(null);
   const rotationRef = useRef(0);
   // Mirrors fanChart.ts's own live `rotation` for the compass button only --
@@ -121,7 +125,7 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
       centerOnSelect: justSelected && !shouldFit,
     });
     container.replaceChildren(svg);
-  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme]);
+  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, displayVersion]);
 
   const wrapped = ((rotation % 360) + 360) % 360;
   const rotated = wrapped > 0.01 && wrapped < 359.99;

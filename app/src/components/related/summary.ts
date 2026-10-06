@@ -9,16 +9,13 @@
 // generically for every type, while a rich `profile` builder only exists
 // for a handful of types (Person/Family/Place/Event), so summary building
 // this way works uniformly across all 10.
-import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { displayPlaceTitle, formatDisplayDate } from "../../store/placeIndex";
 
 // Exported: reused by detailFields.ts for Media's own `date` field.
 export function displayDate(date: unknown): string {
-  if (!date) return "";
-  try {
-    return formatDate(date as GrampsDate, { format: DateFormat.DAY_SHORT_MONTH_YEAR });
-  } catch {
-    return "";
-  }
+  // Per the tree's display settings (see placeIndex.ts).
+  return formatDisplayDate(date as GrampsDate | null);
 }
 
 /** Accepts either shape a Person can arrive in: raw (extended.*'s
@@ -63,7 +60,7 @@ function summaryText(type: string, obj: any): string {
       return [type_, date].filter(Boolean).join(": ") || obj.description || "(event)";
     }
     case "place":
-      return obj.title || obj.name?.value || "(place)";
+      return displayPlaceTitle(obj.handle) ?? (obj.title || obj.name?.value || "(place)");
     case "repository":
       return obj.name || "(repository)";
     case "source":

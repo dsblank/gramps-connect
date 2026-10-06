@@ -5,6 +5,7 @@
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import { VIEWS } from "./views";
 import { ViewStore } from "./viewStore";
+import { attachDisplayStores } from "./placeIndex";
 
 let sqlPromise: Promise<SqlJsStatic> | null = null;
 function getSql(): Promise<SqlJsStatic> {
@@ -15,6 +16,7 @@ function getSql(): Promise<SqlJsStatic> {
 }
 
 const stores = new Map<string, ViewStore>(VIEWS.map((view) => [view.key, new ViewStore(view, getSql)]));
+attachDisplayStores({ place: stores.get("place")!, event: stores.get("event")! });
 
 // Grouped by ViewConfig.table (defaulting to `key`) rather than by `key`
 // itself -- more than one view can watch the same underlying object type

@@ -28,6 +28,7 @@ import { create, pointer, select } from "d3-selection";
 import "d3-transition";
 import { zoom, zoomIdentity, zoomTransform, type ZoomTransform } from "d3-zoom";
 import type { TreeNode, TreePersonRaw } from "../store/treeData";
+import { lifeEventDate } from "../store/lifeEventDates";
 
 const RING = 70;
 /** The parent-inherited edge's own inset, per generation -- edgeInset's own
@@ -167,8 +168,8 @@ function nameLabel(
  * major browser's own title tooltip. */
 function personTooltip(p: TreePersonRaw): string {
   const name = [p.profile?.name_given, p.profile?.name_surname].filter(Boolean).join(" ") || "(unnamed person)";
-  const birth = p.profile?.birth?.date;
-  const death = p.profile?.death?.date;
+  const birth = lifeEventDate(p, "birth");
+  const death = lifeEventDate(p, "death");
   const dates = [birth ? `b. ${birth}` : null, death ? `d. ${death}` : null].filter(Boolean).join(", ");
   return dates ? `${name}\n${dates}` : name;
 }
@@ -269,8 +270,8 @@ function currentYear(): number {
  * years. */
 function hasFullLifespan(node: TreeNode | null): boolean {
   return (
-    extractYear(node?.person?.profile?.birth?.date) != null &&
-    extractYear(node?.person?.profile?.death?.date) != null
+    extractYear(lifeEventDate(node?.person, "birth")) != null &&
+    extractYear(lifeEventDate(node?.person, "death")) != null
   );
 }
 
@@ -294,7 +295,7 @@ function computeYearScale(ancestorTree: TreeNode | null): { minRefYear: number; 
   const years: number[] = [];
   const walk = (node: TreeNode | null | undefined): void => {
     if (!node) return;
-    if (hasFullLifespan(node)) years.push(extractYear(node.person!.profile!.birth!.date)!);
+    if (hasFullLifespan(node)) years.push(extractYear(lifeEventDate(node.person, "birth"))!);
     node.children?.forEach(walk);
   };
   walk(ancestorTree);
@@ -338,8 +339,8 @@ function nodeRadii(
   pxPerYear: number,
 ): { innerR: number; outerR: number } {
   if (!hasFullLifespan(node)) return { innerR: fallbackInnerR, outerR: fallbackInnerR + RING };
-  const outerR = yearToRadius(extractYear(node!.person!.profile!.birth!.date)!, pxPerYear);
-  const rawInnerR = yearToRadius(extractYear(node!.person!.profile!.death!.date)!, pxPerYear);
+  const outerR = yearToRadius(extractYear(lifeEventDate(node!.person, "birth"))!, pxPerYear);
+  const rawInnerR = yearToRadius(extractYear(lifeEventDate(node!.person, "death"))!, pxPerYear);
   const innerR = Math.max(0, Math.min(rawInnerR, outerR - MIN_THICKNESS));
   return { innerR, outerR: Math.max(outerR, innerR + MIN_THICKNESS) };
 }
@@ -349,8 +350,8 @@ function nodeRadii(
  * for *layout*, a color scale wants the real extremes) and applies
  * regardless of whether "size by lifespan" is also on. */
 function ageAtDeath(node: TreeNode | null): number | null {
-  const birthYear = extractYear(node?.person?.profile?.birth?.date);
-  const deathYear = extractYear(node?.person?.profile?.death?.date);
+  const birthYear = extractYear(lifeEventDate(node?.person, "birth"));
+  const deathYear = extractYear(lifeEventDate(node?.person, "death"));
   return birthYear != null && deathYear != null && deathYear > birthYear ? deathYear - birthYear : null;
 }
 
@@ -1010,7 +1011,7 @@ export function renderFanChart(
   const showsDeathLine = (d: Wedge): boolean =>
     hasRoomForLabel(d) &&
     d.outerR - d.innerR >= MIN_RADIAL_PX_FOR_DEATH_LINE &&
-    !!d.node?.person?.profile?.death?.date;
+    !!lifeEventDate(d.node?.person, "death");
 
   // Root gets a plain upright label (it's not meaningfully "along a radius"
   // -- it's the center point) -- placed at half its own wedge's own height
@@ -1074,7 +1075,7 @@ export function renderFanChart(
     .attr("font-size", (d) => dateFontSize(d.depth))
     .text((d) => {
       const p = d.node!.person!;
-      return clipString(p.profile?.birth?.date ? `*${p.profile.birth.date}` : "", labelWidth(d), dateFontSize(d.depth));
+      return clipString(lifeEventDate(p, "birth") ? `*${lifeEventDate(p, "birth")}` : "", labelWidth(d), dateFontSize(d.depth));
     });
 
   // Death date: a third on-wedge line, only where showsDeathLine allows it
@@ -1091,7 +1092,7 @@ export function renderFanChart(
     .text((d) => {
       if (!showsDeathLine(d)) return "";
       const p = d.node!.person!;
-      return clipString(`†${p.profile!.death!.date}`, labelWidth(d), dateFontSize(d.depth));
+      return clipString(`†${lifeEventDate(p, "death")}`, labelWidth(d), dateFontSize(d.depth));
     });
 
   // Lifespan mode's own year axis: a horizontal rule at y=0 (root's own

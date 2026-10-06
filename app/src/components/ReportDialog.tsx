@@ -29,6 +29,7 @@ import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { promoteJob } from "../store/jobsPromote";
 import { t } from "../i18n/i18n";
+import { BUILTIN_NAME_FORMATS, getDisplaySettings } from "../store/displaySettings";
 
 type Stage = "loading" | "ready" | "error";
 
@@ -71,12 +72,29 @@ function selectedGrampsIds(): string[] {
  * selectors) can't be hit by accident. */
 function initialValues(fields: OptionField[]): Record<string, string> {
   const selected = selectedGrampsIds();
+  const display = displayPrefill();
   const values: Record<string, string> = {};
   for (const field of fields) {
-    const match = field.choices?.find((choice) => selected.includes(choice.value));
+    const match = field.choices?.find((choice) => selected.includes(choice.value) || choice.value === display[field.key]);
     values[field.key] = match ? match.value : field.initial;
   }
   return values;
+}
+
+/** The tree's display settings (displaySettings.ts) as values for Gramps'
+ * standard report options, so a report reads like the app does:
+ * `date_format` is the format's index + 1 (0 is "Default" --
+ * stdoptions.add_date_format_option), `name_format` a built-in format's
+ * number. Left out when the setting is the server default; only applied
+ * above when the report actually offers that value. The place format isn't
+ * here on purpose: the report's `place_format` indexes the *server's*
+ * place_formats.xml, which can't be compared with ours. */
+function displayPrefill(): Record<string, string> {
+  const settings = getDisplaySettings();
+  const prefill: Record<string, string> = { date_format: String(settings.date.format + 1) };
+  const name = BUILTIN_NAME_FORMATS.find((opt) => opt.format === settings.name.format);
+  if (name && name.number !== 0) prefill.name_format = String(name.number);
+  return prefill;
 }
 
 /** Runs one report: a dialog built entirely from the report's own

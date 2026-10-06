@@ -13,6 +13,7 @@ import { EVENT_VIEW, PLACE_VIEW, VIEWS, type ViewConfig } from "./store/views";
 import { getViewStore } from "./store/registry";
 import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
 import { getAuthSnapshot, getCurrentUsername, getToken, subscribe as subscribeAuth } from "./auth/auth";
+import { loadDisplaySettings } from "./store/displaySettings";
 import { isHandoffCandidate, tryHandoffLogin } from "./auth/windowHandoff";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "./i18n/i18n";
 import { LoginForm } from "./auth/LoginForm";
@@ -231,6 +232,12 @@ function AuthenticatedApp() {
   // approach as the loggedIn gate in App()) is enough; no per-component
   // subscription needed.
   const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
+  // The tree's display settings (date/name/place formats), fetched once up
+  // front so the first tables and charts already use them; anything that
+  // renders before this lands re-renders via useDisplayFormatVersion().
+  useEffect(() => {
+    loadDisplaySettings().catch(() => {});
+  }, []);
   useEffect(() => {
     // Module state seeds `lang` from storage at import time but not
     // `strings` -- populate it once on mount for a persisted non-English

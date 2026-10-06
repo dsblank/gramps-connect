@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   EMPTY_VISUAL_DATA, loadVisualData, readVisualData, type MapPlace, type VisualData,
 } from "../store/visualData";
+import { useDisplayFormatVersion } from "../store/placeIndex";
 import { useViewStore } from "./useViewStore";
 
 export interface VisualDataState {
@@ -75,10 +76,12 @@ export function useVisualData(enabled: boolean): VisualDataState {
   // Synchronous, imperative read of the caches -- same pull-not-push shape
   // as DataTable's getRows() call, keyed on the snapshot fields that mean
   // "the rows changed" rather than being pushed a copy of them.
+  // Titles and dates in the data are formatted per the display settings.
+  const displayVersion = useDisplayFormatVersion();
   const data = useMemo(
     () => (ready ? readVisualData() : EMPTY_VISUAL_DATA),
     [
-      ready,
+      ready, displayVersion,
       placeSnapshot.loadedCount, placeSnapshot.revision,
       eventSnapshot.loadedCount, eventSnapshot.revision,
       mediaSnapshot.loadedCount, mediaSnapshot.revision,

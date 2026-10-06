@@ -687,7 +687,7 @@ describe("ViewStore.applyLiveChange", () => {
     await store.applyLiveChange(notification("H1", "UPDATE"));
 
     expect(fetchByHandle).toHaveBeenCalledWith(TAG_VIEW, "test-token", "H1");
-    expect(store.getRows(0, 10)).toEqual([["New", "#ff0000", 1, 1000]]);
+    expect(store.getRows(0, 10)).toEqual([["New", "#ff0000", 1, 1000, "H1"]]);
     expect(store.getSnapshot().loadedCount).toBe(1);
     expect(store.getSnapshot().totalCount).toBe(1);
   });

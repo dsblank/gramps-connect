@@ -3,6 +3,7 @@ import { ActionIcon, Alert, Modal, Stack, Tabs, Text, TextInput } from "@mantine
 import { getToken, hasPermissions } from "../auth/auth";
 import { fetchTrees, renameTree, type Tree } from "../store/adminApi";
 import { UserManagementPanel } from "./UserManagementPanel";
+import { DisplaySettingsPanel } from "./DisplaySettingsPanel";
 import { t } from "../i18n/i18n";
 
 interface OwnerAdministrationDialogProps {
@@ -26,12 +27,16 @@ export function OwnerAdministrationDialog({ opened, onClose }: OwnerAdministrati
         <Tabs.List>
           <Tabs.Tab value="tree">{t("My Tree")}</Tabs.Tab>
           <Tabs.Tab value="users">{t("Users")}</Tabs.Tab>
+          <Tabs.Tab value="preferences">{t("Preferences")}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="tree" pt="sm">
           <OwnTreeTab active={opened} />
         </Tabs.Panel>
         <Tabs.Panel value="users" pt="sm">
           <UserManagementPanel active={opened} />
+        </Tabs.Panel>
+        <Tabs.Panel value="preferences" pt="sm">
+          <DisplaySettingsPanel active={opened} />
         </Tabs.Panel>
       </Tabs>
     </Modal>

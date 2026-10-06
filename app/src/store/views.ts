@@ -6,7 +6,8 @@
 // Forked from the original Layer 2/3 spike's views.ts (since removed, see
 // git history) -- this is the production copy now; see PLAN.md.
 import { createElement, type ReactNode } from "react";
-import { formatDate, DateFormat, type GrampsDate } from "@gramps-connect/gramps-date";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
 import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
@@ -42,8 +43,12 @@ export interface ColumnConfig {
    * field -- see `title`'s fallback to `name` below. */
   toSql?: (apiValue: unknown, item?: Record<string, unknown>) => string | number | null;
   /** Stored SQLite value -> displayed cell content. Default: String(value),
-   * or "" for null/undefined. */
-  toDisplay?: (sqlValue: unknown) => ReactNode;
+   * or "" for null/undefined. `row` reads a sibling column's stored value
+   * by key (hidden ones and `handle` included), for a cell whose display
+   * depends on more than its own value -- see place_title's formatted
+   * place, which needs the event's place handle and date. Callers without
+   * a whole row (homeStats.ts) leave it out. */
+  toDisplay?: (sqlValue: unknown, row?: RowValue) => ReactNode;
   /** Stored SQLite value -> the cell's hover title attribute. Default: no
    * title -- for a column whose toDisplay is lossy (e.g. "change"'s
    * relative-time text) and wants the precise value available on hover. */
@@ -139,9 +144,50 @@ export interface ViewConfig {
   };
 }
 
+export type RowValue = (key: string) => unknown;
+
+function parseDateJson(json: unknown): GrampsDate | null {
+  if (typeof json !== "string" || json === "") return null;
+  try {
+    return JSON.parse(json) as GrampsDate;
+  } catch {
+    return null;
+  }
+}
+
+// Per the tree's display settings (see placeIndex.ts) -- read at render
+// time, so changing the setting needs no refetch.
 function formatGrampsDateJson(json: unknown): string {
-  if (!json) return "";
-  return formatDate(JSON.parse(json as string) as GrampsDate, { format: DateFormat.DAY_SHORT_MONTH_YEAR });
+  return formatDisplayDate(parseDateJson(json));
+}
+
+/** A place title cell: the automatic title (placeIndex.ts) when display
+ * settings have it on and the place is cached, else the stored title as
+ * before. `date` is the event's, for an event's place. */
+function displayPlaceCell(stored: unknown, handle: unknown, date: GrampsDate | null = null): string {
+  return displayPlaceTitle(typeof handle === "string" ? handle : null, date) ?? (stored == null ? "" : String(stored));
+}
+
+/** Placeref list -> just what the place formatter needs, `[{ref, date}]`
+ * with empty dates dropped -- the full PlaceRef also carries `_class` and
+ * an empty citation/note list. Null when there are no parents. */
+function toPlacerefs(value: unknown): string | null {
+  const refs = value as { ref?: string; date?: GrampsDate }[] | null | undefined;
+  if (!refs?.length) return null;
+  return JSON.stringify(
+    refs
+      .filter((r) => r.ref)
+      .map((r) => (r.date && !isBlankDate(r.date) ? { ref: r.ref, date: r.date } : { ref: r.ref })),
+  );
+}
+
+function isBlankDate(date: GrampsDate): boolean {
+  return date.modifier === 0 && !date.text && date.dateval.every((v) => !v);
+}
+
+/** A list of PlaceName objects (alt_names), or null when empty. */
+function toNonEmptyJson(value: unknown): string | null {
+  return Array.isArray(value) && value.length > 0 ? JSON.stringify(value) : null;
 }
 
 function toSqlJson(value: unknown): string | null {
@@ -415,6 +461,7 @@ export const EVENT_VIEW: ViewConfig = {
     {
       key: "place_title", label: "Place", select: { json_path: ["place", "title"] }, sqlType: "TEXT",
       toSql: (title, item) => placeTitleOrName(title, item, "place_name"),
+      toDisplay: (title, row) => displayPlaceCell(title, row?.("place"), parseDateJson(row?.("date"))),
     },
     // Hidden: place_title's own fallback source -- see placeTitleOrName.
     {
@@ -454,6 +501,7 @@ export const PLACE_VIEW: ViewConfig = {
     {
       key: "title", label: "Title", select: "title", sqlType: "TEXT",
       toSql: (title, item) => placeTitleOrName(title, item, "name"),
+      toDisplay: (title, row) => displayPlaceCell(title, row?.("handle")),
     },
     { key: "lat", label: "Lat", select: "lat", sqlType: "TEXT" },
     { key: "long", label: "Long", select: "long", sqlType: "TEXT" },
@@ -484,6 +532,23 @@ export const PLACE_VIEW: ViewConfig = {
     {
       key: "media_refs", label: "Media handles", select: { json_path: ["media_list"] },
       sqlType: "TEXT", hidden: true, toSql: toRefHandles,
+    },
+    // Hidden: what automatic place titles (placeDisplay.ts, via
+    // placeIndex.ts) need beyond `name` -- the type (populated place /
+    // house number), the other names (by date and language), and the
+    // enclosing places *with their dates*, which enclosed_by drops.
+    {
+      key: "place_type", label: "Place type", select: { json_path: ["place_type", "value"] },
+      // Comes back as "3" from the SQLite backend, 3 from Postgres.
+      sqlType: "INTEGER", hidden: true, toSql: (v) => (v === null || v === undefined || v === "" ? null : Number(v)),
+    },
+    {
+      key: "alt_names", label: "Alternative names", select: { json_path: ["alt_names"] },
+      sqlType: "TEXT", hidden: true, toSql: toNonEmptyJson,
+    },
+    {
+      key: "placerefs", label: "Enclosing places", select: { json_path: ["placeref_list"] },
+      sqlType: "TEXT", hidden: true, toSql: toPlacerefs,
     },
   ],
 };

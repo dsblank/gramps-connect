@@ -1,17 +1,18 @@
 // The detail line(s) under each SearchView result's title -- the
-// Google-results-page "snippet". Built off `hit.object.profile`
-// (searchApi.ts's fetchSearch always sends profile=all) rather than
-// re-deriving anything from the raw object: every profile field here
-// (EventProfileSchema's `date`/`place`, PersonProfileSchema's
-// birth/death, ...) arrives as a server-formatted display string already,
-// so unlike summary.ts's summaryLine() this never touches
-// @gramps-connect/gramps-date -- there's no GrampsDate struct here to
-// format, profile.birth.date is already "12 Jan 1900". Six of the ten
+// Google-results-page "snippet". Built mostly off `hit.object.profile`
+// (searchApi.ts's fetchSearch always sends profile=all). The exception is
+// dates and event places: the profile's strings are formatted with the
+// *server's* Gramps preferences, so those are re-derived from the raw
+// object (and the Events/Places caches) per the tree's display settings,
+// falling back to the profile's text when the caches can't answer. Six of the ten
 // object types get a `profile` at all (person/family/event/citation/
 // place/media, confirmed against SearchResource.get_object_from_handle in
 // gramps-web-api's resources/search.py); the other four (repository/
 // source/note/tag) fall back to their own raw fields, same ones
 // summary.ts's summaryText() already reads for their titles.
+import { lifeEventDate, lifeEventPlace } from "../../store/lifeEventDates";
+import { displayPlaceTitle, formatDisplayDate } from "../../store/placeIndex";
+
 function joinNonEmpty(parts: (string | null | undefined | false)[], sep = " · "): string {
   return parts.filter((p): p is string => Boolean(p && p.trim())).join(sep);
 }
@@ -47,8 +48,13 @@ export function snippetFor(objectType: string, obj: any): string[] {
   const profile = obj?.profile;
   switch (objectType) {
     case "person": {
-      const born = joinNonEmpty([profile?.birth?.date, profile?.birth?.place && `in ${profile.birth.place}`], " ");
-      const died = joinNonEmpty([profile?.death?.date, profile?.death?.place && `in ${profile.death.place}`], " ");
+      // Dates/places per the tree's display settings (lifeEvent*), falling
+      // back to the profile's server-formatted text when the Events cache
+      // can't answer.
+      const birthPlace = lifeEventPlace(obj, "birth");
+      const deathPlace = lifeEventPlace(obj, "death");
+      const born = joinNonEmpty([lifeEventDate(obj, "birth"), birthPlace && `in ${birthPlace}`], " ");
+      const died = joinNonEmpty([lifeEventDate(obj, "death"), deathPlace && `in ${deathPlace}`], " ");
       const spouse = spouseName(profile);
       return [
         born && `Born ${born}`,
@@ -61,15 +67,16 @@ export function snippetFor(objectType: string, obj: any): string[] {
       const children = Array.isArray(profile?.children) && profile.children.length > 0
         ? `${profile.children.length} ${profile.children.length === 1 ? "child" : "children"}`
         : "";
-      const marriage = joinNonEmpty(
-        [profile?.marriage?.date, profile?.marriage?.place && `in ${profile.marriage.place}`],
-        " "
-      );
+      const marriagePlace = lifeEventPlace(obj, "marriage");
+      const marriage = joinNonEmpty([lifeEventDate(obj, "marriage"), marriagePlace && `in ${marriagePlace}`], " ");
       const second = joinNonEmpty([marriage && `Married ${marriage}`, children]);
       return [parents, second].filter((l): l is string => Boolean(l));
     }
     case "event": {
-      const line = joinNonEmpty([profile?.date, profile?.place && `at ${profile.place}`], " ");
+      // The hit is the raw Event itself: its own date and place handle.
+      const date = obj?.date ? formatDisplayDate(obj.date) : profile?.date;
+      const place = (obj?.place && displayPlaceTitle(obj.place, obj.date)) || profile?.place;
+      const line = joinNonEmpty([date, place && `at ${place}`], " ");
       const people: string[] = Array.isArray(profile?.participants?.people)
         ? profile.participants.people.map((p: any) => p?.person?.name_display).filter(Boolean)
         : [];

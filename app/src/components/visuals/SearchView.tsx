@@ -10,6 +10,7 @@ import { MediaThumbnail } from "../related/MediaThumbnail";
 import { snippetFor } from "./searchSnippet";
 import { t } from "../../i18n/i18n";
 import { VisualFrame } from "./VisualFrame";
+import { useDisplayFormatVersion } from "../../store/placeIndex";
 
 // Point 5 of the "make it a Google results page" request this view was
 // redesigned for: a bounded top-N rather than an unbounded scroll -- each
@@ -288,6 +289,8 @@ function RecordThumbnail({ hit }: { hit: SearchHit }) {
  * covers the picture -- a Media hit's own file, or the first photo
  * attached to a person/family/event/place/source/citation. */
 function SearchResultRow({ hit }: { hit: SearchHit }) {
+  // The snippet's dates/places follow the display settings.
+  useDisplayFormatVersion();
   const icon = iconFor(hit.object_type);
   const snippet = snippetFor(hit.object_type, hit.object);
   const tagColor = hit.object_type === "tag" ? (hit.object.color as string | undefined) : undefined;

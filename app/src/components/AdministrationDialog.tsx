@@ -4,6 +4,7 @@ import { notifications } from "@mantine/notifications";
 import { getToken, hasPermissions } from "../auth/auth";
 import { CONFIG_KEYS, type ConfigKey, deleteConfigValue, fetchConfig, setConfigValue } from "../store/adminApi";
 import { UserManagementPanel } from "./UserManagementPanel";
+import { DisplaySettingsPanel } from "./DisplaySettingsPanel";
 import { t } from "../i18n/i18n";
 
 interface AdministrationDialogProps {
@@ -26,7 +27,9 @@ interface AdministrationDialogProps {
  * a standalone dialog (ManageTreesDialog.tsx) rather than a tab here -- it
  * also needs to be reachable without opening Administration at all, since it
  * doubles as the way an admin switches which tree their own account is
- * assigned to. */
+ * assigned to. The Preferences tab is the one per-tree exception: it's the same
+ * DisplaySettingsPanel.tsx OwnerAdministrationDialog.tsx shows, kept here
+ * too so an admin can reach their own tree's display settings. */
 export function AdministrationDialog({ opened, onClose }: AdministrationDialogProps) {
   return (
     <Modal opened={opened} onClose={onClose} title={t("Administration")} size="70rem">
@@ -34,12 +37,16 @@ export function AdministrationDialog({ opened, onClose }: AdministrationDialogPr
         <Tabs.List>
           <Tabs.Tab value="users">{t("Users")}</Tabs.Tab>
           <Tabs.Tab value="settings">{t("Site settings")}</Tabs.Tab>
+          <Tabs.Tab value="preferences">{t("Preferences")}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="users" pt="sm">
           <UserManagementPanel active={opened} />
         </Tabs.Panel>
         <Tabs.Panel value="settings" pt="sm">
           <SiteSettingsTab active={opened} />
+        </Tabs.Panel>
+        <Tabs.Panel value="preferences" pt="sm">
+          <DisplaySettingsPanel active={opened} />
         </Tabs.Panel>
       </Tabs>
     </Modal>

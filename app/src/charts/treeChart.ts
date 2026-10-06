@@ -32,6 +32,7 @@ import { curveBumpX, link } from "d3-shape";
 import "d3-transition";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { personThumbnailUrl, type TreeNode } from "../store/treeData";
+import { lifeEventDate } from "../store/lifeEventDates";
 
 const BOX_WIDTH = 190;
 const BOX_HEIGHT = 90;
@@ -331,22 +332,22 @@ function treeChartCore(
     .text((d) => clipString(d.data.nameGiven || "…", textWidth(d)));
 
   node
-    .filter((d) => !!d.data.person?.profile?.birth?.date)
+    .filter((d) => !!lifeEventDate(d.data.person, "birth"))
     .append("text")
     .attr("y", -BOX_HEIGHT / 2 + 59)
     .attr("x", textX)
     .attr("text-anchor", "start")
     .attr("fill", "var(--mantine-color-dimmed)")
-    .text((d) => clipString(`*${d.data.person?.profile?.birth?.date}`, textWidth(d)));
+    .text((d) => clipString(`*${lifeEventDate(d.data.person, "birth")}`, textWidth(d)));
 
   node
-    .filter((d) => !!d.data.person?.profile?.death?.date)
+    .filter((d) => !!lifeEventDate(d.data.person, "death"))
     .append("text")
     .attr("y", -BOX_HEIGHT / 2 + 76)
     .attr("x", textX)
     .attr("text-anchor", "start")
     .attr("fill", "var(--mantine-color-dimmed)")
-    .text((d) => clipString(`†${d.data.person?.profile?.death?.date}`, textWidth(d)));
+    .text((d) => clipString(`†${lifeEventDate(d.data.person, "death")}`, textWidth(d)));
 
   // Boundary marker: an IntersectionObserver target *and* a click target on
   // any box at the edge of the loaded tree with further known ancestors/

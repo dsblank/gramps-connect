@@ -10,7 +10,8 @@ import {
 import type { GeoJSONStoreFeatures, HexColor } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon } from "geojson";
-import { formatDate, type GrampsDate } from "@gramps-connect/gramps-date";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { formatDisplayDate } from "../store/placeIndex";
 import {
   Alert, Anchor, Box, Button, ColorInput, Divider, Group, Kbd, List, Loader, Modal, NumberInput, SegmentedControl,
   Slider, Stack, Text, TextInput, useComputedColorScheme,
@@ -1751,7 +1752,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
                   date set there means this place's overlay(s) always
                   show. */}
               <Text size="xs" c="dimmed" truncate style={{ maxWidth: 200 }}>
-                {placeDate ? formatDate(placeDate) : t("(always visible -- no date on this place)")}
+                {placeDate ? formatDisplayDate(placeDate) : t("(always visible -- no date on this place)")}
               </Text>
               {/* Read-only, deliberately -- a map overlay can only ever be
                   added to the place its own panel was opened from (see

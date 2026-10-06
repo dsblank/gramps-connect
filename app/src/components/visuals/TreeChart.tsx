@@ -3,6 +3,7 @@ import { useComputedColorScheme } from "@mantine/core";
 import { zoomTransform, type ZoomTransform } from "d3-zoom";
 import { renderTreeChart } from "../../charts/treeChart";
 import type { TreeNode } from "../../store/treeData";
+import { useDisplayFormatVersion } from "../../store/placeIndex";
 
 /** Auto-expand-on-reveal won't fire until a boundary marker has been
  * on-screen at at least this many CSS pixels wide -- the marker's hit-rect
@@ -88,6 +89,9 @@ export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function Tr
   // pending/last-expanded handle across an unrelated rebuild" the same way.
   const prevExpandCenterHandleRef = useRef<string | null>(null);
   const dark = useComputedColorScheme("light") === "dark";
+  // Box dates format per the display settings (lifeEventDates.ts); redraw
+  // when those, or the Events cache they read from, change.
+  const displayVersion = useDisplayFormatVersion();
 
   useEffect(() => {
     const element = containerRef.current;
@@ -183,7 +187,7 @@ export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function Tr
     return () => io.disconnect();
   }, [
     ancestorTree, descendantTree, size.width, size.height, selectedHandle, onSelectPerson, dark, token, onExpand,
-    expandingKeys, autoExpandEnabled, expandCenterHandle,
+    expandingKeys, autoExpandEnabled, expandCenterHandle, displayVersion,
   ]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;

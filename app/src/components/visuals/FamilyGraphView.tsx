@@ -26,6 +26,8 @@ import {
 } from "../../store/treeData";
 type OnExpandUp = (clusterId: string, sibling: TreePersonRaw) => void;
 import { t } from "../../i18n/i18n";
+import { lifeEventDate } from "../../store/lifeEventDates";
+import { useDisplayFormatVersion } from "../../store/placeIndex";
 
 const CARD_WIDTH = 150;
 // At least 2x CARD_WIDTH: a compact card's name and dates sit on one row
@@ -40,8 +42,8 @@ const COMPACT_CARD_WIDTH = 380;
 function personDateBadges(person: TreePersonRaw) {
   return (
     <>
-      {person.profile?.birth?.date && <Badge size="xs" variant="light">*{person.profile.birth.date}</Badge>}
-      {person.profile?.death?.date && <Badge size="xs" variant="light">{"†"}{person.profile.death.date}</Badge>}
+      {lifeEventDate(person, "birth") && <Badge size="xs" variant="light">*{lifeEventDate(person, "birth")}</Badge>}
+      {lifeEventDate(person, "death") && <Badge size="xs" variant="light">{"†"}{lifeEventDate(person, "death")}</Badge>}
     </>
   );
 }
@@ -412,6 +414,8 @@ function FamilySquareCard({
   person, token, selected, highlighted, relationText, onSelect, onExpand, canExpand, expanding,
   onCollapse, canCollapse, expandDirection, cardRef, pulse, compact,
 }: FamilySquareCardProps) {
+  // Date badges follow the display settings (lifeEventDates.ts).
+  useDisplayFormatVersion();
   const name = [person.profile?.name_given, person.profile?.name_surname].filter(Boolean).join(" ") || t("(unnamed person)");
   const thumb = !compact && token ? personThumbnailUrl(token, person, 100) : null;
   return (

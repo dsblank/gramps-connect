@@ -6,6 +6,8 @@ import { fetchObjectExtended, getCachedObjectDetail, setCachedObjectDetail, zipR
 import type { ObjectDetail } from "../store/objectDetail";
 import { fetchPlainObject } from "../store/objectsApi";
 import { subscribeTreeChange } from "../store/treeChangeBus";
+import { useDisplayFormatVersion } from "../store/placeIndex";
+import { getDisplaySettings } from "../store/displaySettings";
 import type { ViewConfig } from "../store/views";
 import { RELATED_CONFIG } from "./related/config";
 import { DetailFields } from "./related/DetailFields";
@@ -356,6 +358,12 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
 export function RelatedPanel({
   view, handle, draftStack, revision, onNavigate, onViewGallery, updateDocumentTitle, flow, actions = true,
 }: RelatedPanelProps) {
+  // Summaries and detail fields format dates/places per the tree's display
+  // settings; re-render the panel (and its sections) when those change.
+  useDisplayFormatVersion();
+  // Profile names come back in this format (objectDetail.ts), so a change
+  // refetches.
+  const nameFormat = getDisplaySettings().name.format;
   const [state, setState] = useState<LoadState>({ status: "loading" });
   // Bumped by EditTopicButton/LinkObjectControl/TopicLinksSection after a
   // write that goes through topicsApi.ts/refListApi.ts directly, not
@@ -491,7 +499,7 @@ export function RelatedPanel({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [view, handle, revision, refetchNonce, topicsActivitySignal]);
+  }, [view, handle, revision, refetchNonce, topicsActivitySignal, nameFormat]);
 
   if (state.status === "loading") {
     return (
