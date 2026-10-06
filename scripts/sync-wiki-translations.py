@@ -58,6 +58,12 @@ LOCALES_PATH = REPO_ROOT / "app" / "public" / "lang" / "index.json"
 # more confusing than useful.
 SPECIAL_PAGES = {"_Sidebar", "_Footer"}
 
+# GitHub treats any "_Sidebar.*.md" file as the wiki sidebar and shows
+# whichever sorts last on every page (it showed "_Sidebar.zh_CN.md"
+# everywhere), so a translated sidebar is stored as "_Nav.{lang}.md".
+# Must match TRANSLATED_FILE_STEMS in app/src/store/wikiDocsApi.ts.
+TRANSLATED_FILE_STEMS = {"_Sidebar": "_Nav"}
+
 SHA_LEN = 12  # matches the marker hand-written for Home.de.md
 SHA_MARKER_RE = re.compile(r"<!--\s*translated-from-sha:\s*([0-9a-f]+)\s*-->\n?")
 
@@ -111,9 +117,13 @@ def english_pages(locales: set[str]) -> list[str]:
     return pages
 
 
+def translation_path(page: str, lang: str) -> Path:
+    return WIKI_DIR / f"{TRANSLATED_FILE_STEMS.get(page, page)}.{lang}.md"
+
+
 def translations_for(page: str, locales: set[str]) -> dict[str, Path]:
     result = {}
-    for path in WIKI_DIR.glob(f"{page}.*.md"):
+    for path in WIKI_DIR.glob(f"{TRANSLATED_FILE_STEMS.get(page, page)}.*.md"):
         lang = path.stem.split(".")[-1]
         if lang in locales:
             result[lang] = path
@@ -240,7 +250,7 @@ def sync_anchors(page: str, lang: str) -> None:
     outline as its source; a mismatch (usually a stale translation) is
     reported and the page is left alone. Level-1 page titles are skipped."""
     en_lines = (WIKI_DIR / f"{page}.md").read_text(encoding="utf-8").split("\n")
-    path = WIKI_DIR / f"{page}.{lang}.md"
+    path = translation_path(page, lang)
     lines = path.read_text(encoding="utf-8").split("\n")
 
     en_headings = heading_lines(en_lines)
@@ -273,10 +283,10 @@ def sync_links(lang: str, locales: set[str]) -> None:
     again and resolves the language itself. Only links in the page body:
     the cross-link banner deliberately points at other languages, fenced
     code isn't a link, and _Sidebar/_Footer are skipped since GitHub only
-    ever renders the English _Sidebar.md (the translated ones are in-app
-    nav only). Idempotent."""
+    ever renders the English _Sidebar.md (the translated ones, stored as
+    _Nav.{lang}.md, are in-app nav only). Idempotent."""
     pages = english_pages(locales)
-    has_translation = {page for page in pages if (WIKI_DIR / f"{page}.{lang}.md").is_file()}
+    has_translation = {page for page in pages if translation_path(page, lang).is_file()}
 
     def localize(match: re.Match) -> str:
         target, anchor = match.group(1), match.group(2) or ""
@@ -289,7 +299,7 @@ def sync_links(lang: str, locales: set[str]) -> None:
         return f"]({localized}{anchor})"
 
     for page in sorted(has_translation - SPECIAL_PAGES):
-        path = WIKI_DIR / f"{page}.{lang}.md"
+        path = translation_path(page, lang)
         text = path.read_text(encoding="utf-8")
         banner = CROSSLINK_RE.search(text)
         head, body = (text[: banner.end()], text[banner.end():]) if banner else ("", text)
@@ -309,7 +319,7 @@ def sync_links(lang: str, locales: set[str]) -> None:
 
 def stamp(page: str, lang: str, locales: set[str]) -> None:
     en_path = WIKI_DIR / f"{page}.md"
-    translated_path = WIKI_DIR / f"{page}.{lang}.md"
+    translated_path = translation_path(page, lang)
     if not en_path.is_file():
         sys.exit(f"No such English page: {en_path}")
     if not translated_path.is_file():

@@ -25,8 +25,16 @@ export interface WikiPage {
 
 const pageCache = new Map<string, WikiPage>();
 
+// GitHub treats any "_Sidebar.*.md" file as the wiki sidebar and shows
+// whichever sorts last on every page (it showed "_Sidebar.zh_CN.md"
+// everywhere), so translated sidebars live under a name GitHub gives no
+// special meaning. Must match TRANSLATED_FILE_STEMS in
+// scripts/sync-wiki-translations.py.
+const TRANSLATED_FILE_STEMS: Record<string, string> = { _Sidebar: "_Nav" };
+
 function wikiPageFilename(page: string, lang: string): string {
-  return lang === "en" ? `${page}.md` : `${page}.${lang}.md`;
+  if (lang === "en") return `${page}.md`;
+  return `${TRANSLATED_FILE_STEMS[page] ?? page}.${lang}.md`;
 }
 
 export function wikiPageUrl(page: string, lang = "en"): string {
