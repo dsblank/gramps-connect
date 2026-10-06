@@ -3,6 +3,7 @@ import { DateFormat } from "@gramps-connect/gramps-date";
 import {
   DEFAULT_DISPLAY_SETTINGS,
   FULL_PLACE_FORMAT,
+  isValidIdTemplate,
   isValidNameFormat,
   nameKeywordsToCodes,
   normalizeDisplaySettings,
@@ -29,6 +30,7 @@ describe("normalizeDisplaySettings", () => {
       date: { format: DateFormat.ISO },
       name: { format: "%l, %f" },
       place: { auto: false, active: 1, formats: [FULL_PLACE_FORMAT, custom] },
+      ids: DEFAULT_DISPLAY_SETTINGS.ids,
     });
   });
 
@@ -50,6 +52,20 @@ describe("normalizeDisplaySettings", () => {
   it("always pins Full as format 0", () => {
     const settings = normalizeDisplaySettings({ place: { formats: [{ name: "Edited", levels: "0", language: "", street: 0, reverse: false }] } });
     expect(settings.place.formats).toEqual([FULL_PLACE_FORMAT]);
+  });
+});
+
+describe("ID templates", () => {
+  it("validates and keeps them per type", () => {
+    expect(isValidIdTemplate("I%04d")).toBe(true);
+    expect(isValidIdTemplate("ID-%d-x")).toBe(true);
+    expect(isValidIdTemplate("I%04s")).toBe(false);
+    expect(isValidIdTemplate("I")).toBe(false);
+    expect(isValidIdTemplate("I%d%d")).toBe(false);
+    const settings = normalizeDisplaySettings({ ids: { person: "P%05d", family: "bad", note: 3 } });
+    expect(settings.ids.person).toBe("P%05d");
+    expect(settings.ids.family).toBe("");
+    expect(settings.ids.note).toBe("");
   });
 });
 

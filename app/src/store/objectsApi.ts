@@ -12,6 +12,7 @@ import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { endpointBaseFor } from "./objectDetail";
 import type { ViewConfig } from "./views";
+import { assignGrampsIds } from "./grampsIds";
 
 export interface TransactionEntry {
   type: "add" | "update" | "delete";
@@ -37,13 +38,21 @@ export async function createObjects(
   token: string,
   objects: Record<string, unknown>[]
 ): Promise<TransactionEntry[]> {
-  const res = await fetch(`${API_BASE}/api/objects/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(objects),
-  });
-  if (!res.ok) throw new Error(await parseErrorMessage(res));
-  return await res.json();
+  // New records get Gramps IDs from the tree's templates, when it has any
+  // (grampsIds.ts). The server refuses a Gramps ID that's already taken --
+  // possible if someone else created one between our check and this POST --
+  // and rolls the whole batch back, so one retry with fresh IDs covers it.
+  for (let attempt = 0; ; attempt++) {
+    const { objects: prepared, assigned } = await assignGrampsIds(token, objects);
+    const res = await fetch(`${API_BASE}/api/objects/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(prepared),
+    });
+    if (res.ok) return await res.json();
+    if (res.status === 400 && assigned > 0 && attempt === 0) continue;
+    throw new Error(await parseErrorMessage(res));
+  }
 }
 
 /** Plain GET of an object's editable-dict shape -- no `extend`/`profile`/

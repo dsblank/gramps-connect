@@ -34,6 +34,7 @@ const ROW_LABELS: Record<ImportKey, string> = {
   placeAuto: "Automatic place titles",
   placeFormats: "Place formats",
   placeActive: "Place format in use",
+  ids: "Gramps IDs for new records",
 };
 
 /** "Import from Gramps desktop…" -- a one-shot copy of the desktop display
@@ -132,6 +133,10 @@ export function ImportDesktopSettingsDialog({ opened, onClose, current, customNa
         return s.place.auto ? t("On") : t("Off");
       case "placeFormats":
         return s.place.formats.map((f) => f.name).join(", ");
+      case "ids": {
+        const set = Object.values(s.ids).filter(Boolean);
+        return set.length ? set.join(", ") : t("Server default");
+      }
       case "placeActive": {
         const fmt = s.place.formats[s.place.active];
         const example = fmt && sampleHandle ? formatPlaceWith(sampleHandle, fmt) : null;

@@ -78,7 +78,7 @@ describe("parsePlaceFormatsXml", () => {
 describe("buildImportItems / applyImport", () => {
   it("imports everything usable", () => {
     const items = buildImportItems(input());
-    expect(items.map((i) => i.key)).toEqual(["date", "name", "placeAuto", "placeFormats", "placeActive"]);
+    expect(items.map((i) => i.key)).toEqual(["date", "name", "placeAuto", "placeFormats", "placeActive", "ids"]);
     expect(items.find((i) => i.key === "name")!.isDefault).toBe(true);
     const result = applyImport(DEFAULT_DISPLAY_SETTINGS, items, new Set(items.map((i) => i.key)));
     expect(result.date.format).toBe(DateFormat.DAY_LONG_MONTH_YEAR);
@@ -86,6 +86,20 @@ describe("buildImportItems / applyImport", () => {
     expect(result.place.auto).toBe(false);
     expect(result.place.formats.map((f) => f.name)).toEqual(["Full", "City", "Street"]);
     expect(result.place.active).toBe(2);
+    // Only iprefix is in the file; the others stay as they were.
+    expect(result.ids.person).toBe("I%04d");
+    expect(result.ids.family).toBe("");
+  });
+
+  it("imports ID templates, marking an all-defaults set", () => {
+    const ini = parseGrampsIni("[preferences]\n;;iprefix='I%04d'\nfprefix='FAM%05d'\noprefix='bad'\n");
+    const item = buildImportItems(input({ ini })).find((i) => i.key === "ids")!;
+    expect(item.isDefault).toBe(false);
+    expect(item.reason).toMatch(/can't be used/);
+    const result = applyImport(DEFAULT_DISPLAY_SETTINGS, [item], new Set(["ids"]));
+    expect(result.ids).toMatchObject({ person: "I%04d", family: "FAM%05d", media: "" });
+    const defaults = parseGrampsIni("[preferences]\n;;iprefix='I%04d'\n;;fprefix='F%04d'\n");
+    expect(buildImportItems(input({ ini: defaults })).find((i) => i.key === "ids")!.isDefault).toBe(true);
   });
 
   it("maps the date index through the desktop language", () => {

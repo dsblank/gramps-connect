@@ -7,7 +7,6 @@ import {
   Modifier,
   NewYear,
   Quality,
-  formatDate,
   getStartDate,
   getStopDate,
   isCompound,
@@ -21,6 +20,7 @@ import {
   type NewYearValue,
 } from "@gramps-connect/gramps-date";
 import { t } from "../i18n/i18n";
+import { formatDisplayDate, useDisplayFormatVersion } from "../store/placeIndex";
 
 interface DateInputProps {
   label: string;
@@ -434,7 +434,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
 }
 
 /** The compact quick-entry row: a text buffer initialized from
- * `formatDate(value)` and re-synced whenever `value` changes externally
+ * `formatDisplayDate(value)` and re-synced whenever `value` changes externally
  * (e.g. an edit made via "More…", or a Live Sync push from another
  * client) -- but only while the field isn't focused, so an in-progress
  * edit here is never clobbered out from under the user. Parses via
@@ -460,12 +460,16 @@ function QuickEntryField({
    * return) lives here rather than on its own row below. */
   trailing?: ReactNode;
 }) {
-  const [buffer, setBuffer] = useState(() => (value ? formatDate(value) : ""));
+  // Shown in the tree's date format (Preferences) -- every one of the six
+  // reads back through parseDate() to the same date, so editing in it is
+  // lossless. Re-synced when the setting changes, same focus guard.
+  const displayVersion = useDisplayFormatVersion();
+  const [buffer, setBuffer] = useState(() => formatDisplayDate(value));
   const focusedRef = useRef(false);
 
   useEffect(() => {
-    if (!focusedRef.current) setBuffer(value ? formatDate(value) : "");
-  }, [value]);
+    if (!focusedRef.current) setBuffer(formatDisplayDate(value));
+  }, [value, displayVersion]);
 
   function commitBuffer() {
     const trimmed = buffer.trim();

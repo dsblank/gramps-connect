@@ -6,13 +6,16 @@
 //
 // Only the keys that something in gramps-connect actually uses are
 // imported: place-auto, place-format (+ place_formats.xml), date-format,
-// name-format. See DISPLAY_SETTINGS_PLAN.md, Phase 3.
+// name-format, and the ID templates (iprefix..nprefix, see grampsIds.ts).
+// See DISPLAY_SETTINGS_PLAN.md, Phase 3.
 import { DateFormat } from "@gramps-connect/gramps-date";
 import {
   BUILTIN_NAME_FORMATS,
   FULL_PLACE_FORMAT,
   type CustomNameFormat,
+  isValidIdTemplate,
   type DisplaySettings,
+  type IdType,
   type PlaceFormatDef,
 } from "./displaySettings";
 
@@ -150,7 +153,20 @@ export function desktopLanguageFor(uiLang: string): string {
 
 // -- The import itself --
 
-export type ImportKey = "date" | "name" | "placeAuto" | "placeFormats" | "placeActive";
+/** gramps.ini's [preferences] key for each type's ID template. */
+const DESKTOP_ID_KEYS: Record<IdType, string> = {
+  person: "iprefix",
+  family: "fprefix",
+  event: "eprefix",
+  place: "pprefix",
+  source: "sprefix",
+  citation: "cprefix",
+  repository: "rprefix",
+  media: "oprefix",
+  note: "nprefix",
+};
+
+export type ImportKey = "date" | "name" | "placeAuto" | "placeFormats" | "placeActive" | "ids";
 
 export interface ImportItem {
   key: ImportKey;
@@ -271,6 +287,30 @@ export function buildImportItems(input: ImportInput): ImportItem[] {
       reason: known ? undefined : formats ? "Not in place_formats.xml" : "Needs place_formats.xml",
       isDefault: activeValue.isDefault,
       apply: (s) => (known && active < s.place.formats.length ? { ...s, place: { ...s.place, active } } : s),
+    });
+  }
+
+  // ID templates: one row for all nine, since desktop sets them together
+  // and they're rarely changed one at a time.
+  const idValues = (Object.entries(DESKTOP_ID_KEYS) as [IdType, string][])
+    .map(([type, key]) => {
+      const value = ini.get(`preferences.${key}`);
+      const parsed = value ? parsePyLiteral(value.raw) : null;
+      return { type, value, template: typeof parsed === "string" ? parsed : null };
+    })
+    .filter((entry) => entry.value && entry.template !== null);
+  if (idValues.length > 0) {
+    const valid = idValues.filter((entry) => isValidIdTemplate(entry.template!));
+    items.push({
+      key: "ids",
+      desktop: idValues.map((entry) => entry.template).join(", "),
+      usable: valid.length > 0,
+      reason: valid.length < idValues.length ? "Some ID formats can't be used here" : undefined,
+      isDefault: idValues.every((entry) => entry.value!.isDefault),
+      apply: (s) => ({
+        ...s,
+        ids: { ...s.ids, ...Object.fromEntries(valid.map((entry) => [entry.type, entry.template!])) },
+      }),
     });
   }
 

@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActionIcon, Alert, Button, Checkbox, Group, Select, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Alert, Button, Checkbox, Group, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { DateFormat } from "@gramps-connect/gramps-date";
 import { DATE_FORMAT_LABELS, describeDateFormat } from "./displayFormatLabels";
 import { ImportDesktopSettingsDialog } from "./ImportDesktopSettingsDialog";
+import { formatGrampsId } from "../store/grampsIds";
 import { hasPermissions } from "../auth/auth";
 import { formatPlaceWith, samplePlaceHandle, useDisplayFormatVersion } from "../store/placeIndex";
 import {
   BUILTIN_NAME_FORMATS,
+  GRAMPS_DEFAULT_ID_TEMPLATES,
+  ID_TYPES,
+  isValidIdTemplate,
+  type IdType,
   type DisplaySettings,
   type CustomNameFormat,
   type PlaceFormatDef,
@@ -17,6 +22,18 @@ import {
 } from "../store/displaySettings";
 import { t } from "../i18n/i18n";
 
+
+const ID_TYPE_LABELS: Record<IdType, string> = {
+  person: "People",
+  family: "Families",
+  event: "Events",
+  place: "Places",
+  source: "Sources",
+  citation: "Citations",
+  repository: "Repositories",
+  media: "Media",
+  note: "Notes",
+};
 
 const STREET_OPTIONS = [
   { value: "0", label: "None" },
@@ -87,6 +104,8 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
   if (!draft || !saved) return null;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  // Save would silently drop an invalid template (normalizeDisplaySettings).
+  const idsValid = ID_TYPES.every((type) => draft.ids[type] === "" || isValidIdTemplate(draft.ids[type]));
   // A stored format string that matches no listed option (e.g. a custom
   // format since deleted from the tree) still shows, as its own entry.
   const selectedName = nameOptions.find((opt) => !opt.disabled && opt.format === draft.name.format);
@@ -266,15 +285,53 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
         {t('Levels selects which parts of the place hierarchy to show, counting from the place itself (0) upward: ":" is all, "0:2" the first two, "-1" the last. A "p" prefix counts from the populated place (city, town, village…), e.g. "p:".')}
       </Text>
       {canEdit && (
-        <Group justify="space-between">
+        <Group>
           <Button variant="default" size="xs" onClick={addPlaceFormat}>
             {t("Add place format")}
+          </Button>
+        </Group>
+      )}
+
+      <Title order={5}>{t("New records")}</Title>
+      <Text size="xs" c="dimmed">
+        {t('The Gramps ID given to each new record, like Gramps\' own "I%04d" (I0001, I0002, ...). Gramps Connect picks the next unused number. Leave a type empty to let the server number it the standard Gramps way (I0001, F0001, ...). Imported files keep their own IDs.')}
+      </Text>
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs" verticalSpacing="xs">
+        {ID_TYPES.map((type) => {
+          const value = draft.ids[type];
+          const valid = value === "" || isValidIdTemplate(value);
+          return (
+            <TextInput
+              key={type}
+              size="xs"
+              label={t(ID_TYPE_LABELS[type])}
+              placeholder={t("Server default")}
+              disabled={!canEdit}
+              value={value}
+              error={valid ? undefined : t('Needs one number field, e.g. "I%04d"')}
+              description={value && valid ? `${t("e.g.")} ${formatGrampsId(value, 42)}` : undefined}
+              onChange={(e) => {
+                const next = e.currentTarget.value.trim();
+                update((d) => ({ ...d, ids: { ...d.ids, [type]: next } }));
+              }}
+            />
+          );
+        })}
+      </SimpleGrid>
+      {canEdit && (
+        <Group justify="space-between">
+          <Button
+            variant="default"
+            size="xs"
+            onClick={() => update((d) => ({ ...d, ids: { ...GRAMPS_DEFAULT_ID_TEMPLATES } }))}
+          >
+            {t("Use Gramps' default IDs")}
           </Button>
           <Group gap="xs">
             <Button variant="default" disabled={!dirty || saving} onClick={() => setDraft(saved)}>
               {t("Revert")}
             </Button>
-            <Button disabled={!dirty} loading={saving} onClick={handleSave}>
+            <Button disabled={!dirty || !idsValid} loading={saving} onClick={handleSave}>
               {t("Save")}
             </Button>
           </Group>

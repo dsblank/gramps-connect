@@ -342,3 +342,23 @@ the file locations per OS.
 - Check rendered output in Tree/Fan/Family Graph labels, tables, Timeline,
   Story, search snippets, and both table ordering codepaths, not just the
   settings state.
+
+## Follow-ups (implemented 2026-10-06)
+
+- **Date input follows the date format.** `DateInput.tsx`'s quick-entry
+  buffer uses `formatDisplayDate()`. Safe because every format round-trips
+  through `parseDate()` (qualifiers, ranges/spans, partial, dual-dated,
+  Julian, BCE, text-only). That's now a permanent test,
+  `packages/gramps-date/src/__tests__/roundtrip.test.ts`.
+- **Gramps ID templates for new records** (`ids` in the settings blob,
+  Preferences → New records, imported from iprefix..nprefix).
+  `store/grampsIds.ts` + `createObjects()`:
+  - Next = highest number matching the template in the type's cache + 1.
+    Each candidate is checked on the server (`gramps_id == "…"` count),
+    since caches can be partial or filtered (Notes' baseFilter).
+  - gramps-web-api's POST /api/objects/ uses `add_object(...,
+    fail_if_exists=True)`: a duplicate Gramps ID gets a 400 and the DbTxn
+    aborts (verified live: N0016 duplicate → 400, nothing written).
+    `createObjects()` retries once with fresh IDs.
+  - Differs from desktop: no gap-filling (desktop's counter restarts at 0
+    on each tree open).

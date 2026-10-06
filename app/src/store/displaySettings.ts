@@ -34,6 +34,11 @@ export interface PlaceFormatDef {
   reverse: boolean;
 }
 
+/** Object types that get a Gramps ID, as gramps.ini's iprefix..nprefix
+ * cover them. */
+export type IdType = "person" | "family" | "event" | "place" | "source" | "citation" | "repository" | "media" | "note";
+export const ID_TYPES: IdType[] = ["person", "family", "event", "place", "source", "citation", "repository", "media", "note"];
+
 export interface DisplaySettings {
   version: 1;
   date: { format: DateFormat };
@@ -49,6 +54,11 @@ export interface DisplaySettings {
     active: number;
     formats: PlaceFormatDef[];
   };
+  /** Gramps ID templates for new records ("I%04d"), per type; "" lets the
+   * server number it with Gramps' built-in templates (I%04d, F%04d, ...,
+   * never its gramps.ini's -- see grampsIds.ts). Not display, despite
+   * the key: the Preferences tab holds both (see grampsIds.ts). */
+  ids: Record<IdType, string>;
 }
 
 /** Desktop's built-in format 0 -- PlaceDisplay.__init__'s fallback when
@@ -64,7 +74,27 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   date: { format: DateFormat.DAY_SHORT_MONTH_YEAR },
   name: { format: "" },
   place: { auto: true, active: 0, formats: [FULL_PLACE_FORMAT] },
+  ids: Object.fromEntries(ID_TYPES.map((type) => [type, ""])) as Record<IdType, string>,
 };
+
+/** Desktop's own defaults (gen/config.py's preferences.*prefix). */
+export const GRAMPS_DEFAULT_ID_TEMPLATES: Record<IdType, string> = {
+  person: "I%04d",
+  family: "F%04d",
+  event: "E%04d",
+  place: "P%04d",
+  source: "S%04d",
+  citation: "C%04d",
+  repository: "R%04d",
+  media: "O%04d",
+  note: "N%04d",
+};
+
+/** Desktop's ID templates take exactly one integer field, Python
+ * %-style: "I%04d", "P%d", "ID-%05d-x". */
+export function isValidIdTemplate(template: string): boolean {
+  return /^[^%]*%0?\d*d[^%]*$/.test(template);
+}
 
 export interface NameFormatOption {
   /** Desktop's format number: 0 and up built-in, negative custom. */
@@ -136,7 +166,14 @@ export function normalizeDisplaySettings(raw: unknown): DisplaySettings {
     formats,
   };
 
-  return { version: 1, date, name, place };
+  const ids = Object.fromEntries(
+    ID_TYPES.map((type) => {
+      const value = r.ids?.[type];
+      return [type, typeof value === "string" && isValidIdTemplate(value) ? value : ""];
+    }),
+  ) as Record<IdType, string>;
+
+  return { version: 1, date, name, place, ids };
 }
 
 // -- REST --
