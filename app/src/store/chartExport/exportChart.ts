@@ -127,6 +127,46 @@ function adaptForSvg2pdf(svg: SVGSVGElement): void {
   svg.setAttribute("font-family", PDF_FONT_FAMILY);
 }
 
+/** svg2pdf has no `<textPath>` support -- it would drop the fan chart's
+ * curved labels entirely. Replaces each such `<text>` with one straight
+ * `<text>` per glyph, placed and turned exactly where the browser lays that
+ * glyph out on its path (getStartPositionOfChar/getRotationOfChar, in the
+ * original text's own user space, so the copies go in as its siblings).
+ * Needs `svg` attached to the document -- layout only exists there.
+ * Glyphs the path is too short to hold have no position and are skipped,
+ * the same as the browser leaves them undrawn. */
+export function flattenTextPaths(svg: SVGSVGElement): void {
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  for (const text of Array.from(svg.querySelectorAll<SVGTextElement>("text"))) {
+    if (!text.querySelector("textPath")) continue;
+    const content = text.textContent ?? "";
+    const glyphs = document.createElementNS(SVG_NS, "g");
+    for (const name of ["fill", "font-size", "font-weight", "font-family"]) {
+      const value = text.getAttribute(name);
+      if (value !== null) glyphs.setAttribute(name, value);
+    }
+    const count = Math.min(content.length, text.getNumberOfChars());
+    for (let i = 0; i < count; i++) {
+      if (/\s/.test(content[i])) continue;
+      let at: DOMPoint;
+      let angle: number;
+      try {
+        at = text.getStartPositionOfChar(i);
+        angle = text.getRotationOfChar(i);
+      } catch {
+        continue;
+      }
+      const glyph = document.createElementNS(SVG_NS, "text");
+      glyph.setAttribute("x", String(at.x));
+      glyph.setAttribute("y", String(at.y));
+      glyph.setAttribute("transform", `rotate(${angle} ${at.x} ${at.y})`);
+      glyph.textContent = content[i];
+      glyphs.appendChild(glyph);
+    }
+    text.replaceWith(glyphs);
+  }
+}
+
 async function exportPdf(
   svg: SVGSVGElement,
   width: number,
@@ -167,6 +207,7 @@ async function exportPdf(
     host.appendChild(svg);
     document.body.appendChild(host);
     try {
+      flattenTextPaths(svg);
       await svg2pdf(svg, doc, { x: layout.x, y: layout.y, width: layout.width, height: layout.height });
     } finally {
       host.remove();

@@ -3,7 +3,8 @@
 // wedge, and which way that text faces (radial for narrow distant
 // generations, flipped so nothing reads upside down).
 import { describe, expect, it } from "vitest";
-import { renderFanChart, wedgeLabelLines } from "../charts/fanChart";
+import { fanArcPath, orientFanLabels, renderFanChart, wedgeLabelLines } from "../charts/fanChart";
+import { flattenTextPaths } from "../store/chartExport/exportChart";
 import type { TreeNode, TreePersonRaw } from "../store/treeData";
 
 const person = (given: string, surname: string, birth?: string, death?: string): TreePersonRaw => ({
@@ -58,11 +59,31 @@ function fullTree(depth: number, handle = "1"): TreeNode {
   return { person: p, children: [fullTree(depth - 1, `${handle}f`), fullTree(depth - 1, `${handle}m`)] };
 }
 
-/** The label group's transform for the wedge whose name line reads `name`. */
-function labelTransform(svg: SVGSVGElement, name: string): string {
-  const text = [...svg.querySelectorAll("text")].find((t) => t.textContent?.startsWith(name));
-  return text!.parentElement!.getAttribute("transform") ?? "";
+/** The text element whose content starts with `name`. */
+function textFor(svg: SVGSVGElement, name: string): SVGTextElement {
+  return [...svg.querySelectorAll("text")].find((t) => t.textContent?.startsWith(name))!;
 }
+
+/** Whether the curved line reading `name` runs counter-clockwise (flipped
+ * to read upright) -- its arc's sweep flag. */
+function arcFlipped(svg: SVGSVGElement, name: string): boolean {
+  const id = textFor(svg, name).querySelector("textPath")!.getAttribute("href")!.slice(1);
+  const d = svg.getElementById(id)!.getAttribute("d")!;
+  return / 0 [01] 0 [-\d.e]+ [-\d.e]+$/.test(d);
+}
+
+describe("fanArcPath", () => {
+  it("runs clockwise normally and counter-clockwise flipped, at the baseline radius", () => {
+    expect(fanArcPath(0, Math.PI / 2, 100, 0, 10, false)).toBe("M0 -96.5A96.5 96.5 0 0 1 96.5 0");
+    expect(fanArcPath(0, Math.PI / 2, 100, 0, 10, true)).toBe("M103.5 0A103.5 103.5 0 0 0 0 -103.5");
+  });
+
+  it("puts the first (negative-offset) line outward normally, inward flipped", () => {
+    const radius = (d: string) => Number(/A([\d.]+)/.exec(d)![1]);
+    expect(radius(fanArcPath(0, 1, 100, -10, 10, false))).toBeGreaterThan(100);
+    expect(radius(fanArcPath(0, 1, 100, -10, 10, true))).toBeLessThan(100);
+  });
+});
 
 describe("wedge label orientation", () => {
   const render = (initialRotation = 0, flipLabels = true) =>
@@ -70,31 +91,50 @@ describe("wedge label orientation", () => {
       bboxWidth: 800, bboxHeight: 800, initialRotation, sizeByLifespan: false, colorScheme: "gen", flipLabels,
     });
 
-  it("turns narrow distant-generation labels radial", () => {
+  it("curves inner-generation lines along their ring and turns distant ones radial", () => {
     const svg = render();
-    // depth 1 (father): tangential; depth 7: radial.
-    expect(labelTransform(svg, "Given1f ")).toMatch(/rotate\(90\)/);
-    expect(labelTransform(svg, "Given1fffffff")).not.toMatch(/rotate\(90\)/);
+    expect(textFor(svg, "Given1f ").querySelector("textPath")).not.toBeNull();
+    const deep = textFor(svg, "Given1fffffff");
+    expect(deep.querySelector("textPath")).toBeNull();
+    expect(deep.parentElement!.getAttribute("data-mode")).toBe("radial");
   });
 
-  it("flips tangential labels in the lower half, and only there", () => {
+  it("flips curved lines in the lower half, and only there", () => {
     const svg = render();
     // The father fills the west half; his parents split it into the
     // south-west and north-west quarters, so exactly one of them flips.
-    const ff = labelTransform(svg, "Given1ff ");
-    const fm = labelTransform(svg, "Given1fm ");
-    expect([ff, fm].filter((t) => t.endsWith("rotate(180)"))).toHaveLength(1);
+    expect([arcFlipped(svg, "Given1ff "), arcFlipped(svg, "Given1fm ")].filter(Boolean)).toHaveLength(1);
   });
 
   it("re-evaluates flips against the current rotation", () => {
-    const upright = render(0);
-    const turned = render(180);
-    const flipped = (svg: SVGSVGElement) => labelTransform(svg, "Given1ff ").endsWith("rotate(180)");
-    expect(flipped(turned)).toBe(!flipped(upright));
+    const svg = render(0);
+    const before = arcFlipped(svg, "Given1ff ");
+    orientFanLabels(svg, 180);
+    expect(arcFlipped(svg, "Given1ff ")).toBe(!before);
+    expect(arcFlipped(render(180), "Given1ff ")).toBe(!before);
   });
 
   it("never flips when flipLabels is off", () => {
     const svg = render(0, false);
-    expect([...svg.querySelectorAll("g.wedge > g")].some((g) => g.getAttribute("transform")?.includes("rotate(180)"))).toBe(false);
+    const names = [...svg.querySelectorAll("textPath")].map((t) => t.textContent!);
+    expect(names.some((n) => arcFlipped(svg, n))).toBe(false);
+    expect([...svg.querySelectorAll("g.fan-label")].some((g) => g.getAttribute("transform")?.includes("rotate(180)"))).toBe(false);
+  });
+});
+
+describe("flattenTextPaths", () => {
+  it("replaces curved text with one positioned, rotated text per glyph", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.innerHTML = '<text font-size="9" fill="red"><textPath href="#p">A b</textPath></text>';
+    const text = svg.querySelector("text")! as SVGTextElement & Record<string, unknown>;
+    text.getNumberOfChars = () => 3;
+    text.getStartPositionOfChar = (i: number) => ({ x: i * 10, y: 5 }) as DOMPoint;
+    text.getRotationOfChar = (i: number) => i * 3;
+    flattenTextPaths(svg);
+    const glyphs = [...svg.querySelectorAll("text")];
+    expect(glyphs.map((g) => g.textContent)).toEqual(["A", "b"]);
+    expect(glyphs[1].getAttribute("transform")).toBe("rotate(6 20 5)");
+    expect(glyphs[0].parentElement!.getAttribute("font-size")).toBe("9");
+    expect(svg.querySelector("textPath")).toBeNull();
   });
 });

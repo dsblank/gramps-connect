@@ -24,11 +24,12 @@
 // ancestors on top) combined with each generation's angular span always
 // being a proper subset of its own child's, not any special-cased shape.
 import { arc as d3arc } from "d3-shape";
-import { create, pointer, select, type Selection } from "d3-selection";
+import { create, pointer, select } from "d3-selection";
 import "d3-transition";
 import { zoom, zoomIdentity, zoomTransform, type ZoomTransform } from "d3-zoom";
 import type { TreeNode, TreePersonRaw } from "../store/treeData";
 import { lifeEventDate } from "../store/lifeEventDates";
+import { setExportCloneHook } from "../store/chartExport/prepareSvg";
 
 const RING = 70;
 /** The parent-inherited edge's own inset, per generation -- edgeInset's own
@@ -663,6 +664,68 @@ const SHIFT_SNAP_STEP = 15;
 const UPRIGHT_SNAP = 3;
 const ROTATE_TRANSITION = "fan-rotate";
 
+/** Makes every arc path id unique across renders -- an old and a new chart
+ * can briefly share the document, and `href="#id"` resolves document-wide. */
+let fanRenderSeq = 0;
+
+/** Whether text centered at `thetaDeg` (0 = north, clockwise), with the fan
+ * turned `rotation` degrees, would read upside down on screen: in the lower
+ * half for text following the ring, the left half for radial text. */
+function readsUpsideDown(thetaDeg: number, rotation: number, radial: boolean): boolean {
+  const onScreen = (((thetaDeg + rotation) % 360) + 360) % 360;
+  return radial ? onScreen > 180 : onScreen > 90 && onScreen < 270;
+}
+
+/** The arc path one curved label line sits on: the wedge's full angular
+ * span [a0,a1] (radians), at the radius that puts the line's center
+ * `offset` px from the wedge's middle radius `midR` -- outward for a
+ * negative offset, or inward once flipped, so the stack's first line
+ * always ends up on top as read. Drawn clockwise normally; flipped, it
+ * runs counter-clockwise, which turns the glyphs to face the center. The
+ * radius is the text *baseline*, so it sits a bit inside (or, flipped,
+ * outside) the line's center -- `textPath` text can't use
+ * dominant-baseline reliably, and svg2pdf's flattening (exportChart.ts)
+ * reads glyph positions straight off the baseline. */
+export function fanArcPath(a0: number, a1: number, midR: number, offset: number, size: number, flip: boolean): string {
+  const center = flip ? midR + offset : midR - offset;
+  const r = Math.max(0.1, flip ? center + size * 0.35 : center - size * 0.35);
+  const [from, to] = flip ? [a1, a0] : [a0, a1];
+  const round = (v: number) => Math.round(v * 100) / 100 + 0;
+  const pt = (a: number) => `${round(r * Math.sin(a))} ${round(-r * Math.cos(a))}`;
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  return `M${pt(from)}A${round(r)} ${round(r)} 0 ${large} ${flip ? 0 : 1} ${pt(to)}`;
+}
+
+/** Points every wedge label the right way for the fan's current
+ * `rotation`, purely from the data-* attributes renderFanChart wrote --
+ * so it works the same on the live chart (every rotation change) and on
+ * an export's detached copy (registered via setExportCloneHook, for an
+ * export drawn upright). Straight labels get a transform: root
+ * counter-rotates to stay level; radial ones run outward (`rotate(θ-90)
+ * translate(midR,0)` puts local +x along the radius at the wedge's
+ * midpoint). Curved lines get their arc path (fanArcPath). With flipping
+ * off (`data-fan-flip="0"`), nothing is ever turned to read upright. */
+export function orientFanLabels(svg: SVGSVGElement, rotation: number): void {
+  const flipOn = svg.getAttribute("data-fan-flip") !== "0";
+  for (const g of svg.querySelectorAll<SVGGElement>("g.fan-label")) {
+    const mode = g.getAttribute("data-mode");
+    if (mode === "root") {
+      g.setAttribute("transform", flipOn ? `rotate(${-rotation})` : "");
+    } else if (mode === "radial") {
+      const theta = Number(g.getAttribute("data-theta"));
+      const flip = flipOn && readsUpsideDown(theta, rotation, true);
+      g.setAttribute("transform", `rotate(${theta - 90}) translate(${g.getAttribute("data-midr")},0)${flip ? " rotate(180)" : ""}`);
+    }
+  }
+  for (const path of svg.querySelectorAll<SVGPathElement>("path.fan-arc")) {
+    const num = (name: string) => Number(path.getAttribute(name));
+    const a0 = num("data-a0");
+    const a1 = num("data-a1");
+    const flip = flipOn && readsUpsideDown((((a0 + a1) / 2) * 180) / Math.PI, rotation, false);
+    path.setAttribute("d", fanArcPath(a0, a1, num("data-midr"), num("data-offset"), num("data-size"), flip));
+  }
+}
+
 /** Per-SVG "animate back to upright" hook, registered by renderFanChart --
  * a side table rather than a return-value change so renderFanChart keeps
  * renderTreeChart's own plain "returns the SVG" contract. A WeakMap so a
@@ -792,10 +855,6 @@ export function renderFanChart(
   svg.attr("data-fan-rotation", String(rotation));
   chartContent.attr("data-export-transform", `rotate(${rotation})`);
   const composeTransform = (t: ZoomTransform, rot: number = rotation): string => `${t.toString()} rotate(${rot})`;
-  // Set once the wedge labels exist (below) -- their flip state depends on
-  // the current rotation.
-  let labelGroups: Selection<SVGGElement, Wedge, SVGGElement, undefined> | null = null;
-  let updateLabelOrientation = (): void => {};
   // The one place `rotation` changes after setup -- keeps the drawn
   // transform, the `data-fan-rotation` attribute FanChart.tsx reads back
   // on rebuild, and onRotationChange all in step.
@@ -804,7 +863,7 @@ export function renderFanChart(
     chartContent.attr("transform", composeTransform(zoomTransform(svg.node()!)));
     svg.attr("data-fan-rotation", String(rotation));
     chartContent.attr("data-export-transform", `rotate(${rotation})`);
-    updateLabelOrientation();
+    orientFanLabels(svg.node()!, rotation);
     onRotationChange?.(rotation);
   };
   // A named transition so it never cancels (or is cancelled by) d3-zoom's
@@ -1048,75 +1107,91 @@ export function renderFanChart(
   withPerson.append("title").text((d) => personTooltip(d.node!.person!));
 
   // Each wedge's text box, in one of two orientations, whichever gives the
-  // longer line: *tangential* (lines follow the ring's curve, stacked
-  // across its depth -- a wide inner-generation wedge) or *radial* (lines
-  // run center-outward, stacked across the wedge's width -- the narrow,
-  // deep wedges of distant generations, where turning the text 90° fits far
-  // more of a name, as Gramps' own fan chart does). Root is always upright,
-  // a box inside its own disc. Widths/heights carry a few px of padding
-  // off the wedge's own edges; the radial box's height uses the arc a
-  // quarter of the way out, since the stack's outer lines narrow toward
-  // the center.
+  // longer line: *tangential* (each line its own arc, following the ring's
+  // curve, stacked across its depth -- a wide inner-generation wedge) or
+  // *radial* (straight lines running center-outward, stacked across the
+  // wedge's width -- the narrow, deep wedges of distant generations, where
+  // turning the text 90° fits far more of a name, as Gramps' own fan chart
+  // does). Root is always a straight, level box inside its own disc.
+  // Widths/heights carry a few px of padding off the wedge's own edges. A
+  // tangential line's width is its arc's length, measured a little inside
+  // the ring's middle since the stack's innermost line has the shortest
+  // arc; a radial stack's height likewise uses the arc a quarter of the
+  // way out, since its outer lines narrow toward the center.
   const labelBox = (d: Wedge): { radial: boolean; width: number; height: number } => {
     const thickness = d.outerR - d.innerR;
     if (d.depth === 0) return { radial: false, width: thickness * 1.6, height: thickness * 1.2 };
     const span = d.drawA1 - d.drawA0;
-    const tangential = { radial: false, width: span * ((d.innerR + d.outerR) / 2) - 8, height: thickness - 6 };
+    const tangential = { radial: false, width: span * (d.innerR + thickness * 0.3) - 6, height: thickness - 6 };
     const radial = { radial: true, width: thickness - 8, height: span * (d.innerR + thickness / 4) - 2 };
     return radial.width > tangential.width ? radial : tangential;
   };
-  const labelLines = new Map<Wedge, WedgeLabelLine[]>();
-  for (const d of withPerson.data()) {
-    const box = labelBox(d);
-    labelLines.set(d, wedgeLabelLines(d.node!.person!, box.width, box.height, nameFontSize(d.depth), dateFontSize(d.depth)));
-  }
 
-  // `rotate(θ-90) translate(midR,0)` puts the group's origin at the wedge's
-  // midpoint with local +x pointing outward along the radius -- the radial
-  // orientation as-is; a further `rotate(90)` turns local +x to follow the
-  // ring instead (tangential). With flipLabels, text that would otherwise
-  // read upside down -- tangential labels in the lower half, radial ones in
-  // the left half, judged by where the wedge sits *on screen*, so after
-  // the user's own rotation -- gets an extra half-turn, and root counter-
-  // rotates to stay level. Recomputed on every rotation change (setRotation
-  // above), since a drag can carry a wedge across that line.
-  const labelTransform = (d: Wedge): string => {
-    if (d.depth === 0) return flipLabels ? `rotate(${-rotation})` : "";
-    const thetaDeg = (((d.drawA0 + d.drawA1) / 2) * 180) / Math.PI;
-    const midR = (d.innerR + d.outerR) / 2;
-    const radial = labelBox(d).radial;
-    const onScreen = (((thetaDeg + rotation) % 360) + 360) % 360;
-    const flip = flipLabels && (radial ? onScreen > 180 : onScreen > 90 && onScreen < 270);
-    return `rotate(${thetaDeg - 90}) translate(${midR},0)${radial ? "" : " rotate(90)"}${flip ? " rotate(180)" : ""}`;
-  };
-  labelGroups = withPerson
-    .filter((d) => (labelLines.get(d)?.length ?? 0) > 0)
-    .append("g")
-    .attr("transform", labelTransform);
-  updateLabelOrientation = () => labelGroups?.attr("transform", labelTransform);
-
-  // Lines stack centered on the group's origin. Names in the theme's text
+  // Each labeled wedge's lines, stacked centered on the wedge's midpoint:
+  // `offset` is a line's center relative to that midpoint, negative =
+  // nearer the outer edge (before any flip). Names in the theme's text
   // color; dates in a fixed dark tone rather than var(--mantine-color-dimmed):
-  // the wedges' own fills (GEN_COLORS/DEATH_COLORS above) are the same hex in
-  // both themes, but dimmed is a theme-relative gray that goes light-on-light
-  // in dark mode -- too low-contrast against these mid-toned fills.
-  labelGroups.each(function (d) {
-    const lines = labelLines.get(d)!;
+  // the wedges' own fills (GEN_COLORS/DEATH_COLORS above) are the same hex
+  // in both themes, but dimmed is a theme-relative gray that goes
+  // light-on-light in dark mode -- too low-contrast against these mid-toned
+  // fills. Orientation (and flip) isn't set here: orientFanLabels does
+  // that from the data-* attributes, now and on every rotation change.
+  const arcIdPrefix = `fan-arc-${++fanRenderSeq}`;
+  let arcCount = 0;
+  const arcDefs = defs.append("g");
+  svg.attr("data-fan-flip", flipLabels ? "1" : "0");
+  withPerson.each(function (d) {
+    const box = labelBox(d);
+    const lines = wedgeLabelLines(d.node!.person!, box.width, box.height, nameFontSize(d.depth), dateFontSize(d.depth));
+    if (lines.length === 0) return;
     const total = lines.reduce((sum, l) => sum + l.size * LINE_HEIGHT, 0);
     let y = -total / 2;
-    const g = select(this);
+    const midR = (d.innerR + d.outerR) / 2;
+    const thetaDeg = (((d.drawA0 + d.drawA1) / 2) * 180) / Math.PI;
+    const curved = d.depth > 0 && !box.radial;
+    const g = select(this)
+      .append("g")
+      .attr("class", "fan-label")
+      .attr("data-mode", d.depth === 0 ? "root" : curved ? "arc" : "radial")
+      .attr("data-theta", thetaDeg)
+      .attr("data-midr", midR);
     for (const line of lines) {
       const h = line.size * LINE_HEIGHT;
-      g.append("text")
+      const offset = y + h / 2;
+      y += h;
+      const text = g
+        .append("text")
         .attr("text-anchor", "middle")
-        .attr("dominant-baseline", "middle")
-        .attr("y", y + h / 2)
         .attr("fill", line.kind === "name" ? "var(--mantine-color-text)" : "rgba(0, 0, 0, 0.65)")
         .attr("font-size", line.size)
-        .attr("font-weight", line.kind === "name" ? 600 : null)
+        .attr("font-weight", line.kind === "name" ? 600 : null);
+      if (!curved) {
+        text.attr("dominant-baseline", "middle").attr("y", offset).text(line.text);
+        continue;
+      }
+      const id = `${arcIdPrefix}-${arcCount++}`;
+      arcDefs
+        .append("path")
+        .attr("id", id)
+        .attr("class", "fan-arc")
+        .attr("data-a0", d.drawA0)
+        .attr("data-a1", d.drawA1)
+        .attr("data-midr", midR)
+        .attr("data-offset", offset)
+        .attr("data-size", line.size);
+      text
+        .append("textPath")
+        .attr("href", `#${id}`)
+        .attr("startOffset", "50%")
+        .attr("text-anchor", "middle")
         .text(line.text);
-      y += h;
     }
+  });
+  orientFanLabels(svg.node()!, rotation);
+  // An export drawn upright (or otherwise turned) re-points its copy's
+  // labels for that rotation, not the one on screen.
+  setExportCloneHook(svg.node()!, (clone, { keptTransform }) => {
+    orientFanLabels(clone, Number(/rotate\(\s*(-?[\d.]+)/.exec(keptTransform)?.[1] ?? 0));
   });
 
   // Lifespan mode's own year axis: a horizontal rule at y=0 (root's own

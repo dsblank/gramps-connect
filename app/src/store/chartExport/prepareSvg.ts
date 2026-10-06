@@ -13,6 +13,9 @@
 //    chart's own `rotate(deg)`. Absent means identity.
 //  - `data-export-exclude` on anything that's interactive chrome rather
 //    than chart (the box tree's "+" expand markers).
+// A chart whose drawing depends on that kept transform (the fan's labels
+// flip to stay readable at the current rotation) can also register a
+// setExportCloneHook to redo that part on the copy.
 // An SVG without `data-export-content` can still be exported, just only
 // as "current view".
 
@@ -48,6 +51,49 @@ const XLINK_NS = "http://www.w3.org/1999/xlink";
 /** Breathing room around a whole-chart export's own bounding box, in the
  * chart's user units. */
 const WHOLE_CHART_MARGIN = 16;
+
+export interface ExportCloneContext {
+  /** The rotation the copy is drawn at: the kept transform, or none. */
+  keptTransform: string;
+}
+
+const cloneHooks = new WeakMap<SVGSVGElement, (clone: SVGSVGElement, context: ExportCloneContext) => void>();
+
+/** Registers `hook` to run on every export copy of `live`, after the kept
+ * transform is applied -- for chart drawing that depends on it. */
+export function setExportCloneHook(
+  live: SVGSVGElement,
+  hook: (clone: SVGSVGElement, context: ExportCloneContext) => void,
+): void {
+  cloneHooks.set(live, hook);
+}
+
+/** Gives every id the export copy refers to (`href="#..."`, `url(#...)`)
+ * a fresh name, and repoints those references: the copy can share the
+ * document with the live chart (PDF export lays it out on-page), where a
+ * duplicate id resolves to the live chart's element instead of the copy's
+ * own. */
+let exportSeq = 0;
+function uniquifyReferencedIds(svg: SVGSVGElement): void {
+  const suffix = `-x${++exportSeq}`;
+  const elements = [svg, ...Array.from(svg.querySelectorAll("*"))];
+  const isHref = (name: string) => name === "href" || name === "xlink:href";
+  const referenced = new Set<string>();
+  for (const el of elements) {
+    for (const attr of Array.from(el.attributes)) {
+      if (isHref(attr.name) && attr.value.startsWith("#")) referenced.add(attr.value.slice(1));
+      for (const m of attr.value.matchAll(/url\(#([^)]+)\)/g)) referenced.add(m[1]);
+    }
+  }
+  if (referenced.size === 0) return;
+  for (const el of elements) {
+    if (referenced.has(el.id)) el.id += suffix;
+    for (const attr of Array.from(el.attributes)) {
+      if (isHref(attr.name) && referenced.has(attr.value.slice(1))) attr.value += suffix;
+      else if (attr.value.includes("url(#")) attr.value = attr.value.replace(/url\(#([^)]+)\)/g, `url(#$1${suffix})`);
+    }
+  }
+}
 
 export function contentGroupOf(svg: SVGSVGElement): SVGGElement | null {
   return svg.querySelector<SVGGElement>("[data-export-content]");
@@ -212,11 +258,13 @@ export async function prepareExportSvg(live: SVGSVGElement, options: PrepareOpti
 
   const svg = live.cloneNode(true) as SVGSVGElement;
   svg.querySelectorAll("[data-export-exclude]").forEach((el) => el.remove());
+  uniquifyReferencedIds(svg);
   if (options.area === "whole") {
     const content = contentGroupOf(svg)!;
     const keep = options.keepRotation ? exportTransformOf(live) : "";
     if (keep) content.setAttribute("transform", keep);
     else content.removeAttribute("transform");
+    cloneHooks.get(live)?.(svg, { keptTransform: keep });
   }
   svg.setAttribute("viewBox", `${frame.x} ${frame.y} ${frame.width} ${frame.height}`);
   svg.setAttribute("width", String(frame.width));

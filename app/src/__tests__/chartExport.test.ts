@@ -6,6 +6,7 @@ import { rasterSize } from "../store/chartExport/exportChart";
 import { layoutOnPage } from "../store/chartExport/paperSizes";
 import { pdfFontsCover } from "../store/chartExport/pdfFonts";
 import { exportTransformOf, prepareExportSvg } from "../store/chartExport/prepareSvg";
+import { renderFanChart } from "../charts/fanChart";
 
 describe("layoutOnPage", () => {
   it("picks landscape for a wide chart and portrait for a tall one in auto mode", () => {
@@ -100,6 +101,28 @@ describe("prepareExportSvg", () => {
     });
     expect(svg.querySelector("#content")!.getAttribute("transform")).toBe("translate(250,150) scale(3) rotate(30)");
     expect([width, height]).toEqual([500, 300]);
+  });
+
+  it("re-points a rotated fan's labels for an upright export, on its own renamed arcs", async () => {
+    const person = (h: string) => ({ handle: h, gramps_id: h, gender: 0, profile: { name_given: `G${h}`, name_surname: `S${h}` } });
+    const live = renderFanChart(
+      { person: person("1"), children: [{ person: person("2") }, { person: person("3") }] },
+      { bboxWidth: 400, bboxHeight: 400, initialRotation: 270, sizeByLifespan: false, colorScheme: "gen" },
+    );
+    document.body.appendChild(live);
+    (SVGElement.prototype as unknown as { getBBox: () => DOMRect }).getBBox = () => new DOMRect(-100, -80, 200, 160);
+    const arcFor = (svg: SVGSVGElement) => {
+      const href = svg.querySelector("textPath")!.getAttribute("href")!;
+      return { href, d: svg.getElementById(href.slice(1))?.getAttribute("d") };
+    };
+    const upright = renderFanChart(
+      { person: person("1"), children: [{ person: person("2") }, { person: person("3") }] },
+      { bboxWidth: 400, bboxHeight: 400, sizeByLifespan: false, colorScheme: "gen" },
+    );
+    const { svg } = await prepareExportSvg(live, { area: "whole", colors: "current", keepRotation: false, background: true });
+    expect(arcFor(svg).href).not.toBe(arcFor(live).href);
+    expect(arcFor(svg).d).toBe(arcFor(upright).d);
+    expect(arcFor(svg).d).not.toBe(arcFor(live).d);
   });
 
   it("reuses the live viewBox (offset included) for the current view", async () => {
