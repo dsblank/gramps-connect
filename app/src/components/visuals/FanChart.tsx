@@ -19,7 +19,7 @@ interface FanChartProps {
 
 /** Imperative escape hatch for whatever needs the chart's own live `<svg>`
  * without owning its render loop -- today that's TreeView.tsx's own
- * DownloadImageButton (getSvg -- see store/exportSvgImage.ts's own doc
+ * DownloadImageButton (getSvg -- see DownloadImageButton.tsx's own doc
  * comment on why this has to be a callback, not a ref captured once). */
 export interface FanChartHandle {
   getSvg: () => SVGSVGElement | null;

@@ -377,8 +377,11 @@ function treeChartCore(
 
   const withMarker = withPerson.filter((d) => !!d.data.hasMore);
 
+  // data-export-exclude: interactive chrome, not chart -- left out of an
+  // image export (store/chartExport/prepareSvg.ts).
   const marker = withMarker
     .append("g")
+    .attr("data-export-exclude", "")
     .attr("transform", `translate(${outwardX},0)`);
 
   // The IntersectionObserver target *and* the click target: sized to scale
@@ -489,7 +492,9 @@ export function renderTreeChart(
   }: TreeChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 13);
-  const chartContent = svg.append("g").attr("id", "tree-chart-content");
+  // data-export-content: store/chartExport/prepareSvg.ts's own opt-in for
+  // whole-chart export (pan/zoom dropped, own bounding box framed).
+  const chartContent = svg.append("g").attr("id", "tree-chart-content").attr("data-export-content", "");
 
   // Kept as its own binding (not just `svg.call(zoom<...>()...)` inline) so
   // a select-driven re-center below can animate through it via

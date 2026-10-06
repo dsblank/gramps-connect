@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useComputedColorScheme } from "@mantine/core";
 import { zoomTransform, type ZoomTransform } from "d3-zoom";
 import { renderTreeChart } from "../../charts/treeChart";
@@ -55,6 +55,12 @@ interface TreeChartProps {
   expandCenterHandle: string | null;
 }
 
+/** Same escape hatch as FanChart.tsx's own FanChartHandle -- the live
+ * `<svg>` for TreeView.tsx's DownloadImageButton. */
+export interface TreeChartHandle {
+  getSvg: () => SVGSVGElement | null;
+}
+
 /** Owns a plain `div` and hands its DOM to the d3 renderer -- same
  * "imperative lib in a ref" shape as MapCanvas.tsx wraps maplibre-gl in,
  * sized off its own ResizeObserver the way TimelineChart.tsx measures its
@@ -63,11 +69,14 @@ interface TreeChartProps {
  * re-render) because the gender accent is a validated hex pair, not a
  * Mantine token -- same reason MapCanvas itself re-renders its markers on
  * `dark` (see its own `seriesColor(dark)`). */
-export function TreeChart({
+export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function TreeChart({
   ancestorTree, descendantTree, selectedHandle, onSelectPerson, token, onExpand, expandingKeys, autoExpandEnabled,
   expandCenterHandle,
-}: TreeChartProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
+  useImperativeHandle(ref, () => ({
+    getSvg: () => containerRef.current?.querySelector("svg") ?? null,
+  }), []);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const zoomRef = useRef<ZoomTransform | null>(null);
   // The previous render's selection, so a *new* selection (someone just
@@ -178,4 +187,4 @@ export function TreeChart({
   ]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
-}
+});

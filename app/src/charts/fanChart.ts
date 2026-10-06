@@ -713,7 +713,10 @@ export function renderFanChart(
         .attr("stroke-width", 2);
     });
 
-  const chartContent = svg.append("g").attr("id", "fan-chart-content");
+  // data-export-content/-transform: store/chartExport/prepareSvg.ts's own
+  // opt-in convention -- a whole-chart export drops pan/zoom but keeps the
+  // rotation (kept current by setRotation below).
+  const chartContent = svg.append("g").attr("id", "fan-chart-content").attr("data-export-content", "");
 
   // Root (content (0,0)) sits at the panel's own visual center (xOffset/
   // yOffset below), with the chart free to pan in every direction -- no
@@ -732,6 +735,7 @@ export function renderFanChart(
   // zoomRef/rotationRef needs a ref *across* renders instead.
   let rotation = initialRotation ?? 0;
   svg.attr("data-fan-rotation", String(rotation));
+  chartContent.attr("data-export-transform", `rotate(${rotation})`);
   const composeTransform = (t: ZoomTransform, rot: number = rotation): string => `${t.toString()} rotate(${rot})`;
   // The one place `rotation` changes after setup -- keeps the drawn
   // transform, the `data-fan-rotation` attribute FanChart.tsx reads back
@@ -740,6 +744,7 @@ export function renderFanChart(
     rotation = degrees;
     chartContent.attr("transform", composeTransform(zoomTransform(svg.node()!)));
     svg.attr("data-fan-rotation", String(rotation));
+    chartContent.attr("data-export-transform", `rotate(${rotation})`);
     onRotationChange?.(rotation);
   };
   // A named transition so it never cancels (or is cancelled by) d3-zoom's

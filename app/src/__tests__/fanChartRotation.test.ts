@@ -50,7 +50,7 @@ describe("fan chart rotation", () => {
     const { svg, changes } = render();
     ctrlDrag(svg, 0, 40);
     expect(rotationOf(svg)).toBeCloseTo(40, 6);
-    expect(changes.at(-1)).toBeCloseTo(40, 6);
+    expect(changes[changes.length - 1]).toBeCloseTo(40, 6);
   });
 
   it("snaps a release within a few degrees of upright to exactly 0°", () => {

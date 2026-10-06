@@ -18,7 +18,7 @@ import { DownloadImageButton } from "./DownloadImageButton";
 import { FamilyGraphView } from "./FamilyGraphView";
 import { FanChart, type FanChartHandle } from "./FanChart";
 import { trimTreeToDepth, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
-import { TreeChart } from "./TreeChart";
+import { TreeChart, type TreeChartHandle } from "./TreeChart";
 import { VisualFrame } from "./VisualFrame";
 import { t } from "../../i18n/i18n";
 
@@ -115,6 +115,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // every other per-root state below.
   const [fanDisplayDepth, setFanDisplayDepth] = useState(FAN_BASE_ANC);
   const fanChartRef = useRef<FanChartHandle>(null);
+  const treeChartRef = useRef<TreeChartHandle>(null);
   // Fan mode's own wedge-color scheme -- "Age at death" is the only other
   // one wired up so far (fanChart.ts's own doc comment on why: harrywind.nl
   // has several more, but generation/age-at-death are the two computable
@@ -876,10 +877,16 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
             </Group>
           ) : undefined
         ) : trees ? (
-          <Text size="xs" c="dimmed">
-            drag to pan · scroll to zoom · click a person for details ·{" "}
-            {manualExpandOnly ? "click + to reveal more" : "pan toward the edges to reveal more, or click +"}
-          </Text>
+          <Group justify="space-between" wrap="nowrap" gap="xs">
+            <Text size="xs" c="dimmed">
+              drag to pan · scroll to zoom · click a person for details ·{" "}
+              {manualExpandOnly ? "click + to reveal more" : "pan toward the edges to reveal more, or click +"}
+            </Text>
+            <DownloadImageButton
+              getSvg={() => treeChartRef.current?.getSvg() ?? null}
+              filename={`tree-chart-${(root?.label ?? "tree").replace(/[^\p{L}\p{N}]+/gu, "-")}`}
+            />
+          </Group>
         ) : undefined
       }
     >
@@ -915,6 +922,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       )}
       {chartStyle === "box" && trees && (
         <TreeChart
+          ref={treeChartRef}
           ancestorTree={trees.ancestorTree}
           descendantTree={trees.descendantTree}
           selectedHandle={selectedHandle}
