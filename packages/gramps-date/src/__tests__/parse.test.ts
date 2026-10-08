@@ -186,11 +186,11 @@ test("unparseable text falls back to Text only", () => {
   assert.equal(d.text, "this is not a date at all");
 });
 
-test("blank input parses to an empty text-only date, as in Gramps", () => {
-  // Date.set() refuses an empty value (DateError) and DateParser.parse()
-  // keeps the original input as text -- "" stays "".
+test("blank input parses to the empty date", () => {
+  // Gramps makes it a text-only date ("" kept as text) -- a Gramps bug,
+  // not copied: an empty field means no date, not the text "".
   const d = parseDate("");
-  assert.equal(d.modifier, Modifier.TEXTONLY);
+  assert.equal(d.modifier, Modifier.NONE);
   assert.equal(d.text, "");
   assert.deepEqual(d.dateval, [0, 0, 0, false]);
   assert.equal(formatDate(d), "");

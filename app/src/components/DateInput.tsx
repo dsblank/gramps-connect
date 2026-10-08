@@ -13,14 +13,13 @@ import {
   makeDate,
   newyearFromInputStr,
   newyearToInputStr,
-  parseDate,
   validateDate,
   type DatePart,
   type GrampsDate,
   type NewYearValue,
 } from "@gramps-connect/gramps-date";
 import { t } from "../i18n/i18n";
-import { dateLocaleCode, formatDisplayDate, useDisplayFormatVersion } from "../store/placeIndex";
+import { formatDisplayDate, parseDisplayDate, useDisplayFormatVersion } from "../store/placeIndex";
 
 interface DateInputProps {
   label: string;
@@ -215,7 +214,7 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
  *
  * - A compact quick-entry text field, always visible, showing the
  *   formatted date and re-parsed via `@gramps-connect/gramps-date`'s
- *   parseDate() on blur/Enter -- the *primary* way to enter a date here,
+ *   parseDisplayDate() on blur/Enter -- the *primary* way to enter a date here,
  *   same as Gramps desktop's own default. Unparseable text becomes a
  *   Text-only date carrying the raw string, exactly like Gramps desktop's
  *   own quick-entry field never rejects input.
@@ -438,7 +437,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
  * (e.g. an edit made via "More…", or a Live Sync push from another
  * client) -- but only while the field isn't focused, so an in-progress
  * edit here is never clobbered out from under the user. Parses via
- * parseDate() on blur/Enter, matching Gramps desktop's own MonitoredDate
+ * parseDisplayDate() on blur/Enter, matching Gramps desktop's own MonitoredDate
  * ("content-changed", not per-keystroke). */
 function QuickEntryField({
   label,
@@ -461,7 +460,7 @@ function QuickEntryField({
   trailing?: ReactNode;
 }) {
   // Shown in the tree's date format (Preferences) -- every one of the six
-  // reads back through parseDate() to the same date, so editing in it is
+  // reads back through parseDisplayDate() to the same date, so editing in it is
   // lossless. Re-synced when the setting changes, same focus guard.
   const displayVersion = useDisplayFormatVersion();
   const [buffer, setBuffer] = useState(() => formatDisplayDate(value));
@@ -477,8 +476,8 @@ function QuickEntryField({
       onChange(null);
       return;
     }
-    // In the interface language, the same one the buffer is shown in.
-    onChange(parseDate(trimmed, { locale: dateLocaleCode() }));
+    // In the interface language and format the buffer is shown in.
+    onChange(parseDisplayDate(trimmed));
   }
 
   return (

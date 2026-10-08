@@ -15,43 +15,40 @@ deliberately doesn't use that endpoint for bulk data.
 
 - **`types.ts`** -- the wire-format `GrampsDate` struct and `Modifier`/
   `Quality`/`Calendar`/`NewYear` enums.
-- **`calendar.ts`** -- SDN (Serial/Julian Day Number) conversion for five
-  calendars (Gregorian, Julian, French Republican, Islamic, Swedish) plus
-  round-trip date validation. Hebrew and Persian aren't implemented (their
-  SDN conversion needs more machinery); dates in those calendars still
-  display correctly, they just can't be validated on entry.
-- **`display.ts`** -- `formatDate(date, options)`: modifiers ("before
-  1960", "about Nov 1914"), quality ("estimated "/"calculated "),
-  compound dates ("between X and Y", "from X to Y"), non-Gregorian
-  calendar and non-Jan-1-new-year suffixes, B.C.E., six display formats
-  (ISO, numeric, long/short month with day-then-month or month-then-day
-  ordering).
+- **`calendar.ts`** -- SDN (Serial/Julian Day Number) conversion for all
+  seven Gramps calendars, and calendar-aware date validation.
+- **`display.ts`** -- `formatDate(date, options)`: Gramps' `DateDisplay`,
+  in every format of every language Gramps has (43, from `po/LINGUAS` plus
+  English): modifiers, quality, compound dates, calendar and new-year
+  suffixes, B.C.E., and grammatical month forms (Czech, Finnish, Croatian,
+  Russian, Slovak, Slovenian, Ukrainian).
+- **`parse.ts`** -- `parseDate(text, options)`: Gramps' `DateParser`, so
+  what a user types ("before 1960", "abt Mar 1854 (Julian)") becomes a
+  structured date, and every displayed date reads back.
 - **`entry.ts`** -- `makeDate(input)` builds a `GrampsDate` from
-  structured components (day/month/year/modifier/quality/calendar, not
-  free text); `validateDate(date)` checks it (calendar-valid, and for a
-  range/span, that the second date is later than the first).
-- **`locale.ts`** / **`locales/en.ts`** -- a locale-plugin interface
-  (`DateLocale`) plus one implementation. Only English ships today;
-  adding a language means writing a new `locales/<code>.ts` and calling
-  `registerLocale()`, no changes to `display.ts` itself.
+  structured components; `validateDate(date)` checks it.
+- **`locale.ts`**, **`locales/`** -- the `DateLocale` interface and the
+  languages. English is built in; the others load on demand
+  (`loadLocale(code)`, `availableLocales()`, `resolveLocaleCode(code)`),
+  each its own bundle chunk. Their strings are generated from a live
+  Gramps (`locales/<code>.generated.ts`); the languages whose displayer
+  lays dates out its own way have hand-written layouts in
+  `locales/index.ts`.
 
-## What's deliberately not here (yet)
+## Keeping up with Gramps
 
-- **Free-text date parsing** (typing "before 1960" and having it turn
-  into a structured `Date`) -- that's `gramps/gen/datehandler/
-  _dateparser.py`, a large regex-based grammar, a separate undertaking
-  from structured entry.
-- **Grammatical inflection** (`_datedisplay.py`'s `Lexeme`/
-  `FORMATS_long_month_year` machinery) -- only matters for languages
-  with case-marked month names (Russian and similar); doesn't affect
-  English, which is the only locale implemented so far.
-- **Hebrew/Persian calendar math** -- see calendar.ts's note above.
+`scripts/generate_gramps_locales.py` regenerates every language's strings
+and the test fixtures from the installed Gramps (about 4 seconds, one
+process per language). Run it after a Gramps update, then `npm test`. The
+tests check every format of every language against what Gramps itself
+displays, against the date sets of Gramps' own unit tests, and that every
+displayed date parses back.
 
-Add these the same way everything else here was built: read the
-corresponding Python source in `gramps/gen/`, translate it, verify
-against the real thing (this package's own tests cross-check every case
-against a live `DateDisplayEn`/`gcalendar.py` run, not just hand-derived
-expected values).
+Where Gramps is wrong -- a displayed date that doesn't read back, a crash,
+lost input -- gramps-date does the right thing instead, and the case is
+recorded in [GRAMPS_BUGS.md](GRAMPS_BUGS.md) for reporting upstream
+(`src/__tests__/knownGrampsBugs.ts` lists the ones whose Gramps text still
+reads back, so the tests accept ours there).
 
 ## Provenance and license
 

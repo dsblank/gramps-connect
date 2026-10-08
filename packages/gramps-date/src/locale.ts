@@ -3,15 +3,31 @@
 // the handful of DateDisplay/DateParser subclass hooks locales actually
 // override (see _datedisplay.py's DateDisplay and _dateparser.py's
 // DateParser base classes), enough to plug in a new language's strings
-// without touching display.ts/parse.ts. "en", "en_GB", "de", "fr" and "es" ship
-// here (registered below); their strings are generated from a real Gramps
-// by scripts/generate_gramps_locales.py and checked against Gramps' own
-// output by __tests__/locales.test.ts. Add more the same way: run the
-// script for the language, write locales/<code>.ts with its layouts, and
-// register it below.
+// without touching display.ts/parse.ts. every language Gramps has
+// (locales/available.generated.ts) ships here, loaded on demand
+// (loadLocale); their strings are generated from a real Gramps by
+// scripts/generate_gramps_locales.py and checked against Gramps' own output
+// by __tests__/locales.test.ts and grampsTests.test.ts. A language whose
+// displayer lays out dates its own way also needs its layouts in
+// locales/index.ts.
 
-import type { Calendar, Modifier, NewYear, Quality } from "./types";
+import type { Calendar, DatePart, GrampsDate, Modifier, NewYear, NewYearValue, Quality } from "./types";
 import type { GregorianLayout } from "./layouts";
+
+/** What a language's own display() gets to work with. */
+export interface DisplayHelpers {
+  /** The language being displayed (its strings). */
+  locale: DateLocale;
+  /** One date part in the format being displayed (display_cal[cal]). */
+  part: (datePart: DatePart, calendar: Calendar) => string;
+  /** The " (Julian)" suffix (format_extras). */
+  extras: (calendar: Calendar, newyear: NewYearValue) => string;
+}
+
+export type ParserPatternName =
+  | "aboutBrackets" | "bce" | "calendar" | "calendarNewyear" | "calendarNewyearIso" | "iso" | "isoTimestamp"
+  | "modifier" | "modifierAfter" | "numeric" | "newyear" | "newyearIso" | "quality" | "quarter" | "range"
+  | "span" | "today" | "rfc";
 export { BASE_LAYOUTS, type GregorianLayout } from "./layouts";
 
 /** A month-name table, index 0 unused (Gramps' own 1-based month
@@ -28,6 +44,27 @@ export interface DateTemplates {
   span: string;
   range: string;
   modifiers: readonly string[];
+}
+
+/** The grammatical context a date is shown in: what precedes or governs
+ * it ("before", "between", ...; "" for none). Gramps' context keys. */
+export type InflectKey = "" | "from" | "to" | "between" | "and" | "before" | "after" | "about" | "estimated" | "calculated";
+
+/** FORMATS_long/short_month_year: the form a context takes, and its
+ * month-and-year template ("{month} {year}", Croatian "{month} {year}."). */
+export interface MonthYearFormat {
+  form: string | null;
+  template: string;
+}
+
+export type MonthFormLists = "long" | "short" | "hebrew" | "french" | "islamic" | "persian";
+
+export interface Inflection {
+  /** Per month list, per month: form name -> word (null: a list without
+   * forms). The first form is the plain name. */
+  forms: Readonly<Record<MonthFormLists, readonly (Readonly<Record<string, string>> | null)[] | null>>;
+  longMonthYear: Readonly<Record<InflectKey, MonthYearFormat>>;
+  shortMonthYear: Readonly<Record<InflectKey, MonthYearFormat>>;
 }
 
 export interface DateLocale {
@@ -119,6 +156,39 @@ export interface DateLocale {
    * display.ts's own doc comment). */
   numericOrder: "dmy" | "mdy" | "ymd";
 
+  /** _get_localized_year's addition to a bare year ("" for most;
+   * Croatian "."). */
+  yearSuffix: string;
+
+  /** The base numeric format's result is left-trimmed (Norwegian's
+   * dd_dformat01 override). */
+  numericLstrip?: boolean;
+
+  /** The language's own layouts apply to every calendar, not just
+   * Gregorian (displayers overriding _display_calendar: Hungarian,
+   * Swedish). */
+  layoutsForAllCalendars?: boolean;
+
+  /** A second long-month list (Lithuanian nominative), for layouts with
+   * monthYearMonths "altLong". */
+  altLongMonths?: MonthNames | null;
+
+  /** Roman month numerals for "roman" layouts, index = month, when the
+   * language writes its own (Hungarian "I.", "II."). */
+  romanMonths?: MonthNames | null;
+
+  /** Grammatical forms of month names (Gramps' Lexemes), for languages
+   * whose translators gave them: cs, fi, hr, ru, sk, sl, uk. */
+  inflection?: Inflection | null;
+
+  /** Parser: the numeric pattern starts with a weekday (Icelandic
+   * "%a %e.%b %Y" -- DateParser._ddmy). */
+  numericWeekdayFirst: boolean;
+
+  /** The language's base layouts (its translated dd_dformat01..05) --
+   * what every non-Gregorian calendar uses. */
+  baseLayouts: readonly GregorianLayout[];
+
   /** Gregorian layout for each of the language's numbered formats -- the
    * same numbering as desktop's Preferences list (`formatNames`). */
   gregorianLayouts: readonly GregorianLayout[];
@@ -131,18 +201,30 @@ export interface DateLocale {
    * "Tag. Monat Jahr"). */
   formatIndex: Readonly<Record<number, number>>;
 
-  templates: DateTemplates;
+  /** Display templates per quality (none, estimated, calculated) -- some
+   * languages word a date differently with a quality. */
+  templates: readonly DateTemplates[];
 
-  /** Parser: span/range patterns (JS regex source, anchored, with named
-   * groups `start` and `stop`) -- ports of DateParser._span/_range. */
-  spanPattern: string;
-  rangePattern: string;
+  /** A language whose wording is grammar rather than templates (Hebrew's
+   * "ב" prefix, added only without a day or with a quality) ports its
+   * displayer's display() here; formatDate calls it instead of the
+   * templates. */
+  display?: (date: GrampsDate, helpers: DisplayHelpers) => string;
 
-  /** Parser: every month word Gramps' parser accepts -> month number.
-   * Gramps' parsers all share one table that every language adds to, so
-   * this includes other languages' names too -- kept that way to accept
-   * exactly what Gramps does. Added to the long/short month names. */
-  monthWords: Readonly<Record<string, number>>;
+  /** Parser: every pattern Gramps' parser matches with, as JS regex
+   * source (anchored) + case flag -- each language overrides some in its
+   * init_strings. Group numbering is Gramps' own. */
+  parserPatterns: Readonly<Record<ParserPatternName, { source: string; ignoreCase: boolean }>>;
+
+  /** Parser: Gramps' month tables per calendar (word -> month number).
+   * Gramps' parsers share one Gregorian table that every language adds to,
+   * so it includes other languages' names too. The language's own month
+   * names are added on top (parse.ts), fixing languages Gramps can't parse
+   * at all. */
+  monthTables: Readonly<Record<"gregorian" | "swedish" | "hebrew" | "french" | "islamic" | "persian", Readonly<Record<string, number>>>>;
+
+  /** Parser: _rfc's English month abbreviations. */
+  rfcMonths: Readonly<Record<string, number>>;
 
   /** Parser: each calendar's two text-date patterns (month name first /
    * day first) -- Gramps' own, as JS regex source with `{months}` where the
@@ -169,19 +251,42 @@ export function isLocaleRegistered(code: string): boolean {
   return registry.has(code);
 }
 
-// Registered here, not in index.ts: a side-effecting import is only
-// guaranteed to run for code that actually imports index.ts. display.ts
-// and entry.ts both reach getLocale() through this module directly, so
-// registration has to live wherever the registry itself does, not in a
-// downstream barrel file some callers (and this package's own test
-// files) may never import.
+// English is registered here, unconditionally -- it's the default and the
+// fallback, and registering it in this module (not a downstream barrel)
+// guarantees it for every importer, this package's own tests included.
+// Every other language loads on demand: loadLocale().
 import { en } from "./locales/en";
-import { en_GB } from "./locales/en_GB";
-import { de } from "./locales/de";
-import { fr } from "./locales/fr";
-import { es } from "./locales/es";
+import { availableLocaleCodes, buildLocale } from "./locales/index";
 registerLocale(en);
-registerLocale(en_GB);
-registerLocale(de);
-registerLocale(fr);
-registerLocale(es);
+
+/** Every language that can be loaded (and English), by code. */
+export function availableLocales(): string[] {
+  return availableLocaleCodes();
+}
+
+/** The best loadable language for a UI language code: the exact code
+ * ("pt_BR"), else its base language ("de" for "de_CH"), else null. */
+export function resolveLocaleCode(code: string): string | null {
+  const available = new Set(availableLocaleCodes());
+  if (available.has(code)) return code;
+  const base = code.split(/[_-]/)[0];
+  return available.has(base) ? base : null;
+}
+
+const loading = new Map<string, Promise<DateLocale | null>>();
+
+/** Loads a language (once) and registers it, so getLocale(code) returns it
+ * from then on. Resolves to null for an unknown code. */
+export function loadLocale(code: string): Promise<DateLocale | null> {
+  const existing = registry.get(code);
+  if (existing) return Promise.resolve(existing);
+  let promise = loading.get(code);
+  if (!promise) {
+    promise = buildLocale(code).then((locale) => {
+      if (locale) registerLocale(locale);
+      return locale;
+    });
+    loading.set(code, promise);
+  }
+  return promise;
+}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Checkbox, FileInput, Group, Modal, Select, Stack, Table, Text } from "@mantine/core";
-import type { DateFormat } from "@gramps-connect/gramps-date";
+import { availableLocales, loadLocale, type DateFormat } from "@gramps-connect/gramps-date";
 import {
   DESKTOP_DATE_FORMATS,
   applyImport,
@@ -49,6 +49,18 @@ export function ImportDesktopSettingsDialog({ opened, onClose, current, customNa
   const [placeFormats, setPlaceFormats] = useState<PlaceFormatDef[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [desktopLanguage, setDesktopLanguage] = useState(() => desktopLanguageFor(getI18nSnapshot().lang));
+  // The chosen desktop language's date strings load on demand; the import
+  // maps its date format exactly once they have (buildImportItems).
+  const [loadedLocales, setLoadedLocales] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    loadLocale(desktopLanguage)
+      .then(() => !cancelled && setLoadedLocales((n) => n + 1))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [desktopLanguage]);
   const [chosen, setChosen] = useState<Set<ImportKey>>(new Set());
 
   useEffect(() => {
@@ -98,7 +110,8 @@ export function ImportDesktopSettingsDialog({ opened, onClose, current, customNa
       ini
         ? buildImportItems({ ini, placeFormats, desktopLanguage, customNameFormats, dateFormatLabel: describeDateFormat })
         : [],
-    [ini, placeFormats, desktopLanguage, customNameFormats],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadedLocales: recompute once the language loads
+    [ini, placeFormats, desktopLanguage, customNameFormats, loadedLocales],
   );
 
   // Pre-tick what the user evidently chose on desktop: usable, not just
@@ -191,8 +204,8 @@ export function ImportDesktopSettingsDialog({ opened, onClose, current, customNa
             allowDeselect={false}
             value={desktopLanguage}
             onChange={(value) => value && setDesktopLanguage(value)}
-            data={Object.entries(DESKTOP_DATE_FORMATS)
-              .map(([value, { label }]) => ({ value, label: t(label) }))
+            data={[...new Set([...availableLocales(), ...Object.keys(DESKTOP_DATE_FORMATS)])]
+              .map((value) => ({ value, label: DESKTOP_DATE_FORMATS[value] ? `${t(DESKTOP_DATE_FORMATS[value].label)} (${value})` : value }))
               .sort((a, b) => a.label.localeCompare(b.label))}
           />
         </Group>

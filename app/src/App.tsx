@@ -14,6 +14,7 @@ import { getViewStore } from "./store/registry";
 import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
 import { getAuthSnapshot, getCurrentUsername, getToken, subscribe as subscribeAuth } from "./auth/auth";
 import { loadDisplaySettings } from "./store/displaySettings";
+import { dateLocaleCode } from "./store/placeIndex";
 import { isHandoffCandidate, tryHandoffLogin } from "./auth/windowHandoff";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "./i18n/i18n";
 import { LoginForm } from "./auth/LoginForm";
@@ -238,6 +239,11 @@ function AuthenticatedApp() {
   useEffect(() => {
     loadDisplaySettings().catch(() => {});
   }, []);
+  // Start loading the interface language's date strings right away (they
+  // load on demand; dates show in English until they land).
+  useEffect(() => {
+    dateLocaleCode();
+  }, [lang]);
   useEffect(() => {
     // Module state seeds `lang` from storage at import time but not
     // `strings` -- populate it once on mount for a persisted non-English

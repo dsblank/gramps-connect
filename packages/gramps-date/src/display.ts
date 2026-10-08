@@ -26,8 +26,8 @@
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/blob/master/gramps/gen/datehandler/_datedisplay.py
 
-import { Calendar, Modifier, NewYearValue, type DatePart, type GrampsDate, getStartDate, getStopDate } from "./types";
-import { type DateLocale, getLocale } from "./locale";
+import { Calendar, Modifier, NewYearValue, Quality, type DatePart, type GrampsDate, getStartDate, getStopDate } from "./types";
+import { type DateLocale, type InflectKey, type MonthFormLists, getLocale } from "./locale";
 import { BASE_LAYOUTS, type GregorianLayout } from "./layouts";
 
 // In its own module so locale files can use it without a display.ts <->
@@ -93,58 +93,176 @@ export function displayIso(datePart: DatePart, locale: DateLocale): string {
   return formatBce(value, datePart, locale);
 }
 
+/** Python's s[start:end] (negative indices from the end, clamped). */
+function pySlice(text: string, start: number, end: number): string {
+  const norm = (i: number) => (i < 0 ? Math.max(text.length + i, 0) : Math.min(i, text.length));
+  return text.slice(norm(start), norm(end));
+}
+
+/** Python's str.replace: every occurrence; an empty `find` leaves the
+ * text unchanged here (as replacing "" with "" does). */
+function pyReplaceAll(text: string, find: string, replacement: string): string {
+  return find === "" ? text : text.split(find).join(replacement);
+}
+
+/** `_get_short_weekday` / `_get_long_weekday`: the weekday name for the
+ * raw numbers read as a proleptic-Gregorian date (whatever the calendar,
+ * as Gramps does), "" when there's no day/month, a 13th month, or a BCE
+ * or out-of-range year. */
+function weekdayName(datePart: DatePart, names: readonly string[]): string {
+  const [day, month, year] = datePart;
+  if (day === 0 || month === 0 || month === 13 || year > 9999 || year < 0) return "";
+  const d = new Date(Date.UTC(2000, month - 1, day));
+  d.setUTCFullYear(year);
+  // Python weekday() is Monday=0; Gramps indexes Sunday=1 .. Saturday=7.
+  const pythonWeekday = (d.getUTCDay() + 6) % 7;
+  return names[((pythonWeekday + 1) % 7) + 1] ?? "";
+}
+
+/** `dd_dformat01`, the base numeric format, faithfully: %b/%B become the
+ * month *number*, %a/%A the weekday, a zero day goes with its delimiter
+ * (Python replace -- every occurrence -- and slicing), the year unsigned,
+ * and "-" becomes "/". A bare year goes through the language's year
+ * localization. */
 function formatNumeric(datePart: DatePart, locale: DateLocale): string {
   const [day, month, year, slash] = datePart;
   if (slash) return displayIso(datePart, locale);
-  // Year only: str(year) in dd_dformat01 -- signed, so a BCE year shows as
-  // "-44 B.C.E." (Gramps' own output, quirk included).
-  if (day === 0 && month === 0) return String(year);
+  // Unsigned: the BCE marker says it (Gramps writes "-44 B.C.E." here,
+  // which doesn't read back -- a Gramps bug, not copied).
+  if (day === 0 && month === 0) return String(Math.abs(year)) + locale.yearSuffix;
 
-  let value = locale.numericFormat.replace("%m", String(month));
+  // %e (day, no padding -- Bulgarian) is handled as %d; Gramps leaves it in
+  // the output as "%e" (a Gramps bug, not copied).
+  let value = locale.numericFormat.replace("%e", "%d").replace("%m", String(month));
+  value = value.replace("%b", String(month)).replace("%B", String(month));
+  value = value.replace("%a", weekdayName(datePart, locale.shortDays)).replace("%A", weekdayName(datePart, locale.longDays));
   if (day === 0) {
-    // Remove the zero day and its adjacent delimiter -- mirrors
-    // dd_dformat01's exact index arithmetic for "which side is the
-    // delimiter on."
     const i = value.indexOf("%d");
-    if (value.length === i + 2) {
-      value = value.slice(0, i - 1) + value.slice(i + 2); // delimiter to the left
-    } else {
-      value = value.slice(0, i) + value.slice(i + 3); // delimiter to the right
-    }
+    value =
+      value.length === i + 2
+        ? pyReplaceAll(value, pySlice(value, i - 1, i + 2), "") // delimiter to the left
+        : pyReplaceAll(value, pySlice(value, i, i + 3), ""); // delimiter to the right
   }
   value = value.replace("%d", String(day));
   value = value.replace("%Y", String(Math.abs(year)));
   return value.replace(/-/g, "/");
 }
 
-function monthTablesFor(calendar: Calendar, locale: DateLocale): { long: readonly string[]; short: readonly string[] } {
+interface MonthTables {
+  long: readonly string[];
+  short: readonly string[];
+  /** Which DateLocale.inflection.forms lists these are. */
+  longForms: MonthFormLists;
+  shortForms: MonthFormLists;
+}
+
+function monthTablesFor(calendar: Calendar, locale: DateLocale): MonthTables {
   // Only Gregorian/Julian/Swedish (which display identically -- see
   // _display_julian = _display_swedish = _display_gregorian in the
   // original) have distinct long/short month tables; the other
   // calendars have no abbreviated form in Gramps at all.
+  const one = (months: readonly string[], forms: MonthFormLists): MonthTables => ({ long: months, short: months, longForms: forms, shortForms: forms });
   switch (calendar) {
     case Calendar.HEBREW:
-      return { long: locale.hebrewMonths, short: locale.hebrewMonths };
+      return one(locale.hebrewMonths, "hebrew");
     case Calendar.FRENCH:
-      return { long: locale.frenchMonths, short: locale.frenchMonths };
+      return one(locale.frenchMonths, "french");
     case Calendar.ISLAMIC:
-      return { long: locale.islamicMonths, short: locale.islamicMonths };
+      return one(locale.islamicMonths, "islamic");
     case Calendar.PERSIAN:
-      return { long: locale.persianMonths, short: locale.persianMonths };
+      return one(locale.persianMonths, "persian");
     default:
-      return { long: locale.longMonths, short: locale.shortMonths };
+      return { long: locale.longMonths, short: locale.shortMonths, longForms: "long", shortForms: "short" };
   }
 }
 
-function monthDayYear(datePart: DatePart, months: readonly string[], locale: DateLocale, dayFirst: boolean, dayDot = false): string {
+/** A range's or span's two dates take the same case (Gramps' own comment
+ * on FORMATS_long_month_year): where a translation names a form the month
+ * doesn't have (Czech "between" -> "X"; Gramps raises KeyError), its
+ * partner's is used. */
+const PARTNER_KEY: Partial<Record<InflectKey, InflectKey>> = { between: "and", and: "between", from: "to", to: "from" };
+
+/** A month name in a grammatical context (format_long_month and
+ * format_long_month_year, with DateDisplayRU/FI's day forms): the word,
+ * plus the month-and-year template when the list is inflected. */
+function inflectedMonth(
+  month: number,
+  plain: string,
+  list: MonthFormLists,
+  short: boolean,
+  locale: DateLocale,
+  inflect: InflectKey,
+  form?: string,
+): { word: string; template?: string } | null {
+  const inflection = locale.inflection;
+  const forms = inflection?.forms[list];
+  if (!inflection || !forms) return null;
+  const formats = short ? inflection.shortMonthYear : inflection.longMonthYear;
+  const format = formats[inflect] ?? formats[""];
+  const lexeme = forms[month];
+  const partner = PARTNER_KEY[inflect];
+  const pick = (name: string | null | undefined) => (name ? lexeme?.[name] : undefined);
+  const word = form !== undefined
+    ? pick(form)
+    : format.form ? pick(format.form) ?? (partner ? pick(formats[partner].form) : undefined) : plain;
+  return { word: word ?? plain, template: form !== undefined ? "{month} {year}" : format.template };
+}
+
+/** Python str.format for the text templates: {day} / {day:d},
+ * {long_month}, {short_month}, {year}. */
+/** Python str.format for the text templates: {name}, {name:d}, and
+ * zero-padded {name:02d}. */
+function fillTextTemplate(template: string, values: Record<string, string>): string {
+  return template.replace(/\{(\w+)(?::(0\d+)?d)?\}/g, (match, key: string, pad?: string) => {
+    const value = values[key];
+    if (value === undefined) return match;
+    return pad ? value.padStart(Number(pad), "0") : value;
+  });
+}
+
+/** A "text" layout (dd_dformat02..05, or a language's own month-name
+ * format): the template for a full date; "{month} {year}" without a day;
+ * the year alone without a month (localized for the base layouts). */
+const ROMAN_MONTHS = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII"];
+
+/** A "text" layout (dd_dformat02..05, or a language's own format): the
+ * template for a full date; `monthYear` without a day; the year alone
+ * without a month (localized for the base layouts). */
+function formatText(datePart: DatePart, tables: MonthTables, locale: DateLocale, layout: Extract<GregorianLayout, { kind: "text" }>, calendar: Calendar, inflect: InflectKey): string {
   const [day, month, year, slash] = datePart;
+  if (slash && layout.isoWhenSlash) return displayIso(datePart, locale);
   const y = slashYear(year, slash);
+  const monthText = (kind: NonNullable<typeof layout.monthYearMonths>) =>
+    kind === "long" ? tables.long[month]
+      : kind === "short" ? tables.short[month]
+        : kind === "roman" ? (locale.romanMonths ?? ROMAN_MONTHS)[month]
+          // The alternate list is Gregorian month names; other calendars keep theirs.
+          : kind === "altLong" ? (calendar === Calendar.GREGORIAN || calendar === Calendar.JULIAN || calendar === Calendar.SWEDISH ? locale.altLongMonths?.[month] ?? tables.long[month] : tables.long[month])
+            : String(month);
+  const values = (kind: NonNullable<typeof layout.monthYearMonths>) => {
+    const m = monthText(kind);
+    return { day: String(day), month: m, long_month: m, short_month: m, year: y };
+  };
+  // Inflected month names (long/short lists with forms only).
+  const inflected = (form?: string) => {
+    if (layout.months !== "long" && layout.months !== "short") return null;
+    const short = layout.months === "short";
+    return inflectedMonth(month, monthText(layout.months), short ? tables.shortForms : tables.longForms, short, locale, inflect, form);
+  };
   if (day === 0) {
-    if (month === 0) return y;
-    return `${months[month]} ${y}`;
+    if (month === 0) return layout.yearOnly ? fillTextTemplate(layout.yearOnly, values(layout.months)) : layout.base ? y + locale.yearSuffix : y;
+    const inf = inflected(inflect === "" ? layout.monthYearForm : undefined);
+    if (inf) return fillTextTemplate(inf.template!, { month: inf.word, year: y });
+    return fillTextTemplate(layout.monthYear ?? "{month} {year}", values(layout.monthYearMonths ?? layout.months));
   }
-  if (month === 0) return displayIso(datePart, locale); // day set, month not -- gramps bug 8477
-  return dayFirst ? `${day}${dayDot ? "." : ""} ${months[month]} ${y}` : `${months[month]} ${day}, ${y}`;
+  if (month === 0) {
+    // Day set, month not -- gramps bug 8477; ISO unless the layout says.
+    return layout.noMonth ? fillTextTemplate(layout.noMonth, values(layout.months)) : displayIso(datePart, locale);
+  }
+  const inf = inflected(layout.dayForm);
+  if (!inf && layout.numericWhenUninflected) return formatNumeric(datePart, locale);
+  const v = values(layout.months);
+  return fillTextTemplate(layout.template, inf ? { ...v, month: inf.word, long_month: inf.word, short_month: inf.word } : v);
 }
 
 /** The layout one date part is drawn with: the language's own for a
@@ -152,42 +270,47 @@ function monthDayYear(datePart: DatePart, months: readonly string[], locale: Dat
  * GregorianLayout) -- where a format number past the base list means the
  * base's last one, as `_display_calendar`'s `else` does. */
 function layoutFor(calendar: Calendar, locale: DateLocale, index: number): GregorianLayout {
-  if (calendar === Calendar.GREGORIAN) return locale.gregorianLayouts[index] ?? BASE_LAYOUTS[0];
-  return BASE_LAYOUTS[Math.min(index, BASE_LAYOUTS.length - 1)];
+  // Languages whose displayer overrides _display_calendar (Hungarian,
+  // Swedish) draw every calendar their own way.
+  if (calendar === Calendar.GREGORIAN || locale.layoutsForAllCalendars) return locale.gregorianLayouts[index] ?? BASE_LAYOUTS[0];
+  return locale.baseLayouts[Math.min(index, locale.baseLayouts.length - 1)];
 }
 
-/** A language's own numeric format (German/French `_display_gregorian`
- * formats 1 and 6/8): the pattern filled in as-is, with the raw signed
- * year and any zero day kept. */
-function formatLocaleNumeric(datePart: DatePart, locale: DateLocale, pad: boolean, isoWhenBce: boolean): string {
+/** A language's own numeric format (German/French/Dutch/Polish
+ * `_display_gregorian`): see GregorianLayout's "numeric". */
+function formatLocaleNumeric(datePart: DatePart, locale: DateLocale, layout: Extract<GregorianLayout, { kind: "numeric" }>): string {
   const [day, month, year, slash] = datePart;
-  if (slash || (isoWhenBce && year < 0)) return displayIso(datePart, locale);
+  if (slash || (layout.isoWhenBce && year < 0)) return displayIso(datePart, locale);
   let value: string;
   if (day === 0 && month === 0) {
-    value = String(year);
+    value = String(layout.absYear ? Math.abs(year) : year);
   } else {
-    const two = (n: number) => (pad ? String(n).padStart(2, "0") : String(n));
-    value = locale.numericFormat.replace("%m", two(month)).replace("%d", two(day)).replace("%Y", String(year));
+    const two = (n: number) => (layout.pad ? String(n).padStart(2, "0") : String(n));
+    value = locale.numericFormat.replace("%e", "%d").replace("%m", two(month));
+    if (day === 0 && layout.dropZeroDay) {
+      // _date_ja.py: the day and the character after it ("%d日").
+      const i = value.indexOf("%d");
+      if (i >= 0) value = value.slice(0, i) + value.slice(i + 3);
+    }
+    value = value.replace("%d", two(day)).replace("%Y", String(layout.absYear ? Math.abs(year) : year));
+    if (layout.dashToSlash) value = value.replace(/-/g, "/");
   }
   return formatBce(value, datePart, locale);
 }
 
 /** `_display_calendar` / a language's `_display_gregorian`: one date part
  * in the locale's numbered format `index`. */
-function displayDatePartAt(datePart: DatePart, calendar: Calendar, locale: DateLocale, index: number): string {
+function displayDatePartAt(datePart: DatePart, calendar: Calendar, locale: DateLocale, index: number, inflect: InflectKey = ""): string {
   const layout = layoutFor(calendar, locale, index);
   switch (layout.kind) {
     case "iso":
       return displayIso(datePart, locale);
     case "baseNumeric":
-      return formatBce(formatNumeric(datePart, locale), datePart, locale);
+      return formatBce(locale.numericLstrip ? formatNumeric(datePart, locale).trimStart() : formatNumeric(datePart, locale), datePart, locale);
     case "numeric":
-      return formatLocaleNumeric(datePart, locale, layout.pad, layout.isoWhenBce);
-    case "text": {
-      const tables = monthTablesFor(calendar, locale);
-      const months = layout.months === "long" ? tables.long : tables.short;
-      return formatBce(monthDayYear(datePart, months, locale, layout.order === "dmy", layout.dayDot), datePart, locale);
-    }
+      return formatLocaleNumeric(datePart, locale, layout);
+    case "text":
+      return formatBce(formatText(datePart, monthTablesFor(calendar, locale), locale, layout, calendar, inflect), datePart, locale);
   }
 }
 
@@ -210,8 +333,8 @@ function fillTemplate(template: string, values: Record<string, string>): string 
 function displayCompound(date: GrampsDate, locale: DateLocale, index: number, template: string): string {
   return fillTemplate(template, {
     quality: locale.qualityStrings[date.quality] ?? "",
-    start: displayDatePartAt(getStartDate(date), date.calendar, locale, index),
-    stop: displayDatePartAt(getStopDate(date), date.calendar, locale, index),
+    start: displayDatePartAt(getStartDate(date), date.calendar, locale, index, date.modifier === Modifier.SPAN ? "from" : "between"),
+    stop: displayDatePartAt(getStopDate(date), date.calendar, locale, index, date.modifier === Modifier.SPAN ? "to" : "and"),
     calendar: formatExtras(date.calendar, date.newyear, locale),
   });
 }
@@ -230,14 +353,36 @@ export function formatDate(date: GrampsDate, options: FormatDateOptions = {}): s
   const start = getStartDate(date);
   if (date.modifier === Modifier.TEXTONLY) return date.text;
   if (start[0] === 0 && start[1] === 0 && start[2] === 0) return "";
-  if (date.modifier === Modifier.SPAN) return displayCompound(date, locale, index, locale.templates.span);
-  if (date.modifier === Modifier.RANGE) return displayCompound(date, locale, index, locale.templates.range);
+  if (locale.display) {
+    return locale.display(date, {
+      locale,
+      part: (datePart, calendar) => displayDatePartAt(datePart, calendar, locale, index),
+      extras: (calendar, newyear) => formatExtras(calendar, newyear, locale),
+    });
+  }
+  const templates = locale.templates[date.quality] ?? locale.templates[0];
+  if (date.modifier === Modifier.SPAN) return displayCompound(date, locale, index, templates.span);
+  if (date.modifier === Modifier.RANGE) return displayCompound(date, locale, index, templates.range);
 
   // The modifier's word (and its position -- Finnish puts it after the
   // date) is part of the template, extracted from Gramps' own output.
-  return fillTemplate(locale.templates.modifiers[date.modifier] ?? "{quality}{date}{calendar}", {
+  return fillTemplate(templates.modifiers[date.modifier] ?? "{quality}{date}{calendar}", {
     quality: locale.qualityStrings[date.quality] ?? "",
-    date: displayDatePartAt(start, date.calendar, locale, index),
+    date: displayDatePartAt(start, date.calendar, locale, index, inflectKey(date)),
     calendar: formatExtras(date.calendar, date.newyear, locale),
   });
+}
+
+/** display_formatted's date_type: the context a single date is shown in. */
+function inflectKey(date: GrampsDate): InflectKey {
+  switch (date.modifier) {
+    case Modifier.BEFORE: return "before";
+    case Modifier.AFTER: return "after";
+    case Modifier.FROM: return "from";
+    case Modifier.TO: return "to";
+    case Modifier.ABOUT: return "about";
+  }
+  if (date.quality === Quality.ESTIMATED) return "estimated";
+  if (date.quality === Quality.CALCULATED) return "calculated";
+  return "";
 }

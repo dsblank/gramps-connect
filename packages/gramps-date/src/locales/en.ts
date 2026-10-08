@@ -1,9 +1,9 @@
-// English. Strings: ./en.generated.ts (Gramps' base DateDisplay/DateParser
-// in an en_US locale -- month-first numeric dates, "%m/%d/%Y"). Layouts:
-// Gramps' base ones.
+// English -- the one language built in rather than loaded on demand (the
+// default, and the fallback for any language not loaded). Strings:
+// ./en.generated.ts (Gramps' base DateDisplay/DateParser in an en_US
+// locale -- month-first numeric dates). Layouts: Gramps' base ones.
 
-import { BASE_LAYOUTS } from "../layouts";
-import { enStrings } from "./en.generated";
-import { fromGramps, IDENTITY_FORMAT_INDEX } from "./fromGramps";
+import { strings } from "./en.generated";
+import { fromGramps } from "./fromGramps";
 
-export const en = fromGramps(enStrings, { gregorianLayouts: BASE_LAYOUTS, formatIndex: IDENTITY_FORMAT_INDEX });
+export const en = fromGramps(strings, null);

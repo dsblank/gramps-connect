@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Generate gramps-date locale data and test vectors from a real Gramps.
 
-    python3 packages/gramps-date/scripts/generate_gramps_locales.py de fr es
+    python3 packages/gramps-date/scripts/generate_gramps_locales.py [lang ...] [--strings-only]
 
+Without languages: English plus every language in Gramps' po/LINGUAS, each
+in its own process, in parallel (Gramps' parser keeps state in class
+attributes, which leaks from one language into the next in one process).
 For each language this writes:
 
   src/locales/<lang>.generated.ts   every *string* the displayer/parser uses,
@@ -10,16 +13,22 @@ For each language this writes:
                                     DateParser objects (class attributes are
                                     not enough: translations replace many of
                                     them at runtime -- German's class says
-                                    "etwa", the live displayer says "um")
-  src/__tests__/fixtures/gramps-<lang>.json
+                                    "etwa", the live displayer says "um"),
+                                    including inflected month forms
+  src/__tests__/fixtures/gramps-<lang>.json.gz
                                     what Gramps displays for a set of dates in
                                     every one of that language's format
                                     numbers, and what Gramps' parser makes of
-                                    each displayed string
+                                    each displayed string and of typed input
+  src/__tests__/fixtures/gramps-tests-<lang>.json.gz
+                                    the same for the date sets of Gramps' own
+                                    unit tests
 
-Layouts (day/month order, "12." vs "12", zero padding) are *not* generated --
-they live in hand-written src/locales/<lang>.ts, checked against the vectors
-by src/__tests__/locales.test.ts.
+and src/locales/available.generated.ts, the list of loadable languages.
+
+Layouts (day/month order, "12." vs "12", zero padding) are *not* generated:
+languages whose displayer lays dates out its own way are hand-written in
+src/locales/index.ts, checked against the vectors by the tests.
 
 Needs Gramps importable with compiled translations (see the app's
 scripts/compile-gramps-translations.py).
@@ -28,7 +37,9 @@ scripts/compile-gramps-translations.py).
 import json
 import os
 import re
+import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 # Importing the datehandler first sets up Gramps' default locale and its
 # localedir; a GrampsLocale(lang=...) created before that has no
@@ -48,7 +59,8 @@ Y1, Y2 = 1111, 2222
 def py_to_js_regex(pattern):
     """Gramps' patterns are used with re.match (anchored at the start) and
     Python's (?P<name>...) groups."""
-    return "^" + pattern.replace("(?P<", "(?<")
+    body = pattern.replace("(?P<", "(?<")
+    return body if body.startswith("^") else "^" + body
 
 
 def make_date(quality, modifier, calendar, start, stop=None, newyear=0, text=""):
@@ -72,41 +84,45 @@ def date_json(date):
 
 def templates(dd):
     """Turn sentinel renderings back into templates with {quality} {start}
-    {stop} {date} {calendar} placeholders. Rendered in ISO (format 0), so the
-    dates are just the sentinel years."""
+    {stop} {date} {calendar} placeholders -- one set per quality (none,
+    estimated, calculated), since some languages word a date differently
+    with a quality (Hebrew adds "ב־" only then). Rendered in ISO (format 0),
+    so the dates are just the sentinel years."""
     dd.set_format(0)
-    qual = dd._qual_str[Date.QUAL_ESTIMATED]
     scal = dd.format_extras(Date.CAL_JULIAN, 0)
+    jul = Date.CAL_JULIAN
 
-    def to_template(rendered, pairs):
-        out = rendered
-        if not out.startswith(qual):
-            raise SystemExit(f"quality not at the start of {rendered!r} -- extend templates()")
-        out = "{quality}" + out[len(qual):]
-        if not out.endswith(scal):
-            raise SystemExit(f"calendar suffix not at the end of {rendered!r}")
-        out = out[: -len(scal)] + "{calendar}"
-        for literal, placeholder in pairs:
-            if out.count(literal) != 1:
-                raise SystemExit(f"{literal!r} not exactly once in {rendered!r}")
-            out = out.replace(literal, placeholder)
-        return out
+    def per_quality(quality):
+        qual = dd._qual_str[quality]
 
-    est, jul = Date.QUAL_ESTIMATED, Date.CAL_JULIAN
-    span = dd.display(make_date(est, Date.MOD_SPAN, jul, (0, 0, Y1, False), (0, 0, Y2, False)))
-    rng = dd.display(make_date(est, Date.MOD_RANGE, jul, (0, 0, Y1, False), (0, 0, Y2, False)))
-    modifiers = []
-    for mod in range(9):
-        if mod in (Date.MOD_RANGE, Date.MOD_SPAN, Date.MOD_TEXTONLY):
-            modifiers.append("")
-            continue
-        rendered = dd.display(make_date(est, mod, jul, (0, 0, Y1, False)))
-        modifiers.append(to_template(rendered, [(str(Y1), "{date}")]))
-    return {
-        "span": to_template(span, [(str(Y1), "{start}"), (str(Y2), "{stop}")]),
-        "range": to_template(rng, [(str(Y1), "{start}"), (str(Y2), "{stop}")]),
-        "modifiers": modifiers,
-    }
+        def to_template(rendered, pairs):
+            # Each piece wherever the language puts it (Finnish:
+            # "arviolta 1111 ja 2222 (juliaaninen) välillä"), as long as it
+            # occurs exactly once.
+            out = rendered
+            pieces = ([(qual, "{quality}")] if qual else []) + [(scal, "{calendar}")] + pairs
+            for literal, placeholder in pieces:
+                if out.count(literal) != 1:
+                    raise SystemExit(f"{literal!r} not exactly once in {rendered!r} -- extend templates()")
+                out = out.replace(literal, placeholder)
+            return out
+
+        span = dd.display(make_date(quality, Date.MOD_SPAN, jul, (0, 0, Y1, False), (0, 0, Y2, False)))
+        rng = dd.display(make_date(quality, Date.MOD_RANGE, jul, (0, 0, Y1, False), (0, 0, Y2, False)))
+        modifiers = []
+        for mod in range(9):
+            if mod in (Date.MOD_RANGE, Date.MOD_SPAN, Date.MOD_TEXTONLY):
+                modifiers.append("")
+                continue
+            rendered = dd.display(make_date(quality, mod, jul, (0, 0, Y1, False)))
+            modifiers.append(to_template(rendered, [(str(Y1), "{date}")]))
+        return {
+            "span": to_template(span, [(str(Y1), "{start}"), (str(Y2), "{stop}")]),
+            "range": to_template(rng, [(str(Y1), "{start}"), (str(Y2), "{stop}")]),
+            "modifiers": modifiers,
+        }
+
+    return [per_quality(quality) for quality in (Date.QUAL_NONE, Date.QUAL_ESTIMATED, Date.QUAL_CALCULATED)]
 
 
 # Calendar -> (Gramps' month-name-first pattern, day-first pattern, the
@@ -119,6 +135,46 @@ TEXT_PATTERNS = {
     "persian": ("_ptext", "_ptext2", "_pmon_str"),
     "islamic": ("_itext", "_itext2", "_imon_str"),
 }
+
+
+# Gramps parser regex attribute -> exported name. All are used with
+# re.match (anchored at the start), so each gets a leading "^".
+PARSER_PATTERNS = {
+    "_abt2": "aboutBrackets", "_bce_re": "bce", "_cal": "calendar", "_calny": "calendarNewyear",
+    "_calny_iso": "calendarNewyearIso", "_iso": "iso", "_isotimestamp": "isoTimestamp",
+    "_modifier": "modifier", "_modifier_after": "modifierAfter", "_numeric": "numeric", "_ny": "newyear",
+    "_ny_iso": "newyearIso", "_qual": "quality", "_quarter": "quarter", "_range": "range", "_span": "span",
+    "_today": "today", "_rfc": "rfc",
+}
+
+
+# The word-list alternations Gramps embeds in its patterns (init_strings),
+# exported as placeholders: the port fills each with Gramps' words *plus*
+# the words it displays, so every displayed date reads back (Gramps' own
+# parsers don't always accept their displayers' words -- e.g. Spanish
+# "(Republicano francés)").
+ALTERNATIONS = {
+    "_bce_str": "{bce}", "_qual_str": "{qualities}", "_mod_str": "{modifiers}",
+    "_mod_after_str": "{modifiersAfter}", "_cal_str": "{calendars}", "_ny_str": "{newyears}",
+}
+
+
+def parser_patterns(dp):
+    """Every compiled pattern the parser matches with, as JS regex source +
+    flags, word lists as placeholders (ALTERNATIONS) -- languages override
+    some patterns (init_strings), so all are exported rather than rebuilt."""
+    import re as _re
+    out = {}
+    for attr, name in PARSER_PATTERNS.items():
+        pattern = getattr(dp, attr)
+        source = pattern.pattern
+        # Longest first, so one alternation inside another can't be split.
+        for alt_attr, placeholder in sorted(ALTERNATIONS.items(), key=lambda kv: -len(getattr(dp, kv[0], "") or "")):
+            alternation = getattr(dp, alt_attr, None)
+            if alternation and alternation in source:
+                source = source.replace(alternation, placeholder)
+        out[name] = {"source": py_to_js_regex(source), "ignoreCase": bool(pattern.flags & _re.IGNORECASE)}
+    return out
 
 
 def text_patterns(dp):
@@ -144,17 +200,73 @@ def numeric_order(dhformat):
     return "".join(name for _, name in order)
 
 
+# Per calendar, the months distinct_months renamed: Gramps' text for them is
+# ambiguous, so it's no reference even where it happens to read back.
+COLLIDED = {}
+
+
+def collided(date):
+    months = {date.get_month()} | ({date.get_stop_month()} if date.is_compound() else set())
+    return bool(COLLIDED.get(date.get_calendar(), set()) & months)
+
+
+def distinct_months(lang, names, english, calendars):
+    """Month names with translation collisions undone: where two months
+    share a translation (cs/pl both Adars "Adar", sl Persian "Mehr" for
+    Aban too) neither can read back, so those months keep Gramps' English
+    names. A Gramps translation bug, reported upstream."""
+    names = [str(n) for n in names]
+    folded = [n.lower() for n in names]
+    for i in range(1, len(names)):
+        if folded.count(folded[i]) > 1:
+            print(f"{lang}: month {i} {names[i]!r} shared with another month; using {english[i]!r}", flush=True)
+            names[i] = english[i]
+            for calendar in calendars:
+                COLLIDED.setdefault(calendar, set()).add(i)
+    return names
+
+
+INFLECT_KEYS = ("", "from", "to", "between", "and", "before", "after", "about", "estimated", "calculated")
+
+
+def month_year_formats(formats):
+    """FORMATS_long/short_month_year: per inflection context, the case form
+    it takes ("{long_month.forms[Р]} {year}" -> "Р") and its template."""
+    out = {}
+    for key in INFLECT_KEYS:
+        m = re.fullmatch(r"(.*)\{(?:long|short)_month(?:\.forms\[([^\]]+)\])?\}(.*)", str(formats[key]))
+        out[key] = {"form": m.group(2), "template": f"{m.group(1)}{{month}}{m.group(3)}"}
+    return out
+
+
+def inflection(dd):
+    """Month names with grammatical forms (Lexemes: cs, fi, hr, ru, sk, sl,
+    uk), per month list, and the forms each context takes -- or None. The
+    contexts are Gramps' English keys: Finnish translates the keys
+    themselves ("ennen"), which then aren't in FORMATS_*_month_year, so
+    Gramps raises KeyError there (a Gramps bug, fixed by not translating)."""
+    lists = {"long": dd.long_months, "short": dd.short_months, "hebrew": dd.hebrew,
+             "french": dd.french, "islamic": dd.islamic, "persian": dd.persian}
+    forms = {name: [dict(m.forms) if hasattr(m, "forms") else None for m in months]
+             if hasattr(months[1], "forms") else None for name, months in lists.items()}
+    if not any(forms.values()):
+        return None
+    return {"forms": forms,
+            "longMonthYear": month_year_formats(dd.FORMATS_long_month_year),
+            "shortMonthYear": month_year_formats(dd.FORMATS_short_month_year)}
+
+
 def strings(lang, loc):
     dd, dp = loc.date_displayer, loc.date_parser
-    order = numeric_order(dd.dhformat)
+    en = GrampsLocale(lang="en").date_displayer
     return {
         "code": lang,
-        "longMonths": list(dd.long_months),
-        "shortMonths": list(dd.short_months),
-        "hebrewMonths": list(dd.hebrew),
-        "frenchMonths": list(dd.french),
-        "islamicMonths": list(dd.islamic),
-        "persianMonths": list(dd.persian),
+        "longMonths": distinct_months(lang, dd.long_months, list(en.long_months), (Date.CAL_GREGORIAN, Date.CAL_JULIAN, Date.CAL_SWEDISH)),
+        "shortMonths": distinct_months(lang, dd.short_months, list(en.short_months), (Date.CAL_GREGORIAN, Date.CAL_JULIAN, Date.CAL_SWEDISH)),
+        "hebrewMonths": distinct_months(lang, dd.hebrew, list(en.hebrew), (Date.CAL_HEBREW,)),
+        "frenchMonths": distinct_months(lang, dd.french, list(en.french), (Date.CAL_FRENCH,)),
+        "islamicMonths": distinct_months(lang, dd.islamic, list(en.islamic), (Date.CAL_ISLAMIC,)),
+        "persianMonths": distinct_months(lang, dd.persian, list(en.persian), (Date.CAL_PERSIAN,)),
         "calendarNames": list(dd.calendar),
         "modifierStrings": list(dd._mod_str),
         "qualityStrings": list(dd._qual_str),
@@ -166,15 +278,45 @@ def strings(lang, loc):
         "qualityWords": dict(sorted(dp.quality_to_int.items())),
         "calendarWords": dict(sorted(dp.calendar_to_int.items())),
         "bceWords": list(dp.bce),
-        # Gramps' parsers share one month_to_int dict (each _date_xx.py adds
-        # its aliases to DateParser.month_to_int itself), so every language
-        # accepts every other's month names -- exported whole, so the port
-        # accepts exactly what Gramps does.
-        "monthWords": dict(sorted(dp.month_to_int.items())),
         "textPatterns": text_patterns(dp),
-        "spanPattern": py_to_js_regex(dp._span.pattern),
-        "rangePattern": py_to_js_regex(dp._range.pattern),
-        "numericOrder": order if order in ("dmy", "mdy", "ymd") else "dmy",
+        "parserPatterns": parser_patterns(dp),
+        # Gramps' parser month tables, exactly -- the only names it accepts
+        # (languages without their own parser class never get their month
+        # names added, so Gramps can't parse e.g. Turkish "Ocak 4, 1789").
+        "monthTables": {
+            "gregorian": dict(sorted(dp.month_to_int.items())),
+            "swedish": dict(sorted(dp.swedish_to_int.items())),
+            "hebrew": dict(sorted(dp.hebrew_to_int.items())),
+            "french": dict(sorted(dp.french_to_int.items())),
+            "islamic": dict(sorted(dp.islamic_to_int.items())),
+            "persian": dict(sorted(dp.persian_to_int.items())),
+        },
+        # _rfc's (English) month abbreviations.
+        "rfcMonths": dict(dp._rfc_mons_to_int),
+        # The base layouts' translated templates (dd_dformat02..05), Python
+        # str.format syntax -- translators can reorder or punctuate them.
+        "baseTextTemplates": {
+            "longMonthDayYear": loc.translation.sgettext("{long_month} {day:d}, {year}"),
+            "shortMonthDayYear": loc.translation.sgettext("{short_month} {day:d}, {year}"),
+            "dayLongMonthYear": loc.translation.sgettext("{day:d} {long_month} {year}"),
+            "dayShortMonthYear": loc.translation.sgettext("{day:d} {short_month} {year}"),
+        },
+        # A second long-month list some displayers use for month-and-year
+        # dates (Lithuanian nominative "long_months_vardininkas").
+        "altLongMonths": [str(m) for m in getattr(dd, "long_months_vardininkas", ())] or None,
+        # Hungarian's own Roman numerals ("I.", "II."); others use plain ones.
+        "romanMonths": [str(m) for m in getattr(dd, "roman_months", ())] or None,
+        "inflection": inflection(dd),
+        # For %a/%A in a numeric pattern (Icelandic).
+        "shortDays": [str(day) for day in dd.short_days],
+        "longDays": [str(day) for day in dd.long_days],
+        # _get_localized_year's addition to a bare year (Croatian: ".").
+        "yearSuffix": dd._get_localized_year("1854")[len("1854"):],
+        # The parser's own reading of its pattern (DateParser.__init__), after
+        # align_parser_numeric_order -- covers %e/%b/%a patterns too.
+        "numericOrder": "ymd" if dp.ymd else "dmy" if dp.dmy else "mdy",
+        # Icelandic's "%a %e.%b %Y" sets DateParser._ddmy (weekday first).
+        "numericWeekdayFirst": bool(getattr(dp, "_ddmy", False)),
         # A gettext context ("date format\x04Numerical") can leak into a
         # name that has no translation; keep just the name.
         "formatNames": [name.split("\x04")[-1] for name in dd.formats],
@@ -234,7 +376,38 @@ TYPED = {
 
 def typed_vectors(lang, loc):
     dp = loc.date_parser
-    return [{"text": text, "parsed": date_json(dp.parse(text))} for text in TYPED["_all"] + TYPED.get(lang, [])]
+    out = []
+    for text in TYPED["_all"] + TYPED.get(lang, []):
+        parsed = gramps_parse(dp, text)
+        out.append({"text": text, "parsed": date_json(parsed) if parsed else None})
+    return out
+
+
+GRAMPS_ERRORS = {}
+
+
+def gramps_display(dd, date):
+    """dd.display(date), or None where Gramps itself raises -- e.g. Czech's
+    inflected month formats hit KeyError 'X' in format_long_month for some
+    date types. Counted per language and reported; tests skip these."""
+    try:
+        return dd.display(date)
+    except Exception as exc:  # noqa: BLE001 -- recording Gramps' own failures
+        key = f"{type(exc).__name__}: {exc}"
+        GRAMPS_ERRORS[key] = GRAMPS_ERRORS.get(key, 0) + 1
+        return None
+
+
+def gramps_parse(dp, text):
+    """dp.parse(text), or None where Gramps' parser itself raises (it only
+    catches DateError -- Japanese "between 1850 and 1860" hits KeyError in
+    _parse_calendar). Counted like gramps_display's; tests skip these."""
+    try:
+        return dp.parse(text)
+    except Exception as exc:  # noqa: BLE001 -- recording Gramps' own failures
+        key = f"parse {type(exc).__name__}: {exc}"
+        GRAMPS_ERRORS[key] = GRAMPS_ERRORS.get(key, 0) + 1
+        return None
 
 
 def vectors(loc):
@@ -244,9 +417,13 @@ def vectors(loc):
         shown = []
         for index in range(len(dd.formats)):
             dd.set_format(index)
-            text = dd.display(date)
-            parsed = dp.parse(text)
-            shown.append({"text": text, "parsed": date_json(parsed), "grampsRoundTrips": parsed.is_equal(date)})
+            text = gramps_display(dd, date)
+            if text is None:
+                shown.append(None)  # Gramps itself raises here -- see gramps_display
+                continue
+            parsed = gramps_parse(dp, text)
+            shown.append({"text": text, "parsed": date_json(parsed) if parsed else None,
+                          "grampsRoundTrips": bool(parsed and parsed.is_equal(date)) and not collided(date)})
         result.append({"date": date_json(date), "formats": shown})
     return result
 
@@ -297,9 +474,17 @@ def test_set_vectors(loc, sets):
             shown = []
             for index in formats:
                 dd.set_format(index)
-                text = dd.display(date)
-                parsed = compact(dp.parse(text))
-                shown.append(text if structured(parsed) == structured(original) else [text, parsed])
+                text = gramps_display(dd, date)
+                if text is None:
+                    shown.append(None)  # Gramps itself raises here -- see gramps_display
+                    continue
+                parsed_date = gramps_parse(dp, text)
+                if parsed_date is None:
+                    shown.append([text, None])  # Gramps' parser raises -- see gramps_parse
+                    continue
+                parsed = compact(parsed_date)
+                same = structured(parsed) == structured(original) and not collided(date)
+                shown.append(text if same else [text, parsed])
             rows.append([original, shown])
         out.append({"name": name, "formats": list(formats), "dates": rows})
     return out
@@ -307,7 +492,7 @@ def test_set_vectors(loc, sets):
 
 TS_HEADER = """// GENERATED by scripts/generate_gramps_locales.py from Gramps' live
 // date displayer/parser for "{lang}" -- do not edit by hand; re-run the
-// script. Layouts live in the hand-written ./{lang}.ts.
+// script. Layouts: locales/index.ts (base ones unless listed there).
 //
 // Original strings: Gramps (gramps/gen/datehandler/_date_{lang}.py,
 // _datestrings.py and the "{lang}" translation catalog), GPL v2 or later.
@@ -335,26 +520,102 @@ def align_parser_numeric_order(lang, loc):
     dp.ymd = groups in (("y", "m", "d"), ("y", "b", "d"))
 
 
-def main(langs):
+def all_languages():
+    """English plus every language Gramps ships (po/LINGUAS -- the catalogs
+    its build compiles and installs; other po/*.po files exist but aren't
+    shipped)."""
+    po_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__import__("gramps").__file__))), "po")
+    with open(os.path.join(po_dir, "LINGUAS"), encoding="utf-8") as f:
+        linguas = [word for line in f if not line.startswith("#") for word in line.split()]
+    return ["en"] + linguas
+
+
+def check_catalog(lang, loc):
+    """Translations must actually load (a GrampsLocale made before the
+    datehandler import, or without compiled catalogs, silently comes out
+    English). Checked by the catalog file rather than by month names: many
+    of Gramps' languages don't translate dates, and really do show English
+    month names."""
+    if lang.startswith("en"):
+        return
+    mo = os.path.join(loc.localedir or "", lang, "LC_MESSAGES", "gramps.mo")
+    if not os.path.exists(mo):
+        raise SystemExit(f"{lang}: no compiled catalog at {mo}")
+
+
+def write_gz_json(path, data):
+    import gzip
+    with gzip.open(path, "wt", encoding="utf-8", compresslevel=9) as f:
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+
+
+def write_manifest():
+    """locales/available.generated.ts: every generated language and a loader
+    for each (a static import() per file, which bundlers split into its own
+    chunk), so the package can list and load languages on demand. English
+    is built in (locales/en.ts), so not listed."""
+    langs = sorted(f[: -len(".generated.ts")] for f in os.listdir(os.path.join(SRC, "locales"))
+                   if f.endswith(".generated.ts") and f not in ("available.generated.ts", "en.generated.ts"))
+    lines = ["// GENERATED by scripts/generate_gramps_locales.py -- every language with a",
+             "// <code>.generated.ts here, each loaded on demand (English is built in).", "",
+             'import type { GrampsStrings } from "./fromGramps";', "",
+             "export const LOCALE_LOADERS: Readonly<Record<string, () => Promise<{ strings: GrampsStrings }>>> = {"]
+    lines += [f'  {json.dumps(lang)}: () => import("./{lang}.generated"),' for lang in langs]
+    lines += ["};", ""]
+    with open(os.path.join(SRC, "locales", "available.generated.ts"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+
+def main(langs, strings_only=False, jobs=None):
+    """Each language in its own process: Gramps' parser keeps month tables
+    and patterns in class attributes, so one language's leak into the next
+    in a shared process (Serbian typed input read with another language's
+    words)."""
     os.makedirs(os.path.join(SRC, "__tests__", "fixtures"), exist_ok=True)
-    sets = gramps_test_sets()
-    for lang in langs:
-        loc = GrampsLocale(lang=lang)
-        align_parser_numeric_order(lang, loc)
-        if loc.date_displayer.long_months[1] == "January" and not lang.startswith("en"):
-            raise SystemExit(f"{lang}: translations didn't load (English month names)")
-        data = strings(lang, loc)
-        ts = TS_HEADER.format(lang=lang)
-        ts += f"export const {lang}Strings = {json.dumps(data, ensure_ascii=False, indent=2)} as const;\n"
-        with open(os.path.join(SRC, "locales", f"{lang}.generated.ts"), "w", encoding="utf-8") as f:
-            f.write(ts)
-        with open(os.path.join(SRC, "__tests__", "fixtures", f"gramps-{lang}.json"), "w", encoding="utf-8") as f:
-            json.dump({"lang": lang, "formatNames": data["formatNames"], "vectors": vectors(loc),
-                       "typed": typed_vectors(lang, loc)}, f, ensure_ascii=False, indent=1)
-        with open(os.path.join(SRC, "__tests__", "fixtures", f"gramps-tests-{lang}.json"), "w", encoding="utf-8") as f:
-            json.dump({"lang": lang, "sets": test_set_vectors(loc, sets)}, f, ensure_ascii=False, separators=(",", ":"))
-        print(f"{lang}: {len(data['formatNames'])} formats, templates {data['templates']['range']!r}")
+    flags = ["--strings-only"] if strings_only else []
+    failed = []
+    with ThreadPoolExecutor(max_workers=jobs or os.cpu_count()) as pool:
+        runs = {lang: pool.submit(subprocess.run, [sys.executable, __file__, "--one", lang, *flags],
+                                  capture_output=True, text=True) for lang in langs}
+        for lang, run in runs.items():
+            result = run.result()
+            print(result.stdout, end="", flush=True)
+            if result.returncode:
+                failed.append(lang)
+                print(f"{lang}: FAILED\n{result.stderr}", file=sys.stderr, flush=True)
+    write_manifest()
+    if failed:
+        sys.exit(f"failed: {' '.join(failed)}")
+
+
+def generate(lang, strings_only=False):
+    sets = None if strings_only else gramps_test_sets()
+    loc = GrampsLocale(lang=lang)
+    check_catalog(lang, loc)
+    align_parser_numeric_order(lang, loc)
+    data = strings(lang, loc)
+    ts = TS_HEADER.format(lang=lang)
+    ts += f"export const strings = {json.dumps(data, ensure_ascii=False, indent=2)} as const;\n"
+    with open(os.path.join(SRC, "locales", f"{lang}.generated.ts"), "w", encoding="utf-8") as f:
+        f.write(ts)
+    if strings_only:
+        print(f"{lang}: strings", flush=True)
+        return
+    fixtures = os.path.join(SRC, "__tests__", "fixtures")
+    write_gz_json(os.path.join(fixtures, f"gramps-{lang}.json.gz"),
+                  {"lang": lang, "formatNames": data["formatNames"], "vectors": vectors(loc), "typed": typed_vectors(lang, loc)})
+    write_gz_json(os.path.join(fixtures, f"gramps-tests-{lang}.json.gz"), {"lang": lang, "sets": test_set_vectors(loc, sets)})
+    errors = f", Gramps raised {dict(GRAMPS_ERRORS)}" if GRAMPS_ERRORS else ""
+    GRAMPS_ERRORS.clear()
+    print(f"{lang}: {len(data['formatNames'])} formats, templates {data['templates'][1]['range']!r}{errors}", flush=True)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or ["en", "en_GB", "de", "fr", "es"])
+    # --strings-only: rewrite locales/*.generated.ts without the (slow) fixtures.
+    # --one LANG: generate a single language in this process (main's workers).
+    strings_only = "--strings-only" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--strings-only"]
+    if args[:1] == ["--one"]:
+        generate(args[1], strings_only)
+    else:
+        main(args or all_languages(), strings_only)

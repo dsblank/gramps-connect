@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { DateFormat } from "@gramps-connect/gramps-date";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { DateFormat, loadLocale } from "@gramps-connect/gramps-date";
 import {
   DEFAULT_DISPLAY_SETTINGS,
   FULL_PLACE_FORMAT,
@@ -12,6 +12,11 @@ import {
   normalizeDisplaySettings,
   saveDisplaySettings,
 } from "../displaySettings";
+
+// Languages other than English load on demand.
+beforeAll(async () => {
+  await Promise.all(["de", "fr", "sv"].map((code) => loadLocale(code)));
+});
 
 vi.mock("../../auth/auth", () => ({ getToken: vi.fn(async () => "tok") }));
 

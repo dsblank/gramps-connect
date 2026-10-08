@@ -12,7 +12,7 @@
 // with the formatted one once the cache catches up, via
 // useDisplayFormatVersion().
 import { useEffect, useSyncExternalStore } from "react";
-import { formatDate, isLocaleRegistered, type GrampsDate } from "@gramps-connect/gramps-date";
+import { formatDate, isLocaleRegistered, loadLocale, parseDate, resolveLocaleCode, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getI18nSnapshot, subscribe as subscribeI18n } from "../i18n/i18n";
 import type { ViewStore } from "./viewStore";
 import { formatPlace, locationList, type PlaceRecord } from "./placeDisplay";
@@ -156,15 +156,24 @@ export function samplePlaceHandle(): string | null {
 }
 
 /** A Gramps date as the display settings say to show it. */
+const requestedLocales = new Set<string>();
+
 /** The gramps-date locale for the interface language: the exact code when
- * it's registered ("en_GB"), else its base language ("de" for "de_AT"),
- * else English. Every locale shipped there matches Gramps' own display
- * and parsing for that language. */
+ * gramps-date has it ("pt_BR"), else its base language ("de" for "de_CH"),
+ * else English. Every language but English loads on demand: until it has,
+ * this answers "en" and starts the load, and dates re-render
+ * (useDisplayFormatVersion) once it lands. */
 export function dateLocaleCode(): string {
-  const lang = getI18nSnapshot().lang;
-  if (isLocaleRegistered(lang)) return lang;
-  const base = lang.split(/[_-]/)[0];
-  return isLocaleRegistered(base) ? base : "en";
+  const code = resolveLocaleCode(getI18nSnapshot().lang);
+  if (!code) return "en";
+  if (isLocaleRegistered(code)) return code;
+  if (!requestedLocales.has(code)) {
+    requestedLocales.add(code);
+    loadLocale(code)
+      .then(() => bump())
+      .catch(() => requestedLocales.delete(code));
+  }
+  return "en";
 }
 
 /** A Gramps date as the display settings say to show it, in the interface
@@ -177,6 +186,15 @@ export function formatDisplayDate(date: GrampsDate | null | undefined): string {
   } catch {
     return "";
   }
+}
+
+/** Reads a date typed in the interface language. Text shown by
+ * formatDisplayDate reads back to the same date: the tree's format is
+ * tried first, which settles formats that look alike (Polish
+ * "Miesiąc.Dzień.Rok" 1.4.1789 vs its day-first numeric). */
+export function parseDisplayDate(text: string): GrampsDate {
+  const locale = dateLocaleCode();
+  return parseDate(text, { locale, grampsFormat: grampsFormatFor(getDisplaySettings(), locale) });
 }
 
 let version = 0;

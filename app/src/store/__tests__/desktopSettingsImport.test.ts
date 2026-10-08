@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
-import { DateFormat } from "@gramps-connect/gramps-date";
+import { beforeAll, describe, expect, it } from "vitest";
+import { DateFormat, loadLocale } from "@gramps-connect/gramps-date";
 import {
   DESKTOP_DATE_FORMATS,
   applyImport,
@@ -12,6 +12,11 @@ import {
   type ImportInput,
 } from "../desktopSettingsImport";
 import { DEFAULT_DISPLAY_SETTINGS, FULL_PLACE_FORMAT, type CustomNameFormat } from "../displaySettings";
+
+// Languages other than English load on demand.
+beforeAll(async () => {
+  await Promise.all(["de", "fr", "sv"].map((code) => loadLocale(code)));
+});
 
 // Shaped like a real ConfigManager save: header comments, defaults written
 // as ;;key=value, repr() values, booleans as ints.
@@ -111,8 +116,10 @@ describe("buildImportItems / applyImport", () => {
     const apply = (items: typeof fr) => applyImport(DEFAULT_DISPLAY_SETTINGS, items, new Set(["date"])).date.format;
     expect(apply(fr)).toBe(DateFormat.DAY_LONG_MONTH_YEAR);
     expect(apply(en)).toBe(DateFormat.LONG_MONTH_DAY_YEAR);
+    // Swedish's #2 is its own year-first layout, ported too.
     const sv = buildImportItems(input({ ini, desktopLanguage: "sv" }));
-    expect(sv[0].usable).toBe(false);
+    expect(sv[0].usable).toBe(true);
+    expect(sv[0].desktop).toContain("1854 Mars 12");
   });
 
   it("taking the active place format takes the imported list with it", () => {
@@ -158,9 +165,11 @@ describe("buildImportItems / applyImport", () => {
 
 describe("desktopLanguageFor", () => {
   it("maps UI languages", () => {
-    expect(desktopLanguageFor("de_AT")).toBe("de");
-    expect(desktopLanguageFor("zh_CN")).toBe("zh");
-    expect(desktopLanguageFor("nn")).toBe("nb");
+    // Every Gramps language is a gramps-date locale, regional ones included.
+    expect(desktopLanguageFor("de_AT")).toBe("de_AT");
+    expect(desktopLanguageFor("de-CH")).toBe("de");
+    expect(desktopLanguageFor("zh_CN")).toBe("zh_CN");
+    expect(desktopLanguageFor("nn")).toBe("nn");
     expect(desktopLanguageFor("xx")).toBe("en");
     expect(Object.values(DESKTOP_DATE_FORMATS).every((l) => l.formats[0] === DateFormat.ISO)).toBe(true);
   });

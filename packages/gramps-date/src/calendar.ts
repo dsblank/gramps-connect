@@ -1,12 +1,11 @@
 // Calendar SDN (Serial Day Number) conversion, and date-entry validation
 // built on top of it.
 //
-// Translated from gramps/gen/lib/gcalendar.py, for the five "simpler"
-// calendars: Gregorian, Julian, French Republican, Islamic, and Swedish.
-// Hebrew and Persian need more involved helper functions and aren't
-// covered here -- gramps-web's own JS port of the same module
-// (src/gcalendar.js) carries the identical scope note, for the same
-// reason; see isValidCalendarDate's docstring.
+// Translated from gramps/gen/lib/gcalendar.py: all seven Gramps calendars
+// to an SDN; back from one for Gregorian, Julian, French Republican,
+// Islamic and Swedish (validation round-trips through those).
+// gramps-web's JS port of the same module (src/gcalendar.js) stops at
+// those five.
 //
 // The SDN is identical to the Julian Day Number (JDN). All functions
 // accept and return integer values. Year numbering uses astronomical
@@ -296,16 +295,9 @@ export function persianSdn(year: number, month: number, day: number): number {
 /** Convert (year, month, day) to an SDN, for any of the seven Gramps
  * calendars. Zero-adjusts partial dates (year/month/day unset -> 1) so a
  * partial date still round-trips through a real SDN for validation
- * purposes -- see isValidCalendarDate.
- *
- * Hebrew/Persian have no SDN conversion implemented here (see this
- * file's header) -- rather than throw (a real date in either calendar,
- * e.g. one entered in Gramps desktop, must still be editable here even
- * though this package can't compute its sortval), this returns 0. That's
- * safe: gramps-web-api recomputes `sortval` from `dateval` on every
- * write (server-side, using real Gramps calendar code), so a client-side
- * placeholder is only ever transient, never persisted as the final
- * answer -- see recalc_date_sortvals in gramps-web-api's api/util.py. */
+ * purposes -- see isValidCalendarDate. (gramps-web-api also recomputes
+ * `sortval` from `dateval` on every write -- recalc_date_sortvals in its
+ * api/util.py.) */
 export function dateToSdn(calendar: Calendar, year: number, month: number, day: number): number {
   if (year === 0 && month === 0 && day === 0) return 0;
   const y = year !== 0 ? year : 1;

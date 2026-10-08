@@ -8,7 +8,7 @@
 // imported: place-auto, place-format (+ place_formats.xml), date-format,
 // name-format, and the ID templates (iprefix..nprefix, see grampsIds.ts).
 // See DISPLAY_SETTINGS_PLAN.md, Phase 3.
-import { DateFormat, formatDate, getLocale, isLocaleRegistered, parseDate } from "@gramps-connect/gramps-date";
+import { DateFormat, formatDate, getLocale, isLocaleRegistered, parseDate, resolveLocaleCode } from "@gramps-connect/gramps-date";
 
 const SAMPLE_DATE = parseDate("1854-03-12");
 import {
@@ -151,6 +151,10 @@ export const DESKTOP_DATE_FORMATS: Record<string, { label: string; formats: (Dat
 /** gramps-connect UI language ("de_AT", "zh_CN") -> a DESKTOP_DATE_FORMATS
  * key, defaulting to English. */
 export function desktopLanguageFor(uiLang: string): string {
+  // A language gramps-date has (exact or base) maps desktop's format
+  // number exactly; otherwise the nearest-match table below.
+  const exact = resolveLocaleCode(uiLang);
+  if (exact) return exact;
   const base = uiLang.split(/[_-]/)[0].toLowerCase();
   if (base === "nn") return "nb";
   return base in DESKTOP_DATE_FORMATS ? base : "en";
