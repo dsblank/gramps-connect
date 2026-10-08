@@ -13,6 +13,7 @@
 
 import type { Calendar, DatePart, GrampsDate, Modifier, NewYear, NewYearValue, Quality } from "./types";
 import type { GregorianLayout } from "./layouts";
+import type { LunarStyle } from "./locales/lunar";
 
 /** What a language's own display() gets to work with. */
 export interface DisplayHelpers {
@@ -57,12 +58,15 @@ export interface MonthYearFormat {
   template: string;
 }
 
-export type MonthFormLists = "long" | "short" | "hebrew" | "french" | "islamic" | "persian";
+export type MonthFormLists = "long" | "short" | "hebrew" | "french" | "islamic" | "persian" | LunarCalendarName;
+
+/** The lunisolar calendars (Calendar.CHINESE_LUNAR, KOREAN_LUNAR, VIETNAMESE_LUNAR). */
+export type LunarCalendarName = "chinese" | "korean" | "vietnamese";
 
 export interface Inflection {
   /** Per month list, per month: form name -> word (null: a list without
    * forms). The first form is the plain name. */
-  forms: Readonly<Record<MonthFormLists, readonly (Readonly<Record<string, string>> | null)[] | null>>;
+  forms: Readonly<Partial<Record<MonthFormLists, readonly (Readonly<Record<string, string>> | null)[] | null>>>;
   longMonthYear: Readonly<Record<InflectKey, MonthYearFormat>>;
   shortMonthYear: Readonly<Record<InflectKey, MonthYearFormat>>;
 }
@@ -84,6 +88,9 @@ export interface DateLocale {
   frenchMonths: MonthNames;
   islamicMonths: MonthNames;
   persianMonths: MonthNames;
+  /** Month names of the lunisolar calendars, index = month 1-12 (a leap
+   * month 101-112 uses its month's name). */
+  lunarMonths: Readonly<Record<LunarCalendarName, MonthNames>>;
 
   longDays: MonthNames; // index 0 unused, 1=Sunday..7=Saturday (Gramps' own weekday numbering)
   shortDays: MonthNames;
@@ -181,6 +188,16 @@ export interface DateLocale {
    * whose translators gave them: cs, fi, hr, ru, sk, sl, uk. */
   inflection?: Inflection | null;
 
+  /** Prefixes that give both a quality and a modifier (Chinese "估计早于":
+   * estimated + before), tried before the quality words, as Gramps' zh
+   * parsers' match_quality does. */
+  compoundQualityModifiers?: Readonly<Record<string, readonly [Quality, Modifier]>>;
+
+  /** The language's own way of writing dates in its lunisolar calendar
+   * (zh 2024年正月1日, ko 2024년 정월 1일, vi Năm 2024 Tháng Giêng Ngày 1),
+   * displayed and read back; see locales/lunar.ts. */
+  lunarStyle?: LunarStyle;
+
   /** Parser: the numeric pattern starts with a weekday (Icelandic
    * "%a %e.%b %Y" -- DateParser._ddmy). */
   numericWeekdayFirst: boolean;
@@ -221,7 +238,7 @@ export interface DateLocale {
    * so it includes other languages' names too. The language's own month
    * names are added on top (parse.ts), fixing languages Gramps can't parse
    * at all. */
-  monthTables: Readonly<Record<"gregorian" | "swedish" | "hebrew" | "french" | "islamic" | "persian", Readonly<Record<string, number>>>>;
+  monthTables: Readonly<Record<"gregorian" | "swedish" | "hebrew" | "french" | "islamic" | "persian" | LunarCalendarName, Readonly<Record<string, number>>>>;
 
   /** Parser: _rfc's English month abbreviations. */
   rfcMonths: Readonly<Record<string, number>>;
@@ -231,7 +248,7 @@ export interface DateLocale {
    * month alternation goes. Languages differ in more than words here:
    * German and French allow any one character after the day ("12. März"),
    * forbid a dot after the month, and leave the end unanchored. */
-  textPatterns: Readonly<Record<"gregorian" | "swedish" | "hebrew" | "french" | "persian" | "islamic", { text: string; text2: string }>>;
+  textPatterns: Readonly<Record<"gregorian" | "swedish" | "hebrew" | "french" | "persian" | "islamic" | LunarCalendarName, { text: string; text2: string }>>;
 }
 
 const registry = new Map<string, DateLocale>();

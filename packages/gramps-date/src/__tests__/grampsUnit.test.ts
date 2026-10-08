@@ -86,7 +86,12 @@ test("DateStringsTest.testFirstStringEmpty", () => {
 test("DateStringsTest.testCalendarIndex", () => {
   // DateStrings.calendar names Gregorian too; the displayer blanks that slot
   // ("gregorian cal name shouldn't be output!") and the parser keeps it.
-  assert.deepEqual(en.calendarNames.slice(1), ["Julian", "Hebrew", "French Republican", "Persian", "Islamic", "Swedish"]);
+  const names: [Calendar, string][] = [
+    [Calendar.JULIAN, "Julian"], [Calendar.HEBREW, "Hebrew"], [Calendar.FRENCH, "French Republican"],
+    [Calendar.PERSIAN, "Persian"], [Calendar.ISLAMIC, "Islamic"], [Calendar.SWEDISH, "Swedish"],
+    [Calendar.CHINESE_LUNAR, "Chinese Lunar"], [Calendar.KOREAN_LUNAR, "Korean Lunar"], [Calendar.VIETNAMESE_LUNAR, "Vietnamese Lunar"],
+  ];
+  for (const [calendar, name] of names) assert.equal(en.calendarNames[calendar], name);
   assert.equal(en.calendarNames[Calendar.GREGORIAN], "");
   assert.equal(en.calendarWords["gregorian"], Calendar.GREGORIAN);
 });

@@ -17,7 +17,8 @@
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/blob/master/gramps/gen/lib/gcalendar.py
 
-import { Calendar } from "./types";
+import { Calendar, isLunarCalendar } from "./types";
+import { LUNAR_TABLES, type LunarYearTable } from "./lunarTables.generated";
 
 const GRG_SDN_OFFSET = 32045;
 const GRG_DAYS_PER_5_MONTHS = 153;
@@ -292,7 +293,99 @@ export function persianSdn(year: number, month: number, day: number): number {
   return Math.trunc(Math.ceil(v1 + v2 + v3 + v4 + PRS_EPOCH - 1));
 }
 
-/** Convert (year, month, day) to an SDN, for any of the seven Gramps
+// -- Chinese, Korean and Vietnamese lunisolar calendars: gcalendar.py's
+// chinese_lunar_sdn/_ymd and their Korean/Vietnamese variants, over the
+// year tables in lunarTables.generated.ts (lunartables.py). Korea's and
+// Vietnam's calendars are computed for their own meridians, so each has
+// its own table where it differs from China's; other years use China's.
+
+interface IndexedTable {
+  table: LunarYearTable;
+  /** offsets[i]: days from table.startSdn to the first day of baseYear + i
+   * (one more entry: the day after the table's last year). */
+  offsets: number[];
+}
+
+/** _chn_iter_months: [month, isLeap, days] in calendar order. */
+function lunarMonths(yearInfo: number): [number, boolean, number][] {
+  const leapMonth = yearInfo & 0xf;
+  const out: [number, boolean, number][] = [];
+  for (let m = 1; m <= 12; m++) {
+    out.push([m, false, ((yearInfo >> (16 - m)) & 1) + 29]);
+    if (m === leapMonth) out.push([m, true, ((yearInfo >> 16) & 1) + 29]);
+  }
+  return out;
+}
+
+const indexed = new Map<LunarYearTable, IndexedTable>();
+
+function indexTable(table: LunarYearTable): IndexedTable {
+  let entry = indexed.get(table);
+  if (!entry) {
+    const offsets = [0];
+    for (const info of table.yearInfos) offsets.push(offsets[offsets.length - 1] + lunarMonths(info).reduce((n, [, , days]) => n + days, 0));
+    entry = { table, offsets };
+    indexed.set(table, entry);
+  }
+  return entry;
+}
+
+/** The table a calendar uses for a year (Korean/Vietnamese: their own
+ * where they have one, else the Chinese). */
+function tableForYear(calendar: Calendar, year: number): IndexedTable {
+  const own = calendar === Calendar.KOREAN_LUNAR ? LUNAR_TABLES.korean : calendar === Calendar.VIETNAMESE_LUNAR ? LUNAR_TABLES.vietnamese : null;
+  if (own && year >= own.baseYear && year < own.baseYear + own.yearInfos.length) return indexTable(own);
+  return indexTable(LUNAR_TABLES.chinese);
+}
+
+function tableForSdn(calendar: Calendar, sdn: number): IndexedTable {
+  const own = calendar === Calendar.KOREAN_LUNAR ? LUNAR_TABLES.korean : calendar === Calendar.VIETNAMESE_LUNAR ? LUNAR_TABLES.vietnamese : null;
+  if (own) {
+    const t = indexTable(own);
+    const offset = sdn - own.startSdn;
+    if (offset >= 0 && offset < t.offsets[t.offsets.length - 1]) return t;
+  }
+  return indexTable(LUNAR_TABLES.chinese);
+}
+
+/** chinese_lunar_sdn (and the Korean/Vietnamese ones): months 101-112 are
+ * leap months; 0 outside the tables or for a month the year doesn't have. */
+export function lunarSdn(calendar: Calendar, year: number, month: number, day: number): number {
+  const { table, offsets } = tableForYear(calendar, year);
+  const idx = year - table.baseYear;
+  if (idx < 0 || idx >= table.yearInfos.length) return 0;
+  const isLeap = month > 100;
+  const target = isLeap ? month - 100 : month;
+  let offset = offsets[idx];
+  for (const [m, leap, days] of lunarMonths(table.yearInfos[idx])) {
+    if (m === target && leap === isLeap) return table.startSdn + offset + day - 1;
+    offset += days;
+  }
+  return 0;
+}
+
+/** chinese_lunar_ymd (and the Korean/Vietnamese ones): [year, month, day],
+ * month 101-112 for a leap month; [0, 0, 0] outside the tables. */
+export function lunarYmd(calendar: Calendar, sdn: number): [number, number, number] {
+  const { table, offsets } = tableForSdn(calendar, sdn);
+  const offset = sdn - table.startSdn;
+  if (offset < 0 || offset >= offsets[offsets.length - 1]) return [0, 0, 0];
+  let lo = 0;
+  let hi = table.yearInfos.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (offsets[mid] <= offset) lo = mid;
+    else hi = mid - 1;
+  }
+  let remaining = offset - offsets[lo];
+  for (const [m, leap, days] of lunarMonths(table.yearInfos[lo])) {
+    if (remaining < days) return [table.baseYear + lo, leap ? m + 100 : m, remaining + 1];
+    remaining -= days;
+  }
+  return [0, 0, 0];
+}
+
+/** Convert (year, month, day) to an SDN, for any of the ten Gramps
  * calendars. Zero-adjusts partial dates (year/month/day unset -> 1) so a
  * partial date still round-trips through a real SDN for validation
  * purposes -- see isValidCalendarDate. (gramps-web-api also recomputes
@@ -318,6 +411,10 @@ export function dateToSdn(calendar: Calendar, year: number, month: number, day: 
       return hebrewSdn(y, m, d);
     case Calendar.PERSIAN:
       return persianSdn(y, m, d);
+    case Calendar.CHINESE_LUNAR:
+    case Calendar.KOREAN_LUNAR:
+    case Calendar.VIETNAMESE_LUNAR:
+      return lunarSdn(calendar, y, m, d);
     default:
       throw new Error(`Calendar ${calendar} not implemented`);
   }
@@ -357,12 +454,27 @@ function swedishValid(year: number, month: number, day: number): boolean {
   return key !== 17000229;
 }
 
+/** A lunisolar date as Date.set's sanity check sees it: an unset day or
+ * month stands for the 1st, and the date must survive a round trip (so a
+ * leap month must be one the year has, and a day must be in the month). */
+function lunarValid(calendar: Calendar, year: number, month: number, day: number): boolean {
+  const m = month || 1;
+  const d = day || 1;
+  if (!(m >= 1 && m <= 12) && !(m >= 101 && m <= 112)) return false;
+  if (year === 0) return d <= 30;
+  const sdn = lunarSdn(calendar, year, m, d);
+  if (sdn === 0) return false;
+  const [ly, lm, ld] = lunarYmd(calendar, sdn);
+  return ly === year && lm === m && ld === d;
+}
+
 export function isValidCalendarDate(
   calendar: Calendar,
   year: number,
   month: number,
   day: number
 ): boolean {
+  if (isLunarCalendar(calendar)) return lunarValid(calendar, year, month, day);
   if (month === 0 || day === 0) return true;
   if (calendar === Calendar.HEBREW || calendar === Calendar.PERSIAN) return true;
 

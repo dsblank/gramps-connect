@@ -99,6 +99,53 @@ export const strings = {
     "Bahman",
     "Esfand"
   ],
+  "lunarMonths": {
+    "chinese": [
+      "",
+      "正月",
+      "二月",
+      "三月",
+      "四月",
+      "五月",
+      "六月",
+      "七月",
+      "八月",
+      "九月",
+      "十月",
+      "十一月",
+      "十二月"
+    ],
+    "korean": [
+      "",
+      "Jeongwol",
+      "Iwol",
+      "Samwol",
+      "Sawol",
+      "Owol",
+      "Yuwol",
+      "Chirwol",
+      "Palwol",
+      "Guwol",
+      "Siwol",
+      "Sibirwol",
+      "Sibiwol"
+    ],
+    "vietnamese": [
+      "",
+      "Tháng Giêng",
+      "Tháng Hai",
+      "Tháng Ba",
+      "Tháng Tư",
+      "Tháng Năm",
+      "Tháng Sáu",
+      "Tháng Bảy",
+      "Tháng Tám",
+      "Tháng Chín",
+      "Tháng Mười",
+      "Tháng Mười Một",
+      "Tháng Chạp"
+    ]
+  },
   "calendarNames": [
     "",
     "儒略曆",
@@ -106,7 +153,10 @@ export const strings = {
     "法國共和曆",
     "伊朗曆",
     "伊斯蘭曆",
-    "瑞典曆"
+    "瑞典曆",
+    "Chinese Lunar",
+    "Korean Lunar",
+    "Vietnamese Lunar"
   ],
   "modifierStrings": [
     "",
@@ -128,77 +178,92 @@ export const strings = {
   "bceFormat": "%s B.C.E.",
   "templates": [
     {
-      "span": " 從 {start} 到 {stop}{calendar}",
-      "range": " 介於 {start} 與 {stop}{calendar} 之間",
+      "span": "自{start}至{stop}{calendar}",
+      "range": "介於{start}與{stop}之間{calendar}",
       "modifiers": [
         "{date}{calendar}",
-        "以前 {date}{calendar}",
-        "以後 {date}{calendar}",
-        "大約 {date}{calendar}",
+        "{date}以前{calendar}",
+        "{date}以後{calendar}",
+        "大約{date}{calendar}",
         "",
         "",
         "",
-        "from {date}{calendar}",
-        "to {date}{calendar}"
+        "從{date}{calendar}",
+        "到{date}{calendar}"
       ]
     },
     {
-      "span": "{quality} 從 {start} 到 {stop}{calendar}",
-      "range": "{quality} 介於 {start} 與 {stop}{calendar} 之間",
+      "span": "估計為自{start}至{stop}{calendar}",
+      "range": "估計為介於{start}與{stop}之間{calendar}",
       "modifiers": [
-        "{quality}{date}{calendar}",
-        "{quality}以前 {date}{calendar}",
-        "{quality}以後 {date}{calendar}",
-        "{quality}大約 {date}{calendar}",
+        "估計為{date}{calendar}",
+        "估計早於{date}{calendar}",
+        "估計晚於{date}{calendar}",
+        "估計為大約{date}{calendar}",
         "",
         "",
         "",
-        "{quality}from {date}{calendar}",
-        "{quality}to {date}{calendar}"
+        "估計為從{date}{calendar}",
+        "估計為到{date}{calendar}"
       ]
     },
     {
-      "span": "{quality} 從 {start} 到 {stop}{calendar}",
-      "range": "{quality} 介於 {start} 與 {stop}{calendar} 之間",
+      "span": "推算為自{start}至{stop}{calendar}",
+      "range": "推算為介於{start}與{stop}之間{calendar}",
       "modifiers": [
-        "{quality}{date}{calendar}",
-        "{quality}以前 {date}{calendar}",
-        "{quality}以後 {date}{calendar}",
-        "{quality}大約 {date}{calendar}",
+        "推算為{date}{calendar}",
+        "推算早於{date}{calendar}",
+        "推算晚於{date}{calendar}",
+        "推算為大約{date}{calendar}",
         "",
         "",
         "",
-        "{quality}from {date}{calendar}",
-        "{quality}to {date}{calendar}"
+        "推算為從{date}{calendar}",
+        "推算為到{date}{calendar}"
       ]
     }
   ],
   "modifierWords": {
+    "about": 3,
+    "after": 2,
+    "before": 1,
     "from": 7,
     "to": 8,
-    "以前": 1,
-    "以後": 2,
-    "大約": 3
+    "到": 8,
+    "大約": 3,
+    "從": 7
   },
-  "modifierWordsAfterDate": {},
+  "modifierWordsAfterDate": {
+    "以前": 1,
+    "以後": 2
+  },
   "qualityWords": {
+    "估計為": 1,
+    "推算為": 2,
     "據估計": 1,
     "據計算": 2
   },
   "calendarWords": {
+    "chinese lunar": 7,
+    "cl": 7,
     "f": 3,
     "g": 0,
     "h": 2,
     "i": 5,
     "j": 1,
+    "korean lunar": 8,
     "p": 4,
     "s": 6,
+    "vietnamese lunar": 9,
     "伊斯蘭曆": 5,
     "伊郎歷": 4,
     "儒略曆": 1,
     "希伯來歷": 2,
     "法國共和歷": 3,
     "瑞典歷": 6,
+    "舊曆": 7,
+    "農曆": 7,
+    "陰曆": 7,
     "陽曆": 0
   },
   "bceWords": [
@@ -235,6 +300,18 @@ export const strings = {
     "islamic": {
       "text": "^{months}\\s+(\\d+)?\\s*,?\\s*((\\d+)(/\\d+)?)?\\s*$",
       "text2": "^(\\d+)?\\s+?{months}\\s*((\\d+)(/\\d+)?)?\\s*$"
+    },
+    "chinese": {
+      "text": "^{months}\\.?(\\s+\\d+)?\\s*,?\\s+((\\d+)(/\\d+)?)?\\s*$",
+      "text2": "^(\\d+)?\\s+?{months}\\.?\\s*((\\d+)(/\\d+)?)?\\s*$"
+    },
+    "korean": {
+      "text": "^{months}\\.?(\\s+\\d+)?\\s*,?\\s+((\\d+)(/\\d+)?)?\\s*$",
+      "text2": "^(\\d+)?\\s+?{months}\\.?\\s*((\\d+)(/\\d+)?)?\\s*$"
+    },
+    "vietnamese": {
+      "text": "^{months}\\.?(\\s+\\d+)?\\s*,?\\s+((\\d+)(/\\d+)?)?\\s*$",
+      "text2": "^(\\d+)?\\s+?{months}\\.?\\s*((\\d+)(/\\d+)?)?\\s*$"
     }
   },
   "parserPatterns": {
@@ -247,15 +324,15 @@ export const strings = {
       "ignoreCase": false
     },
     "calendar": {
-      "source": "^(.*)\\s+\\({calendars}\\)( ?.*)",
+      "source": "^(.*?)\\s*\\({calendars}\\)( ?.*)",
       "ignoreCase": true
     },
     "calendarNewyear": {
-      "source": "^(.*)\\s+\\({calendars},\\s*{newyears}\\)( ?.*)",
+      "source": "^(.*?)\\s*\\({calendars},\\s*{newyears}\\)( ?.*)",
       "ignoreCase": true
     },
     "calendarNewyearIso": {
-      "source": "^(.*)\\s+\\({calendars},\\s*(\\d{1,2}-\\d{1,2})\\)( ?.*)",
+      "source": "^(.*?)\\s*\\({calendars},\\s*(\\d{1,2}-\\d{1,2})\\)( ?.*)",
       "ignoreCase": true
     },
     "iso": {
@@ -267,27 +344,27 @@ export const strings = {
       "ignoreCase": false
     },
     "modifier": {
-      "source": "^{modifiers}\\s+(.*)",
+      "source": "^{modifiers}\\s*(.*)",
       "ignoreCase": true
     },
     "modifierAfter": {
-      "source": "^(.*)\\s+{modifiersAfter}",
+      "source": "^(.*?)\\s*({modifiersAfter})\\s*$",
       "ignoreCase": true
     },
     "numeric": {
-      "source": "^((\\d+)年\\s*)?((\\d+)月\\s*)?(\\d+)?日?\\s*$",
+      "source": "^(?:西元)?((\\d+)年\\s*)?((\\d+)月\\s*)?(\\d+)?日?\\s*$",
       "ignoreCase": false
     },
     "newyear": {
-      "source": "^(.*)\\s+\\({newyears}\\)( ?.*)",
+      "source": "^(.*?)\\s*\\({newyears}\\)( ?.*)",
       "ignoreCase": true
     },
     "newyearIso": {
-      "source": "^(.*)\\s+\\((\\d{1,2}-\\d{1,2})\\)( ?.*)",
+      "source": "^(.*?)\\s*\\((\\d{1,2}-\\d{1,2})\\)( ?.*)",
       "ignoreCase": false
     },
     "quality": {
-      "source": "^(.* ?){qualities}\\s+(.+)",
+      "source": "^(.* ?){qualities}\\s*(.+)",
       "ignoreCase": true
     },
     "quarter": {
@@ -1510,6 +1587,204 @@ export const strings = {
       "t": 4,
       "ti": 4,
       "tir": 4
+    },
+    "chinese": {
+      "b": 8,
+      "ba": 8,
+      "bay": 8,
+      "bayu": 8,
+      "bayue": 8,
+      "e": 2,
+      "er": 2,
+      "ery": 2,
+      "eryu": 2,
+      "eryue": 2,
+      "j": 9,
+      "ji": 9,
+      "jiu": 9,
+      "jiuy": 9,
+      "jiuyu": 9,
+      "jiuyue": 9,
+      "l": 6,
+      "li": 6,
+      "liu": 6,
+      "liuy": 6,
+      "liuyu": 6,
+      "liuyue": 6,
+      "q": 7,
+      "qi": 7,
+      "qiy": 7,
+      "qiyu": 7,
+      "qiyue": 7,
+      "s": 12,
+      "sa": 3,
+      "san": 3,
+      "sany": 3,
+      "sanyu": 3,
+      "sanyue": 3,
+      "sh": 12,
+      "shi": 12,
+      "shie": 12,
+      "shier": 12,
+      "shier'": 12,
+      "shier'y": 12,
+      "shier'yu": 12,
+      "shier'yue": 12,
+      "shiy": 11,
+      "shiyi": 11,
+      "shiyiy": 11,
+      "shiyiyu": 11,
+      "shiyiyue": 11,
+      "shiyu": 10,
+      "shiyue": 10,
+      "si": 4,
+      "siy": 4,
+      "siyu": 4,
+      "siyue": 4,
+      "w": 5,
+      "wu": 5,
+      "wuy": 5,
+      "wuyu": 5,
+      "wuyue": 5,
+      "z": 1,
+      "zh": 1,
+      "zhe": 1,
+      "zhen": 1,
+      "zheng": 1,
+      "zhengy": 1,
+      "zhengyu": 1,
+      "zhengyue": 1,
+      "一月": 1,
+      "七月": 7,
+      "三月": 3,
+      "九月": 9,
+      "二月": 2,
+      "五月": 5,
+      "八月": 8,
+      "六月": 6,
+      "十一月": 11,
+      "十二月": 12,
+      "十月": 10,
+      "四月": 4,
+      "正月": 1,
+      "閏一月": 101,
+      "閏七月": 107,
+      "閏三月": 103,
+      "閏九月": 109,
+      "閏二月": 102,
+      "閏五月": 105,
+      "閏八月": 108,
+      "閏六月": 106,
+      "閏十一月": 111,
+      "閏十二月": 112,
+      "閏十月": 110,
+      "閏四月": 104,
+      "閏正月": 101
+    },
+    "korean": {
+      "c": 7,
+      "ch": 7,
+      "chi": 7,
+      "chir": 7,
+      "chirw": 7,
+      "chirwo": 7,
+      "chirwol": 7,
+      "g": 9,
+      "gu": 9,
+      "guw": 9,
+      "guwo": 9,
+      "guwol": 9,
+      "i": 2,
+      "iw": 2,
+      "iwo": 2,
+      "iwol": 2,
+      "j": 1,
+      "je": 1,
+      "jeo": 1,
+      "jeon": 1,
+      "jeong": 1,
+      "jeongw": 1,
+      "jeongwo": 1,
+      "jeongwol": 1,
+      "o": 5,
+      "ow": 5,
+      "owo": 5,
+      "owol": 5,
+      "p": 8,
+      "pa": 8,
+      "pal": 8,
+      "palw": 8,
+      "palwo": 8,
+      "palwol": 8,
+      "s": 11,
+      "sa": 3,
+      "sam": 3,
+      "samw": 3,
+      "samwo": 3,
+      "samwol": 3,
+      "saw": 4,
+      "sawo": 4,
+      "sawol": 4,
+      "si": 11,
+      "sib": 11,
+      "sibi": 11,
+      "sibir": 11,
+      "sibirw": 11,
+      "sibirwo": 11,
+      "sibirwol": 11,
+      "sibiw": 12,
+      "sibiwo": 12,
+      "sibiwol": 12,
+      "siw": 10,
+      "siwo": 10,
+      "siwol": 10,
+      "y": 6,
+      "yu": 6,
+      "yuw": 6,
+      "yuwo": 6,
+      "yuwol": 6
+    },
+    "vietnamese": {
+      "t": 1,
+      "th": 1,
+      "thá": 1,
+      "thán": 1,
+      "tháng": 1,
+      "tháng b": 7,
+      "tháng ba": 3,
+      "tháng bả": 7,
+      "tháng bảy": 7,
+      "tháng c": 9,
+      "tháng ch": 9,
+      "tháng chí": 9,
+      "tháng chín": 9,
+      "tháng chạ": 12,
+      "tháng chạp": 12,
+      "tháng g": 1,
+      "tháng gi": 1,
+      "tháng giê": 1,
+      "tháng giên": 1,
+      "tháng giêng": 1,
+      "tháng h": 2,
+      "tháng ha": 2,
+      "tháng hai": 2,
+      "tháng m": 10,
+      "tháng mư": 10,
+      "tháng mườ": 10,
+      "tháng mười": 10,
+      "tháng mười m": 11,
+      "tháng mười mộ": 11,
+      "tháng mười một": 11,
+      "tháng n": 5,
+      "tháng nă": 5,
+      "tháng năm": 5,
+      "tháng s": 6,
+      "tháng sá": 6,
+      "tháng sáu": 6,
+      "tháng t": 8,
+      "tháng tá": 8,
+      "tháng tám": 8,
+      "tháng tư": 4
     }
   },
   "rfcMonths": {
@@ -1555,11 +1830,12 @@ export const strings = {
     "星期五",
     "星期六"
   ],
-  "yearSuffix": "",
+  "yearSuffix": "年",
   "numericOrder": "ymd",
   "numericWeekdayFirst": false,
   "formatNames": [
     "年年年年-月月-日日 (ISO)",
-    "數字格式"
+    "數字格式",
+    "干支年格式"
   ]
 } as const;

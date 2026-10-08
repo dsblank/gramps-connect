@@ -11,6 +11,8 @@ import type { GregorianLayout } from "../layouts";
 import { DateFormat } from "../formats";
 import { LOCALE_LOADERS } from "./available.generated";
 import { fromGramps, IDENTITY_FORMAT_INDEX } from "./fromGramps";
+import { ZH_CN_WORDS, ZH_TW_WORDS, zhLayout } from "./zh";
+import { KO_LUNAR_STYLE, VI_LUNAR_STYLE } from "./lunar";
 
 interface LocaleLayout {
   /** See DateLocale.numericLstrip. */
@@ -24,6 +26,10 @@ interface LocaleLayout {
   /** A port of the displayer's display(), for wording templates can't
    * express (see DateLocale.display). */
   display?: DateLocale["display"];
+  /** See DateLocale.lunarStyle. */
+  lunarStyle?: DateLocale["lunarStyle"];
+  /** See DateLocale.compoundQualityModifiers. */
+  compoundQualityModifiers?: DateLocale["compoundQualityModifiers"];
 }
 
 /** A language's own month-name layout (`%d. %s %s` and the like in its
@@ -65,6 +71,15 @@ function adjust(changes: Record<number, Partial<Extract<GregorianLayout, { kind:
 }
 
 const CUSTOM_LAYOUTS: Readonly<Record<string, LocaleLayout>> = {
+  // DateDisplayZH_CN / ZH_TW (_date_zh_CN.py, _date_zh_TW.py; zh_HK uses
+  // the Traditional handler): see zh.ts.
+  zh_CN: zhLayout(ZH_CN_WORDS),
+  zh_TW: zhLayout(ZH_TW_WORDS),
+  zh_HK: zhLayout(ZH_TW_WORDS),
+  // DateDisplayKO._display_korean_lunar / DateDisplayVI._display_vietnamese_lunar:
+  // their own lunar calendar written their own way (see lunar.ts).
+  ko: { lunarStyle: KO_LUNAR_STYLE },
+  vi: { lunarStyle: VI_LUNAR_STYLE },
   // DateDisplayRU (_date_ru.py): day-first dates always take the genitive
   // ("4 марта 1789"), whatever precedes them; for every calendar.
   ru: {

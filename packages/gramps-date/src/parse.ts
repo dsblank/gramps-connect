@@ -34,9 +34,10 @@
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/blob/master/gramps/gen/datehandler/_dateparser.py
 
-import { Calendar, Modifier, Quality, type NewYear, type DatePart, type GrampsDate, type NewYearValue } from "./types";
+import { Calendar, Modifier, Quality, isLunarCalendar, type NewYear, type DatePart, type GrampsDate, type NewYearValue } from "./types";
 import { makeDate } from "./entry";
 import { isValidCalendarDate } from "./calendar";
+import { parseLunarText } from "./locales/lunar";
 import { type DateLocale, type MonthNames, type GregorianLayout, getLocale } from "./locale";
 
 export interface ParseDateOptions {
@@ -441,6 +442,9 @@ function compileLocale(locale: DateLocale): CompiledLocale {
     [Calendar.FRENCH]: buildTextTables(monthTable(t.french, locale.frenchMonths), locale.textPatterns.french, locale.frenchMonths, other, roman),
     [Calendar.ISLAMIC]: buildTextTables(monthTable(t.islamic, locale.islamicMonths), locale.textPatterns.islamic, locale.islamicMonths, other, roman),
     [Calendar.PERSIAN]: buildTextTables(monthTable(t.persian, locale.persianMonths), locale.textPatterns.persian, locale.persianMonths, other, roman),
+    [Calendar.CHINESE_LUNAR]: buildTextTables(monthTable(t.chinese, locale.lunarMonths.chinese), locale.textPatterns.chinese, locale.lunarMonths.chinese, other, roman),
+    [Calendar.KOREAN_LUNAR]: buildTextTables(monthTable(t.korean, locale.lunarMonths.korean), locale.textPatterns.korean, locale.lunarMonths.korean, other, roman),
+    [Calendar.VIETNAMESE_LUNAR]: buildTextTables(monthTable(t.vietnamese, locale.lunarMonths.vietnamese), locale.textPatterns.vietnamese, locale.lunarMonths.vietnamese, other, roman),
   };
 
   const words = wordMaps(locale);
@@ -608,20 +612,35 @@ function validFor(calendar: Calendar, year: number, month: number, day: number):
   // A real month whatever the calendar: 1-12, or 13 for Hebrew (Adar II)
   // and French Republican (the extra days). (isValidCalendarDate accepts
   // any month when the day is 0.)
+  // Lunisolar leap months are 101-112.
+  if (isLunarCalendar(calendar)) return isValidCalendarDate(calendar, year, month, day);
   if (month > 13 || (month === 13 && calendar !== Calendar.HEBREW && calendar !== Calendar.FRENCH)) return false;
   switch (calendar) {
     case Calendar.GREGORIAN:
     case Calendar.JULIAN:
     case Calendar.SWEDISH:
     case Calendar.FRENCH:
+    case Calendar.CHINESE_LUNAR:
+    case Calendar.KOREAN_LUNAR:
+    case Calendar.VIETNAMESE_LUNAR:
       return isValidCalendarDate(calendar, year, month, day);
     default:
       return true;
   }
 }
 
+function lunarMonthNames(locale: DateLocale, calendar: Calendar): readonly string[] {
+  return calendar === Calendar.KOREAN_LUNAR ? locale.lunarMonths.korean
+    : calendar === Calendar.VIETNAMESE_LUNAR ? locale.lunarMonths.vietnamese : locale.lunarMonths.chinese;
+}
+
 function parseSubdate(text: string, tables: CompiledLocale, calendar: Calendar): DatePart | null {
   const calTables = tables.months[calendar];
+  const style = tables.locale.lunarStyle;
+  if (style && calendar === style.calendar) {
+    const own = parseLunarText(style, text, lunarMonthNames(tables.locale, calendar));
+    if (own && validFor(calendar, own[2], own[1], own[0])) return own;
+  }
   // The format the text is known to be in goes first (ParseDateOptions.grampsFormat).
   if (tables.hintLayout !== undefined) {
     const { locale } = tables;
@@ -633,6 +652,16 @@ function parseSubdate(text: string, tables: CompiledLocale, calendar: Calendar):
 
   const monthResult = parseCalendarMonthText(text, tables.months[calendar], calendar, tables.locale.numericOrder);
   if (monthResult) return monthResult;
+
+  // _parse_chinese_lunar (and Korean/Vietnamese): "YEAR-MONTH-DAY" with a
+  // leap month written 101-112 ("2020-104-1").
+  if (isLunarCalendar(calendar)) {
+    const lm = /^(\d{1,4})(?:-(\d{1,3})(?:-(\d{1,2}))?)?$/.exec(text.trim());
+    if (lm) {
+      const [year, month, day] = [getInt(lm[1]), lm[2] ? getInt(lm[2]) : 0, lm[3] ? getInt(lm[3]) : 0];
+      return validFor(calendar, year, month, day) ? [day, month, year, false] : null;
+    }
+  }
 
   let m = tables.isoRe.exec(text);
   if (m) {
@@ -800,7 +829,8 @@ function matchQuality(text: string, qual: Quality, tables: CompiledLocale): [str
   const m = tables.qualRe.exec(text);
   if (m) {
     const next = tables.words.qualities.get(m[2].toLowerCase()) ?? qual;
-    return [m[1] + m[3], next];
+    // A quality word may end the text (Tamil, Korean): nothing follows it.
+    return [m[1] + (m[3] ?? ""), next];
   }
   return [text, qual];
 }
@@ -951,6 +981,17 @@ function setDateFromText(rawText: string, tables: CompiledLocale): MatchResult {
   newyear = nextNy;
   [text, newyear] = matchNewyear(text, newyear, tables);
   [text, cal] = matchCalendar(text, cal, tables);
+
+  // A prefix giving both quality and modifier ("估计早于"): the rest is
+  // the date (zh match_quality/match_modifier's _pending_modifier).
+  for (const [prefix, [q, mod]] of Object.entries(tables.locale.compoundQualityModifiers ?? {})) {
+    if (!text.startsWith(prefix)) continue;
+    const [rest, bc] = matchBce(text.slice(prefix.length).trim(), tables);
+    let part = parseSubdate(rest, tables, cal);
+    if (!part) return { modifier: Modifier.TEXTONLY, calendar: Calendar.GREGORIAN, newyear: 0, quality: Quality.NONE, dateval: NO_MATCH, text: text0 };
+    if (bc) part = invertYear(part);
+    return { modifier: mod, calendar: cal, newyear, quality: q, dateval: part, text: "" };
+  }
   [text, qual] = matchQuality(text, qual, tables);
 
   const span = matchSpan(text, cal, newyear, qual, tables);

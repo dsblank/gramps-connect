@@ -18,6 +18,7 @@ export interface GrampsStrings {
   frenchMonths: readonly string[];
   islamicMonths: readonly string[];
   persianMonths: readonly string[];
+  lunarMonths: DateLocale["lunarMonths"];
   calendarNames: readonly string[];
   modifierStrings: readonly string[];
   qualityStrings: readonly string[];
@@ -57,6 +58,8 @@ export function fromGramps(
     gregorianLayouts?: readonly GregorianLayout[];
     formatIndex?: Readonly<Record<number, number>>;
     display?: DateLocale["display"];
+    lunarStyle?: DateLocale["lunarStyle"];
+    compoundQualityModifiers?: DateLocale["compoundQualityModifiers"];
     numericLstrip?: boolean;
     layoutsForAllCalendars?: boolean;
   } | null,
@@ -70,6 +73,7 @@ export function fromGramps(
     frenchMonths: strings.frenchMonths,
     islamicMonths: strings.islamicMonths,
     persianMonths: strings.persianMonths,
+    lunarMonths: strings.lunarMonths,
     longDays: strings.longDays,
     shortDays: strings.shortDays,
     yearSuffix: strings.yearSuffix,
@@ -92,6 +96,8 @@ export function fromGramps(
     formatIndex: layout?.formatIndex ?? IDENTITY_FORMAT_INDEX,
     templates: strings.templates,
     display: layout?.display,
+    lunarStyle: layout?.lunarStyle,
+    compoundQualityModifiers: layout?.compoundQualityModifiers,
     numericLstrip: layout?.numericLstrip,
     layoutsForAllCalendars: layout?.layoutsForAllCalendars,
     altLongMonths: strings.altLongMonths,

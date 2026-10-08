@@ -30,8 +30,9 @@ Layouts (day/month order, "12." vs "12", zero padding) are *not* generated:
 languages whose displayer lays dates out its own way are hand-written in
 src/locales/index.ts, checked against the vectors by the tests.
 
-Needs Gramps importable with compiled translations (see the app's
-scripts/compile-gramps-translations.py).
+Needs a Gramps with the lunisolar calendars (6.2, or the lunar-calendar
+pull requests), importable with compiled translations -- see the README.
+Also writes src/lunarTables.generated.ts, those calendars' year tables.
 """
 
 import json
@@ -100,7 +101,12 @@ def templates(dd):
             # "arviolta 1111 ja 2222 (juliaaninen) välillä"), as long as it
             # occurs exactly once.
             out = rendered
-            pieces = ([(qual, "{quality}")] if qual else []) + [(scal, "{calendar}")] + pairs
+            # A language that words the quality itself (zh: "估计为" where its
+            # quality string is "据估计 ") keeps that wording literally; the
+            # templates are per quality anyway.
+            if qual and rendered.count(qual) == 1:
+                out = out.replace(qual, "{quality}")
+            pieces = [(scal, "{calendar}")] + pairs
             for literal, placeholder in pieces:
                 if out.count(literal) != 1:
                     raise SystemExit(f"{literal!r} not exactly once in {rendered!r} -- extend templates()")
@@ -134,7 +140,18 @@ TEXT_PATTERNS = {
     "french": ("_ftext", "_ftext2", "_fmon_str"),
     "persian": ("_ptext", "_ptext2", "_pmon_str"),
     "islamic": ("_itext", "_itext2", "_imon_str"),
+    "chinese": ("_cltext", "_cltext2", "_clmon_str"),
+    "korean": ("_kltext", "_kltext2", "_klmon_str"),
+    "vietnamese": ("_vltext", "_vltext2", "_vlmon_str"),
 }
+
+# The lunisolar calendars: (exported name, DateDisplay/DateParser attribute
+# stem, Date calendar constant).
+LUNAR_CALENDARS = (
+    ("chinese", "chinese_lunar", "CAL_CHINESE_LUNAR"),
+    ("korean", "korean_lunar", "CAL_KOREAN_LUNAR"),
+    ("vietnamese", "vietnamese_lunar", "CAL_VIETNAMESE_LUNAR"),
+)
 
 
 # Gramps parser regex attribute -> exported name. All are used with
@@ -267,6 +284,11 @@ def strings(lang, loc):
         "frenchMonths": distinct_months(lang, dd.french, list(en.french), (Date.CAL_FRENCH,)),
         "islamicMonths": distinct_months(lang, dd.islamic, list(en.islamic), (Date.CAL_ISLAMIC,)),
         "persianMonths": distinct_months(lang, dd.persian, list(en.persian), (Date.CAL_PERSIAN,)),
+        # The lunisolar calendars (Gramps 6.2+: Chinese, Korean, Vietnamese).
+        "lunarMonths": {
+            name: distinct_months(lang, getattr(dd, attr), list(getattr(en, attr)), (getattr(Date, cal),))
+            for name, attr, cal in LUNAR_CALENDARS
+        },
         "calendarNames": list(dd.calendar),
         "modifierStrings": list(dd._mod_str),
         "qualityStrings": list(dd._qual_str),
@@ -290,6 +312,7 @@ def strings(lang, loc):
             "french": dict(sorted(dp.french_to_int.items())),
             "islamic": dict(sorted(dp.islamic_to_int.items())),
             "persian": dict(sorted(dp.persian_to_int.items())),
+            **{name: dict(sorted(getattr(dp, f"{attr}_to_int").items())) for name, attr, _cal in LUNAR_CALENDARS},
         },
         # _rfc's (English) month abbreviations.
         "rfcMonths": dict(dp._rfc_mons_to_int),
@@ -352,6 +375,17 @@ def sample_dates():
     for cal, part in ((H, (1, 1, 5600, False)), (H, (0, 7, 5600, False)), (F, (1, 1, 10, False)),
                       (I, (12, 9, 1300, False)), (P, (1, 1, 1300, False))):
         out.append(make_date(N, Date.MOD_NONE, cal, part))
+    # Lunisolar calendars: months 101-112 are leap months.
+    for name, _attr, cal_name in LUNAR_CALENDARS:
+        cal = getattr(Date, cal_name)
+        for part in ((1, 1, 2024, False), (15, 8, 1976, False), (0, 8, 1976, False), (1, 104, 2020, False),
+                     (0, 104, 2020, False), (0, 0, 1900, False), (30, 12, 1899, False)):
+            out.append(make_date(N, Date.MOD_NONE, cal, part))
+        for mod in (Date.MOD_BEFORE, Date.MOD_AFTER, Date.MOD_ABOUT):
+            out.append(make_date(N, mod, cal, (5, 5, 1950, False)))
+        out.append(make_date(EST, Date.MOD_NONE, cal, (5, 5, 1950, False)))
+        out.append(make_date(N, Date.MOD_RANGE, cal, (1, 1, 1900, False), (1, 1, 1910, False)))
+        out.append(make_date(N, Date.MOD_SPAN, cal, (0, 3, 2020, False), (0, 104, 2020, False)))
     out.append(make_date(N, Date.MOD_TEXTONLY, G, (0, 0, 0, False), text="around the war"))
     return out
 
@@ -369,6 +403,11 @@ TYPED = {
            "Jänner 1850", "Hornung 1850"],
     "fr": ["vers 1850", "env. 1850", "avant mars 1900", "après 1900", "entre 1850 et 1860", "de 1850 à 1860",
            "12/3/1854", "12 mars 1854", "1er mars 1854", "estimée 1800", "calculée 1800"],
+    "zh_CN": ["农历2024年正月1日", "2024年正月1日 (农历)", "2024-1-1 (cl)", "2020-104-1 (cl)", "1976年8月15日",
+              "1850年以前", "大约1850年", "估计为1800年", "估计早于1900年", "自1850年至1860年", "介于1850年与1860年之间"],
+    "zh_TW": ["2024年正月1日 (農曆)", "2024-1-1 (cl)", "1976年8月15日", "1850年以前", "大約1850年"],
+    "ko": ["2024년1월1일 (음력)", "2024-1-1 (음력)", "2020-104-1 (음력)", "1850년 이전", "약 1850년"],
+    "vi": ["Tháng Giêng 1 2024 (âm lịch)", "2024-1-1 (âm lịch)", "Nhuận Tháng Tư 1 2020 (âm lịch)", "khoảng 1850"],
     "es": ["hacia 1850", "aprox. 1850", "antes de marzo 1900", "después de 1900", "entre 1850 y 1860",
            "de 1850 a 1860", "12/3/1854", "12 marzo 1854", "estimado 1800"],
 }
@@ -566,11 +605,42 @@ def write_manifest():
         f.write("\n".join(lines))
 
 
+def write_lunar_tables():
+    """src/lunarTables.generated.ts: the lunisolar calendars' year tables
+    (gramps/gen/lib/lunartables.py), with the SDN each table starts on as
+    gcalendar.py computes it."""
+    from gramps.gen.lib import gcalendar
+
+    tables = {}
+    for name, prefix in (("chinese", "_CHN"), ("korean", "_KOR"), ("vietnamese", "_VIE")):
+        tables[name] = {
+            "baseYear": getattr(gcalendar, f"{prefix}_BASE_YEAR"),
+            "startSdn": getattr(gcalendar, f"{prefix}_START_SDN"),
+            "yearInfos": list(getattr(gcalendar, f"{prefix}_YEAR_INFOS")),
+        }
+    ts = (
+        "// GENERATED by scripts/generate_gramps_locales.py from Gramps'\n"
+        "// gramps/gen/lib/lunartables.py -- do not edit by hand.\n//\n"
+        "// Each year is one 17-bit integer: bits 3-0 the leap month (0 = none),\n"
+        "// bits 15-4 month 1..12 big (30 days) or not (29), bit 16 the leap month.\n"
+        "// Chinese: tyme4py (MIT licence); Korean: KASI data via korean_lunar_calendar\n"
+        "// (MIT licence) and UTC+9 computation; Vietnamese: UTC+8/UTC+7 computation.\n\n"
+        "export interface LunarYearTable {\n  baseYear: number;\n  startSdn: number;\n  yearInfos: readonly number[];\n}\n\n"
+        f"export const LUNAR_TABLES: Readonly<Record<\"chinese\" | \"korean\" | \"vietnamese\", LunarYearTable>> = {json.dumps(tables, separators=(',', ':'))};\n"
+    )
+    with open(os.path.join(SRC, "lunarTables.generated.ts"), "w", encoding="utf-8") as f:
+        f.write(ts)
+
+
 def main(langs, strings_only=False, jobs=None):
     """Each language in its own process: Gramps' parser keeps month tables
     and patterns in class attributes, so one language's leak into the next
     in a shared process (Serbian typed input read with another language's
     words)."""
+    if not hasattr(Date, "CAL_VIETNAMESE_LUNAR"):
+        sys.exit("Needs a Gramps with the lunisolar calendars (Chinese, Korean and Vietnamese "
+                 "Lunar): Gramps 6.2, or a checkout of gramps-project/gramps#2374 (which builds "
+                 "on #2375 and #2369). See the README.")
     os.makedirs(os.path.join(SRC, "__tests__", "fixtures"), exist_ok=True)
     flags = ["--strings-only"] if strings_only else []
     failed = []
@@ -584,6 +654,7 @@ def main(langs, strings_only=False, jobs=None):
                 failed.append(lang)
                 print(f"{lang}: FAILED\n{result.stderr}", file=sys.stderr, flush=True)
     write_manifest()
+    write_lunar_tables()
     if failed:
         sys.exit(f"failed: {' '.join(failed)}")
 

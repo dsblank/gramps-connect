@@ -26,13 +26,14 @@
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/blob/master/gramps/gen/datehandler/_datedisplay.py
 
-import { Calendar, Modifier, NewYearValue, Quality, type DatePart, type GrampsDate, getStartDate, getStopDate } from "./types";
+import { Calendar, Modifier, NewYearValue, Quality, isLunarCalendar, type DatePart, type GrampsDate, getStartDate, getStopDate } from "./types";
 import { type DateLocale, type InflectKey, type MonthFormLists, getLocale } from "./locale";
 import { BASE_LAYOUTS, type GregorianLayout } from "./layouts";
 
 // In its own module so locale files can use it without a display.ts <->
 // locale.ts import cycle; re-exported here for existing importers.
 import { DateFormat } from "./formats";
+import { lunarText } from "./locales/lunar";
 export { DateFormat };
 
 export interface FormatDateOptions {
@@ -171,6 +172,12 @@ function monthTablesFor(calendar: Calendar, locale: DateLocale): MonthTables {
       return one(locale.islamicMonths, "islamic");
     case Calendar.PERSIAN:
       return one(locale.persianMonths, "persian");
+    case Calendar.CHINESE_LUNAR:
+      return one(locale.lunarMonths.chinese, "chinese");
+    case Calendar.KOREAN_LUNAR:
+      return one(locale.lunarMonths.korean, "korean");
+    case Calendar.VIETNAMESE_LUNAR:
+      return one(locale.lunarMonths.vietnamese, "vietnamese");
     default:
       return { long: locale.longMonths, short: locale.shortMonths, longForms: "long", shortForms: "short" };
   }
@@ -301,6 +308,13 @@ function formatLocaleNumeric(datePart: DatePart, locale: DateLocale, layout: Ext
 /** `_display_calendar` / a language's `_display_gregorian`: one date part
  * in the locale's numbered format `index`. */
 function displayDatePartAt(datePart: DatePart, calendar: Calendar, locale: DateLocale, index: number, inflect: InflectKey = ""): string {
+  // The language's own lunar calendar, its own way (zh/ko/vi).
+  if (locale.lunarStyle && calendar === locale.lunarStyle.calendar) {
+    return lunarText(locale.lunarStyle, datePart, index, monthTablesFor(calendar, locale).long) ?? displayIso(datePart, locale);
+  }
+  // _display_chinese_lunar (and Korean/Vietnamese): ISO in format 0, and
+  // for a leap month (101-112) in every format, so it reads back.
+  if (isLunarCalendar(calendar) && (index === 0 || datePart[1] > 100)) return displayIso(datePart, locale);
   const layout = layoutFor(calendar, locale, index);
   switch (layout.kind) {
     case "iso":

@@ -48,6 +48,16 @@ export enum Calendar {
   PERSIAN = 4,
   ISLAMIC = 5,
   SWEDISH = 6,
+  /** Lunisolar calendars (Gramps 6.2+). Months 101-112 are the leap
+   * (intercalary) versions of months 1-12. */
+  CHINESE_LUNAR = 7,
+  KOREAN_LUNAR = 8,
+  VIETNAMESE_LUNAR = 9,
+}
+
+/** The lunisolar calendars, whose months 101-112 are leap months. */
+export function isLunarCalendar(calendar: Calendar): boolean {
+  return calendar === Calendar.CHINESE_LUNAR || calendar === Calendar.KOREAN_LUNAR || calendar === Calendar.VIETNAMESE_LUNAR;
 }
 
 /** `Date.NEWYEAR_*` -- a non-Jan-1 new year start, relevant to a handful of

@@ -10,6 +10,7 @@ import {
   getStartDate,
   getStopDate,
   isCompound,
+  isLunarCalendar,
   makeDate,
   newyearFromInputStr,
   newyearToInputStr,
@@ -20,6 +21,8 @@ import {
 } from "@gramps-connect/gramps-date";
 import { t } from "../i18n/i18n";
 import { formatDisplayDate, parseDisplayDate, useDisplayFormatVersion } from "../store/placeIndex";
+import { fetchServerState } from "../store/cacheMeta";
+import { supportsLunarCalendars } from "../store/serverCapabilities";
 
 interface DateInputProps {
   label: string;
@@ -52,11 +55,8 @@ const QUALITY_OPTIONS = [
   { value: String(Quality.CALCULATED), label: "Calculated" },
 ];
 
-// All 7 Gramps calendars are selectable -- Hebrew/Persian round-trip
-// (store, display, edit) even though gramps-date can't compute their SDN
-// locally; dateToSdn falls back to sortval 0 for those two, and
-// gramps-web-api recomputes the authoritative sortval server-side on
-// every write regardless (see calendar.ts's dateToSdn doc comment).
+// Gramps' seven classic calendars, always selectable. (gramps-web-api
+// recomputes the authoritative sortval server-side on every write.)
 const CALENDAR_OPTIONS = [
   { value: String(Calendar.GREGORIAN), label: "Gregorian" },
   { value: String(Calendar.JULIAN), label: "Julian" },
@@ -66,6 +66,35 @@ const CALENDAR_OPTIONS = [
   { value: String(Calendar.ISLAMIC), label: "Islamic" },
   { value: String(Calendar.SWEDISH), label: "Swedish" },
 ];
+
+// The lunisolar calendars (Gramps 6.2+): offered only when the server's
+// Gramps has them (serverCapabilities.ts), or when the date already uses one.
+const LUNAR_CALENDAR_OPTIONS = [
+  { value: String(Calendar.CHINESE_LUNAR), label: "Chinese Lunar" },
+  { value: String(Calendar.KOREAN_LUNAR), label: "Korean Lunar" },
+  { value: String(Calendar.VIETNAMESE_LUNAR), label: "Vietnamese Lunar" },
+];
+
+/** The calendar choices: the lunar ones when the server supports them;
+ * otherwise only the date's own lunar calendar, if it has one, so editing
+ * it never silently switches calendars. */
+export function calendarOptions(serverHasLunar: boolean, current: Calendar): { value: string; label: string }[] {
+  if (serverHasLunar) return [...CALENDAR_OPTIONS, ...LUNAR_CALENDAR_OPTIONS];
+  return [...CALENDAR_OPTIONS, ...LUNAR_CALENDAR_OPTIONS.filter((o) => o.value === String(current))];
+}
+
+/** Whether the server's Gramps has the lunar calendars (false until known). */
+function useServerHasLunarCalendars(): boolean {
+  const [has, setHas] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetchServerState()
+      .then((state) => { if (live) setHas(supportsLunarCalendars(state.grampsVersion)); })
+      .catch(() => { /* can't tell: keep them hidden */ });
+    return () => { live = false; };
+  }, []);
+  return has;
+}
 
 // New Year is only user-editable for the three calendars whose new year
 // isn't culturally fixed -- port of Gramps desktop's own
@@ -158,10 +187,15 @@ interface DatePartRowProps {
   onChange: (part: DatePart) => void;
   nativePickerEnabled: boolean;
   invalid?: boolean;
+  /** A lunisolar calendar: months 101-112 are leap months, entered as the
+   * month number plus a "Leap month" switch. */
+  lunar?: boolean;
 }
 
-function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartRowProps) {
+function DatePartRow({ part, onChange, nativePickerEnabled, invalid, lunar }: DatePartRowProps) {
   const [day, month, year, slash] = part;
+  const leap = !!lunar && month > 100;
+  const shownMonth = leap ? month - 100 : month;
 
   function setField(next: { day?: number; month?: number; year?: number }) {
     onChange([next.day ?? day, next.month ?? month, next.year ?? year, slash]);
@@ -182,8 +216,11 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
         <NumberInput
           label={t("Month")}
           placeholder={t("Month")}
-          value={month || ""}
-          onChange={(v) => setField({ month: Number(v) || 0 })}
+          value={shownMonth || ""}
+          onChange={(v) => {
+            const m = Number(v) || 0;
+            setField({ month: leap && m ? m + 100 : m });
+          }}
           hideControls
           allowDecimal={false}
           allowNegative={false}
@@ -204,6 +241,15 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
           max={31}
         />
       </Group>
+      {lunar && (
+        <Switch
+          label={t("Leap month")}
+          checked={leap}
+          disabled={!shownMonth}
+          onChange={(e) => setField({ month: e.currentTarget.checked ? shownMonth + 100 : shownMonth })}
+          mb={8}
+        />
+      )}
       <NativeDatePickerButton part={part} onChange={onChange} enabled={nativePickerEnabled} />
     </Group>
   );
@@ -226,6 +272,7 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid }: DatePartR
  *   "Text comment" annotation field -- for anything the quick parser can't
  *   express or the user prefers not to type. */
 export function DateInput({ label, id, value, onChange }: DateInputProps) {
+  const serverHasLunar = useServerHasLunarCalendars();
   const modifier = value?.modifier ?? Modifier.NONE;
   const quality = value?.quality ?? Quality.NONE;
   const calendar = value?.calendar ?? Calendar.GREGORIAN;
@@ -364,7 +411,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
             {!textOnly && (
               <Select
                 label={t("Calendar")}
-                data={CALENDAR_OPTIONS}
+                data={calendarOptions(serverHasLunar, calendar)}
                 value={String(calendar)}
                 onChange={(v) => setCalendar((Number(v) as Calendar) ?? Calendar.GREGORIAN)}
                 allowDeselect={false}
@@ -380,6 +427,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
                 part={start}
                 onChange={(p) => commit({ start: p })}
                 nativePickerEnabled={calendar === Calendar.GREGORIAN}
+                lunar={isLunarCalendar(calendar)}
                 invalid={validation?.date1Invalid}
               />
               {compound && (
@@ -389,6 +437,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
                     part={stop}
                     onChange={(p) => commit({ stop: p })}
                     nativePickerEnabled={calendar === Calendar.GREGORIAN}
+                    lunar={isLunarCalendar(calendar)}
                     invalid={validation ? validation.date2Empty || validation.date2Invalid || validation.date2OrderInvalid : false}
                   />
                 </Group>
