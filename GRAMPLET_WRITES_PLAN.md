@@ -1,14 +1,19 @@
 # Gramplet Writes Plan
 
-Status: Phases 1-2 done 2026-10-10; Phase 3 (Help/wiki done alongside each
-phase; the Store example still to do). Changes from the plan below, made
-while building Phase 2:
+Status: all three phases done 2026-10-10 (Store example:
+gramplet-store/mark-unsourced-private). Changes from the plan below, made
+while building it:
 - The Gramplets menu marks such Gramplets with ✎ but doesn't disable them
   for users without Editor rights -- a dry run is still useful to them, so
   only the window's Run button is disabled.
 - Commits are always synchronous; background=true isn't used yet (it
   returns a Celery task to poll, and Desktop has no Celery anyway).
 - A commit-changes message from a run a newer run replaced is refused.
+- Schema validation builds one jsonschema validator per class instead of
+  calling jsonschema.validate() per record, which re-checks the schema
+  itself every time (~270ms a record in Pyodide; ~5ms now). Measured on the
+  example: a real run over 2,171 people takes under two minutes, nearly all
+  of it one GET per record.
 
 Let Gramplets change the tree, not just read it. There are no limits on
 *what* a Gramplet may write; the safeguards are an explicit per-Gramplet

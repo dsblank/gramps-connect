@@ -479,25 +479,42 @@ def _ch_validate_embedded(value, path="$"):
             _ch_validate_embedded(item, f"{path}[{i}]")
 
 
-def _ch_validate(data):
+# One validator per class (and per gender-patched variant): building it
+# checks the schema itself against the JSON Schema meta-schema, which is
+# what nearly all of jsonschema.validate()'s time goes to -- doing that for
+# every record made validating a couple of thousand take minutes.
+_ch_validators = {}
+
+
+def _ch_validator(cls, patch_gender):
     import copy
+    import jsonschema
+    key = (cls.__name__, patch_gender)
+    if key not in _ch_validators:
+        schema = cls.get_schema()
+        if patch_gender:
+            schema = copy.deepcopy(schema)
+            schema["properties"]["gender"]["maximum"] = cls.OTHER
+        validator_class = jsonschema.validators.validator_for(schema)
+        validator_class.check_schema(schema)
+        _ch_validators[key] = validator_class(schema)
+    return _ch_validators[key]
+
+
+def _ch_validate(data):
     import jsonschema
     cls = _ch_gramps_class(data.get("_class"))
     if cls is None:
         raise ValueError(f"unknown object class {data.get('_class')!r}")
-    schema = cls.get_schema()
     data = {k: v for k, v in data.items() if k != "complete"}
     # Gramps 5.2 added Person.OTHER = 3, but the JSON schema still caps
     # gender at 2 (see gramps-web-api's validate_object_dict()).
     other = getattr(cls, "OTHER", None)
-    maximum = schema.get("properties", {}).get("gender", {}).get("maximum")
-    if other is not None and data.get("gender") == other and maximum is not None and other > maximum:
-        schema = copy.deepcopy(schema)
-        schema["properties"]["gender"]["maximum"] = other
-    try:
-        jsonschema.validate(data, schema)
-    except jsonschema.exceptions.ValidationError as exc:
-        raise ValueError(f"{exc.json_path}: {exc.message}") from None
+    maximum = cls.get_schema().get("properties", {}).get("gender", {}).get("maximum")
+    patch_gender = other is not None and data.get("gender") == other and maximum is not None and other > maximum
+    error = jsonschema.exceptions.best_match(_ch_validator(cls, patch_gender).iter_errors(data))
+    if error is not None:
+        raise ValueError(f"{error.json_path}: {error.message}")
     _ch_validate_embedded(data)
 
 

@@ -33,6 +33,7 @@ gramplet-store/
 | `listensToSelection` | no | Whether this Gramplet should re-run when the selected record changes. |
 | `listensToFilter` | no | Whether this Gramplet should re-run when the active filter changes. |
 | `kind` | no | `"view"` (default) for a View Gramplet, shown in the panel below a list; `"window"` for a Gramplet run from the Gramplets menu in its own window. `views`/`listensTo*` only apply to `"view"`. |
+| `allowChanges` | no | `true` installs it with "Allow data changes" on, letting its code change and delete records (dry run first, then Run in its window). Only allowed with `"kind": "window"`. |
 
 A Gramplet (`"kind": "window"`) runs as soon as its window opens; to ask
 for input first, draw it with the `st.*` widgets and do the real work
