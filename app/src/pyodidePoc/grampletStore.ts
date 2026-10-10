@@ -140,6 +140,8 @@ export function buildGrampletFromCatalogEntry(entry: CatalogEntry, defaultViewKe
     addedViews: defaultViewKey ? [defaultViewKey] : [],
     listensToSelection: entry.listensToSelection,
     listensToFilter: entry.listensToFilter,
+    kind: entry.kind,
+    category: entry.category,
     sourceId: entry.id,
     sourceVersion: entry.version,
     sourceCodeHash: hashCode(entry.code),
@@ -162,9 +164,9 @@ export async function installFromCatalog(entry: CatalogEntry, defaultViewKey?: s
   return { ...built, handle };
 }
 
-/** Overwrites `installed`'s code/description/views/listening flags with
- * `entry`'s current content and bumps its `sourceVersion`/
- * `sourceCodeHash` to match -- same PUT saveGrampletManifest() already
+/** Overwrites `installed`'s code/description/views/listening flags/kind/
+ * category with `entry`'s current content and bumps its
+ * `sourceVersion`/`sourceCodeHash` to match -- same PUT saveGrampletManifest() already
  * uses for an ordinary hand-edit save. Deliberately leaves `label`
  * untouched (a viewer's own rename of the tab is not "content" the
  * catalog owns) and `addedViews`/`handle`/`id`/`sourceId` alone (identity
@@ -186,6 +188,8 @@ export async function updateFromCatalog(installed: Gramplet, entry: CatalogEntry
     views: entry.views,
     listensToSelection: entry.listensToSelection,
     listensToFilter: entry.listensToFilter,
+    kind: entry.kind,
+    category: entry.category,
     sourceVersion: entry.version,
     sourceCodeHash: hashCode(entry.code),
   };

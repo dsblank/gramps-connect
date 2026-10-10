@@ -183,6 +183,16 @@ describe("fetchGramplets", () => {
     expect(fileGets()).toEqual(["LATE"]);
   });
 
+  it("loads a valid window Gramplet manifest and skips one with an unknown kind", async () => {
+    const good = { id: "w", label: "W", code: "", kind: "window", category: "chart" };
+    const badKind = { ...good, id: "x", kind: "panel" };
+    server.set("M1", ["c1", JSON.stringify(good)]);
+    server.set("M2", ["c2", JSON.stringify(badKind)]);
+    const loaded = await fetchGramplets({ fresh: true });
+    expect(loaded.map((g) => g.id)).toEqual(["w"]);
+    expect(loaded[0].kind).toBe("window");
+  });
+
   it("shares one in-flight load between concurrent callers, unless a caller asks for a fresh one", async () => {
     server.set("M1", ["c1", manifest("a")]);
 

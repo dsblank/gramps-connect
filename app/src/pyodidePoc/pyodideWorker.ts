@@ -9,7 +9,7 @@ import { autoAwaitGrampletCode } from "./autoAwait";
 import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
 import { preprocessPipInstalls } from "./pipInstall";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
-import type { GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse } from "./types";
+import type { GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -139,8 +139,9 @@ async function ensureCatalogPackagesForCode(pyodide: PyodideInterface, code: str
 // Set fresh from each RunGrampletRequest, read by the bridge functions
 // below -- the worker can't call getToken() itself (reads localStorage,
 // not available inside a Worker), so the main thread resolves a token and
-// hands it over per-message instead. See types.ts's RunGrampletRequest
-// doc comment for the known "not refreshed mid-run" limitation.
+// hands it over per-message instead -- and again mid-run via a
+// SetTokenRequest (see types.ts), for a long window-Gramplet run that
+// outlives the token it started with.
 let currentToken = "";
 
 // The RunGrampletRequest currently executing (see runOne() below) -- read
@@ -150,6 +151,29 @@ let currentToken = "";
 // never runs two requests' Python concurrently, so there's only ever one
 // meaningful value for this at a time.
 let currentRunId = "";
+
+// st.progress() throttling -- see bridge.reportRunProgress() below. A run
+// moving its bar once per row would otherwise post thousands of messages
+// a second, each one a main-thread re-render.
+const RUN_PROGRESS_INTERVAL_MS = 100;
+let lastRunProgressAt = 0;
+let pendingRunProgress: PyodideWorkerResponse | null = null;
+let pendingRunProgressTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Sends the latest throttled-away run-progress now, if any -- from its
+ * own trailing timer, and before a run's final blocks/error reply so the
+ * bar never ends on a stale value. */
+function flushRunProgress(): void {
+  if (pendingRunProgressTimer !== null) {
+    clearTimeout(pendingRunProgressTimer);
+    pendingRunProgressTimer = null;
+  }
+  if (pendingRunProgress) {
+    lastRunProgressAt = Date.now();
+    reply(pendingRunProgress);
+    pendingRunProgress = null;
+  }
+}
 
 // The JS side of filter()/get_object() -- registered into Pyodide once
 // (see BOOTSTRAP_PY) as the `_gramps_connect_bridge` module, wrapped by
@@ -174,14 +198,34 @@ let currentRunId = "";
 // Gramplet's own filter(..., limit=5000) just works rather than erroring.
 const MAX_PAGE_LIMIT = 1000;
 
+/** A failed bridge call's error text: gramps-web-api's own message when
+ * the body is its usual {"error": {"message": ...}} JSON (e.g. a GOQL
+ * syntax error -- what a Gramplet author can act on), the raw body
+ * otherwise. Prefixed with the Python-facing function name and status. */
+async function bridgeError(name: string, res: Response): Promise<Error> {
+  const body = await res.text();
+  let message = body;
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown } };
+    if (typeof parsed.error?.message === "string") message = parsed.error.message;
+  } catch {
+    // Not JSON -- keep the raw body.
+  }
+  return new Error(`${name}(): ${res.status} ${message}`);
+}
+
 const bridge = {
   async filter(objectType: string, argsJson: string): Promise<string> {
     const args = JSON.parse(argsJson) as {
       where: string | null;
       what: string[] | null;
       order: unknown;
-      limit: number;
+      limit: number | null;
     };
+    // limit=None in Python: every match. Infinity still pages in
+    // MAX_PAGE_LIMIT chunks below, and stops on the last page's null
+    // next_after like any other limit.
+    const limit = args.limit ?? Number.POSITIVE_INFINITY;
     const endpoint = OBJECT_QUERY_ENDPOINTS[objectType];
     if (!endpoint) throw new Error(`filter(): unknown object type ${JSON.stringify(objectType)}`);
     // A `what` entry is passed straight through as a plain select-entry
@@ -203,7 +247,7 @@ const bridge = {
     // last page (object_query.py: `next_after = ... if has_more else None`).
     const items: unknown[] = [];
     let after: string | undefined;
-    while (items.length < args.limit) {
+    while (items.length < limit) {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
@@ -211,11 +255,11 @@ const bridge = {
           select,
           where_expr: args.where ?? undefined,
           order_by: args.order ?? undefined,
-          limit: Math.min(args.limit - items.length, MAX_PAGE_LIMIT),
+          limit: Math.min(limit - items.length, MAX_PAGE_LIMIT),
           after,
         }),
       });
-      if (!res.ok) throw new Error(`filter(): ${res.status} ${await res.text()}`);
+      if (!res.ok) throw await bridgeError("filter", res);
       const page = (await res.json()) as { items: unknown[]; next_after: string | null };
       items.push(...page.items);
       if (!page.next_after) break;
@@ -229,7 +273,7 @@ const bridge = {
     const res = await fetch(`${API_BASE}${base}${encodeURIComponent(handle)}`, {
       headers: { Authorization: `Bearer ${currentToken}` },
     });
-    if (!res.ok) throw new Error(`get_object(): ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await bridgeError("get_object", res);
     return res.text();
   },
   // The single-object GET endpoint's own `?backlinks=true` (base.py's
@@ -246,7 +290,7 @@ const bridge = {
     const res = await fetch(`${API_BASE}${base}${encodeURIComponent(handle)}?backlinks=true`, {
       headers: { Authorization: `Bearer ${currentToken}` },
     });
-    if (!res.ok) throw new Error(`get_backlinks(): ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await bridgeError("get_backlinks", res);
     const data = (await res.json()) as { backlinks?: Record<string, string[]> };
     return JSON.stringify(data.backlinks ?? {});
   },
@@ -268,7 +312,7 @@ const bridge = {
     const res = await fetch(`${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`, {
       headers: { Authorization: `Bearer ${currentToken}` },
     });
-    if (!res.ok) throw new Error(`get_relationship(): ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await bridgeError("get_relationship", res);
     return res.text();
   },
   // db.get_relationships()'s bridge half -- the same endpoint's `/all`
@@ -284,7 +328,7 @@ const bridge = {
     const res = await fetch(`${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`, {
       headers: { Authorization: `Bearer ${currentToken}` },
     });
-    if (!res.ok) throw new Error(`get_relationships(): ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await bridgeError("get_relationships", res);
     return res.text();
   },
   // get_number_of_<type>()'s bridge half -- limit=1 (only one row's worth
@@ -302,7 +346,7 @@ const bridge = {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
       body: JSON.stringify({ select: ["handle"], where_expr: where ?? undefined, limit: 1, count: true }),
     });
-    if (!res.ok) throw new Error(`count(): ${res.status} ${await res.text()}`);
+    if (!res.ok) throw await bridgeError("count", res);
     const total = res.headers.get("X-Total-Count");
     if (total === null) throw new Error("count(): missing X-Total-Count response header");
     return total;
@@ -319,6 +363,27 @@ const bridge = {
   // keep running JS afterward, so it still arrives and renders mid-sleep.
   reportProgress(blocksJson: string): void {
     reply({ type: "progress", blocks: JSON.parse(blocksJson) as GrampletBlock[], runId: currentRunId });
+  },
+  // st.progress()'s value (stBootstrap.ts), for a Gramplet window's
+  // minimized chip -- the bar itself travels in the ordinary "progress"
+  // output snapshot. Plain (not async) for the same reason
+  // reportProgress() above is. Throttled to one message per
+  // RUN_PROGRESS_INTERVAL_MS, leading edge sent at once; a call landing
+  // inside the interval replaces the pending one, which a trailing timer
+  // sends once the interval is up. That timer only fires when this
+  // worker's event loop is free -- i.e. while the Python code is awaiting
+  // a network call, which is exactly when a stale message would otherwise
+  // sit on screen longest ("Loading people..." during a long filter()).
+  // A CPU-bound loop keeps moving its bar, so it never needs the timer.
+  reportRunProgress(argsJson: string): void {
+    const { done, total, message } = JSON.parse(argsJson) as { done: number; total: number | null; message: string };
+    pendingRunProgress = { type: "run-progress", done, total, message, runId: currentRunId };
+    const wait = lastRunProgressAt + RUN_PROGRESS_INTERVAL_MS - Date.now();
+    if (wait <= 0) {
+      flushRunProgress();
+    } else if (pendingRunProgressTimer === null) {
+      pendingRunProgressTimer = setTimeout(flushRunProgress, wait);
+    }
   },
 };
 
@@ -351,9 +416,9 @@ async def filter(object_type, where=None, what=None, order=None, limit=50):
     string. 'where' is a where_expr string (e.g. 'gender == 1'), 'order'
     is a list of {"column": ..., "direction": "asc"|"desc"}. 'limit' isn't
     capped at gramps-web-api's own per-request max of 1000 -- pass 5000
-    and get 5000 (or every match, if fewer): the JS bridge pages through
-    multiple requests transparently, so this never needs to think about
-    the server's own per-page limit."""
+    and get 5000 (or every match, if fewer), or limit=None for every
+    match: the JS bridge pages through multiple requests transparently, so
+    this never needs to think about the server's own per-page limit."""
     import json as _json
     args_json = _json.dumps({"where": where, "what": what, "order": order, "limit": limit})
     items_json = await _bridge.filter(object_type, args_json)
@@ -815,6 +880,7 @@ _selected_type = None
 _selected_handle = None
 _home_person_handle = None
 _where_expr = None
+_filter_type = None
 
 # Per-run memo for the two functions below, so calling get_selected()
 # twice in one Gramplet is one fetch, not two -- keyed by nothing (there's
@@ -825,13 +891,14 @@ _selected_object = _UNFETCHED
 _home_person_object = _UNFETCHED
 
 
-def _set_run_context(new_selected_type, new_selected_handle, new_home_person_handle, new_where_expr):
-    global _selected_type, _selected_handle, _home_person_handle, _where_expr
+def _set_run_context(new_selected_type, new_selected_handle, new_home_person_handle, new_where_expr, new_filter_type):
+    global _selected_type, _selected_handle, _home_person_handle, _where_expr, _filter_type
     global _selected_object, _home_person_object
     _selected_type = new_selected_type
     _selected_handle = new_selected_handle
     _home_person_handle = new_home_person_handle
     _where_expr = new_where_expr
+    _filter_type = new_filter_type
     _selected_object = _UNFETCHED
     _home_person_object = _UNFETCHED
 
@@ -885,7 +952,7 @@ async def get_home_person():
     return _home_person_object
 
 
-def get_filter():
+def get_filter(object_type=None):
     """The where_expr string currently applied on the view this Gramplet is
     running on -- FilterBar's own search box and the "Filters" picker's
     saved filter/Custom Rule, ANDed together when both are active (see
@@ -894,7 +961,15 @@ def get_filter():
     either surface, or there's no view context at all (the standalone
     editor's own preview run). Unlike get_selected()/get_home_person() this
     is a plain string already, not a handle needing a fetch -- no \`await\`
-    needed, and no round trip either way."""
+    needed, and no round trip either way.
+
+    get_filter("person") (or any other object type) returns the filter only
+    if it's a filter on that type -- None if the open list is some other
+    type, so it's always safe to pass straight to filter("person", ...).
+    Matters for a Gramplet in its own window, which runs against whichever
+    list happens to be open."""
+    if object_type is not None and object_type != _filter_type:
+        return None
     return _where_expr
 
 
@@ -1579,13 +1654,19 @@ function escapeHtml(text: string): string {
 // while the first is still running should run the first request, then
 // (once it's done) skip straight to the third, not visibly run the second
 // too on the way there.
-let queuedRequest: PyodideWorkerRequest | null = null;
+let queuedRequest: RunGrampletRequest | null = null;
 let running = false;
 
-async function runOne(request: PyodideWorkerRequest): Promise<void> {
+async function runOne(request: RunGrampletRequest): Promise<void> {
   const { code, token, runId } = request;
   currentToken = token;
   currentRunId = runId;
+  // A previous run's throttled-away progress belongs to that run --
+  // drop it rather than send it tagged with this one's runId.
+  if (pendingRunProgressTimer !== null) clearTimeout(pendingRunProgressTimer);
+  pendingRunProgressTimer = null;
+  pendingRunProgress = null;
+  lastRunProgressAt = 0;
   // Sent right as this request is dequeued and actually starts using the
   // interpreter -- the gap between postMessage() and this arriving is how
   // the caller tells "queued behind another Gramplet" apart from
@@ -1664,8 +1745,9 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     const selectedHandleArg = request.selectedHandle != null ? JSON.stringify(request.selectedHandle) : "None";
     const homePersonHandleArg = request.homePersonHandle != null ? JSON.stringify(request.homePersonHandle) : "None";
     const whereExprArg = request.whereExpr != null ? JSON.stringify(request.whereExpr) : "None";
+    const filterTypeArg = request.filterType != null ? JSON.stringify(request.filterType) : "None";
     await pyodide.runPythonAsync(
-      `_set_run_context(${selectedTypeArg}, ${selectedHandleArg}, ${homePersonHandleArg}, ${whereExprArg})`
+      `_set_run_context(${selectedTypeArg}, ${selectedHandleArg}, ${homePersonHandleArg}, ${whereExprArg}, ${filterTypeArg})`
     );
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
     // _finalize_blocks() flushes any pending print buffer and/or table
@@ -1689,6 +1771,7 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     if (result !== undefined) {
       blocks.push({ type: "html", markup: `<pre>${escapeHtml(String(result))}</pre>` });
     }
+    flushRunProgress();
     reply({ type: "blocks", blocks, runId });
   } catch (err) {
     // Whatever the run produced before the crash -- often the most useful
@@ -1704,11 +1787,18 @@ async function runOne(request: PyodideWorkerRequest): Promise<void> {
     } catch {
       // Nothing to recover -- fall through with the empty blocks default.
     }
+    flushRunProgress();
     reply({ type: "error", text: err instanceof Error ? err.message : String(err), blocks, runId });
   }
 }
 
 self.onmessage = (event: MessageEvent<PyodideWorkerRequest>) => {
+  if (event.data.type === "set-token") {
+    // Not a run: takes effect for the current run's next network call,
+    // and never touches queuedRequest.
+    currentToken = event.data.token;
+    return;
+  }
   // Replaces (never appends to) whatever was queued -- see queuedRequest's
   // own doc comment above.
   queuedRequest = event.data;

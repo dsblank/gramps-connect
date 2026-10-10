@@ -20,6 +20,7 @@
 // panel, this only ever runs at author/publish time, where surfacing a
 // mistake immediately is more useful than silently publishing a broken
 // catalog entry.
+import esbuild from "esbuild";
 import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -28,6 +29,22 @@ const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const repoRoot = path.dirname(appDir);
 const storeDir = path.join(repoRoot, "gramplet-store");
 const iconsDir = path.join(storeDir, "icons");
+
+// The app's own validator for the window-Gramplet fields (kind/
+// category), so a Store entry and a tree manifest are held to the same
+// rules. grampletManifest.ts has no runtime imports, so a bundle-free
+// esbuild transform plus a data: URL import loads it in plain Node -- the
+// same trick export-gql-presets.mjs uses.
+const { validateGrampletKindFields } = await (async () => {
+  const result = await esbuild.build({
+    entryPoints: [path.join(appDir, "src/pyodidePoc/grampletManifest.ts")],
+    bundle: false,
+    write: false,
+    format: "esm",
+    platform: "node",
+  });
+  return import(`data:text/javascript,${encodeURIComponent(result.outputFiles[0].text)}`);
+})();
 
 const REQUIRED_MANIFEST_FIELDS = ["id", "name", "description", "version", "author", "category"];
 const ICON_EXTENSIONS = ["png", "jpg", "jpeg", "svg", "webp"];
@@ -67,6 +84,10 @@ async function loadEntry(slug) {
   if (manifest.views !== undefined && (!Array.isArray(manifest.views) || !manifest.views.every((v) => typeof v === "string"))) {
     throw new Error(`gramplet-store/${slug}/manifest.json: "views", if present, must be an array of strings`);
   }
+  const kindFieldsError = validateGrampletKindFields(manifest);
+  if (kindFieldsError) {
+    throw new Error(`gramplet-store/${slug}/manifest.json: ${kindFieldsError}`);
+  }
 
   let code;
   try {
@@ -90,8 +111,8 @@ async function loadEntry(slug) {
     }
   }
 
-  const { id, name, description, version, author, category, views, listensToSelection, listensToFilter } = manifest;
-  return { id, name, description, version, author, category, views, listensToSelection, listensToFilter, iconUrl, code };
+  const { id, name, description, version, author, category, views, listensToSelection, listensToFilter, kind } = manifest;
+  return { id, name, description, version, author, category, views, listensToSelection, listensToFilter, kind, iconUrl, code };
 }
 
 const slugs = (await readdir(storeDir, { withFileTypes: true }))

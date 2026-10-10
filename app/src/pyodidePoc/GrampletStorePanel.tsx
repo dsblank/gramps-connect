@@ -1,16 +1,22 @@
 // Browse the Gramplet Store's catalog (gramplet-store/catalog.json, see
 // grampletStore.ts's own top comment) and install/update/remove Gramplets
-// from it. Opened from MenuBar.tsx's Help menu ("Gramplet Store…"), gated
-// on the same GRAMPLET_AUTHOR_PERMISSION as the Add menu's "Add Gramplet…" --
+// from it. Opened from MenuBar.tsx's Gramplets menu ("Gramplet Store…"),
+// gated on the same GRAMPLET_AUTHOR_PERMISSION as its "New Gramplet…" --
 // see grampletMedia.ts's own doc comment for why authoring needs a higher
 // bar than ordinary Media edit rights. A single flat list rather than
 // Mantine's Accordion (not used anywhere else in this codebase) -- Card +
 // an inline Collapse-on-click detail, the same "> Options" disclosure
 // pattern ExportDialog.tsx already uses, kept consistent rather than
-// introducing a new component family for one dialog.
+// introducing a new component family for one dialog. Two tabs, one per
+// kind (types.ts's GrampletKind): Gramplets (run from the Gramplets menu)
+// first, View Gramplets (the panel under each list) second -- the search
+// box and the Install/Update/Remove all buttons apply to the open tab.
 import { useEffect, useState } from "react";
-import { Alert, Badge, Button, Card, Collapse, Group, Loader, Modal, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
+import {
+  Alert, Badge, Button, Card, Collapse, Group, Loader, Modal, SimpleGrid, Stack, Tabs, Text, TextInput,
+} from "@mantine/core";
 import { canAuthorGramplets, fetchGramplets } from "./grampletMedia";
+import { grampletKind } from "./grampletManifest";
 import { confirmDialog } from "../store/confirmDialog";
 import {
   DEFAULT_CATALOG_URL,
@@ -26,7 +32,7 @@ import {
 import { PythonCodeEditor } from "./PythonCodeEditor";
 import { OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import { t } from "../i18n/i18n";
-import type { CatalogEntry, Gramplet } from "./types";
+import type { CatalogEntry, Gramplet, GrampletKind } from "./types";
 
 type LoadStatus = "loading" | "ready" | "error";
 
@@ -57,6 +63,7 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [installed, setInstalled] = useState<Gramplet[]>([]);
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<GrampletKind>("window");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // Which entry's Install/Update/Remove button is mid-request -- disables
   // just that one row's buttons rather than the whole dialog, so browsing
@@ -143,7 +150,9 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const visible = catalog.filter((entry) => matches(entry, query.trim()));
+  const matching = catalog.filter((entry) => matches(entry, query.trim()));
+  const countOf = (kind: GrampletKind) => matching.filter((entry) => grampletKind(entry) === kind).length;
+  const visible = matching.filter((entry) => grampletKind(entry) === tab);
   const canAuthor = canAuthorGramplets();
   const pending = visible.filter((entry) => !findInstalledEntry(installed, entry.id));
   // Same "scoped to the filtered list" behavior as Install all above --
@@ -295,9 +304,28 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
               {removeAllError}
             </Alert>
           )}
+          <Tabs value={tab} onChange={(value) => value && setTab(value as GrampletKind)}>
+            <Tabs.List>
+              <Tabs.Tab value="window">
+                {t("Gramplets")} ({countOf("window")})
+              </Tabs.Tab>
+              <Tabs.Tab value="view">
+                {t("View Gramplets")} ({countOf("view")})
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs>
+          <Text size="sm" c="dimmed">
+            {tab === "window"
+              ? t("Gramplets open in their own window from the Gramplets menu, when you run them.")
+              : t("View Gramplets show below a list and follow what you select there -- add one to a list with the + in its View Gramplets panel.")}
+          </Text>
           {visible.length === 0 && (
             <Text size="sm" c="dimmed">
-              {t("No matches")}
+              {query.trim()
+                ? t("No matches")
+                : tab === "window"
+                  ? t("No Gramplets in the Store yet.")
+                  : t("No View Gramplets in the Store yet.")}
             </Text>
           )}
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
@@ -331,9 +359,11 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
                           <Badge size="xs" variant="light">
                             {entry.category}
                           </Badge>
-                          <Badge size="xs" variant="outline" color="gray">
-                            {viewsLabel(entry.views)}
-                          </Badge>
+                          {tab === "view" && (
+                            <Badge size="xs" variant="outline" color="gray">
+                              {viewsLabel(entry.views)}
+                            </Badge>
+                          )}
                           {gramplet && !updateAvailable && (
                             <Badge size="xs" color="green" variant="light">
                               {t("Installed")}
@@ -351,6 +381,11 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
                         <Text size="xs" c="dimmed">
                           {entry.author} · v{entry.version}
                         </Text>
+                        {gramplet && tab === "window" && (
+                          <Text size="xs" c="green">
+                            {t("Open it from the Gramplets menu.")}
+                          </Text>
+                        )}
                       </Stack>
                     </Group>
                     <Group gap="xs" wrap="nowrap">

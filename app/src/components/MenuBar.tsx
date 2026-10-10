@@ -23,10 +23,14 @@ import { runMediaExport } from "../store/mediaExportApi";
 import { exportLabel, downloadArchiveLocally } from "../store/jobsPromote";
 import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
-import { GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
+import { fetchGramplets, GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
+import { grampletMenuGroups } from "../pyodidePoc/grampletMenu";
+import { MAX_GRAMPLET_WINDOWS, openGrampletWindow } from "../pyodidePoc/grampletWindows";
+import type { Gramplet } from "../pyodidePoc/types";
+import { notifications } from "@mantine/notifications";
 
 // pyodidePoc/ pulls in prismjs/react-simple-code-editor -- lazy since a
-// session that never opens "Add Gramplet…" never fetches either.
+// session that never opens "New Gramplet…" never fetches either.
 // GRAMPLET_AUTHOR_PERMISSION below is a plain string constant from the same
 // directory's grampletMedia.ts, not GrampletEditDialog.tsx itself, so
 // importing it plainly doesn't pull prismjs/react-simple-code-editor in
@@ -80,6 +84,9 @@ interface MenuItemSpec {
   danger?: boolean;
   /** Turns this item into a submenu. Mutually exclusive with onClick. */
   children?: MenuItemSpec[];
+  /** Shown greyed out and unclickable -- an informational row ("No
+   * Gramplets installed"). */
+  disabled?: boolean;
 }
 
 interface AppMenuProps {
@@ -106,7 +113,7 @@ function AppMenuItem({ item }: { item: MenuItemSpec }) {
       </Menu.Sub.Dropdown>
     </Menu.Sub>
   ) : (
-    <Menu.Item onClick={item.onClick} c={item.danger ? "red" : undefined}>
+    <Menu.Item onClick={item.onClick} c={item.danger ? "red" : undefined} disabled={item.disabled}>
       {item.label}
     </Menu.Item>
   );
@@ -252,6 +259,9 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const [deleteAllOpened, setDeleteAllOpened] = useState(false);
   const [manageTreesOpened, setManageTreesOpened] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
+  // null until the first load finishes, so the menu says "Loading…" rather
+  // than briefly claiming nothing is installed.
+  const [treeGramplets, setTreeGramplets] = useState<Gramplet[] | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
   const [systemInfoOpened, setSystemInfoOpened] = useState(false);
   const [researcherOpened, setResearcherOpened] = useState(false);
@@ -281,6 +291,40 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
       cancelled = true;
     };
   }, [reportsRequested]);
+
+  // Refetched on every open of the Gramplets menu, so one installed or
+  // edited since (here or by someone else) shows up -- cheap, since
+  // fetchGramplets() only re-downloads manifests whose checksum changed.
+  function loadWindowGramplets() {
+    fetchGramplets({ fresh: true })
+      .then(setTreeGramplets)
+      .catch((err) => {
+        console.error("failed to list Gramplets", err);
+        setTreeGramplets((current) => current ?? []);
+      });
+  }
+
+  function grampletMenuItems(): MenuItemSpec[] {
+    if (treeGramplets === null) return [{ label: t("Loading…"), disabled: true }];
+    const groups = grampletMenuGroups(treeGramplets, t("Other"));
+    if (groups.length === 0) return [{ label: t("No Gramplets installed"), disabled: true }];
+    const item = (gramplet: Gramplet): MenuItemSpec => ({
+      label: `${gramplet.label}…`,
+      onClick: () => openWindowGramplet(gramplet),
+    });
+    if (groups.length === 1 && groups[0].category === null) return groups[0].gramplets.map(item);
+    return groups.map((group) => ({ label: t(group.category ?? ""), children: group.gramplets.map(item) }));
+  }
+
+  function openWindowGramplet(gramplet: Gramplet) {
+    if (openGrampletWindow(gramplet) === "full") {
+      notifications.show({
+        color: "orange",
+        title: t("Too many Gramplet windows"),
+        message: `${t("Close a Gramplet window first -- at most this many can be open at once:")} ${MAX_GRAMPLET_WINDOWS}`,
+      });
+    }
+  }
 
   // Report names come from whatever plugins the server has installed --
   // unlike i18n.ts's static desktopStrings list, there's no way to know
@@ -357,24 +401,6 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               perm: type === "family" ? [PERM_ADD_OBJ, PERM_EDIT_OBJ] : PERM_ADD_OBJ,
               onClick: () => draftStack.openDraft(type),
             })),
-            {
-              // Not a draft type -- opens GrampletEditDialog.tsx directly,
-              // same as Media (draftStack.ts excludes both). Gated well
-              // above the AddObject/EditObject an ordinary Media upload
-              // needs -- see grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION
-              // doc comment (discussion #4, F9): Gramplet code runs in
-              // every viewer's browser who adds it to their own view, not
-              // just the author's, so authoring one needs a higher bar
-              // than editing an ordinary Media object does.
-              // (Map overlays used to have their own place-less "Add Map
-              // Overlay…" entry here too -- removed once a map overlay was
-              // required to always start from a specific place's own panel
-              // instead, see MapOverlaysSection.tsx.)
-              label: "Add Gramplet…",
-              perm: GRAMPLET_AUTHOR_PERMISSION,
-              onClick: () => setGrampletOpened(true),
-              separatorBefore: true,
-            },
           ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already
@@ -426,6 +452,38 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             },
           ]}
         />
+        {/* (Window) Gramplets -- Python from the Gramplet Store, run on
+            demand in their own window (GrampletWindow.tsx). Separate from
+            Reports, which are the server's own report plugins. */}
+        <AppMenu
+          label={t("Gramplets")}
+          items={[
+            ...grampletMenuItems(),
+            {
+              // Browse/install/update/remove from gramplet-store/catalog.json
+              // (see GrampletStorePanel.tsx's own top comment) -- installing
+              // or updating one is an authoring action, so it's gated on the
+              // same permission as New Gramplet below. See
+              // grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION doc comment
+              // (discussion #4, F9): Gramplet code runs in the browser of
+              // everyone who uses it, so authoring needs a higher bar than
+              // editing an ordinary Media object does.
+              label: "Gramplet Store…",
+              perm: GRAMPLET_AUTHOR_PERMISSION,
+              onClick: () => setGrampletStoreOpened(true),
+              separatorBefore: true,
+            },
+            {
+              // Opens GrampletEditDialog.tsx, defaulting to a Gramplet (the
+              // kind this menu lists); its Kind choice switches to a View
+              // Gramplet.
+              label: "New Gramplet…",
+              perm: GRAMPLET_AUTHOR_PERMISSION,
+              onClick: () => setGrampletOpened(true),
+            },
+          ]}
+          onOpen={loadWindowGramplets}
+        />
         <AppMenu
           label={t("Reports")}
           items={reportMenuItems(reports, setReportId)}
@@ -443,10 +501,8 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             /api/metadata/researcher/, same deal -- its Edit button is what's
             actually gated, on EditTree, inside the dialog itself rather than
             here on the menu item, so every user can still see who to
-            contact about the tree even if they can't change it. Gramplet
-            Store is the exception -- it's an authoring action
-            (installing/updating a Gramplet), gated the same as "Add
-            Gramplet…" over in the Add menu. */}
+            contact about the tree even if they can't change it. (The
+            Gramplet Store moved to the Gramplets menu.) */}
         <AppMenu
           label={t("Help")}
           items={[
@@ -465,18 +521,6 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             { label: "System Information", onClick: () => setSystemInfoOpened(true) },
             { label: "Researcher", onClick: () => setResearcherOpened(true) },
             { label: "About", onClick: () => setAboutOpened(true), separatorBefore: true },
-            {
-              // Browse/install/update/remove from gramplet-store/catalog.json
-              // (see GrampletStorePanel.tsx's own top comment) -- same
-              // permission as "Add Gramplet…" in the Add menu, since
-              // installing or updating one is exactly that same authoring
-              // action, just sourced from the catalog instead of a blank
-              // editor.
-              label: "Gramplet Store…",
-              perm: GRAMPLET_AUTHOR_PERMISSION,
-              onClick: () => setGrampletStoreOpened(true),
-              separatorBefore: true,
-            },
           ]}
         />
       </Group>
@@ -522,7 +566,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             </Box>
           }
         >
-          <GrampletEditDialog target={{ kind: "new" }} onClose={() => setGrampletOpened(false)} />
+          <GrampletEditDialog target={{ kind: "new", defaultKind: "window" }} onClose={() => setGrampletOpened(false)} />
         </Suspense>
       )}
       {grampletStoreOpened && (

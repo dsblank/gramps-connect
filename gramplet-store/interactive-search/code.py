@@ -8,7 +8,7 @@
 # remembers its own current value for you across those reruns.
 #
 # Demonstrates:
-#   - st.text_input(), st.selectbox(), st.checkbox()
+#   - st.text_input(), st.radio(), st.checkbox(), st.number_input()
 #   - safely building a "where" string from user-typed text (never use an
 #     f-string to paste user input straight in -- see the comment below)
 #   - st.session_state for a value that isn't tied to one specific widget
@@ -19,12 +19,18 @@
 # (the default, empty here); after that, whatever the person last typed.
 surname = st.text_input("Surname contains", value="")
 
-# st.selectbox(label, options, index=0, key=None) renders a dropdown and
-# returns whichever option is currently selected (the real option from
-# your list, not just its displayed string).
-sort_field = st.selectbox("Sort by", ["Surname", "Given name", "Gramps ID"], index=0)
+# st.radio(label, options, index=0, key=None, horizontal=False) shows
+# every choice at once and returns whichever is currently selected (the
+# real option from your list, not just its displayed string) --
+# horizontal=True puts them in a row. st.selectbox() is the same idea as a
+# dropdown, for a longer list.
+sort_field = st.radio("Sort by", ["Surname", "Given name", "Gramps ID"], horizontal=True)
 
 only_no_death_date = st.checkbox("Only show people with no recorded death date", value=False)
+
+# st.number_input(label, min_value=None, max_value=None, value=...) returns
+# a number -- an int here, since every number given is an int.
+limit = st.number_input("Show at most", min_value=1, max_value=500, value=50)
 
 # IMPORTANT: never paste user-typed text straight into a "where" string
 # with an f-string (f"surname == '{surname}'") -- someone typing a stray
@@ -55,13 +61,17 @@ order_column = {"Surname": "surname", "Given name": "given_name", "Gramps ID": "
 # for directly -- everything they can do is already available through
 # people()/families()/etc. and db's own methods). 'order' is a list of
 # {"column": ..., "direction": "asc"|"desc"} dicts, most significant
-# column first. limit is modest (50, the same default every db/people()
-# method already uses) since this reruns on every keystroke -- each
-# match here is a real object, one more network fetch than the search
-# itself, so keeping the limit reasonable keeps typing responsive.
-results = people(where, order=[{"column": order_column, "direction": "asc"}], limit=50)
+# column first. The limit defaults to a modest 50 (the same default every
+# db/people() method already uses) since this reruns on every keystroke --
+# each match here is a real object, one more network fetch than the
+# search itself, so keeping the limit reasonable keeps typing responsive.
+results = people(where, order=[{"column": order_column, "direction": "asc"}], limit=limit)
 
-st.write(f"{len(results)} match(es)")
+# st.info()/st.success()/st.warning()/st.error() show a colored message box.
+if results:
+    st.write(f"{len(results)} match(es)")
+else:
+    st.info("No one matches.")
 
 # A whole Person object renders as a clickable row on its own (see
 # 01_hello_table.py) -- no need to build the name text by hand.

@@ -2,7 +2,7 @@
   "id": "person-filter",
   "name": "Person Filter",
   "description": "Search people by name, gender and death date, within the current filter if one is applied.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Gramps Connect",
   "category": "example",
   "views": [

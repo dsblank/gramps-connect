@@ -18,17 +18,19 @@
 #     string (see 05_pygal_charts.py's own r.surname), so a dotted key
 #     needs square brackets, not dot access: row["birth.date"], not
 #     row.birth.date -- the key really is the literal string "birth.date"
+#   - st.error() for a query the server rejects, st.info() for a hint
 
 where_text = st.text_input("Where (GOQL)", value="")
 columns_text = st.text_input(
     "Columns (comma-separated GOQL field expressions)",
     value="gramps_id, primary_name.first_name, primary_name.surname_list[0].surname",
 )
+limit = st.number_input("Show at most", min_value=1, max_value=1000, value=50)
 
 columns = [c.strip() for c in columns_text.split(",") if c.strip()]
 
 if not columns:
-    st.write("Enter at least one column above to run the query.")
+    st.info("Enter at least one column above to run the query.")
 else:
     # and_filters(get_filter(), ...) layers this on top of whatever filter
     # is currently applied on the People view this Gramplet is a tab of --
@@ -45,9 +47,14 @@ else:
     # kind of arbitrary expression, so there's no column here that could
     # safely be offered as a sort key without silently failing for most
     # of what someone would actually type.
-    matches = filter("person", where=where, what=columns, limit=50)
-
-    st.write(f"{len(matches)} match(es)")
-    set_column_titles(*columns)
-    for match in matches:
-        row(*[match[c] for c in columns])
+    # A typo in either box is the server's to reject -- shown as a red
+    # message box rather than a Python traceback.
+    try:
+        matches = filter("person", where=where, what=columns, limit=limit)
+    except Exception as err:
+        st.error(f"The server couldn't run that query: {err}")
+    else:
+        st.write(f"{len(matches)} match(es)")
+        set_column_titles(*columns)
+        for match in matches:
+            row(*[match[c] for c in columns])

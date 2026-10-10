@@ -112,6 +112,16 @@ describe("topicWindows", () => {
     expect(n2After).toEqual({ handle: "N2", minimized: true });
   });
 
+  it("docks each open window in the shared bottom dock, and undocks it on close or eviction", async () => {
+    const { getDock } = await import("../bottomDock");
+    for (const handle of ["N1", "N2", "N3", "N4", "N5", "N6"]) openTopicWindow(handle);
+    expect(getDock().map((e) => e.id)).toEqual(["topic:N2", "topic:N3", "topic:N4", "topic:N5", "topic:N6"]);
+    toggleMinimizeTopicWindow("N3");
+    expect(getDock().map((e) => e.id)).toContain("topic:N3");
+    closeTopicWindow("N4");
+    expect(getDock().map((e) => e.id)).toEqual(["topic:N2", "topic:N3", "topic:N5", "topic:N6"]);
+  });
+
   describe("MAX_OPEN_WINDOWS cap", () => {
     it("closes the single oldest window once a 6th is opened, keeping the newest 5", () => {
       openTopicWindow("N1");

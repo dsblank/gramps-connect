@@ -8,9 +8,10 @@
 
 given_name = st.text_input("Given name contains", value="")
 surname = st.text_input("Surname contains", value="")
-gender_choice = st.selectbox("Gender", ["Any", "Male", "Female"], index=0)
+gender_choice = st.radio("Gender", ["Any", "Male", "Female"], horizontal=True)
 no_death_date = st.checkbox("No death date recorded", value=False)
-sort_field = st.selectbox("Sort by", ["Surname", "Given name", "Gramps ID"], index=0)
+sort_field = st.radio("Sort by", ["Surname", "Given name", "Gramps ID"], horizontal=True)
+limit = st.number_input("Show at most", min_value=1, max_value=500, value=50)
 
 # Never paste user-typed text straight into a "where" string with an
 # f-string -- see 04_interactive_search.py's own comment on repr().
@@ -38,11 +39,14 @@ where = and_filters(
 
 order_column = {"Surname": "surname", "Given name": "given_name", "Gramps ID": "gramps_id"}[sort_field]
 
-# Limit kept modest, same as 04_interactive_search.py, since this reruns
-# on every keystroke.
-matches = people(where, order=[{"column": order_column, "direction": "asc"}], limit=50)
+# The limit defaults to a modest 50, same as 04_interactive_search.py,
+# since this reruns on every keystroke.
+matches = people(where, order=[{"column": order_column, "direction": "asc"}], limit=limit)
 
-st.write(f"{len(matches)} match(es)")
+if matches:
+    st.write(f"{len(matches)} match(es)")
+else:
+    st.info("No one matches.")
 set_column_titles("Person")
 for person in matches:
     row(person)

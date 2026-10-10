@@ -6,6 +6,16 @@
 // Plain module state + a listener set, same shape as the old dmUi.ts's
 // single-thread version of this idea, just supporting more than one window
 // open at once.
+import { dock, undock } from "./bottomDock";
+
+/** Every Topic window's width, expanded or minimized -- its share of the
+ * bottom dock (bottomDock.ts), which it occupies the whole time it's open. */
+export const TOPIC_CARD_WIDTH = 320;
+
+export function topicDockId(handle: string): string {
+  return `topic:${handle}`;
+}
+
 export interface TopicWindow {
   handle: string;
   minimized: boolean;
@@ -54,6 +64,8 @@ export function openTopicWindow(handle: string): void {
   } else {
     const next = [...windows, { handle, minimized: false }];
     windows = next.length > MAX_OPEN_WINDOWS ? next.slice(next.length - MAX_OPEN_WINDOWS) : next;
+    for (const evicted of next.slice(0, next.length - windows.length)) undock(topicDockId(evicted.handle));
+    dock(topicDockId(handle), TOPIC_CARD_WIDTH);
   }
   notify();
 }
@@ -62,6 +74,7 @@ export function closeTopicWindow(handle: string): void {
   const next = windows.filter((w) => w.handle !== handle);
   if (next.length === windows.length) return;
   windows = next;
+  undock(topicDockId(handle));
   notify();
 }
 

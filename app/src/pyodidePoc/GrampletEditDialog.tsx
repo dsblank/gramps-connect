@@ -1,5 +1,6 @@
 // Creates or edits a "Gramplet"-tagged Media object's own JSON manifest
-// (name/description/views/code) -- "Add Gramplet…" (MenuBar's Add menu) and an existing
+// (name/description/kind/views/code) -- "New Gramplet…" (MenuBar's Gramplets
+// menu), the View Gramplet panel's "Create new View Gramplet", and an existing
 // Gramplet's "Edit Gramplet" (MediaGrampletEditButton.tsx, the header
 // action slot RelatedPanel.tsx already gives MediaKmlEditButton.tsx for
 // the other Media type this app can meaningfully edit) both open this,
@@ -19,17 +20,18 @@
 // the tab, purely what that same menu puts under the name to say what
 // this Gramplet actually does.
 import { useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
+import { Alert, Box, Button, Group, Loader, Modal, Radio, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { InfoButton } from "../components/InfoButton";
 import { canAuthorGramplets, fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
 import { getHomePersonHandle } from "../store/homePersonPreference";
 import { GrampletHelpDialog } from "./GrampletHelpDialog";
+import { grampletKind } from "./grampletManifest";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import { t } from "../i18n/i18n";
 import { PythonCodeEditor } from "./PythonCodeEditor";
-import type { Gramplet, PyodideWorkerResponse } from "./types";
+import type { Gramplet, GrampletKind, GrampletOutputResponse, PyodideWorkerResponse } from "./types";
 
 export type GrampletEditorTarget =
   | {
@@ -39,9 +41,13 @@ export type GrampletEditorTarget =
        * Gramplet's `views` to just this one type instead of "All", and
        * pre-adds it to this same view's `addedViews`, so saving it
        * (Cancel aside) makes it show up as a tab right there without a
-       * separate "+ Add Gramplet" step. MenuBar.tsx's generic "Add
-       * Gramplet…" (no particular list in context) omits this. */
+       * separate "+ Add Gramplet" step. MenuBar.tsx's "New Gramplet…"
+       * (no particular list in context) omits this. */
       defaultViewKey?: string;
+      /** Which Kind the editor starts on -- "window" from the Gramplets
+       * menu's "New Gramplet…", "view" (the default) from the panel. The
+       * author can still switch it. */
+      defaultKind?: GrampletKind;
     }
   | { kind: "edit"; handle: string };
 
@@ -82,7 +88,7 @@ for person in people(order=[{"column": "change", "direction": "desc"}], limit=10
     row(person, datetime.datetime.fromtimestamp(person.change))
 `;
 
-// With no `defaultViewKey` (MenuBar's generic "Add Gramplet…"): usable
+// With no `defaultViewKey` (MenuBar's "New Gramplet…"): usable
 // everywhere (`views`) but shown nowhere yet (`addedViews: []`) -- a
 // list's own "+ Add Gramplet" is how it actually starts appearing as a
 // tab, same deliberate-curation model item 0/3/4 this whole views/
@@ -90,12 +96,13 @@ for person in people(order=[{"column": "change", "direction": "desc"}], limit=10
 // Gramplet"): scoped to just that type on both fields instead, so it's
 // immediately usable and already showing as a tab back where it was
 // created from.
-function newGramplet(defaultViewKey?: string): Gramplet {
+function newGramplet(defaultViewKey?: string, defaultKind: GrampletKind = "view"): Gramplet {
   const views = defaultViewKey ? [defaultViewKey] : OBJECT_TYPES;
   const addedViews = defaultViewKey ? [defaultViewKey] : [];
   return {
     id: crypto.randomUUID(),
-    label: "New Gramplet",
+    ...(defaultKind === "window" ? { kind: "window" as const } : {}),
+    label: defaultKind === "window" ? "New Gramplet" : "New View Gramplet",
     description: "",
     code: NEW_GRAMPLET_CODE,
     views,
@@ -123,11 +130,11 @@ export function GrampletEditDialog({
   const [status, setStatus] = useState<Status>(target.kind === "new" ? "ready" : "loading");
   const [error, setError] = useState("");
   const [gramplet, setGramplet] = useState<Gramplet | null>(
-    target.kind === "new" ? newGramplet(target.defaultViewKey) : null
+    target.kind === "new" ? newGramplet(target.defaultViewKey, target.defaultKind) : null
   );
   const [saving, setSaving] = useState(false);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
-  const [runResponse, setRunResponse] = useState<PyodideWorkerResponse | null>(null);
+  const [runResponse, setRunResponse] = useState<GrampletOutputResponse | null>(null);
   // Every other Gramplet's own name -- the "+ Add Gramplet" menu
   // (PyodidePocPanel.tsx) identifies its options by `label` alone, so two
   // Gramplets sharing a name would be indistinguishable there. Best-effort
@@ -216,7 +223,9 @@ export function GrampletEditDialog({
         // the same status. Status only moves to "done"/"error" on the one
         // message that actually ends the run, and only that one (plus
         // "progress") carries a response worth displaying.
-        if (event.data.type === "started") return;
+        // run-progress: st.progress()'s value for a window's minimized chip
+        // -- the bar itself arrives in the "progress" snapshot below.
+        if (event.data.type === "started" || event.data.type === "run-progress") return;
         if (event.data.type !== "progress") {
           setRunStatus(event.data.type === "error" ? "error" : "done");
         }
@@ -247,6 +256,7 @@ export function GrampletEditDialog({
     }
   }
 
+  const isWindow = gramplet ? grampletKind(gramplet) === "window" : false;
   const selfHandle = target.kind === "edit" ? target.handle : undefined;
   const trimmedLabel = gramplet?.label.trim() ?? "";
   const isDuplicateName =
@@ -257,7 +267,7 @@ export function GrampletEditDialog({
     // Second line of defense, not the primary one -- every real entry
     // point that can reach this dialog (PyodidePocPanel.tsx's "Create new
     // Gramplet"/edit-pencil, MediaGrampletEditButton.tsx, MenuBar.tsx's
-    // "Add Gramplet…") already gates on this same permission before ever
+    // "New Gramplet…") already gates on this same permission before ever
     // opening it. See grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION doc
     // comment for why authoring needs a higher bar than the underlying
     // Media PUT/POST itself requires.
@@ -277,11 +287,15 @@ export function GrampletEditDialog({
       // single `description === undefined` one, same as a Gramplet saved
       // before this field existed.
       const description = gramplet.description?.trim();
-      const toSave = {
+      const toSave: Gramplet = {
         ...gramplet,
         ...(description ? { description } : { description: undefined }),
         views,
         addedViews: (gramplet.addedViews ?? []).filter((v) => views.includes(v)),
+        // A View Gramplet has no `kind` written at all (missing means
+        // "view", same as every Gramplet saved before it existed).
+        kind: isWindow ? "window" : undefined,
+        category: isWindow ? gramplet.category?.trim() || undefined : undefined,
       };
       if (target.kind === "new") {
         await uploadGramplet(toSave);
@@ -298,7 +312,16 @@ export function GrampletEditDialog({
   }
 
   return (
-    <Modal opened onClose={onClose} title={target.kind === "new" ? t("Add Gramplet") : t("Edit Gramplet")} size="90%">
+    <Modal
+      opened
+      onClose={onClose}
+      title={
+        target.kind === "new"
+          ? isWindow ? t("New Gramplet") : t("New View Gramplet")
+          : isWindow ? t("Edit Gramplet") : t("Edit View Gramplet")
+      }
+      size="90%"
+    >
       {status === "loading" && <Loader size="sm" />}
       {status === "error" && !gramplet && <Alert color="red">{error}</Alert>}
       {gramplet && (
@@ -309,45 +332,72 @@ export function GrampletEditDialog({
             onChange={(e) => setGramplet({ ...gramplet, label: e.currentTarget.value })}
             error={isDuplicateName ? t("Another Gramplet already has this name") : undefined}
           />
+          <Radio.Group
+            label={t("Kind")}
+            value={isWindow ? "window" : "view"}
+            onChange={(value) => setGramplet({ ...gramplet, kind: value === "window" ? "window" : undefined })}
+          >
+            <Stack gap={6} mt={6}>
+              <Radio value="window" label={t("Gramplet -- opens in a window from the Gramplets menu")} />
+              <Radio value="view" label={t("View Gramplet -- shows below a list")} />
+            </Stack>
+          </Radio.Group>
           <Textarea
             label={t("Description")}
-            description={t(
-              "Shown under the name in a list's \"+ Add Gramplet\" menu, to say what this Gramplet does -- the tab itself only ever shows the name."
-            )}
+            description={
+              isWindow
+                ? t("Shown at the top of its window, to say what this Gramplet does.")
+                : t(
+                    "Shown under the name in a list's \"+ Add a View Gramplet\" menu, to say what this View Gramplet does -- the tab itself only ever shows the name."
+                  )
+            }
             value={gramplet.description ?? ""}
             onChange={(e) => setGramplet({ ...gramplet, description: e.currentTarget.value })}
             autosize
             minRows={2}
           />
-          <Select
-            label={t("View")}
-            data={[
-              { value: ALL_VIEWS_OPTION, label: t("All") },
-              ...OBJECT_TYPES.map((type) => ({ value: type, label: t(OBJECT_TYPE_LABELS[type]) })),
-            ]}
-            value={viewSelectValue(gramplet.views)}
-            onChange={(value) => {
-              if (!value) return;
-              setGramplet({ ...gramplet, views: value === ALL_VIEWS_OPTION ? OBJECT_TYPES : [value] });
-            }}
-            allowDeselect={false}
-          />
-          <Switch
-            label={t("Re-run automatically when the selected record changes")}
-            description={t(
-              "Only meaningful with a specific View above (not \"All\") -- reads the record currently open on that list, as get_selected(). Leave off for a tree-wide summary that doesn't care what's selected; this preview here never has a selection either way."
-            )}
-            checked={gramplet.listensToSelection ?? false}
-            onChange={(e) => setGramplet({ ...gramplet, listensToSelection: e.currentTarget.checked })}
-          />
-          <Switch
-            label={t("Re-run automatically when the filter changes")}
-            description={t(
-              "Only meaningful with a specific View above (not \"All\") -- reads the filter currently applied on that list (the search box or a Filters picker selection), as get_filter(). Leave off for a Gramplet that doesn't care what's filtered in; this preview here never has a filter either way."
-            )}
-            checked={gramplet.listensToFilter ?? false}
-            onChange={(e) => setGramplet({ ...gramplet, listensToFilter: e.currentTarget.checked })}
-          />
+          {isWindow ? (
+            <TextInput
+              label={t("Category")}
+              description={t(
+                "Groups it with others in the Gramplets menu, e.g. \"chart\" or \"data quality\". Leave blank for \"Other\"."
+              )}
+              value={gramplet.category ?? ""}
+              onChange={(e) => setGramplet({ ...gramplet, category: e.currentTarget.value })}
+            />
+          ) : (
+            <>
+              <Select
+                label={t("View")}
+                data={[
+                  { value: ALL_VIEWS_OPTION, label: t("All") },
+                  ...OBJECT_TYPES.map((type) => ({ value: type, label: t(OBJECT_TYPE_LABELS[type]) })),
+                ]}
+                value={viewSelectValue(gramplet.views)}
+                onChange={(value) => {
+                  if (!value) return;
+                  setGramplet({ ...gramplet, views: value === ALL_VIEWS_OPTION ? OBJECT_TYPES : [value] });
+                }}
+                allowDeselect={false}
+              />
+              <Switch
+                label={t("Re-run automatically when the selected record changes")}
+                description={t(
+                  "Only meaningful with a specific View above (not \"All\") -- reads the record currently open on that list, as get_selected(). Leave off for a tree-wide summary that doesn't care what's selected; this preview here never has a selection either way."
+                )}
+                checked={gramplet.listensToSelection ?? false}
+                onChange={(e) => setGramplet({ ...gramplet, listensToSelection: e.currentTarget.checked })}
+              />
+              <Switch
+                label={t("Re-run automatically when the filter changes")}
+                description={t(
+                  "Only meaningful with a specific View above (not \"All\") -- reads the filter currently applied on that list (the search box or a Filters picker selection), as get_filter(). Leave off for a Gramplet that doesn't care what's filtered in; this preview here never has a filter either way."
+                )}
+                checked={gramplet.listensToFilter ?? false}
+                onChange={(e) => setGramplet({ ...gramplet, listensToFilter: e.currentTarget.checked })}
+              />
+            </>
+          )}
           <Group gap="xs">
             <Text size="sm" fw={500}>
               {t("Code")}
@@ -389,7 +439,11 @@ export function GrampletEditDialog({
             <Button variant="default" onClick={onClose}>
               {t("Cancel")}
             </Button>
-            <Button onClick={handleSave} loading={saving} disabled={isDuplicateName || !canAuthorGramplets()}>
+            <Button
+              onClick={handleSave}
+              loading={saving}
+              disabled={isDuplicateName || !canAuthorGramplets()}
+            >
               {t("Save")}
             </Button>
           </Group>

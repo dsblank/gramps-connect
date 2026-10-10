@@ -160,6 +160,12 @@ describe("buildGrampletFromCatalogEntry", () => {
     expect(built.addedViews).toEqual(["family"]);
   });
 
+  it("carries a window Gramplet's kind and category", () => {
+    const built = buildGrampletFromCatalogEntry(entry({ kind: "window", category: "chart" }));
+    expect(built.kind).toBe("window");
+    expect(built.category).toBe("chart");
+  });
+
   it("gives every install its own id, even for the same entry", () => {
     const a = buildGrampletFromCatalogEntry(entry());
     const b = buildGrampletFromCatalogEntry(entry());

@@ -53,6 +53,7 @@ import { EditDialogs } from "./components/EditDialogs";
 import { useMediaDrop } from "./hooks/useMediaDrop";
 import { MediaDropOverlay } from "./components/MediaDropOverlay";
 import { PyodidePocPanel } from "./pyodidePoc/PyodidePocPanel";
+import { GrampletWindows } from "./pyodidePoc/GrampletWindows";
 import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 
@@ -664,6 +665,9 @@ function AuthenticatedApp() {
           navigation underneath them, not just within whichever view opened
           one. */}
       <FloatingTopicWindows />
+      {/* (Window) Gramplets from the Gramplets menu -- same reason; they
+          also keep running in the background while you navigate. */}
+      <GrampletWindows />
       {/* Single shared modal answering every confirmDialog() call across
           the app -- see ConfirmDialogHost.tsx's own doc comment. */}
       <ConfirmDialogHost />

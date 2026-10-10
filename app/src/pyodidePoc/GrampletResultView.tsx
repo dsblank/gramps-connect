@@ -12,7 +12,7 @@ import { Alert, Code, Table, Text } from "@mantine/core";
 import { t } from "../i18n/i18n";
 import { ObjectCellButton } from "./ObjectCellButton";
 import "./stWidgets.css";
-import type { GrampletBlock, PyodideWorkerResponse, TableCell } from "./types";
+import type { GrampletBlock, GrampletOutputResponse, TableCell } from "./types";
 
 // "queued": posted to the worker but not yet actually running -- another
 // Gramplet's own script has the shared interpreter (pyodideWorker.ts
@@ -396,7 +396,7 @@ export function GrampletResultView({
   onWidgetEvent,
 }: {
   status: RunStatus;
-  response: PyodideWorkerResponse | null;
+  response: GrampletOutputResponse | null;
   interactive?: boolean;
   onWidgetEvent?: (key: string, value: unknown) => void;
 }) {
@@ -465,7 +465,7 @@ export function GrampletResultView({
     if (status === "queued") {
       return (
         <Text size="xs" c="dimmed">
-          {t("Waiting for another Gramplet to finish running…")}
+          {t("Waiting for another View Gramplet to finish running…")}
         </Text>
       );
     }

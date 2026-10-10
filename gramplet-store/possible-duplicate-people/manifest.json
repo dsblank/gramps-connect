@@ -1,0 +1,9 @@
+{
+  "id": "possible-duplicate-people",
+  "name": "Possible Duplicate People",
+  "description": "Pairs of people with the same name (ignoring accents and case) born within a few years of each other -- candidates to check and merge.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "data quality",
+  "kind": "window"
+}

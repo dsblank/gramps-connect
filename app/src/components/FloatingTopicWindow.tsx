@@ -4,7 +4,9 @@ import { getToken } from "../auth/auth";
 import { formatHash } from "../hash";
 import { fetchObjectExtended, getBacklinks, type ObjectDetail } from "../store/objectDetail";
 import { parseTopicSpec } from "../store/topicsApi";
-import { closeTopicWindow, getTopicActivityVersion, subscribeTopicActivity, toggleMinimizeTopicWindow } from "../store/topicWindows";
+import {
+  closeTopicWindow, getTopicActivityVersion, subscribeTopicActivity, toggleMinimizeTopicWindow, TOPIC_CARD_WIDTH,
+} from "../store/topicWindows";
 import { TOPICS_VIEW } from "../store/views";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { LinkObjectControl } from "./related/LinkObjectControl";
@@ -12,12 +14,6 @@ import { TopicLinksSection } from "./related/TopicLinksSection";
 import { TopicThread } from "./related/TopicThread";
 import { t } from "../i18n/i18n";
 
-// Exported so FloatingTopicWindows.tsx can compute each card's independent
-// `rightOffset` from these -- see this component's own doc comment for why
-// positioning is independent per card rather than a shared flex row.
-export const CARD_WIDTH = 320;
-export const CARD_GAP = 12;
-export const VIEWPORT_MARGIN = 16;
 
 /** A click on a linked object inside a floating window promotes straight
  * to a real view switch -- there's no aside/reference-detail pane inside a
@@ -83,7 +79,7 @@ export function FloatingTopicWindow({ handle, minimized, rightOffset }: { handle
         position: "fixed",
         bottom: 0,
         right: rightOffset,
-        width: CARD_WIDTH,
+        width: TOPIC_CARD_WIDTH,
         maxHeight: "calc(100vh - 32px)",
         display: "flex",
         flexDirection: "column",

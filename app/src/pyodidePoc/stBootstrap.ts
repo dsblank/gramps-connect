@@ -166,6 +166,119 @@ class _St:
         )
         return current
 
+    def number_input(self, label, min_value=None, max_value=None, value="min", step=None, format=None, key=None):
+        """Streamlit's st.number_input: a number box with up/down steps;
+        returns its current value. An int if every number given (value,
+        min_value, max_value, step) is an int, a float otherwise -- mixing
+        the two is an error, as in Streamlit. value="min" (the default)
+        starts at min_value, or 0 / 0.0 without one. step defaults to 1 for
+        ints and 0.01 for floats; format is a printf-style string such as
+        "%.2f" for how the number is shown."""
+        import html as _html_stdlib
+        widget_key = key if key is not None else label
+        given = [v for v in (None if value == "min" else value, min_value, max_value, step) if v is not None]
+        for v in given:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise TypeError(f"st.number_input arguments must be numbers, not {type(v).__name__}")
+        is_int = all(isinstance(v, int) for v in given)
+        if given and not is_int and any(isinstance(v, int) for v in given):
+            raise TypeError(
+                "All numerical arguments to st.number_input must be of the same type (all int or all float): "
+                + ", ".join(f"{name}={v!r}" for name, v in (("value", value), ("min_value", min_value),
+                    ("max_value", max_value), ("step", step)) if v is not None and v != "min")
+            )
+        kind = int if (given and is_int) else float
+        if min_value is not None and max_value is not None and min_value > max_value:
+            raise ValueError(f"st.number_input min_value ({min_value}) is greater than max_value ({max_value})")
+        default = (min_value if min_value is not None else kind(0)) if value == "min" else value
+        if (min_value is not None and default < min_value) or (max_value is not None and default > max_value):
+            raise ValueError(
+                f"st.number_input value ({default}) must be between min_value ({min_value}) and max_value ({max_value})"
+            )
+        if step is None:
+            step = 1 if kind is int else 0.01
+        # What's stored is whatever the page last sent -- a string, from
+        # the <input>'s change event -- so it's read back as this widget's
+        # own type every time, falling back to the default if it isn't a
+        # number at all (an emptied box), and kept within min/max (the
+        # browser lets you type past them).
+        stored = _st_current_instance.get(widget_key, default)
+        try:
+            current = kind(stored) if kind is float else int(float(stored))
+        except (TypeError, ValueError):
+            current = default
+        if min_value is not None:
+            current = max(min_value, current)
+        if max_value is not None:
+            current = min(max_value, current)
+        shown = (format % current) if format else str(current)
+        html(
+            '<label class="st-number-input">{label}<input type="number" data-gramplet-key="{key}" '
+            'data-gramplet-event="change" value="{value}" step="{step}"{min}{max}></label>'.format(
+                key=_html_stdlib.escape(str(widget_key)),
+                label=_html_stdlib.escape(str(label)),
+                value=_html_stdlib.escape(shown),
+                step=step,
+                min="" if min_value is None else f' min="{min_value}"',
+                max="" if max_value is None else f' max="{max_value}"',
+            )
+        )
+        return current
+
+    def radio(self, label, options, index=0, key=None, horizontal=False):
+        """Streamlit's st.radio: one choice out of a few, all visible at
+        once; returns the selected option (the original object from
+        options, as st.selectbox does), or None when index=None and
+        nothing's been picked yet. horizontal=True lays the choices out in
+        a row."""
+        import html as _html_stdlib
+        import uuid as _uuid_stdlib
+        widget_key = key if key is not None else label
+        options = list(options)
+        default = options[index] if index is not None and 0 <= index < len(options) else None
+        stored = _st_current_instance.get(widget_key, default)
+        current = stored if stored in options else next(
+            (opt for opt in options if str(opt) == str(stored)), default
+        )
+        # Radios group by name across the whole page, so the name is made
+        # unique per render -- two windows (or two Gramplets) with the same
+        # label must never share one group.
+        group = "st-radio-" + _uuid_stdlib.uuid4().hex
+        choices = "".join(
+            '<label class="st-radio-option"><input type="radio" name="{group}" value="{value}" '
+            'data-gramplet-key="{key}" data-gramplet-event="change"{checked}>{value}</label>'.format(
+                group=group,
+                value=_html_stdlib.escape(str(opt)),
+                key=_html_stdlib.escape(str(widget_key)),
+                checked=" checked" if current is not None and opt == current else "",
+            )
+            for opt in options
+        )
+        html(
+            '<div class="st-radio{horizontal}" role="radiogroup"><div class="st-radio-label">{label}</div>{choices}</div>'.format(
+                horizontal=" st-radio-horizontal" if horizontal else "",
+                label=_html_stdlib.escape(str(label)),
+                choices=choices,
+            )
+        )
+        return current
+
+    def info(self, body, icon=None):
+        """Streamlit's st.info: a blue message box."""
+        _st_alert("info", body, icon)
+
+    def success(self, body, icon=None):
+        """Streamlit's st.success: a green message box."""
+        _st_alert("success", body, icon)
+
+    def warning(self, body, icon=None):
+        """Streamlit's st.warning: a yellow message box."""
+        _st_alert("warning", body, icon)
+
+    def error(self, body, icon=None):
+        """Streamlit's st.error: a red message box."""
+        _st_alert("error", body, icon)
+
     def write(self, *args):
         """The escape hatch for anything that isn't a dedicated widget --
         for now, a thin alias for the existing print() builtin (BOOTSTRAP_PY)
@@ -176,6 +289,20 @@ class _St:
     @property
     def session_state(self):
         return _st_current_instance
+
+    def progress(self, value, text=None):
+        """Streamlit's st.progress: a progress bar in the output, right where
+        it's called. value is 0-100 as an int, or 0.0-1.0 as a float; text is
+        an optional label above the bar. Returns the bar -- call
+        bar.progress(value, text=...) on it to move it in place, and
+        bar.empty() to remove it once done. Cheap enough to call once per
+        row: the display updates at most about ten times a second (always
+        at once for a new text or a full bar)."""
+        percent = _st_progress_percent(value)
+        html(_st_progress_markup(percent, text))
+        bar = _ProgressBar(_gramplet_sink_stack[-1][-1])
+        _st_progress_changed(percent, text)
+        return bar
 
     def columns(self, spec, gap=None):
         """Lays out spec side-by-side regions (equal widths for an int,
@@ -205,6 +332,88 @@ class _St:
         return tuple(_Column(cb) for cb in column_blocks)
 
 st = _St()
+
+
+def _st_alert(kind, body, icon):
+    # The four status boxes differ only in color (stWidgets.css). body is
+    # shown as plain text with its line breaks kept -- Streamlit renders it
+    # as Markdown, which isn't supported here yet. icon is an emoji or any
+    # short string, shown before the text.
+    import html as _html_stdlib
+    icon_html = '<span class="st-alert-icon">{}</span>'.format(_html_stdlib.escape(str(icon))) if icon else ""
+    html('<div class="st-alert st-alert-{kind}" role="alert">{icon}<div class="st-alert-body">{body}</div></div>'.format(
+        kind=kind, icon=icon_html, body=_html_stdlib.escape(str(body)),
+    ))
+
+
+def _st_progress_percent(value):
+    # Streamlit's own rule: an int is a percentage (0-100), a float a
+    # fraction (0.0-1.0); anything else is an error rather than a guess.
+    if isinstance(value, bool):
+        raise TypeError("st.progress value must be an int (0-100) or a float (0.0-1.0), not a bool")
+    if isinstance(value, int):
+        if not 0 <= value <= 100:
+            raise ValueError(f"st.progress value has invalid value [0, 100]: {value}")
+        return value
+    if isinstance(value, float):
+        if not 0.0 <= value <= 1.0:
+            raise ValueError(f"st.progress value has invalid value [0.0, 1.0]: {value}")
+        return value * 100
+    raise TypeError(f"st.progress value must be an int (0-100) or a float (0.0-1.0), not {type(value).__name__}")
+
+
+def _st_progress_markup(percent, text):
+    import html as _html_stdlib
+    label = '<div class="st-progress-text">{}</div>'.format(_html_stdlib.escape(str(text))) if text else ""
+    return (
+        '<div class="st-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{p:.0f}">'
+        '{label}<div class="st-progress-track"><div class="st-progress-fill" style="width: {p:.2f}%"></div></div></div>'
+    ).format(p=percent, label=label)
+
+
+# When the bar was last pushed to the page, and with which text -- see
+# _st_progress_changed().
+_st_progress_last_sent = 0.0
+_st_progress_last_text = None
+
+
+def _st_progress_changed(percent, text):
+    # Pushes the output so far (the bar included) to the page mid-run --
+    # the same live snapshot print() sends -- plus the bar's value alone
+    # for a Gramplet window's minimized chip. Throttled to about ten a
+    # second, since serializing the output on every call of a tight loop
+    # would cost more than the loop; a new text or a full bar always goes
+    # out at once, so a "Loading..." set just before a long wait never sits
+    # unseen.
+    import json as _json_stdlib
+    import time as _time_stdlib
+    global _st_progress_last_sent, _st_progress_last_text
+    now = _time_stdlib.monotonic()
+    if now - _st_progress_last_sent < 0.1 and text == _st_progress_last_text and percent < 100:
+        return
+    _st_progress_last_sent = now
+    _st_progress_last_text = text
+    _report_progress()
+    _bridge.reportRunProgress(_json_stdlib.dumps({"done": percent, "total": 100, "message": str(text or "")}))
+
+
+class _ProgressBar:
+    """What st.progress() returns -- Streamlit's own pattern of keeping the
+    returned element to update it in place. Holds its own block in the
+    output, so it moves in place wherever it was created (inside a column
+    too) rather than adding a new bar per update."""
+    def __init__(self, block):
+        self._block = block
+
+    def progress(self, value, text=None):
+        percent = _st_progress_percent(value)
+        self._block["markup"] = _st_progress_markup(percent, text)
+        _st_progress_changed(percent, text)
+        return self
+
+    def empty(self):
+        self._block["markup"] = ""
+        _report_progress()
 
 class _Column:
     """One region returned by st.columns() -- a plain list of blocks

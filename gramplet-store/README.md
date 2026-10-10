@@ -32,6 +32,12 @@ gramplet-store/
 | `views` | no | Which object-type views (`"person"`, `"family"`, ...) this Gramplet can be added to -- see `app/src/pyodidePoc/objectEndpoints.ts`'s `OBJECT_TYPES`. Omit for "every type". |
 | `listensToSelection` | no | Whether this Gramplet should re-run when the selected record changes. |
 | `listensToFilter` | no | Whether this Gramplet should re-run when the active filter changes. |
+| `kind` | no | `"view"` (default) for a View Gramplet, shown in the panel below a list; `"window"` for a Gramplet run from the Gramplets menu in its own window. `views`/`listensTo*` only apply to `"view"`. |
+
+A Gramplet (`"kind": "window"`) runs as soon as its window opens; to ask
+for input first, draw it with the `st.*` widgets and do the real work
+behind an `st.button`. A long-running one can show a bar with
+`st.progress(value, text=None)` (Streamlit's own API). `category` also groups Gramplets into submenus in the Gramplets menu.
 
 `code.py` is plain Gramplet Python -- see the (i) "Writing a Gramplet" help
 button in the app's own Gramplet editor for the full runtime API

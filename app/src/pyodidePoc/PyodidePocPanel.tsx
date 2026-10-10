@@ -19,9 +19,11 @@ import { getHomePersonHandle } from "../store/homePersonPreference";
 import { getViewStore } from "../store/registry";
 import { subscribeTreeChange } from "../store/treeChangeBus";
 import { canAuthorGramplets, effectiveAddedViews, fetchGramplets, writeLocalAddedViews } from "./grampletMedia";
+import { grampletFilterExpr } from "./grampletContext";
+import { grampletKind } from "./grampletManifest";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
-import type { Gramplet, PyodideWorkerResponse } from "./types";
+import type { Gramplet, GrampletOutputResponse, PyodideWorkerResponse } from "./types";
 import classes from "./PyodidePocPanel.module.css";
 
 // Pulls in prismjs/react-simple-code-editor -- lazy for the same reason
@@ -65,23 +67,6 @@ function readStoredCollapsed(viewKey: string): boolean {
   return raw === null ? true : raw === "1";
 }
 
-// The filter a Gramplet's get_filter() sees and Gramplet.listensToFilter
-// watches for changes -- FilterBar's own typed search box (whereExpr) ANDed
-// with the "Filters" picker's saved-filter/custom-rule contribution
-// (pickerExpr), either/both/neither of which may be active. Deliberately
-// excludes ViewStore's own combinedFilter()'s third ingredient, baseFilter
-// (e.g. Notes/Topics/Stories) -- that's a structural property of the view
-// itself, not something the user applied, so a listening Gramplet shouldn't
-// treat being tabbed onto such a view as "the filter changed". Bug fixed
-// 2026-09-15: applying/clearing a saved filter or Custom Rule through the
-// Filters picker used to change only pickerExpr, which get_filter()/
-// listensToFilter never looked at -- a Gramplet re-ran on a FilterBar search
-// but sat stale through a picker-applied filter.
-function grampletFilterExpr(snapshot: { whereExpr: string | null; pickerExpr: string | null }): string | null {
-  const parts = [snapshot.pickerExpr, snapshot.whereExpr].filter((part): part is string => !!part);
-  return parts.length === 0 ? null : parts.map((part) => `(${part})`).join(" and ");
-}
-
 export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // Gates "Create new Gramplet" and each tab's own edit-pencil below --
   // see grampletMedia.ts's GRAMPLET_AUTHOR_PERMISSION doc comment for why
@@ -93,7 +78,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   const [listStatus, setListStatus] = useState<ListStatus>("loading");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<RunStatus>("loading");
-  const [response, setResponse] = useState<PyodideWorkerResponse | null>(null);
+  const [response, setResponse] = useState<GrampletOutputResponse | null>(null);
   // "Expand" overlay -- state, not props, so the single <GrampletResultView>
   // element further down stays at the exact same position in the JSX tree
   // whether expanded or not (only which container its createPortal() call
@@ -136,7 +121,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         selectedHandle: string | null;
         whereExpr: string | null;
         status: RunStatus;
-        response: PyodideWorkerResponse | null;
+        response: GrampletOutputResponse | null;
       }
     >
   >(new Map());
@@ -160,7 +145,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         whereExpr: string | null;
         runId: string;
         status: RunStatus;
-        response: PyodideWorkerResponse | null;
+        response: GrampletOutputResponse | null;
       }
     >
   >(new Map());
@@ -208,6 +193,9 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       // message belongs to whichever run was posted most recently.
       worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
         const data = event.data;
+        // st.progress()'s value for a window's minimized chip -- the bar
+        // itself arrives in the "progress" output snapshot.
+        if (data.type === "run-progress") return;
         const gid = runIdToGrampletRef.current.get(data.runId);
         if (!gid) return; // Unknown/already-cleaned-up runId -- nothing to do.
         const entry = runningRef.current.get(gid);
@@ -252,7 +240,9 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   async function loadGramplets(fresh = false) {
     setListStatus("loading");
     try {
-      setGramplets(await fetchGramplets({ fresh }));
+      // Only View Gramplets belong in this panel -- (window) Gramplets run
+      // from the Gramplets menu instead (GrampletWindows.tsx).
+      setGramplets((await fetchGramplets({ fresh })).filter((g) => grampletKind(g) === "view"));
       setListStatus("ready");
     } catch (err) {
       console.error("[gramplets] failed to load", err);
@@ -560,7 +550,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         token = await getToken();
       } catch (err) {
         if (!cancelled) {
-          const errorResponse: PyodideWorkerResponse = {
+          const errorResponse: GrampletOutputResponse = {
             type: "error",
             text: err instanceof Error ? err.message : String(err),
             blocks: [],
@@ -599,6 +589,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         selectedType,
         selectedHandle,
         whereExpr,
+        filterType: viewKey,
         homePersonHandle: getHomePersonHandle(),
       });
     })();
@@ -641,7 +632,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     try {
       token = await getToken();
     } catch (err) {
-      const errorResponse: PyodideWorkerResponse = {
+      const errorResponse: GrampletOutputResponse = {
         type: "error",
         text: err instanceof Error ? err.message : String(err),
         blocks: [],
@@ -676,6 +667,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       selectedType,
       selectedHandle,
       whereExpr,
+      filterType: viewKey,
       homePersonHandle: getHomePersonHandle(),
       widgetEvent: { key, value },
     });
@@ -753,7 +745,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
             {collapsed ? "▴" : "▾"}
           </Text>
           <Text size="xs" c="dimmed" fw={600}>
-            Gramplets
+            View Gramplets
           </Text>
         </Group>
       </UnstyledButton>
@@ -771,13 +763,13 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
             <Group px="sm" pt="xs" gap="xs">
               <Loader size="xs" />
               <Text size="xs" c="dimmed">
-                Loading Gramplets…
+                Loading View Gramplets…
               </Text>
             </Group>
           )}
           {listStatus === "error" && (
             <Box px="sm" pt="xs">
-              <Alert color="red" title="Couldn't load Gramplets">
+              <Alert color="red" title="Couldn't load View Gramplets">
                 Check the console for details.
               </Alert>
             </Box>
@@ -832,11 +824,11 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                   </Tabs.List>
                   <Menu position="bottom-end" withinPortal>
                     <Menu.Target>
-                      <CircleGlyphButton glyph="+" label="Add a Gramplet" onClick={() => {}} />
+                      <CircleGlyphButton glyph="+" label="Add a View Gramplet" onClick={() => {}} />
                     </Menu.Target>
                     <Menu.Dropdown>
                       {canAuthor && (
-                        <Menu.Item onClick={() => setCreatingNew(true)}>Create new Gramplet</Menu.Item>
+                        <Menu.Item onClick={() => setCreatingNew(true)}>Create new View Gramplet</Menu.Item>
                       )}
                       {availableGramplets.length > 0 && (
                         <>
@@ -874,8 +866,8 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                 {tabGramplets.length === 0 ? (
                   <Text size="xs" c="dimmed">
                     {gramplets.length === 0
-                      ? "No Gramplets on this tree yet -- use + Add Gramplet above to create one."
-                      : `No Gramplets added to ${typeLabel} yet -- use + Add Gramplet above.`}
+                      ? "No View Gramplets on this tree yet -- use + above to create one."
+                      : `No View Gramplets added to ${typeLabel} yet -- use + above to add one.`}
                   </Text>
                 ) : (
                   <>

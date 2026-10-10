@@ -44,7 +44,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
               <SymbolRow
                 symbol="people(where=None, order=None, limit=50)"
                 meaning={t(
-                  "Every person matching where (a query -- see below), as full records, in one call. Same for families(), events(), places(), repositories(), sources(), citations(), media(), notes(), tags()."
+                  "Every person matching where (a query -- see below), as full records, in one call. Same for families(), events(), places(), repositories(), sources(), citations(), media(), notes(), tags(). limit=None means every match -- each one is its own fetch, so on a big tree that takes a while (a good use for progress(), below)."
                 )}
               />
               <SymbolRow
@@ -101,7 +101,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
               <SymbolRow
                 symbol="get_selected()"
                 meaning={t(
-                  "Whichever record is currently open on this list's own detail pane, fetched as a real Gramps object -- None if nothing is selected."
+                  "Whichever record is currently open on the list's own detail pane, fetched as a real Gramps object -- None if nothing is selected."
                 )}
               />
               <SymbolRow
@@ -114,7 +114,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Table>
           <Text size="sm" c="dimmed">
             {t(
-              "Turn on \"Re-run automatically when the selected record changes\" (next to View, above the code box) to have this Gramplet re-run itself the moment a different row is selected -- off by default, since most Gramplets are tree-wide summaries that don't care."
+              "In a View Gramplet, turn on \"Re-run automatically when the selected record changes\" (next to View, above the code box) to have it re-run itself the moment a different row is selected -- off by default, since most Gramplets are tree-wide summaries that don't care."
             )}
           </Text>
           <Code block>
@@ -127,7 +127,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Code>
           <Text size="sm" c="dimmed">
             {t(
-              "A Gramplet attached to \"All\" views (rather than one specific type) can be handed any kind of record -- import the class you're checking for (from gramps.gen.lib import Person, Family) and use isinstance(get_selected(), Person) to tell them apart; type(get_selected()).__name__ (e.g. \"Person\") is there too, if all you need is a label to display rather than a branch."
+              "A View Gramplet attached to \"All\" views (rather than one specific type) can be handed any kind of record -- import the class you're checking for (from gramps.gen.lib import Person, Family) and use isinstance(get_selected(), Person) to tell them apart; type(get_selected()).__name__ (e.g. \"Person\") is there too, if all you need is a label to display rather than a branch."
             )}
           </Text>
           <Text size="sm" c="dimmed">
@@ -137,6 +137,24 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Text>
           <Code block>
             {'print(db.get_relationship(get_home_person(), get_selected()) or "Not related")'}
+          </Code>
+        </Section>
+
+        <Section title={t("Gramplets that open in a window")}>
+          <Text size="sm">
+            {t(
+              "A Gramplet whose Kind is \"Gramplet\" (rather than \"View Gramplet\") runs from the Gramplets menu, in its own window, as soon as it's opened -- so it can take longer and keep running while you work elsewhere. get_selected() and get_filter() read whichever list is open behind the window when it starts -- use get_filter(\"person\") (or another type) to get the filter only when that list is of that type. To ask for input first, draw it with the st widgets (see \"Interactive widgets\" below) and do the real work behind an st.button:"
+            )}
+          </Text>
+          <Code block>
+            {'surname = st.text_input("Surname", "Smith")\n'
+              + 'if st.button("Run"):\n'
+              + '    everyone = people(f"primary_name.surname_list[0].surname == \'{surname}\'", limit=None)\n'
+              + '    bar = st.progress(0, text="Checking people...")\n'
+              + "    for i, person in enumerate(everyone):\n"
+              + "        bar.progress((i + 1) / len(everyone))\n"
+              + "        ...\n"
+              + "    bar.empty()"}
           </Code>
         </Section>
 
@@ -200,6 +218,26 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
               <SymbolRow
                 symbol="st.selectbox(label, options, index=0, key=None)"
                 meaning={t("A dropdown; returns the currently selected option.")}
+              />
+              <SymbolRow
+                symbol={'st.number_input(label, min_value=None, max_value=None, value="min", step=None, format=None, key=None)'}
+                meaning={t(
+                  "A number box; returns its current value -- an int if every number you give is an int, a float otherwise. format is printf-style, e.g. \"%.2f\"."
+                )}
+              />
+              <SymbolRow
+                symbol="st.radio(label, options, index=0, key=None, horizontal=False)"
+                meaning={t("One choice out of a few, all shown at once; returns the selected option (None with index=None until one is picked).")}
+              />
+              <SymbolRow
+                symbol="st.info(body)  st.success(body)  st.warning(body)  st.error(body)"
+                meaning={t("A blue / green / yellow / red message box. Each takes an optional icon=, e.g. icon=\"✅\".")}
+              />
+              <SymbolRow
+                symbol="st.progress(value, text=None)"
+                meaning={t(
+                  "A progress bar, right where it's called: value is 0-100 (an int) or 0.0-1.0 (a float), text an optional label. Returns the bar -- bar.progress(value, text=...) moves it in place and bar.empty() removes it. Cheap enough to call once per row."
+                )}
               />
               <SymbolRow symbol="st.write(*args)" meaning={t("Same as print().")} />
               <SymbolRow

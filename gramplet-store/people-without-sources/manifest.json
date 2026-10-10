@@ -1,0 +1,9 @@
+{
+  "id": "people-without-sources",
+  "name": "People Without Sources",
+  "description": "Everyone with no source at all -- no citation on the person, on their event references, or on any of their events. Uses the current People filter, if there is one.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "data quality",
+  "kind": "window"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "age-at-death-by-decade",
+  "name": "Age at Death by Decade",
+  "description": "A chart of the typical (median) age at death for each decade of birth or death, with how many people each bar is based on. Uses the current People filter, if there is one.",
+  "version": "1.0.0",
+  "author": "Gramps Connect",
+  "category": "chart",
+  "kind": "window"
+}

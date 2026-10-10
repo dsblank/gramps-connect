@@ -26,6 +26,7 @@ import { getToken, hasPermissions } from "../auth/auth";
 import { fetchPage, parseErrorMessage } from "../store/api";
 import { MEDIA_VIEW, type ColumnConfig } from "../store/views";
 import { uploadMedia, updateMediaFile, setMediaDesc, getOrCreateTagHandle, tagAndDescribeMedia } from "../store/jobsApi";
+import { validateGrampletKindFields } from "./grampletManifest";
 import { OBJECT_TYPES } from "./objectEndpoints";
 import type { Gramplet } from "./types";
 
@@ -113,9 +114,11 @@ function isGramplet(value: unknown): value is Gramplet {
     (g.addedViews === undefined ||
       (Array.isArray(g.addedViews) && g.addedViews.every((v) => typeof v === "string"))) &&
     (g.listensToSelection === undefined || typeof g.listensToSelection === "boolean") &&
+    (g.listensToFilter === undefined || typeof g.listensToFilter === "boolean") &&
     (g.sourceId === undefined || typeof g.sourceId === "string") &&
     (g.sourceVersion === undefined || typeof g.sourceVersion === "string") &&
-    (g.sourceCodeHash === undefined || typeof g.sourceCodeHash === "string")
+    (g.sourceCodeHash === undefined || typeof g.sourceCodeHash === "string") &&
+    validateGrampletKindFields(g) === null
   );
 }
 

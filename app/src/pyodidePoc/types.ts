@@ -83,8 +83,25 @@
 /** One tab in the panel -- named "Gramplet" after Gramps desktop's own
  * sidebar-widget addons, since that's the closest existing concept this
  * is prototyping a web/Python equivalent of. */
+/** Which kind of Gramplet a manifest is (Gramplet.kind below). "view" is a
+ * View Gramplet: a tab in the panel under an object-type list, re-run
+ * automatically. "window" is what the UI calls plain "Gramplet": run from
+ * the Gramplets menu, in its own window (asking for any input with its own
+ * st.* widgets, like any other Gramplet). See
+ * GRAMPLETS_PLAN.md. "window" is internal only -- never shown to users. */
+export type GrampletKind = "view" | "window";
+
 export interface Gramplet {
   id: string;
+  /** View Gramplet or (window) Gramplet -- missing means "view", which is
+   * every Gramplet saved before this field existed. Read through
+   * grampletManifest.ts's grampletKind(), not directly. */
+  kind?: GrampletKind;
+  /** A short grouping tag ("chart", "utility", ...) -- the Gramplets
+   * menu's submenu. Copied from the Store entry's own `category` on
+   * install/update; free text, and optional (a hand-written Gramplet
+   * without one lands under "Other"). */
+  category?: string;
   /** Short name, shown as the Gramplet's own tab label in
    * PyodidePocPanel.tsx (and mirrored into the underlying Media object's
    * `desc`, so it's what identifies it in the Media list too). Enforced
@@ -210,6 +227,8 @@ export interface CatalogEntry {
   views?: string[];
   listensToSelection?: boolean;
   listensToFilter?: boolean;
+  /** Same meaning as the matching Gramplet fields. */
+  kind?: GrampletKind;
   /** Relative to the catalog's own base URL (e.g. "icons/hello-table.png"),
    * not an absolute URL -- resolved against `fetchCatalog()`'s own
    * `catalogUrl` by whichever component renders it. Undefined when the
@@ -283,6 +302,12 @@ export interface RunGrampletRequest {
    * sees whatever filter was applied at the time it ran for some other
    * reason, same as selectedType/selectedHandle. */
   whereExpr: string | null;
+  /** Which object type `whereExpr` is a filter *on* ("person", ...) -- the
+   * list it came from. Lets get_filter("person") return None rather than,
+   * say, a Families filter that would fail as a person query: a View
+   * Gramplet always knows its list, but a (window) Gramplet runs against
+   * whichever list happens to be open. Omitted/null with no filter. */
+  filterType?: string | null;
   /** The handle of the user's Home person, read from
    * store/homePersonPreference.ts -- a per-browser, tree-scoped
    * localStorage preference (the same convention gramps-web itself uses),
@@ -295,7 +320,18 @@ export interface RunGrampletRequest {
   homePersonHandle: string | null;
 }
 
-export type PyodideWorkerRequest = RunGrampletRequest;
+/** Replaces the token the worker's network calls use, mid-run -- for a
+ * long window-Gramplet run outliving the token RunGrampletRequest.token
+ * snapshotted at its start. Handled immediately, outside the run queue, so
+ * it never displaces a queued run. Only takes effect between the run's own
+ * awaits (a CPU-bound Python loop doesn't yield to onmessage), which is
+ * where its network calls happen anyway. */
+export interface SetTokenRequest {
+  type: "set-token";
+  token: string;
+}
+
+export type PyodideWorkerRequest = RunGrampletRequest | SetTokenRequest;
 
 /** A `row()` argument that pyodideWorker.ts recognized as a primary Gramps
  * object (a real `gramps.gen.lib` object, or its raw JSON/DataDict form --
@@ -379,8 +415,22 @@ export type PyodideWorkerResponse =
    * print()-then-time.sleep() loop's output show up live instead of only
    * once the whole run finishes. */
   | { type: "progress"; blocks: GrampletBlock[]; runId: string }
+  /** The latest st.progress() bar's value (stBootstrap.ts) -- `done` out
+   * of `total` (always 100 today), plus its text. Only a Gramplet window's
+   * minimized chip uses it (the bar itself is part of the `progress`
+   * output snapshot above); the panel and editor ignore it. Throttled in
+   * the worker (at most ~10 a second), with the latest throttled-away one
+   * always sent before the run's final `blocks`/`error`. */
+  | { type: "run-progress"; done: number; total: number | null; message: string; runId: string }
   /** `blocks` here is whatever the run produced before it crashed (also
    * flushed via pyodideWorker.ts's `_finalize_blocks()`) -- often the most
    * useful part of a traceback-only failure, so it isn't dropped on the
    * error path. */
   | { type: "error"; text: string; blocks: GrampletBlock[]; runId: string };
+
+/** Every response that carries output to show -- what the View Gramplet
+ * panel/editor keep as their current response. Excludes `run-progress`,
+ * which only a Gramplet window's minimized chip uses; the panel and editor
+ * ignore it (an st.progress() bar still shows in their output, via the
+ * ordinary `progress` snapshot). */
+export type GrampletOutputResponse = Exclude<PyodideWorkerResponse, { type: "run-progress" }>;
