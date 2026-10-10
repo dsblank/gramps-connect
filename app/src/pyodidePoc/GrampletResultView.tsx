@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Code, Table, Text } from "@mantine/core";
 import { t } from "../i18n/i18n";
+import { ChangeSummary } from "./ChangeSummary";
 import { ObjectCellButton } from "./ObjectCellButton";
 import "./stWidgets.css";
 import type { GrampletBlock, GrampletOutputResponse, TableCell } from "./types";
@@ -485,11 +486,12 @@ export function GrampletResultView({
         <Alert color="red" title={t("Python error")}>
           <Code block>{response?.type === "error" ? response.text : ""}</Code>
         </Alert>
+        {response?.type === "error" && response.changes && <ChangeSummary groups={response.changes} />}
       </>
     );
   }
   if (response?.type === "blocks") {
-    if (response.blocks.length === 0) {
+    if (response.blocks.length === 0 && !response.changes) {
       // Every real outcome -- a table, an html()/print() call, or the
       // code's own trailing expression value -- lands in `blocks` (see
       // GrampletBlock in types.ts and onmessage in pyodideWorker.ts), so
@@ -510,6 +512,7 @@ export function GrampletResultView({
         {response.blocks.map((block, i) => (
           <BlockOutput key={i} block={block} interactive={interactive} onWidgetEvent={onWidgetEvent} />
         ))}
+        {response.changes && <ChangeSummary groups={response.changes} />}
       </>
     );
   }

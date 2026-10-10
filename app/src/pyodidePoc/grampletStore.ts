@@ -142,6 +142,7 @@ export function buildGrampletFromCatalogEntry(entry: CatalogEntry, defaultViewKe
     listensToFilter: entry.listensToFilter,
     kind: entry.kind,
     category: entry.category,
+    allowChanges: entry.allowChanges,
     sourceId: entry.id,
     sourceVersion: entry.version,
     sourceCodeHash: hashCode(entry.code),
@@ -165,7 +166,7 @@ export async function installFromCatalog(entry: CatalogEntry, defaultViewKey?: s
 }
 
 /** Overwrites `installed`'s code/description/views/listening flags/kind/
- * category with `entry`'s current content and bumps its
+ * category/allowChanges with `entry`'s current content and bumps its
  * `sourceVersion`/`sourceCodeHash` to match -- same PUT saveGrampletManifest() already
  * uses for an ordinary hand-edit save. Deliberately leaves `label`
  * untouched (a viewer's own rename of the tab is not "content" the
@@ -190,6 +191,7 @@ export async function updateFromCatalog(installed: Gramplet, entry: CatalogEntry
     listensToFilter: entry.listensToFilter,
     kind: entry.kind,
     category: entry.category,
+    allowChanges: entry.allowChanges,
     sourceVersion: entry.version,
     sourceCodeHash: hashCode(entry.code),
   };

@@ -158,6 +158,13 @@ export interface Gramplet {
    * RunGrampletRequest's own `whereExpr` for what a listening Gramplet's
    * code actually reads (via `get_filter()`). */
   listensToFilter?: boolean;
+  /** "Allow data changes" (GrampletEditDialog's checkbox, see
+   * GRAMPLET_WRITES_PLAN.md): lets this Gramplet's code change and delete
+   * records (changesBootstrap.ts). Only ever true on a (window) Gramplet --
+   * a View Gramplet never changes data, whatever its manifest says (it's
+   * never passed as RunGrampletRequest.allowChanges for one). Missing means
+   * off. */
+  allowChanges?: boolean;
   /** The catalog entry's own `id` (CatalogEntry.id below) this Gramplet was
    * installed from, if it was installed from the Gramplet Store rather
    * than hand-authored via "Create new Gramplet" -- undefined for the
@@ -229,6 +236,7 @@ export interface CatalogEntry {
   listensToFilter?: boolean;
   /** Same meaning as the matching Gramplet fields. */
   kind?: GrampletKind;
+  allowChanges?: boolean;
   /** Relative to the catalog's own base URL (e.g. "icons/hello-table.png"),
    * not an absolute URL -- resolved against `fetchCatalog()`'s own
    * `catalogUrl` by whichever component renders it. Undefined when the
@@ -318,6 +326,13 @@ export interface RunGrampletRequest {
    * view context to it, so the standalone editor's own preview run
    * carries it too. */
   homePersonHandle: string | null;
+  /** Gramplet.allowChanges, for a (window) Gramplet only -- the worker is
+   * what enforces it (changesBootstrap.ts). Every such run is a dry run for
+   * now: changes are collected into the response's `changes`, never sent. */
+  allowChanges?: boolean;
+  /** The Gramplet's own name -- what a group of changes is called when the
+   * code doesn't name it with begin_changes(message). */
+  grampletLabel?: string;
 }
 
 /** Replaces the token the worker's network calls use, mid-run -- for a
@@ -348,6 +363,39 @@ export interface ObjectCell {
 }
 
 export type TableCell = string | ObjectCell;
+
+/** One record a run with Allow data changes changed or deleted (see
+ * changesBootstrap.ts's _ch_flush()). `description` is the same default
+ * description an ObjectCell gets. */
+export type RecordChange =
+  | {
+      action: "update";
+      objectType: string;
+      handle: string;
+      description: string;
+      /** Changed fields, as dotted paths ("primary_name.first_name",
+       * "event_ref_list[1]") with before/after shown as short text -- ""
+       * for a field that wasn't there. Capped at 50 per record. */
+      diffs: { path: string; old: string; new: string }[];
+    }
+  | {
+      action: "delete";
+      objectType: string;
+      handle: string;
+      description: string;
+      /** Other records still referring to it (not counting ones deleted in
+       * the same group) -- delete() doesn't remove references. */
+      references: number;
+    };
+
+/** One begin_changes()/end_changes() group -- or, without them, the whole
+ * run, named after the Gramplet. `committed` is always false for now:
+ * every run is a dry run. */
+export interface ChangeGroup {
+  message: string;
+  committed: boolean;
+  changes: RecordChange[];
+}
 
 /** One piece of a `blocks` response (see PyodideWorkerResponse below) --
  * either a table built by set_column_titles()/row() calls, or raw markup from a single
@@ -405,7 +453,7 @@ export type PyodideWorkerResponse =
   /** From set_column_titles()/row()/html()/print() calls, and/or the code's own
    * trailing expression value -- see GrampletBlock above. Empty only when
    * the run produced none of the above. */
-  | { type: "blocks"; blocks: GrampletBlock[]; runId: string }
+  | { type: "blocks"; blocks: GrampletBlock[]; runId: string; changes?: ChangeGroup[] }
   /** Not a terminal message -- zero or more of these can arrive mid-run,
    * each time print() is called (see pyodideWorker.ts's `_report_progress`/
    * `bridge.reportProgress`), always followed by exactly one `blocks` or
@@ -426,7 +474,7 @@ export type PyodideWorkerResponse =
    * flushed via pyodideWorker.ts's `_finalize_blocks()`) -- often the most
    * useful part of a traceback-only failure, so it isn't dropped on the
    * error path. */
-  | { type: "error"; text: string; blocks: GrampletBlock[]; runId: string };
+  | { type: "error"; text: string; blocks: GrampletBlock[]; runId: string; changes?: ChangeGroup[] };
 
 /** Every response that carries output to show -- what the View Gramplet
  * panel/editor keep as their current response. Excludes `run-progress`,

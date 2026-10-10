@@ -20,7 +20,7 @@
 // the tab, purely what that same menu puts under the name to say what
 // this Gramplet actually does.
 import { useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Group, Loader, Modal, Radio, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
+import { Alert, Box, Button, Checkbox, Group, Loader, Modal, Radio, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { InfoButton } from "../components/InfoButton";
 import { canAuthorGramplets, fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
@@ -248,6 +248,11 @@ export function GrampletEditDialog({
         // works the same here as it does on a real view -- a Gramplet
         // built around it is testable from this preview.
         homePersonHandle: getHomePersonHandle(),
+        // Never a real run here, only ever a dry run (see
+        // GRAMPLET_WRITES_PLAN.md): to change data, save it and run it from
+        // the Gramplets menu.
+        allowChanges,
+        grampletLabel: gramplet.label,
         ...(widgetEvent ? { widgetEvent } : {}),
       });
     } catch (err) {
@@ -257,6 +262,7 @@ export function GrampletEditDialog({
   }
 
   const isWindow = gramplet ? grampletKind(gramplet) === "window" : false;
+  const allowChanges = isWindow && gramplet?.allowChanges === true;
   const selfHandle = target.kind === "edit" ? target.handle : undefined;
   const trimmedLabel = gramplet?.label.trim() ?? "";
   const isDuplicateName =
@@ -296,6 +302,7 @@ export function GrampletEditDialog({
         // "view", same as every Gramplet saved before it existed).
         kind: isWindow ? "window" : undefined,
         category: isWindow ? gramplet.category?.trim() || undefined : undefined,
+        allowChanges: allowChanges || undefined,
       };
       if (target.kind === "new") {
         await uploadGramplet(toSave);
@@ -335,7 +342,15 @@ export function GrampletEditDialog({
           <Radio.Group
             label={t("Kind")}
             value={isWindow ? "window" : "view"}
-            onChange={(value) => setGramplet({ ...gramplet, kind: value === "window" ? "window" : undefined })}
+            // View Gramplets never change data, so switching to one clears
+            // Allow data changes.
+            onChange={(value) =>
+              setGramplet({
+                ...gramplet,
+                kind: value === "window" ? "window" : undefined,
+                ...(value === "window" ? {} : { allowChanges: undefined }),
+              })
+            }
           >
             <Stack gap={6} mt={6}>
               <Radio value="window" label={t("Gramplet -- opens in a window from the Gramplets menu")} />
@@ -357,14 +372,24 @@ export function GrampletEditDialog({
             minRows={2}
           />
           {isWindow ? (
-            <TextInput
-              label={t("Category")}
-              description={t(
-                "Groups it with others in the Gramplets menu, e.g. \"chart\" or \"data quality\". Leave blank for \"Other\"."
-              )}
-              value={gramplet.category ?? ""}
-              onChange={(e) => setGramplet({ ...gramplet, category: e.currentTarget.value })}
-            />
+            <>
+              <TextInput
+                label={t("Category")}
+                description={t(
+                  "Groups it with others in the Gramplets menu, e.g. \"chart\" or \"data quality\". Leave blank for \"Other\"."
+                )}
+                value={gramplet.category ?? ""}
+                onChange={(e) => setGramplet({ ...gramplet, category: e.currentTarget.value })}
+              />
+              <Checkbox
+                label={t("Allow data changes")}
+                description={t(
+                  "Lets its code change and delete records -- person.private = True, set_*() methods, delete(record). Running it here is always a dry run that only shows what would change."
+                )}
+                checked={allowChanges}
+                onChange={(e) => setGramplet({ ...gramplet, allowChanges: e.currentTarget.checked || undefined })}
+              />
+            </>
           ) : (
             <>
               <Select
@@ -411,7 +436,7 @@ export function GrampletEditDialog({
           />
           <Group justify="center">
             <Button size="xs" color="green" onClick={() => handleExecute()} loading={runStatus === "loading"}>
-              {t("Execute")}
+              {allowChanges ? t("Dry run") : t("Execute")}
             </Button>
           </Group>
           <Box>

@@ -31,7 +31,7 @@ const storeDir = path.join(repoRoot, "gramplet-store");
 const iconsDir = path.join(storeDir, "icons");
 
 // The app's own validator for the window-Gramplet fields (kind/
-// category), so a Store entry and a tree manifest are held to the same
+// category/allowChanges), so a Store entry and a tree manifest are held to the same
 // rules. grampletManifest.ts has no runtime imports, so a bundle-free
 // esbuild transform plus a data: URL import loads it in plain Node -- the
 // same trick export-gql-presets.mjs uses.
@@ -111,8 +111,23 @@ async function loadEntry(slug) {
     }
   }
 
-  const { id, name, description, version, author, category, views, listensToSelection, listensToFilter, kind } = manifest;
-  return { id, name, description, version, author, category, views, listensToSelection, listensToFilter, kind, iconUrl, code };
+  const { id, name, description, version, author, category, views, listensToSelection, listensToFilter, kind, allowChanges } =
+    manifest;
+  return {
+    id,
+    name,
+    description,
+    version,
+    author,
+    category,
+    views,
+    listensToSelection,
+    listensToFilter,
+    kind,
+    allowChanges,
+    iconUrl,
+    code,
+  };
 }
 
 const slugs = (await readdir(storeDir, { withFileTypes: true }))

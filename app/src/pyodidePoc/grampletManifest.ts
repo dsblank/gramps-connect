@@ -1,5 +1,6 @@
 // Validation for the manifest fields window Gramplets added (`kind`,
-// `category` -- see types.ts and GRAMPLETS_PLAN.md), shared by
+// `category`, `allowChanges` -- see types.ts, GRAMPLETS_PLAN.md and
+// GRAMPLET_WRITES_PLAN.md), shared by
 // grampletMedia.ts's isGramplet() (a tree manifest: skipped if invalid) and
 // app/scripts/build-gramplet-catalog.mjs (a Store entry: the build fails).
 // Deliberately free of runtime imports -- only `import type`, which
@@ -16,14 +17,17 @@ export function grampletKind(manifest: { kind?: GrampletKind }): GrampletKind {
   return manifest.kind ?? "view";
 }
 
-/** Why a manifest's `kind`/`category` fields are invalid, or null if
- * they're fine (including absent). Only these two -- the older fields are
- * checked by each caller as before. */
+/** Why a manifest's `kind`/`category`/`allowChanges` fields are invalid, or
+ * null if they're fine (including absent). Only these -- the older fields
+ * are checked by each caller as before. */
 export function validateGrampletKindFields(manifest: Record<string, unknown>): string | null {
-  const { kind, category } = manifest;
+  const { kind, category, allowChanges } = manifest;
   if (kind !== undefined && !GRAMPLET_KINDS.includes(kind as GrampletKind)) {
     return `"kind" must be one of ${GRAMPLET_KINDS.join(", ")}`;
   }
   if (category !== undefined && typeof category !== "string") return `"category" must be a string`;
+  if (allowChanges !== undefined && typeof allowChanges !== "boolean") return `"allowChanges" must be true or false`;
+  // View Gramplets never change data.
+  if (allowChanges === true && kind !== "window") return `"allowChanges" needs "kind": "window"`;
   return null;
 }

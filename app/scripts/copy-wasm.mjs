@@ -180,6 +180,11 @@ for (const { src, files, destSubdir } of copies) {
 //   above until a code path that actually needs decorator/setuptools hit
 //   it. Same file_name/sha256 either way (3.6.1), so no behavior changed
 //   here beyond fixing `depends`.
+//
+//   jsonschema (+ attrs/jsonschema-specifications/pyrsistent/referencing/
+//   rpds-py/typing-extensions; six is above): a Gramplet with "Allow data
+//   changes" checks every record it changed against its Gramps schema
+//   (changesBootstrap.ts), so a dry run works offline in the Desktop build.
 const BUNDLED_PYODIDE_PACKAGES = [
   "micropip",
   "numpy",
@@ -197,6 +202,13 @@ const BUNDLED_PYODIDE_PACKAGES = [
   "networkx",
   "decorator",
   "setuptools",
+  "jsonschema",
+  "attrs",
+  "jsonschema-specifications",
+  "pyrsistent",
+  "referencing",
+  "rpds-py",
+  "typing-extensions",
 ];
 
 {

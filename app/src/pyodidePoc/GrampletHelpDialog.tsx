@@ -262,6 +262,45 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           </Code>
         </Section>
 
+        <Section title={t("Changing data")}>
+          <Text size="sm">
+            {t(
+              "Only a Gramplet (not a View Gramplet) with Allow data changes turned on in this editor. Change a record the way you'd change any Python object -- it's the same API as Gram.py Script on Gramps desktop. For now every run is a dry run: nothing is saved, and the result lists what would change."
+            )}
+          </Text>
+          <Table verticalSpacing={6} withRowBorders={false}>
+            <Table.Tbody>
+              <SymbolRow
+                symbol="record.field = value"
+                meaning={t(
+                  "Changes a field, nested ones too (person.primary_name.first_name = ...). So do list edits (.append(), .pop(), ...) and any set_*() method, e.g. person.set_privacy(True)."
+                )}
+              />
+              <SymbolRow
+                symbol="delete(record)"
+                meaning={t(
+                  "Deletes a record. Doesn't remove references to it from other records -- the summary says how many there still are."
+                )}
+              />
+              <SymbolRow
+                symbol="begin_changes(message)  end_changes()"
+                meaning={t(
+                  "Optional: groups the changes in between under that message. Without them, the whole run is one group named after the Gramplet."
+                )}
+              />
+            </Table.Tbody>
+          </Table>
+          <Text size="sm" c="dimmed">
+            {t(
+              "Records from people() and the other plural functions, get_raw_object(), get_object(), get_selected() and db.* can be changed; filter() results can't, since they hold only some fields. Every changed record is checked against its Gramps schema first -- an invalid value stops the run with the field that's wrong. Searches (filter(), count(), where=) still see the tree as it was before the run's changes."
+            )}
+          </Text>
+          <Code block>
+            {'for person in people("len(citation_list) == 0", limit=None):\n'
+              + '    person.private = True'}
+          </Code>
+        </Section>
+
         <Section title={t("Drawing graphics")}>
           <Text size="sm">
             {t("html() also takes a chart library's own SVG output, e.g. pygal (pre-bundled -- a plain import works offline, no PyPI round trip):")}

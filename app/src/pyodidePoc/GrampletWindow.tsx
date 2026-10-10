@@ -21,6 +21,7 @@ import { t } from "../i18n/i18n";
 import { confirmDialog } from "../store/confirmDialog";
 import { getHomePersonHandle } from "../store/homePersonPreference";
 import { readMainViewContext } from "./grampletContext";
+import { grampletKind } from "./grampletManifest";
 import { canAuthorGramplets } from "./grampletMedia";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import {
@@ -270,6 +271,9 @@ export function GrampletWindow({
       whereExpr: ctx.whereExpr,
       filterType: ctx.whereExpr ? ctx.viewKey : null,
       homePersonHandle: getHomePersonHandle(),
+      // A dry run for now: what it would change is listed, nothing is saved.
+      allowChanges: grampletKind(gramplet) === "window" && gramplet.allowChanges === true,
+      grampletLabel: gramplet.label,
     });
   }
 

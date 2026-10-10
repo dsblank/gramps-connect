@@ -26,4 +26,13 @@ describe("validateGrampletKindFields", () => {
     expect(validateGrampletKindFields({ category: "chart" })).toBeNull();
     expect(validateGrampletKindFields({ category: 3 })).toMatch(/"category"/);
   });
+
+  it("checks allowChanges, which only a (window) Gramplet may have", () => {
+    expect(validateGrampletKindFields({ kind: "window", allowChanges: true })).toBeNull();
+    expect(validateGrampletKindFields({ kind: "window", allowChanges: false })).toBeNull();
+    expect(validateGrampletKindFields({ allowChanges: false })).toBeNull();
+    expect(validateGrampletKindFields({ kind: "window", allowChanges: "yes" })).toMatch(/"allowChanges"/);
+    expect(validateGrampletKindFields({ allowChanges: true })).toMatch(/"kind": "window"/);
+    expect(validateGrampletKindFields({ kind: "view", allowChanges: true })).toMatch(/"kind": "window"/);
+  });
 });

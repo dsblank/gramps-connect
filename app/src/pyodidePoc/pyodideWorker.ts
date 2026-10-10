@@ -8,8 +8,9 @@ import { API_BASE } from "../config";
 import { autoAwaitGrampletCode } from "./autoAwait";
 import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
 import { preprocessPipInstalls } from "./pipInstall";
+import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
-import type { GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse, RunGrampletRequest } from "./types";
+import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -422,9 +423,9 @@ async def filter(object_type, where=None, what=None, order=None, limit=50):
     import json as _json
     args_json = _json.dumps({"where": where, "what": what, "order": order, "limit": limit})
     items_json = await _bridge.filter(object_type, args_json)
-    from gramps.gen.lib.json_utils import DataDict
-
-    return [DataDict(item) for item in _json.loads(items_json)]
+    # A plain DataDict, or with Allow data changes on, one that refuses to
+    # be changed (changesBootstrap.ts): it's only part of a record.
+    return [_changes_partial(item) for item in _json.loads(items_json)]
 
 
 async def count(object_type, where=None):
@@ -549,11 +550,14 @@ async def get_object(object_type, handle):
     gramps.gen.lib object. Only call this for the specific item(s) you
     actually need it for -- never inside a loop over filter() results."""
     import json as _json
+    # With Allow data changes on, the same handle again in a run is the
+    # same object, changes and all (changesBootstrap.ts).
+    known = _changes_lookup(object_type, handle, "object")
+    if known is not _CH_MISS:
+        return known
     raw_json = await _bridge.getObject(object_type, handle)
     data = _json.loads(raw_json)
-    from gramps.gen.lib.json_utils import data_to_object
-
-    return data_to_object(_fix_object_dict(data, object_type.capitalize()))
+    return _changes_track_object(object_type, handle, _fix_object_dict(data, object_type.capitalize()))
 
 
 async def get_backlinks(object_type, handle):
@@ -582,11 +586,12 @@ async def get_raw_object(object_type, handle):
     a real method or computed attribute (e.g. .get_primary_name()) lazily
     builds the real object on that first access and delegates to it."""
     import json as _json
+    known = _changes_lookup(object_type, handle, "raw")
+    if known is not _CH_MISS:
+        return known
     raw_json = await _bridge.getObject(object_type, handle)
     data = _json.loads(raw_json)
-    from gramps.gen.lib.json_utils import DataDict
-
-    return DataDict(_fix_object_dict(data, object_type.capitalize()))
+    return _changes_track_raw(object_type, handle, _fix_object_dict(data, object_type.capitalize()))
 
 
 def _make_object_list_function(object_type):
@@ -598,7 +603,10 @@ def _make_object_list_function(object_type):
 
     async def _list_function(where=None, order=None, limit=50):
         results = await filter(object_type, where=where, order=order, limit=limit)
-        return [await get_raw_object(object_type, result["handle"]) for result in results]
+        records = [await get_raw_object(object_type, result["handle"]) for result in results]
+        # None: deleted earlier in this run (changesBootstrap.ts's delete()),
+        # which a dry run's server-side filter() can't know about.
+        return [record for record in records if record is not None]
 
     return _list_function
 
@@ -1626,10 +1634,12 @@ function ensureBootstrap(pyodide: PyodideInterface): Promise<void> {
     // ST_BOOTSTRAP_PY (stBootstrap.ts, the `st.*` widget API PoC) runs
     // right after, in the same pyodide global namespace -- it calls
     // BOOTSTRAP_PY's own html() builtin, so it can't run before html()
-    // itself is defined.
+    // itself is defined. CHANGES_BOOTSTRAP_PY (changesBootstrap.ts) likewise
+    // uses BOOTSTRAP_PY's _describe_object()/_pp()/get_backlinks().
     bootstrapPromise = (async () => {
       await pyodide.runPythonAsync(BOOTSTRAP_PY);
       await pyodide.runPythonAsync(ST_BOOTSTRAP_PY);
+      await pyodide.runPythonAsync(CHANGES_BOOTSTRAP_PY);
     })();
   }
   return bootstrapPromise;
@@ -1749,7 +1759,17 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
     await pyodide.runPythonAsync(
       `_set_run_context(${selectedTypeArg}, ${selectedHandleArg}, ${homePersonHandleArg}, ${whereExprArg}, ${filterTypeArg})`
     );
+    // Allow data changes (changesBootstrap.ts): every run is a dry run for
+    // now. jsonschema checks each changed record against its Gramps schema.
+    const allowChanges = request.allowChanges === true;
+    if (allowChanges) await pyodide.loadPackage("jsonschema", { messageCallback: () => {} });
+    const changesMessageArg = JSON.stringify(request.grampletLabel ?? "Gramplet");
+    await pyodide.runPythonAsync(`_changes_begin_run(${allowChanges ? "True" : "False"}, ${changesMessageArg})`);
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
+    // Closes the group still open, if any -- after the code's own result
+    // but before its blocks are collected, so a validation error lands on
+    // the error path below with the output so far.
+    const changes = JSON.parse((await pyodide.runPythonAsync("await _changes_finish()")) as string) as ChangeGroup[];
     // _finalize_blocks() flushes any pending print buffer and/or table
     // (see pyodideWorker's BOOTSTRAP_PY) and hands back every block the
     // run produced -- one per table, per html() call, and per run of
@@ -1772,7 +1792,7 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
       blocks.push({ type: "html", markup: `<pre>${escapeHtml(String(result))}</pre>` });
     }
     flushRunProgress();
-    reply({ type: "blocks", blocks, runId });
+    reply({ type: "blocks", blocks, runId, ...(changes.length > 0 ? { changes } : {}) });
   } catch (err) {
     // Whatever the run produced before the crash -- often the most useful
     // part of a traceback-only failure, so it isn't dropped on the error
@@ -1780,15 +1800,25 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
     // loading yet if the crash happened that early, in which case there's
     // nothing to recover.
     let blocks: GrampletBlock[] = [];
+    let changes: ChangeGroup[] = [];
     try {
       const pyodide = await getPyodide();
       const blocksJson = (await pyodide.runPythonAsync("_finalize_blocks()")) as string;
       blocks = JSON.parse(blocksJson) as GrampletBlock[];
+      // Groups closed before the error (end_changes()); the open one is
+      // dropped, like a failed transaction.
+      changes = JSON.parse((await pyodide.runPythonAsync("_changes_groups_json()")) as string) as ChangeGroup[];
     } catch {
-      // Nothing to recover -- fall through with the empty blocks default.
+      // Nothing to recover -- fall through with the empty defaults.
     }
     flushRunProgress();
-    reply({ type: "error", text: err instanceof Error ? err.message : String(err), blocks, runId });
+    reply({
+      type: "error",
+      text: err instanceof Error ? err.message : String(err),
+      blocks,
+      runId,
+      ...(changes.length > 0 ? { changes } : {}),
+    });
   }
 }
 
