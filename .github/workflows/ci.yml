@@ -21,6 +21,12 @@ jobs:
       - name: Check out gramps-connect
         uses: actions/checkout@v7
 
+      # Before npm ci: needs only git. Catches what this Linux runner
+      # otherwise can't -- paths that collide on macOS/Windows and break
+      # build-standalone.yml there.
+      - name: Check for case-only path collisions
+        run: scripts/check-case-collisions.sh
+
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
