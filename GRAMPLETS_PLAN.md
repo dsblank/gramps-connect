@@ -1,11 +1,13 @@
 # Gramplets — implementation plan (gramps-connect)
 
-Status (2026-10-09): Phases 1-4 implemented, uncommitted (code + wiki).
-Phase 4 added people-without-sources, possible-duplicate-people and
-age-at-death-by-decade to gramplet-store/ (each verified through the real
-worker against the dev fixture), plus get_filter(object_type) so a
-window Gramplet only picks up a filter from a list of the type it queries. Working title was
-"on-demand Gramplets"; see [Naming](#naming) for the final terms.
+Status (2026-10-09): Phases 1-4 done -- committed in 92959bd, wiki in
+0c28491. Phase 4 added people-without-sources, possible-duplicate-people
+and age-at-death-by-decade to gramplet-store/ (each verified through the
+real worker against the dev fixture), plus get_filter(object_type) so a
+window Gramplet only picks up a filter from a list of the type it
+queries. What's left is under [Later](#later) and
+[Open questions](#open-questions). Working title was "on-demand
+Gramplets"; see [Naming](#naming) for the final terms.
 
 ## Goal
 
