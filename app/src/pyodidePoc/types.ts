@@ -327,9 +327,14 @@ export interface RunGrampletRequest {
    * carries it too. */
   homePersonHandle: string | null;
   /** Gramplet.allowChanges, for a (window) Gramplet only -- the worker is
-   * what enforces it (changesBootstrap.ts). Every such run is a dry run for
-   * now: changes are collected into the response's `changes`, never sent. */
+   * what enforces it (changesBootstrap.ts). */
   allowChanges?: boolean;
+  /** With allowChanges: false saves each group of changes as it closes
+   * (via a `commit-changes` message, see below). Anything else -- including
+   * missing -- is a dry run that only collects them into the response's
+   * `changes`. Only GrampletWindow.tsx's Run button ever sends false; the
+   * editor's preview never does. */
+  dryRun?: boolean;
   /** The Gramplet's own name -- what a group of changes is called when the
    * code doesn't name it with begin_changes(message). */
   grampletLabel?: string;
@@ -346,7 +351,26 @@ export interface SetTokenRequest {
   token: string;
 }
 
-export type PyodideWorkerRequest = RunGrampletRequest | SetTokenRequest;
+/** The main thread's answer to a `commit-changes` message (see
+ * PyodideWorkerResponse) -- handled immediately, outside the run queue,
+ * like SetTokenRequest, since the run is waiting on it. */
+export type CommitResultRequest =
+  | { type: "commit-result"; requestId: string; ok: true }
+  | { type: "commit-result"; requestId: string; ok: false; error: string };
+
+export type PyodideWorkerRequest = RunGrampletRequest | SetTokenRequest | CommitResultRequest;
+
+/** One record in a POST /api/transactions/ payload (gramps-web-api's own
+ * raw transaction format, also what it returns for a saved transaction,
+ * and what ?undo=true takes back). `old`/`new` are Gramps' own JSON
+ * serialization of the record; `new` is null for a delete. */
+export interface TransactionItem {
+  type: "add" | "update" | "delete";
+  _class: string;
+  handle: string;
+  old: unknown;
+  new: unknown;
+}
 
 /** A `row()` argument that pyodideWorker.ts recognized as a primary Gramps
  * object (a real `gramps.gen.lib` object, or its raw JSON/DataDict form --
@@ -389,11 +413,13 @@ export type RecordChange =
     };
 
 /** One begin_changes()/end_changes() group -- or, without them, the whole
- * run, named after the Gramplet. `committed` is always false for now:
- * every run is a dry run. */
+ * run, named after the Gramplet. `committed`: saved by a real run (always
+ * false in a dry run). `error`: a real run tried to save it and the server
+ * refused, so none of it was saved. */
 export interface ChangeGroup {
   message: string;
   committed: boolean;
+  error?: string;
   changes: RecordChange[];
 }
 
@@ -470,6 +496,11 @@ export type PyodideWorkerResponse =
    * the worker (at most ~10 a second), with the latest throttled-away one
    * always sent before the run's final `blocks`/`error`. */
   | { type: "run-progress"; done: number; total: number | null; message: string; runId: string }
+  /** A real run (RunGrampletRequest.dryRun false) closed a group of
+   * changes: save `items` as one transaction, then answer with a
+   * CommitResultRequest carrying the same `requestId`. The run waits for
+   * that answer. */
+  | { type: "commit-changes"; runId: string; requestId: string; message: string; items: TransactionItem[] }
   /** `blocks` here is whatever the run produced before it crashed (also
    * flushed via pyodideWorker.ts's `_finalize_blocks()`) -- often the most
    * useful part of a traceback-only failure, so it isn't dropped on the
@@ -477,8 +508,9 @@ export type PyodideWorkerResponse =
   | { type: "error"; text: string; blocks: GrampletBlock[]; runId: string; changes?: ChangeGroup[] };
 
 /** Every response that carries output to show -- what the View Gramplet
- * panel/editor keep as their current response. Excludes `run-progress`,
+ * panel/editor keep as their current response. Excludes `commit-changes`
+ * (only a Gramplet window's real run sends it) and `run-progress`,
  * which only a Gramplet window's minimized chip uses; the panel and editor
  * ignore it (an st.progress() bar still shows in their output, via the
  * ordinary `progress` snapshot). */
-export type GrampletOutputResponse = Exclude<PyodideWorkerResponse, { type: "run-progress" }>;
+export type GrampletOutputResponse = Exclude<PyodideWorkerResponse, { type: "run-progress" } | { type: "commit-changes" }>;

@@ -10,7 +10,7 @@ import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
 import { preprocessPipInstalls } from "./pipInstall";
 import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
-import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, PyodideWorkerResponse, RunGrampletRequest } from "./types";
+import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, TransactionItem, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -160,6 +160,10 @@ const RUN_PROGRESS_INTERVAL_MS = 100;
 let lastRunProgressAt = 0;
 let pendingRunProgress: PyodideWorkerResponse | null = null;
 let pendingRunProgressTimer: ReturnType<typeof setTimeout> | null = null;
+
+// A real run's save requests waiting on the main thread's commit-result
+// (see bridge.commitChanges() below), by requestId.
+const pendingCommits = new Map<string, { resolve: () => void; reject: (err: Error) => void }>();
 
 /** Sends the latest throttled-away run-progress now, if any -- from its
  * own trailing timer, and before a run's final blocks/error reply so the
@@ -351,6 +355,19 @@ const bridge = {
     const total = res.headers.get("X-Total-Count");
     if (total === null) throw new Error("count(): missing X-Total-Count response header");
     return total;
+  },
+  // A real run's group of changes (changesBootstrap.ts's _ch_flush()):
+  // the main thread saves it (GrampletWindow.tsx, grampletCommit.ts) and
+  // answers with a commit-result, which onmessage below resolves this with.
+  // The main thread rather than a fetch() from here so it can keep the
+  // saved transaction for Undo.
+  commitChanges(argsJson: string): Promise<void> {
+    const { message, items } = JSON.parse(argsJson) as { message: string; items: TransactionItem[] };
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      pendingCommits.set(requestId, { resolve, reject });
+      reply({ type: "commit-changes", runId: currentRunId, requestId, message, items });
+    });
   },
   // Deliberately plain (not async), unlike every other bridge function --
   // BOOTSTRAP_PY's print() calls this synchronously, with no `await`, right
@@ -1759,12 +1776,16 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
     await pyodide.runPythonAsync(
       `_set_run_context(${selectedTypeArg}, ${selectedHandleArg}, ${homePersonHandleArg}, ${whereExprArg}, ${filterTypeArg})`
     );
-    // Allow data changes (changesBootstrap.ts): every run is a dry run for
-    // now. jsonschema checks each changed record against its Gramps schema.
+    // Allow data changes (changesBootstrap.ts): a dry run unless the request
+    // says dryRun: false. jsonschema checks each changed record against its
+    // Gramps schema.
     const allowChanges = request.allowChanges === true;
     if (allowChanges) await pyodide.loadPackage("jsonschema", { messageCallback: () => {} });
     const changesMessageArg = JSON.stringify(request.grampletLabel ?? "Gramplet");
-    await pyodide.runPythonAsync(`_changes_begin_run(${allowChanges ? "True" : "False"}, ${changesMessageArg})`);
+    const dryRunArg = request.dryRun === false ? "False" : "True";
+    await pyodide.runPythonAsync(
+      `_changes_begin_run(${allowChanges ? "True" : "False"}, ${changesMessageArg}, ${dryRunArg})`
+    );
     const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
     // Closes the group still open, if any -- after the code's own result
     // but before its blocks are collected, so a validation error lands on
@@ -1827,6 +1848,14 @@ self.onmessage = (event: MessageEvent<PyodideWorkerRequest>) => {
     // Not a run: takes effect for the current run's next network call,
     // and never touches queuedRequest.
     currentToken = event.data.token;
+    return;
+  }
+  if (event.data.type === "commit-result") {
+    // Not a run either: the answer a waiting commitChanges() call needs.
+    const pending = pendingCommits.get(event.data.requestId);
+    pendingCommits.delete(event.data.requestId);
+    if (event.data.ok) pending?.resolve();
+    else pending?.reject(new Error(event.data.error));
     return;
   }
   // Replaces (never appends to) whatever was queued -- see queuedRequest's

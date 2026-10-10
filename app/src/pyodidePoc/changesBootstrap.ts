@@ -6,9 +6,11 @@
 // The API is Gram.py Script's (Gramps desktop's GrampyScript addon):
 // change a record and it's changed -- person.private = True, any set_*()
 // method, list edits -- plus delete(record) and optional begin_changes(msg)
-// / end_changes() grouping. Nothing here writes to the server yet: every
-// run is a dry run, collecting what would change into a summary
-// (ChangeGroup in types.ts).
+// / end_changes() grouping. A dry run collects what would change into a
+// summary (ChangeGroup in types.ts); a real run (only ever from a
+// Gramplet's own window) also saves each group as it closes, as one
+// POST /api/transactions/ -- sent by the main thread, which keeps the
+// returned transactions for Undo (see grampletCommit.ts).
 //
 // How changes are found: every whole record a run fetches (get_raw_object()
 // and get_object(), which everything else -- people(), db.*,
@@ -33,6 +35,7 @@ export const CHANGES_BOOTSTRAP_PY = `
 _CH_MISS = object()
 
 _ch_allowed = False
+_ch_dry_run = True
 _ch_default_message = "Gramplet"
 _ch_group_message = None
 # (object_type, handle, form) -> {"type", "handle", "value", "old"}; form is
@@ -59,9 +62,10 @@ _CH_MAX_DIFFS = 50
 _CH_MAX_SHOWN = 80
 
 
-def _changes_begin_run(allowed, default_message):
-    global _ch_allowed, _ch_default_message, _ch_group_message
+def _changes_begin_run(allowed, default_message, dry_run=True):
+    global _ch_allowed, _ch_dry_run, _ch_default_message, _ch_group_message
     _ch_allowed = bool(allowed)
+    _ch_dry_run = bool(dry_run)
     _ch_default_message = default_message or "Gramplet"
     _ch_group_message = None
     _ch_records.clear()
@@ -574,12 +578,20 @@ async def _ch_flush(message):
         updates[key] = {"entry": entry, "new": new}
 
     changes = []
+    # The /api/transactions/ payload: "old" is the snapshot as the Gramplet
+    # read it, so the server refuses the whole group if anyone changed one
+    # of these records since.
+    items = []
     for (object_type, handle), item in updates.items():
         new = item["new"]
         try:
             _ch_validate(new)
         except ValueError as exc:
             raise ValueError(f"{_describe_object(new)}: {exc}") from None
+        items.append({
+            "type": "update", "_class": new["_class"], "handle": handle,
+            "old": item["entry"]["old"], "new": new,
+        })
         changes.append({
             "action": "update",
             "objectType": object_type,
@@ -600,6 +612,7 @@ async def _ch_flush(message):
         references = sum(
             1 for handles in backlinks.values() for h in handles if h not in deleted_handles
         )
+        items.append({"type": "delete", "_class": item["class"], "handle": handle, "old": old, "new": None})
         changes.append({
             "action": "delete",
             "objectType": object_type,
@@ -609,7 +622,19 @@ async def _ch_flush(message):
         })
 
     if changes:
-        _ch_groups.append({"message": message, "committed": False, "changes": changes})
+        group = {"message": message, "committed": False, "changes": changes}
+        if not _ch_dry_run:
+            try:
+                await _bridge.commitChanges(json.dumps({"message": message, "items": items}))
+            except Exception as exc:
+                # A JS Error crosses as a JsException; its message is what
+                # the main thread put there.
+                text = str(exc).split("Error: ", 1)[-1]
+                group["error"] = text
+                _ch_groups.append(group)
+                raise RuntimeError(f"Saving '{message}' failed, so none of its changes were saved: {text}") from None
+            group["committed"] = True
+        _ch_groups.append(group)
     # The next group starts from here: only what changes again from now on
     # belongs to it.
     for item in updates.values():
@@ -675,8 +700,9 @@ async def _changes_finish():
 
 
 def _changes_groups_json():
-    # After an error: only groups already closed. The open group's changes
-    # are dropped, the way a failed transaction rolls back.
+    # After an error: only groups already closed (plus one whose save just
+    # failed). The open group's changes are dropped, the way a failed
+    # transaction rolls back.
     import json
     return json.dumps(_ch_groups)
 `;

@@ -226,6 +226,17 @@ export function GrampletEditDialog({
         // run-progress: st.progress()'s value for a window's minimized chip
         // -- the bar itself arrives in the "progress" snapshot below.
         if (event.data.type === "started" || event.data.type === "run-progress") return;
+        // The editor only ever does dry runs, so there's never anything to
+        // save; answer anyway rather than leave a run waiting.
+        if (event.data.type === "commit-changes") {
+          worker.postMessage({
+            type: "commit-result",
+            requestId: event.data.requestId,
+            ok: false,
+            error: "The Gramplet editor only does dry runs.",
+          });
+          return;
+        }
         if (event.data.type !== "progress") {
           setRunStatus(event.data.type === "error" ? "error" : "done");
         }

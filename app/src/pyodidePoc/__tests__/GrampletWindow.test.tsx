@@ -6,6 +6,12 @@ import type { MainViewContext } from "../grampletContext";
 import type { Gramplet, PyodideWorkerResponse, RunGrampletRequest } from "../types";
 
 vi.mock("../../auth/auth", () => ({ getToken: vi.fn(async () => "tok"), hasPermissions: vi.fn(() => true) }));
+const commit = vi.hoisted(() => ({
+  canChangeData: vi.fn(() => true),
+  commitChangeGroup: vi.fn(async (message: string, items: unknown[]) => ({ message, transaction: items })),
+  undoCommittedGroups: vi.fn(async () => {}),
+}));
+vi.mock("../grampletCommit", () => commit);
 vi.mock("../../store/homePersonPreference", () => ({ getHomePersonHandle: vi.fn(() => "HOME") }));
 let context: MainViewContext;
 vi.mock("../grampletContext", () => ({
@@ -182,5 +188,89 @@ describe("GrampletWindow", () => {
     expect(first.terminated).toBe(true);
     expect(FakeWorker.instances).toHaveLength(2);
     expect(FakeWorker.instances[1].lastRun.code).toBe("print('edited')");
+  });
+
+  describe("with Allow data changes", () => {
+    const CHANGER: Gramplet = { ...GRAMPLET, id: "c1", allowChanges: true };
+    const ITEMS = [{ type: "update" as const, _class: "Person", handle: "H", old: {}, new: {} }];
+
+    beforeEach(() => {
+      // At most five windows can be open.
+      for (const entry of getGrampletWindows()) closeGrampletWindow(entry.gramplet.id);
+      commit.canChangeData.mockReturnValue(true);
+      commit.commitChangeGroup.mockClear();
+      commit.undoCommittedGroups.mockClear();
+    });
+
+    it("opens with a dry run; Run saves each group the worker sends, and Undo takes them back", async () => {
+      const user = userEvent.setup();
+      renderWindow(CHANGER);
+      await flush();
+      const worker = FakeWorker.instances[0];
+      expect(worker.lastRun).toMatchObject({ allowChanges: true, dryRun: true, grampletLabel: "Counter" });
+      worker.emit({ type: "blocks", blocks: [] });
+      expect(screen.queryByText("Saving changes")).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "Run" }));
+      await flush();
+      expect(worker.lastRun).toMatchObject({ dryRun: false });
+      worker.emit({ type: "commit-changes", requestId: "r1", message: "Fix", items: ITEMS });
+      await flush();
+      expect(commit.commitChangeGroup).toHaveBeenCalledWith("Fix", ITEMS);
+      expect(worker.posted.slice(-1)[0]).toEqual({ type: "commit-result", requestId: "r1", ok: true });
+      worker.emit({ type: "blocks", blocks: [] });
+      expect(screen.getByText("Saving changes")).toBeTruthy();
+      expect(screen.getByText("Saved groups of changes: 1")).toBeTruthy();
+
+      await user.click(screen.getByRole("button", { name: "Undo" }));
+      expect(commit.undoCommittedGroups).toHaveBeenCalledWith([{ message: "Fix", transaction: ITEMS }]);
+      expect(await screen.findByText("Undone.")).toBeTruthy();
+    });
+
+    it("passes a refused save back to the run", async () => {
+      renderWindow({ ...CHANGER, id: "c2" });
+      await flush();
+      const worker = FakeWorker.instances[0];
+      commit.commitChangeGroup.mockRejectedValueOnce(new Error("One of these records was changed"));
+      worker.emit({ type: "commit-changes", requestId: "r2", message: "Fix", items: ITEMS });
+      await flush();
+      expect(worker.posted.slice(-1)[0]).toEqual({
+        type: "commit-result",
+        requestId: "r2",
+        ok: false,
+        error: "One of these records was changed",
+      });
+      expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    });
+
+    it("refuses to save for a run a newer one replaced", async () => {
+      const user = userEvent.setup();
+      renderWindow({ ...CHANGER, id: "c3" });
+      await flush();
+      const worker = FakeWorker.instances[0];
+      const oldRunId = worker.lastRun.runId;
+      worker.emit({ type: "blocks", blocks: [] });
+      await user.click(screen.getByRole("button", { name: "Dry run" }));
+      await flush();
+      worker.emit({ type: "commit-changes", requestId: "r3", message: "Fix", items: ITEMS }, oldRunId);
+      expect(commit.commitChangeGroup).not.toHaveBeenCalled();
+      expect(worker.posted.slice(-1)[0]).toMatchObject({ type: "commit-result", requestId: "r3", ok: false });
+    });
+
+    it("disables Run without Editor rights, but still allows a dry run", async () => {
+      commit.canChangeData.mockReturnValue(false);
+      renderWindow({ ...CHANGER, id: "c4" });
+      await flush();
+      FakeWorker.instances[0].emit({ type: "blocks", blocks: [] });
+      expect((screen.getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: "Dry run" }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it("has no Run/Dry run buttons without it", async () => {
+      renderWindow({ ...GRAMPLET, id: "c5" });
+      await flush();
+      FakeWorker.instances[0].emit({ type: "blocks", blocks: [] });
+      expect(screen.queryByRole("button", { name: "Dry run" })).toBeNull();
+    });
   });
 });

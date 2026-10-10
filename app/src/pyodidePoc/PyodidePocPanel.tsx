@@ -196,6 +196,12 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
         // st.progress()'s value for a window's minimized chip -- the bar
         // itself arrives in the "progress" output snapshot.
         if (data.type === "run-progress") return;
+        // View Gramplets never change data (their runs never set
+        // allowChanges), so there's never anything here to save.
+        if (data.type === "commit-changes") {
+          worker.postMessage({ type: "commit-result", requestId: data.requestId, ok: false, error: "View Gramplets can't change data." });
+          return;
+        }
         const gid = runIdToGrampletRef.current.get(data.runId);
         if (!gid) return; // Unknown/already-cleaned-up runId -- nothing to do.
         const entry = runningRef.current.get(gid);

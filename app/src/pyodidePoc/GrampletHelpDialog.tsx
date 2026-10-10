@@ -265,7 +265,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
         <Section title={t("Changing data")}>
           <Text size="sm">
             {t(
-              "Only a Gramplet (not a View Gramplet) with Allow data changes turned on in this editor. Change a record the way you'd change any Python object -- it's the same API as Gram.py Script on Gramps desktop. For now every run is a dry run: nothing is saved, and the result lists what would change."
+              "Only a Gramplet (not a View Gramplet) with Allow data changes turned on in this editor. Change a record the way you'd change any Python object -- it's the same API as Gram.py Script on Gramps desktop. Here in the editor every run is a dry run: nothing is saved, and the result lists what would change. To save, run it from the Gramplets menu and click Run in its window (Editor rights or above); Undo there takes the changes back."
             )}
           </Text>
           <Table verticalSpacing={6} withRowBorders={false}>
@@ -285,7 +285,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
               <SymbolRow
                 symbol="begin_changes(message)  end_changes()"
                 meaning={t(
-                  "Optional: groups the changes in between under that message. Without them, the whole run is one group named after the Gramplet."
+                  "Optional: groups the changes in between under that message, saved together as one transaction when end_changes() is reached -- if the server refuses it (say, someone else changed one of its records meanwhile), none of the group is saved. Without them, the whole run is one group named after the Gramplet, saved when the run ends."
                 )}
               />
             </Table.Tbody>

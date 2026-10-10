@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
-import { Box, Button, Divider, Group, Loader, Menu } from "@mantine/core";
+import { Box, Button, Divider, Group, Loader, Menu, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../auth/auth";
 import { addDesktopTranslations, getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { ImportDialog } from "./ImportDialog";
@@ -87,6 +87,10 @@ interface MenuItemSpec {
   /** Shown greyed out and unclickable -- an informational row ("No
    * Gramplets installed"). */
   disabled?: boolean;
+  /** A small glyph at the right end of the row (e.g. ✎ for a Gramplet that
+   * changes data), with `hintLabel` as its tooltip text. */
+  hint?: string;
+  hintLabel?: string;
 }
 
 interface AppMenuProps {
@@ -113,7 +117,18 @@ function AppMenuItem({ item }: { item: MenuItemSpec }) {
       </Menu.Sub.Dropdown>
     </Menu.Sub>
   ) : (
-    <Menu.Item onClick={item.onClick} c={item.danger ? "red" : undefined} disabled={item.disabled}>
+    <Menu.Item
+      onClick={item.onClick}
+      c={item.danger ? "red" : undefined}
+      disabled={item.disabled}
+      rightSection={
+        item.hint ? (
+          <Text span size="xs" c="dimmed" title={item.hintLabel} aria-label={item.hintLabel}>
+            {item.hint}
+          </Text>
+        ) : undefined
+      }
+    >
       {item.label}
     </Menu.Item>
   );
@@ -311,6 +326,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
     const item = (gramplet: Gramplet): MenuItemSpec => ({
       label: `${gramplet.label}…`,
       onClick: () => openWindowGramplet(gramplet),
+      ...(gramplet.allowChanges ? { hint: "✎", hintLabel: t("Changes data") } : {}),
     });
     if (groups.length === 1 && groups[0].category === null) return groups[0].gramplets.map(item);
     return groups.map((group) => ({ label: t(group.category ?? ""), children: group.gramplets.map(item) }));

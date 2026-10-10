@@ -1,7 +1,14 @@
 # Gramplet Writes Plan
 
-Status: Phase 1 done 2026-10-10 (window runs are dry runs too until Phase 2
-adds the Run button). Phases 2-3 not started.
+Status: Phases 1-2 done 2026-10-10; Phase 3 (Help/wiki done alongside each
+phase; the Store example still to do). Changes from the plan below, made
+while building Phase 2:
+- The Gramplets menu marks such Gramplets with ✎ but doesn't disable them
+  for users without Editor rights -- a dry run is still useful to them, so
+  only the window's Run button is disabled.
+- Commits are always synchronous; background=true isn't used yet (it
+  returns a Celery task to poll, and Desktop has no Celery anyway).
+- A commit-changes message from a run a newer run replaced is refused.
 
 Let Gramplets change the tree, not just read it. There are no limits on
 *what* a Gramplet may write; the safeguards are an explicit per-Gramplet

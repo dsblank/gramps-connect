@@ -364,6 +364,11 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
                               {viewsLabel(entry.views)}
                             </Badge>
                           )}
+                          {entry.allowChanges && (
+                            <Badge size="xs" color="red" variant="light">
+                              {t("Changes your data")}
+                            </Badge>
+                          )}
                           {gramplet && !updateAvailable && (
                             <Badge size="xs" color="green" variant="light">
                               {t("Installed")}

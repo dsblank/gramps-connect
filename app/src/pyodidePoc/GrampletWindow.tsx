@@ -12,8 +12,14 @@
 // dock standing in for it -- so a run carries on in the background and
 // the rendered result (including any st.* widget's half-typed input) is
 // still there when it's restored.
+//
+// A Gramplet with Allow data changes gets Dry run and Run buttons (see
+// GRAMPLET_WRITES_PLAN.md): opening it does a dry run; Run saves each group
+// of changes as the code closes it (commit-changes messages from the
+// worker, saved by grampletCommit.ts), and Undo takes back everything the
+// current result saved.
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Alert, Box, Button, Group, Loader, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
+import { Alert, Badge, Box, Button, Group, Loader, Paper, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
@@ -22,6 +28,7 @@ import { confirmDialog } from "../store/confirmDialog";
 import { getHomePersonHandle } from "../store/homePersonPreference";
 import { readMainViewContext } from "./grampletContext";
 import { grampletKind } from "./grampletManifest";
+import { canChangeData, commitChangeGroup, undoCommittedGroups, type CommittedGroup } from "./grampletCommit";
 import { canAuthorGramplets } from "./grampletMedia";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import {
@@ -127,10 +134,21 @@ export function GrampletWindow({
   const [geometry, setGeometry] = useState<Geometry>(() => initialGeometry(gramplet.id, cascadeIndex));
   const [maximized, setMaximized] = useState(false);
   const [editing, setEditing] = useState(false);
+  // What the current result's real run saved, for Undo -- and Undo's own
+  // progress. Only ever non-empty for a Gramplet with Allow data changes.
+  const [saved, setSaved] = useState<CommittedGroup[]>([]);
+  const [undo, setUndo] = useState<{ state: "idle" | "undoing" | "undone" } | { state: "error"; error: string }>({
+    state: "idle",
+  });
+  const allowChanges = grampletKind(gramplet) === "window" && gramplet.allowChanges === true;
 
   const workerRef = useRef<Worker | null>(null);
   const activeRunIdRef = useRef("");
   const lastRequestRef = useRef<RunGrampletRequest | null>(null);
+  // The run `saved` belongs to. A commit that was already on its way when
+  // the run was cancelled still lands here (it did get saved), but one from
+  // a run a newer run has replaced is refused instead.
+  const savedForRunRef = useRef<{ runId: string; groups: CommittedGroup[] }>({ runId: "", groups: [] });
   const tokenTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const minimizedRef = useRef(minimized);
   minimizedRef.current = minimized;
@@ -197,6 +215,10 @@ export function GrampletWindow({
       const worker = new Worker(new URL("./pyodideWorker.ts", import.meta.url), { type: "module" });
       worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
         const data = event.data;
+        if (data.type === "commit-changes") {
+          handleCommit(worker, data.runId, data.requestId, data.message, data.items);
+          return;
+        }
         // A run that was cancelled or superseded -- this window has moved on.
         if (data.runId !== activeRunIdRef.current) return;
         if (data.type === "started") {
@@ -217,9 +239,43 @@ export function GrampletWindow({
     return workerRef.current;
   }
 
+  /** A real run closed a group of changes: save it, then tell the worker
+   * how that went -- the run is waiting on the answer. */
+  function handleCommit(worker: Worker, runId: string, requestId: string, message: string, items: CommittedGroup["transaction"]) {
+    const answer = (result: { ok: true } | { ok: false; error: string }) =>
+      worker.postMessage({ type: "commit-result", requestId, ...result });
+    if (runId !== savedForRunRef.current.runId || runId !== activeRunIdRef.current) {
+      answer({ ok: false, error: "This run was replaced by a newer one, so its changes weren't saved." });
+      return;
+    }
+    commitChangeGroup(message, items).then(
+      (group) => {
+        if (savedForRunRef.current.runId === runId) {
+          savedForRunRef.current.groups.push(group);
+          setSaved([...savedForRunRef.current.groups]);
+        }
+        answer({ ok: true });
+      },
+      (err: unknown) => answer({ ok: false, error: err instanceof Error ? err.message : String(err) })
+    );
+  }
+
+  async function handleUndo() {
+    setUndo({ state: "undoing" });
+    try {
+      await undoCommittedGroups(saved);
+      setUndo({ state: "undone" });
+    } catch (err) {
+      setUndo({ state: "error", error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   async function postRun(request: Omit<RunGrampletRequest, "token" | "runId">) {
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
+    savedForRunRef.current = { runId, groups: [] };
+    setSaved([]);
+    setUndo({ state: "idle" });
     setStopped(false);
     setRunStatus("queued");
     setGrampletRunning(gramplet.id, true);
@@ -258,7 +314,7 @@ export function GrampletWindow({
    * and get_filter() see whichever object-type list is open behind the
    * window (nothing, if it isn't a list), and keep seeing that for the
    * whole run even if you navigate elsewhere meanwhile. */
-  function handleRun() {
+  function handleRun(dryRun = true) {
     const ctx = readMainViewContext();
     setResponse(null);
     setProgress(null);
@@ -271,8 +327,9 @@ export function GrampletWindow({
       whereExpr: ctx.whereExpr,
       filterType: ctx.whereExpr ? ctx.viewKey : null,
       homePersonHandle: getHomePersonHandle(),
-      // A dry run for now: what it would change is listed, nothing is saved.
-      allowChanges: grampletKind(gramplet) === "window" && gramplet.allowChanges === true,
+      allowChanges,
+      // Opening the window is always a dry run; only the Run button saves.
+      dryRun,
       grampletLabel: gramplet.label,
     });
   }
@@ -450,6 +507,11 @@ export function GrampletWindow({
           <Text fw={600} size="sm" truncate style={{ minWidth: 0, flex: 1 }}>
             {gramplet.label}
           </Text>
+          {allowChanges && lastRequestRef.current?.dryRun === false && runStatus !== "idle" && (
+            <Badge size="xs" color="red" variant="filled" style={{ flex: "none" }}>
+              {t("Saving changes")}
+            </Badge>
+          )}
           <Group gap={2} wrap="nowrap">
             {canAuthorGramplets() && gramplet.handle && (
               <CircleGlyphButton glyph="✎" label={t("Edit Gramplet")} onClick={() => setEditing(true)} size={18} />
@@ -466,6 +528,56 @@ export function GrampletWindow({
         </Group>
         <Box p="sm" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           <Stack gap="sm">
+            {allowChanges && (
+              <Group gap="xs" wrap="nowrap">
+                <Button size="xs" variant="default" onClick={() => handleRun(true)} disabled={running}>
+                  {t("Dry run")}
+                </Button>
+                <Tooltip
+                  label={t("Saving changes needs Editor rights or above.")}
+                  disabled={canChangeData()}
+                  withArrow
+                >
+                  {/* A disabled button gets no pointer events, so the tooltip
+                      needs a wrapper to hang on. */}
+                  <span>
+                    <Button
+                      size="xs"
+                      color="red"
+                      onClick={() => handleRun(false)}
+                      disabled={running || !canChangeData()}
+                    >
+                      {t("Run")}
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Text size="xs" c="dimmed">
+                  {t("Changes data. Dry run shows what it would change; Run saves it.")}
+                </Text>
+              </Group>
+            )}
+            {saved.length > 0 && (
+              <Group gap="xs" wrap="nowrap" justify="space-between">
+                <Text size="xs" c={undo.state === "error" ? "red" : undefined}>
+                  {undo.state === "undone"
+                    ? t("Undone.")
+                    : undo.state === "error"
+                      ? `${t("Undo failed:")} ${undo.error}`
+                      : `${t("Saved groups of changes:")} ${saved.length}`}
+                </Text>
+                {undo.state !== "undone" && (
+                  <Button
+                    size="xs"
+                    variant="default"
+                    onClick={() => void handleUndo()}
+                    loading={undo.state === "undoing"}
+                    disabled={running}
+                  >
+                    {t("Undo")}
+                  </Button>
+                )}
+              </Group>
+            )}
             {/* The Gramplet's own st.progress() bar (if any) is part of its
                 output below; this row just says it's still going. */}
             {running && (
