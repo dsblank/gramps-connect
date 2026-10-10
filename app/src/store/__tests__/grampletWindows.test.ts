@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as GrampletWindows from "../grampletWindows";
-import type * as BottomDock from "../../store/bottomDock";
-import type { Gramplet } from "../types";
+import type * as BottomDock from "../bottomDock";
+import type { Gramplet } from "../../pyodidePoc/types";
 
 let w: typeof GrampletWindows;
 let dockModule: typeof BottomDock;
@@ -14,7 +14,7 @@ describe("grampletWindows", () => {
   beforeEach(async () => {
     vi.resetModules();
     w = await import("../grampletWindows");
-    dockModule = await import("../../store/bottomDock");
+    dockModule = await import("../bottomDock");
   });
 
   it("opens one window per Gramplet, focusing (and refreshing) an already-open one", () => {

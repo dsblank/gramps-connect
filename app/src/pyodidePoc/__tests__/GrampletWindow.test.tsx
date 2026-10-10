@@ -63,7 +63,7 @@ import { GrampletWindow } from "../GrampletWindow";
 import { GrampletWindows } from "../GrampletWindows";
 import {
   closeGrampletWindow, getGrampletWindows, isAnyGrampletRunning, openGrampletWindow, setGrampletWindowMinimized,
-} from "../grampletWindows";
+} from "../../store/grampletWindows";
 
 const GRAMPLET: Gramplet = { id: "g1", label: "Counter", code: "print(get_filter())", kind: "window" };
 

@@ -5,7 +5,7 @@
 // starts, progress, and the result. Runs as soon as it opens; a Gramplet
 // that wants input first asks for it with its own st.* widgets (and does
 // its real work behind an st.button), same as in the View Gramplet panel.
-// grampletWindows.ts only holds what windows share (open/minimized/
+// store/grampletWindows.ts only holds what windows share (open/minimized/
 // stacking/running).
 //
 // Stays mounted while minimized -- only hidden, with a chip in the bottom
@@ -26,7 +26,7 @@ import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import {
   closeGrampletWindow, focusGrampletWindow, forgetWorker, GRAMPLET_CHIP_WIDTH, markWorkerIdle, setGrampletRunning,
   restartGrampletWindow, setGrampletWindowMinimized, type GrampletWindowEntry,
-} from "./grampletWindows";
+} from "../store/grampletWindows";
 import type { GrampletOutputResponse, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 
 // Pulls in prismjs/react-simple-code-editor -- lazy, like every other

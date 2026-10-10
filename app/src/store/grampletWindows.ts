@@ -1,14 +1,14 @@
 // Which (window) Gramplets are open right now, in their floating windows
-// (GrampletWindows.tsx / GrampletWindow.tsx) -- plain module state plus a
-// listener set, the same shape as store/topicWindows.ts. Each window owns
+// (pyodidePoc/GrampletWindows.tsx / GrampletWindow.tsx) -- plain module state plus a
+// listener set, the same shape as topicWindows.ts. Each window owns
 // its own Pyodide worker and run state (GrampletWindow.tsx); this module
 // only holds what the windows need to agree on between them: which are
 // open, which are minimized (their chip's place in the shared bottom dock),
 // stacking order, which are running (for the leave-page warning), and
 // which idle workers to release to bound memory.
-import { dock, undock } from "../store/bottomDock";
-import { grampletKind } from "./grampletManifest";
-import type { Gramplet } from "./types";
+import { dock, undock } from "./bottomDock";
+import { grampletKind } from "../pyodidePoc/grampletManifest";
+import type { Gramplet } from "../pyodidePoc/types";
 
 /** Unlike topicWindows.ts, opening one more never silently closes the
  * oldest -- that would kill a run in progress. The caller tells the user

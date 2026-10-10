@@ -3,7 +3,7 @@ import { DOCK_MARGIN, dockOffsets, getDock, subscribeDock } from "../store/botto
 import { GrampletWindow } from "./GrampletWindow";
 import {
   getGrampletWindowZOrder, getGrampletWindows, grampletDockId, isAnyGrampletRunning, subscribeGrampletWindows,
-} from "./grampletWindows";
+} from "../store/grampletWindows";
 
 /** Below ordinary modals (Mantine's default zIndex 200), so an edit dialog
  * or the confirm dialog opened while a Gramplet window is up still lands on

@@ -25,7 +25,7 @@ import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { fetchGramplets, GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
 import { grampletMenuGroups } from "../pyodidePoc/grampletMenu";
-import { MAX_GRAMPLET_WINDOWS, openGrampletWindow } from "../pyodidePoc/grampletWindows";
+import { MAX_GRAMPLET_WINDOWS, openGrampletWindow } from "../store/grampletWindows";
 import type { Gramplet } from "../pyodidePoc/types";
 import { notifications } from "@mantine/notifications";
 
