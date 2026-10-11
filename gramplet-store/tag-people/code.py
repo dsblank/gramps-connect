@@ -28,15 +28,8 @@ elif not all_tags:
     st.info("This tree has no tags yet. Create one first.")
 else:
     # The dropdown shows each option as text, so offer names, not records.
-    # Two tags can share a name; number the repeats so each can be picked.
-    by_name = {}
-    for tag in sorted(all_tags, key=lambda tag: tag.name.lower()):
-        label, n = tag.name, 1
-        while label in by_name:
-            n += 1
-            label = f"{tag.name} ({n})"
-        by_name[label] = tag
-    name = st.selectbox("Tag to add", [PICK] + list(by_name))
+    by_name = {tag.name: tag for tag in all_tags}
+    name = st.selectbox("Tag to add", [PICK] + sorted(by_name, key=str.lower))
     if name == PICK:
         st.info("Choose a tag to add.")
     else:
