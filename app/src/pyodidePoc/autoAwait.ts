@@ -74,13 +74,52 @@
 const CALL_SITE_RE =
   /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*|(?<!\.)(?<!await\s{1,20})(?<!def\s{1,20})\b(filter|get_object|get_raw_object|count|get_selected|get_home_person|people|families|events|places|repositories|sources|citations|media|notes|tags|begin_changes|end_changes)\b(?=\s*\()|(?<!await\s{1,20})\b(db\.\w+)(?=\s*\()/g;
 
-export function autoAwaitGrampletCode(code: string): string {
-  return code.replace(
-    CALL_SITE_RE,
-    (match, name: string | undefined, dbCall: string | undefined) => {
-      if (name) return `await ${name}`;
-      if (dbCall) return `await ${dbCall}`;
-      return match;
+// Each call site is wrapped as `(await name(...))`, not just prefixed:
+// `await` binds looser than a subscript/attribute/call trailer, so a bare
+// `await tags()[0]` parses as `await (tags()[0])` -- subscripting the
+// un-awaited coroutine. Wrapping needs the call's closing paren, so
+// findCallEnd() walks forward from the call's `(`, skipping strings and
+// comments the same way CALL_SITE_RE does. If no balanced `)` is found
+// (unfinished code), the site falls back to a bare `await` prefix.
+const SKIP_RE = /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*/y;
+
+function findCallEnd(code: string, from: number): number {
+  const open = code.indexOf("(", from);
+  if (open < 0) return -1;
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    const ch = code[i];
+    if (ch === "'" || ch === '"' || ch === "#") {
+      SKIP_RE.lastIndex = i;
+      const m = SKIP_RE.exec(code);
+      if (m) {
+        i += m[0].length - 1;
+        continue;
+      }
     }
-  );
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+export function autoAwaitGrampletCode(code: string): string {
+  // Insertions are collected first and applied back-to-front, so nested
+  // call sites (`people(get_object(h))`) each get their own wrapping.
+  const inserts: { pos: number; text: string }[] = [];
+  for (const m of code.matchAll(CALL_SITE_RE)) {
+    const site = m[1] ?? m[2];
+    if (!site) continue;
+    const start = m.index!;
+    const end = findCallEnd(code, start + site.length);
+    if (end < 0) inserts.push({ pos: start, text: "await " });
+    else inserts.push({ pos: start, text: "(await " }, { pos: end, text: ")" });
+  }
+  inserts.sort((a, b) => b.pos - a.pos);
+  let out = code;
+  for (const { pos, text } of inserts) out = out.slice(0, pos) + text + out.slice(pos);
+  return out;
 }
