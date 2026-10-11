@@ -125,6 +125,23 @@ fields) — ranked roughly by value, most first:
   stuck on a stale JS bundle until they close every tab).
 - Allow gramplets to edit/create objects (currently read-only via
   `filter()`/`get_object()`).
+- **Gramplet auto-await gaps** (`app/src/pyodidePoc/autoAwait.ts`): a data
+  lookup (`get_object()`, `people()`, ...) still fails in a few common
+  Python shapes, with errors that only make sense if you know about
+  async/await:
+  - **Generator expressions** — `any(get_object(...) for h in handles)`
+    fails with `TypeError: 'async_generator' object is not an iterator`.
+    Fix: when a generator expression gains an `await` and is passed straight
+    to `any`/`all`/`sum`/`min`/`max`/`sorted`/`list`/`set`/`tuple`/
+    `dict`/`"".join`, rewrite it as a list comprehension (same result; only
+    loses early exit, costing extra lookups).
+  - **Friendlier error for the rest** — a lookup inside a lambda
+    (`sorted(..., key=lambda p: get_object(...))`), a method, a generator
+    def, a decorated def, or a def passed around as a value fails with
+    `SyntaxError: 'await' outside async function`. Catch that in
+    `_run_gramplet()` and say instead, at the same line, that data lookups
+    can't happen there — use a regular function called by name, or a list
+    comprehension.
 - Allow more types of addons: tools, reports.
 - Ability to generate PDF forms (add PDF importer).
 - Move under gramps-project — would this enable translations?
