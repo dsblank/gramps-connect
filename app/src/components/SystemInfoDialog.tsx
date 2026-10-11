@@ -11,7 +11,7 @@ import {
   Text,
 } from "@mantine/core";
 import { getToken } from "../auth/auth";
-import { deprecationWarnings, fetchMetadata, systemInfoLines, type Deprecation } from "../store/metadataApi";
+import { deprecationWarnings, fetchServerMetadata, systemInfoLines, type Deprecation } from "../store/metadataApi";
 import { t } from "../i18n/i18n";
 
 interface SystemInfoDialogProps {
@@ -78,7 +78,7 @@ export function SystemInfoDialog({ opened, onClose }: SystemInfoDialogProps) {
     let cancelled = false;
     setStage("loading");
     (async () => {
-      const metadata = await fetchMetadata(await getToken());
+      const metadata = await fetchServerMetadata(await getToken());
       if (cancelled) return;
       setLines(systemInfoLines(metadata, __APP_VERSION__));
       setWarnings(deprecationWarnings(metadata));

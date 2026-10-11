@@ -1,9 +1,9 @@
 // GET /api/metadata/ -- gramps-web-api's description of the server, the
 // tree it's serving and which optional features are configured (see its
-// resources/metadata.py). Two callers with quite different needs: staleness
-// detection (cacheMeta.ts, which reads database identity + object_counts)
-// and Help > System Information, which reports the version block for a bug
-// report.
+// resources/metadata.py). Staleness detection (cacheMeta.ts) reads the
+// database identity + object_counts from it; Help > System Information and
+// Manage Family Trees only need the tree-independent sections, from
+// GET /api/metadata/server/ (fetchServerMetadata).
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 
@@ -116,8 +116,19 @@ function formatBytes(bytes: number): string {
   return mb >= 1 ? `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB` : `${bytes} bytes`;
 }
 
-export async function fetchMetadata(token: string): Promise<Metadata> {
-  const res = await fetch(`${API_BASE}/api/metadata/`, {
+export function fetchMetadata(token: string): Promise<Metadata> {
+  return getMetadata(token, "/api/metadata/");
+}
+
+/** GET /api/metadata/server/ (v3.23.0+) -- just the sections that don't
+ * depend on a tree (versions, locale, server, deprecations), so unlike
+ * fetchMetadata() it also works for a site admin who has no tree. */
+export function fetchServerMetadata(token: string): Promise<Metadata> {
+  return getMetadata(token, "/api/metadata/server/");
+}
+
+async function getMetadata(token: string, path: string): Promise<Metadata> {
+  const res = await fetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   // Status only, deliberately: the body of a failure here is either a JWT

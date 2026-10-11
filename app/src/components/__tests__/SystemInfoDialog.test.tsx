@@ -5,17 +5,17 @@ import { renderWithProviders, screen } from "../../testUtils/renderWithProviders
 vi.mock("../../auth/auth", () => ({ getToken: vi.fn(async () => "tok") }));
 vi.mock("../../store/metadataApi", async () => {
   const actual = await vi.importActual<typeof import("../../store/metadataApi")>("../../store/metadataApi");
-  return { ...actual, fetchMetadata: vi.fn() };
+  return { ...actual, fetchServerMetadata: vi.fn() };
 });
 
-import { fetchMetadata } from "../../store/metadataApi";
+import { fetchServerMetadata } from "../../store/metadataApi";
 import { SystemInfoDialog } from "../SystemInfoDialog";
 
 describe("SystemInfoDialog", () => {
-  beforeEach(() => vi.mocked(fetchMetadata).mockReset());
+  beforeEach(() => vi.mocked(fetchServerMetadata).mockReset());
 
   it("shows deprecated server settings in full when the server sends them", async () => {
-    vi.mocked(fetchMetadata).mockResolvedValue({
+    vi.mocked(fetchServerMetadata).mockResolvedValue({
       gramps_webapi: { version: "3.23.0" },
       deprecations: [
         {
@@ -36,7 +36,7 @@ describe("SystemInfoDialog", () => {
   });
 
   it("shows no warnings section otherwise", async () => {
-    vi.mocked(fetchMetadata).mockResolvedValue({ gramps_webapi: { version: "3.23.0" } });
+    vi.mocked(fetchServerMetadata).mockResolvedValue({ gramps_webapi: { version: "3.23.0" } });
     renderWithProviders(<SystemInfoDialog opened onClose={() => {}} />);
     expect(await screen.findByText(/Gramps Web API 3.23.0/)).toBeTruthy();
     expect(screen.queryByText("Warnings")).toBeNull();

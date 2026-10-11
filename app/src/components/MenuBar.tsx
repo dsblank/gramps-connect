@@ -509,7 +509,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             permission to open: Documentation and About are prose about the
             app itself, the same for every reader, and someone with the
             fewest privileges is the one most likely to be new and want
-            them. System Information reads /api/metadata/, which every
+            them. System Information reads /api/metadata/server/, which every
             logged-in user may call (it's a ProtectedResource, not a
             permissioned one) -- and reporting a bug is exactly what a
             reader with no privileges still needs to be able to do.

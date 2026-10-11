@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Group, Modal, ScrollArea, Stack, Table, Text, TextInput } from "@mantine/core";
 import { getCurrentUsername, getToken, getTreeId, hasPermissions, refreshTokenNow } from "../auth/auth";
-import { fetchMetadata } from "../store/metadataApi";
+import { fetchServerMetadata } from "../store/metadataApi";
 import { type Tree, createTree, fetchTrees, renameTree, setTreeEnabled, updateUser } from "../store/adminApi";
 import { t } from "../i18n/i18n";
 
@@ -78,7 +78,7 @@ export function ManageTreesDialog({ opened, onClose, onTreeRenamed }: ManageTree
     setError(null);
     try {
       const token = await getToken();
-      const [treeList, metadata] = await Promise.all([fetchTrees(token), fetchMetadata(token)]);
+      const [treeList, metadata] = await Promise.all([fetchTrees(token), fetchServerMetadata(token)]);
       setTrees(treeList);
       setMultiTree(metadata.server?.multi_tree ?? false);
       setSelectedId((prev) => (treeList.some((tree) => tree.id === prev) ? prev : null));
