@@ -1,12 +1,16 @@
-// Site-wide administration endpoints: config (SMTP/base-URL settings),
-// multi-tree management, and cross-tree user management. Every one of these
-// is ROLE_ADMIN-only (gramps_webapi/auth/const.py's PERMISSIONS[ROLE_ADMIN]
-// tier -- ViewSettings/EditSettings, ViewOtherTree/EditOtherTree/AddTree/
+// Site-wide administration endpoints: multi-tree management and cross-tree
+// user management. Every one of these is ROLE_ADMIN-only
+// (gramps_webapi/auth/const.py's PERMISSIONS[ROLE_ADMIN] tier --
+// ViewOtherTree/EditOtherTree/AddTree/
 // DisableTree, ViewOtherTreeUser/AddOtherTreeUser/EditOtherTreeUser(Role)/
 // DeleteOtherTreeUser/EditUserTree/MakeAdmin), distinct from the
 // ROLE_OWNER-level per-tree maintenance (reindex/repair/upgrade schema/
 // restore-from-backup/delete-all-objects) that AdministrationDialog.tsx
-// deliberately does not cover -- see its own doc comment.
+// deliberately does not cover -- see its own doc comment. There is no site
+// settings (GET/PUT /api/config/) client: gramps-web-api deprecated storing
+// config in the database in 3.24 (#1050) and drops those endpoints in 4.0,
+// so SMTP/BASE_URL/FRONTEND_URL belong in the server's env vars or config
+// file.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 
@@ -16,47 +20,6 @@ function authHeaders(token: string): Record<string, string> {
 
 function jsonHeaders(token: string): Record<string, string> {
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-}
-
-// -- Site config (GET /api/config/, GET/PUT/DELETE /api/config/<key>/) --
-
-// gramps_webapi's DB_CONFIG_ALLOWED_KEYS (const.py) -- the only keys
-// ConfigResource's PUT/DELETE will accept; anything else 404s.
-export const CONFIG_KEYS = [
-  "EMAIL_HOST",
-  "EMAIL_PORT",
-  "EMAIL_HOST_USER",
-  "EMAIL_HOST_PASSWORD",
-  "DEFAULT_FROM_EMAIL",
-  "BASE_URL",
-  "FRONTEND_URL",
-] as const;
-export type ConfigKey = (typeof CONFIG_KEYS)[number];
-
-/** Only keys that have actually been set come back -- an absent key means
- * "unset", not "empty string" (config_get_all() only queries rows that
- * exist). */
-export async function fetchConfig(token: string): Promise<Partial<Record<ConfigKey, string>>> {
-  const res = await fetch(`${API_BASE}/api/config/`, { headers: authHeaders(token) });
-  if (!res.ok) throw new Error(await parseErrorMessage(res));
-  return res.json();
-}
-
-export async function setConfigValue(token: string, key: ConfigKey, value: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/config/${encodeURIComponent(key)}/`, {
-    method: "PUT",
-    headers: jsonHeaders(token),
-    body: JSON.stringify({ value }),
-  });
-  if (!res.ok) throw new Error(await parseErrorMessage(res));
-}
-
-export async function deleteConfigValue(token: string, key: ConfigKey): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/config/${encodeURIComponent(key)}/`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(await parseErrorMessage(res));
 }
 
 // -- Trees (GET/POST /api/trees/, POST .../enable, .../disable) --
