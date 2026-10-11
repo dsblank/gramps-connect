@@ -5,7 +5,7 @@
 // (public/pyodide/, populated by scripts/copy-wasm.mjs).
 import { loadPyodide, type PyodideInterface } from "pyodide";
 import { API_BASE } from "../config";
-import { autoAwaitGrampletCode } from "./autoAwait";
+import { AUTO_AWAIT_PY } from "./autoAwait";
 import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
 import { preprocessPipInstalls } from "./pipInstall";
 import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
@@ -62,8 +62,8 @@ function getLockFile(): Promise<LockFile> {
   return lockFilePromise;
 }
 
-// Regex-scanned, not a real parser -- same documented tradeoff as
-// autoAwait.ts's own regex-based scan (see that file). Only catches the
+// Regex-scanned, not a real parser -- it runs before Pyodide (and so
+// Python's own ast module) is needed for the code at all. Only catches the
 // first name on a comma-separated `import a, b` line, and only top-level
 // imports (not ones inside a function body) -- good enough for the
 // one-per-line style every Gramplet we've seen uses, and no worse than
@@ -1655,6 +1655,7 @@ function ensureBootstrap(pyodide: PyodideInterface): Promise<void> {
     // uses BOOTSTRAP_PY's _describe_object()/_pp()/get_backlinks().
     bootstrapPromise = (async () => {
       await pyodide.runPythonAsync(BOOTSTRAP_PY);
+      await pyodide.runPythonAsync(AUTO_AWAIT_PY);
       await pyodide.runPythonAsync(ST_BOOTSTRAP_PY);
       await pyodide.runPythonAsync(CHANGES_BOOTSTRAP_PY);
     })();
@@ -1733,9 +1734,9 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
     // console for every run.
     await ensureCatalogPackagesForCode(pyodide, code);
     // `%pip install ...` lines (Jupyter-magic syntax, not real Python) get
-    // rewritten to `await micropip.install([...])` before autoAwaitGrampletCode
-    // runs -- micropip itself isn't part of the catalog scan above (it's not
-    // an `import` the Gramplet's code contains), so it's loaded here, only
+    // rewritten to `await micropip.install([...])` before _run_gramplet()
+    // parses it -- micropip itself isn't part of the catalog scan above (it's
+    // not an `import` the Gramplet's code contains), so it's loaded here, only
     // when a run actually needs it.
     const { code: pipInstalledCode, usesMicropip } = preprocessPipInstalls(code);
     if (usesMicropip) {
@@ -1786,7 +1787,9 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
     await pyodide.runPythonAsync(
       `_changes_begin_run(${allowChanges ? "True" : "False"}, ${changesMessageArg}, ${dryRunArg})`
     );
-    const result = await pyodide.runPythonAsync(autoAwaitGrampletCode(pipInstalledCode));
+    // autoAwait.ts's _run_gramplet() adds the missing `await`s on the parsed
+    // AST, then runs it.
+    const result = await pyodide.runPythonAsync(`await _run_gramplet(${JSON.stringify(pipInstalledCode)})`);
     // Closes the group still open, if any -- after the code's own result
     // but before its blocks are collected, so a validation error lands on
     // the error path below with the output so far.

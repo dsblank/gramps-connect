@@ -1,125 +1,128 @@
-// Auto-inserts `await` before a bare call to any of the async builtins
-// (see types.ts) so a Gramplet author doesn't have to write it themselves
-// -- `filter`/`get_object`/`get_raw_object`/`count`, `get_selected`/
-// `get_home_person` (both fetch the record lazily, on first call in a
-// run), the 10 filter()+ get_raw_object() convenience functions
-// (`people`/`families`/`events`/`places`/`repositories`/`sources`/
-// `citations`/`media`/`notes`/`tags`), and any `db.<method>(...)` call
+// Auto-inserts `await` on calls to the async builtins (see types.ts) so a
+// Gramplet author doesn't have to write it themselves -- `filter`/
+// `get_object`/`get_raw_object`/`count`, `get_selected`/`get_home_person`
+// (both fetch the record lazily, on first call in a run), the 10
+// filter()+get_raw_object() convenience functions (`people`/`families`/
+// `events`/`places`/`repositories`/`sources`/`citations`/`media`/`notes`/
+// `tags`), `begin_changes`/`end_changes`, and any `db.<method>(...)` call
 // (every method pyodideWorker.ts's `Db` class binds is `async def`, as is
-// `db.get_relationship()` on the class itself) are the *only* things in a
-// Gramplet's namespace that ever need awaiting, so this is a narrow, well-scoped
-// transform, not a general "find every awaitable call" preprocessor.
+// `db.get_relationship()` on the class itself). Those are the *only*
+// things in a Gramplet's namespace that ever need awaiting, so this is a
+// narrow transform, not a general "find every awaitable call" pass.
 //
-// Regex-based on purpose, not a real Python parser -- a small, fast,
-// dependency-free pass applied once per run, right before
-// pyodideWorker.ts hands the code to runPythonAsync. The *stored*
-// Gramplet code (what GrampletEditDialog saves) is never touched, only
-// the copy actually executed -- so this is purely a run-time convenience,
-// reversible by construction (nothing about a Gramplet's saved source
-// depends on this transform ever having run).
+// The Python half, executed once by ensureBootstrap() in pyodideWorker.ts
+// right after BOOTSTRAP_PY, in the same global namespace. Each run's code
+// goes through _run_gramplet() instead of straight to runPythonAsync():
+// it parses with Pyodide's own CodeRunner (the same machinery
+// runPythonAsync uses, so last-expression results, top-level await and
+// tracebacks behave the same), rewrites the AST, then compiles and runs
+// that. Working on the AST rather than the source text means strings and
+// comments can't be mistaken for calls, nesting and multi-line calls need
+// no bracket matching, and each call is wrapped as an Await node -- so
+// `tags()[0]` becomes `(await tags())[0]`, not `await (tags()[0])`. Line
+// numbers in tracebacks still point at the Gramplet's own lines, under the
+// filename "<gramplet>". The
+// *stored* Gramplet code is never touched, only what's executed.
 //
-// The alternation's first four branches (triple/single/double-quoted
-// strings, `#` comments) exist purely to be matched-and-skipped: passing
-// them through unchanged in the replacer below is what keeps a `filter(`
-// that only appears inside a string or a comment from being touched.
-// Only one of the two call-site branches' capture groups is ever
-// non-empty at a time; that's how the replacer tells "this is a real
-// call site, needs await" apart from "this was just a string/comment,
-// leave it alone" -- and which of the two shapes it was (bare name vs.
-// `db.method`) so it knows how much of the match to prefix with `await`.
+// A call is left alone when:
+//   - it's already awaited by hand (its arguments are still visited);
+//   - the Gramplet binds that name itself with def/class/import anywhere,
+//     or as a parameter of an enclosing def/lambda -- it's calling its own
+//     thing, not our builtin;
+//   - it's `filter(lambda ..., ...)` or `filter(None, ...)`: Python's own
+//     filter(function, iterable), which our filter(object_type, ...) shadows.
+//     Any other first argument is treated as ours.
+// A plain assignment (`media = media()`) doesn't count as shadowing, so
+// that line still works.
 //
-// The bare-builtin branch (`filter`/`get_object`/.../`tags`) is guarded
-// by three negative lookbehinds:
-//   - (?<!\.)          -- `something.filter(...)`: an attribute/method
-//                          call, not our builtin (JS lookbehind supports
-//                          variable-length patterns, unlike Python's re,
-//                          so `await\s{1,20}` below works as one).
-//                          call, not our builtin.
-//   - (?<!await\s{1,20}) -- already explicitly awaited; existing
-//                          Gramplet code (or a copy-pasted example) that
-//                          already writes `await` keeps working exactly
-//                          as before -- this is a safe no-op on it, not
-//                          just tolerated.
-//   - (?<!def\s{1,20})   -- `def filter(...):` -- a Gramplet author
-//                          shadowing the name with their own function.
-//                          Doesn't cover every way a name could be
-//                          shadowed (a `lambda filter: ...` parameter,
-//                          for instance) -- a deliberate, accepted limit
-//                          of a regex heuristic rather than a real parser.
-//
-// Known, real tradeoff worth knowing about rather than hiding: naming the
-// async query builtin `filter` shadows Python's own built-in `filter()`
-// (the classic `filter(function, iterable)`). This preprocessor can't
-// tell the two apart -- a Gramplet that wants the *real* builtin (e.g.
-// `list(filter(lambda x: x > 0, values))`) gets `await` inserted too,
-// which breaks it (`TypeError: 'filter' object can't be used in 'await'
-// expression` or similar). That collision already existed before this
-// preprocessor (only distinguishable by whether `await` was written by
-// hand); this makes it slightly easier to hit by accident, not a new
-// problem this introduces from scratch.
-//
-// The second call-site branch handles `db.<method>(...)`-style calls
-// (pyodideWorker.ts's `Db` class) -- every method `Db` binds
-// (get_<type>_from_handle, get_raw_<type>_data, iter_<type>_handles,
-// iter_<plural>, get_<type>_from_gramps_id, get_number_of_<plural>) is
-// `async def`, so rather than enumerate them here (and have this drift
-// out of sync again the next time a method is added to `Db`, as happened
-// with iter_*/get_number_of_*/get_*_from_gramps_id), this matches *any*
-// `db.<name>(` call site. These are inherently dotted, so they don't need
-// (and can't use) the bare branch's `(?<!\.)` guard; `\bdb\.` only
-// matches the literal name `db` (word-boundary before it means `mydb.`
-// or `somedb.` never match), so a Gramplet author's own unrelated `db`
-// variable would still collide if they used that exact name -- same
-// class of accepted limitation as the `filter` shadowing above.
-const CALL_SITE_RE =
-  /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*|(?<!\.)(?<!await\s{1,20})(?<!def\s{1,20})\b(filter|get_object|get_raw_object|count|get_selected|get_home_person|people|families|events|places|repositories|sources|citations|media|notes|tags|begin_changes|end_changes)\b(?=\s*\()|(?<!await\s{1,20})\b(db\.\w+)(?=\s*\()/g;
+// Calls inside a regular (non-async) def still get `await`, which Python
+// rejects as a SyntaxError pointing at that line -- clearer than the
+// "coroutine has no attribute" error leaving it out would cause later.
+export const AUTO_AWAIT_PY = `
+import ast as _ast
+from pyodide.code import CodeRunner as _CodeRunner
 
-// Each call site is wrapped as `(await name(...))`, not just prefixed:
-// `await` binds looser than a subscript/attribute/call trailer, so a bare
-// `await tags()[0]` parses as `await (tags()[0])` -- subscripting the
-// un-awaited coroutine. Wrapping needs the call's closing paren, so
-// findCallEnd() walks forward from the call's `(`, skipping strings and
-// comments the same way CALL_SITE_RE does. If no balanced `)` is found
-// (unfinished code), the site falls back to a bare `await` prefix.
-const SKIP_RE = /'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|#[^\n]*/y;
+_AUTO_AWAIT_NAMES = frozenset({
+    "filter", "get_object", "get_raw_object", "count", "get_selected",
+    "get_home_person", "people", "families", "events", "places",
+    "repositories", "sources", "citations", "media", "notes", "tags",
+    "begin_changes", "end_changes",
+})
 
-function findCallEnd(code: string, from: number): number {
-  const open = code.indexOf("(", from);
-  if (open < 0) return -1;
-  let depth = 0;
-  for (let i = open; i < code.length; i++) {
-    const ch = code[i];
-    if (ch === "'" || ch === '"' || ch === "#") {
-      SKIP_RE.lastIndex = i;
-      const m = SKIP_RE.exec(code);
-      if (m) {
-        i += m[0].length - 1;
-        continue;
-      }
-    }
-    if (ch === "(" || ch === "[" || ch === "{") depth++;
-    else if (ch === ")" || ch === "]" || ch === "}") {
-      depth--;
-      if (depth === 0) return i + 1;
-    }
-  }
-  return -1;
-}
 
-export function autoAwaitGrampletCode(code: string): string {
-  // Insertions are collected first and applied back-to-front, so nested
-  // call sites (`people(get_object(h))`) each get their own wrapping.
-  const inserts: { pos: number; text: string }[] = [];
-  for (const m of code.matchAll(CALL_SITE_RE)) {
-    const site = m[1] ?? m[2];
-    if (!site) continue;
-    const start = m.index!;
-    const end = findCallEnd(code, start + site.length);
-    if (end < 0) inserts.push({ pos: start, text: "await " });
-    else inserts.push({ pos: start, text: "(await " }, { pos: end, text: ")" });
-  }
-  inserts.sort((a, b) => b.pos - a.pos);
-  let out = code;
-  for (const { pos, text } of inserts) out = out.slice(0, pos) + text + out.slice(pos);
-  return out;
-}
+def _defined_names(tree):
+    names = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (_ast.Import, _ast.ImportFrom)):
+            for alias in node.names:
+                names.add((alias.asname or alias.name).split(".")[0])
+    return names
+
+
+class _AutoAwait(_ast.NodeTransformer):
+    def __init__(self, shadowed):
+        # A stack of scopes: names defined anywhere, then one set of
+        # parameter names per enclosing def/lambda.
+        self.scopes = [shadowed]
+
+    def _shadowed(self, name):
+        return any(name in scope for scope in self.scopes)
+
+    def visit_FunctionDef(self, node):
+        args = node.args
+        params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+        if args.vararg:
+            params.append(args.vararg)
+        if args.kwarg:
+            params.append(args.kwarg)
+        self.scopes.append({param.arg for param in params})
+        self.generic_visit(node)
+        self.scopes.pop()
+        return node
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+    visit_Lambda = visit_FunctionDef
+
+    def visit_Await(self, node):
+        # Already awaited: visit the call's arguments, not the call itself.
+        self.generic_visit(node.value if isinstance(node.value, _ast.Call) else node)
+        return node
+
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        if self._needs_await(node):
+            return _ast.copy_location(_ast.Await(value=node), node)
+        return node
+
+    def _needs_await(self, node):
+        func = node.func
+        if isinstance(func, _ast.Attribute):
+            return isinstance(func.value, _ast.Name) and func.value.id == "db" and not self._shadowed("db")
+        if not isinstance(func, _ast.Name) or func.id not in _AUTO_AWAIT_NAMES or self._shadowed(func.id):
+            return False
+        if func.id == "filter" and node.args:
+            first = node.args[0]
+            if isinstance(first, _ast.Lambda) or (isinstance(first, _ast.Constant) and first.value is None):
+                return False
+        return True
+
+
+def _auto_await_tree(tree):
+    return _ast.fix_missing_locations(_AutoAwait(_defined_names(tree)).visit(tree))
+
+
+def _auto_await_source(source):
+    # Not used by runs -- lets tests see the rewritten code as text.
+    return _ast.unparse(_auto_await_tree(_ast.parse(source)))
+
+
+async def _run_gramplet(source):
+    # "<gramplet>", not runPythonAsync's "<exec>": the bootstrap code
+    # (this function included) is "<exec>" too, so tracebacks would mix
+    # their line numbers with the Gramplet's own.
+    runner = _CodeRunner(source, filename="<gramplet>", flags=_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+    runner.ast = _auto_await_tree(runner.ast)
+    return await runner.compile().run_async(globals())
+`;

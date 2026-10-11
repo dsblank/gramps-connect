@@ -76,8 +76,8 @@
 //
 // A Gramplet author never has to write `await` before any of the async
 // builtins above, despite all being real async functions -- pyodideWorker.ts
-// runs every Gramplet's code through autoAwait.ts first, which inserts it
-// automatically wherever it's missing (and leaves it alone wherever it's
+// runs every Gramplet's code through autoAwait.ts's AST transform, which
+// inserts it automatically wherever it's missing (and leaves it alone wherever it's
 // already there, so writing it by hand still works fine too).
 
 /** One tab in the panel -- named "Gramplet" after Gramps desktop's own

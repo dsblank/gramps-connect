@@ -1,17 +1,17 @@
 // Rewrites Jupyter-style `%pip install pkg1 pkg2` lines into the
-// micropip call Pyodide actually understands -- the same "one regex pass
-// over the whole source, once per run, right before execution" pattern as
-// autoAwait.ts's `await` insertion. Lets a Gramplet author paste the
+// micropip call Pyodide actually understands -- one regex pass over the
+// source text, once per run. It has to be text, not AST: `%pip` isn't
+// valid Python, so this runs before autoAwait.ts's _run_gramplet() can
+// parse the code at all. Lets a Gramplet author paste the
 // install line they'd use in a normal Jupyter notebook and have it work
 // here too, without needing to know Pyodide has no real `%pip` and
 // installs via `micropip.install()` instead.
 //
 // Anchored to the start of a (possibly indented) line, like
 // pyodideWorker.ts's own scanTopLevelImports() -- no attempt to skip
-// occurrences inside a string or comment the way autoAwait.ts's
-// CALL_SITE_RE does: a literal `%pip install ...` at the start of a line
-// is never valid Python on its own, so there's no real ambiguity to guard
-// against the way there is for a bare `filter(` call.
+// occurrences inside a string or comment: a literal `%pip install ...` at
+// the start of a line is never valid Python on its own, so there's little
+// real ambiguity to guard against.
 const PIP_INSTALL_RE = /^[ \t]*%pip\s+install\s+(.+)$/gm;
 
 export function preprocessPipInstalls(code: string): { code: string; usesMicropip: boolean } {
