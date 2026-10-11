@@ -79,6 +79,7 @@ NATIVE_NAMES = {
     "de": "Deutsch",
     "fr": "Français",
     "es": "Español",
+    "nl": "Nederlands",
     "zh_CN": "简体中文",
 }
 
