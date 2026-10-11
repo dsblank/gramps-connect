@@ -123,8 +123,9 @@ fields) — ranked roughly by value, most first:
   and is low-effort for basic offline app-shell caching; the real ongoing
   cost is cache invalidation on deploy (get it wrong and users silently get
   stuck on a stale JS bundle until they close every tab).
-- Allow gramplets to edit/create objects (currently read-only via
-  `filter()`/`get_object()`).
+- Allow gramplets to create objects (a `new()` call; changing and deleting
+  already work — see `GRAMPLET_WRITES_PLAN.md`, where creating was left out
+  of scope).
 - **Gramplet auto-await gaps** (`app/src/pyodidePoc/autoAwait.ts`): a data
   lookup (`get_object()`, `people()`, ...) still fails in a few common
   Python shapes, with errors that only make sense if you know about
