@@ -76,6 +76,70 @@ describe("auto-await AST transform", () => {
   });
 });
 
+describe("making plain defs async", () => {
+  it("makes a def async when it calls a builtin, and awaits calls to it", () => {
+    expect(rewrite("def first():\n    return tags()[0]\nx = first()")).toBe(
+      "async def first():\n    return (await tags())[0]\nx = await first()"
+    );
+  });
+
+  it("does the same for a def with an await written by hand", () => {
+    expect(rewrite("def first():\n    return await tags()\nx = first()")).toBe(
+      "async def first():\n    return await tags()\nx = await first()"
+    );
+  });
+
+  it("makes callers async too, through any number of levels", () => {
+    expect(rewrite("def a():\n    return tags()\ndef b():\n    return a()\ndef c():\n    return b()\nc()")).toBe(
+      "async def a():\n    return await tags()\n\nasync def b():\n    return await a()\n\n" +
+        "async def c():\n    return await b()\nawait c()"
+    );
+  });
+
+  it("makes a nested def and its enclosing def async", () => {
+    expect(rewrite("def outer():\n    def inner():\n        return tags()\n    return inner()")).toBe(
+      "async def outer():\n\n    async def inner():\n        return await tags()\n    return await inner()"
+    );
+  });
+
+  it("awaits a promoted def even inside a comprehension", () => {
+    expect(rewrite("def name(p):\n    return get_object('Person', p)\nns = [name(h) for h in hs]")).toBe(
+      "async def name(p):\n    return await get_object('Person', p)\nns = [await name(h) for h in hs]"
+    );
+  });
+
+  it("leaves defs that don't need it alone, and still treats them as shadowing", () => {
+    expect(rewrite("def add(a, b):\n    return a + b\nx = add(1, 2)")).toBe("def add(a, b):\n    return a + b\nx = add(1, 2)");
+    expect(rewrite("def tags():\n    return 1\nx = tags()")).toBe("def tags():\n    return 1\nx = tags()");
+  });
+
+  it("does make a def named like a builtin async, if it needs to be", () => {
+    expect(rewrite("def tags():\n    return people()\nx = tags()")).toBe(
+      "async def tags():\n    return await people()\nx = await tags()"
+    );
+  });
+
+  it("leaves a def passed around as a value sync", () => {
+    expect(rewrite("def key(p):\n    return count('Person')\ns = sorted(xs, key=key)")).toBe(
+      "def key(p):\n    return await count('Person')\ns = sorted(xs, key=key)"
+    );
+  });
+
+  it("leaves methods, decorated defs and generators sync", () => {
+    for (const source of [
+      "class C:\n\n    def m(self):\n        return await tags()",
+      "@deco\ndef f():\n    return await tags()",
+      "def g():\n    yield (await tags())",
+    ]) {
+      expect(rewrite(source)).toBe(source);
+    }
+  });
+
+  it("leaves the Gramplet's own async defs and their calls alone", () => {
+    expect(rewrite("async def f():\n    return 1\nc = f()")).toBe("async def f():\n    return 1\nc = f()");
+  });
+});
+
 describe("_run_gramplet", () => {
   beforeAll(async () => {
     await pyodide.runPythonAsync(`
@@ -105,6 +169,12 @@ db = _FakeDb()
   it("runs in the shared globals, like runPythonAsync", async () => {
     await run("kept = len(tags())");
     expect(await run("kept")).toBe(2);
+  });
+
+  it("runs a def that was made async", async () => {
+    expect(await run("def second():\n    return tags()[1]\ndef shout():\n    return second().upper()\nshout()")).toBe(
+      "B"
+    );
   });
 
   it("reports a Gramplet's errors at its own line numbers", async () => {

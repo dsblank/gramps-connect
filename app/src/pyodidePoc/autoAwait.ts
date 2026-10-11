@@ -28,18 +28,32 @@
 //   - it's already awaited by hand (its arguments are still visited);
 //   - the Gramplet binds that name itself with def/class/import anywhere,
 //     or as a parameter of an enclosing def/lambda -- it's calling its own
-//     thing, not our builtin;
+//     thing, not our builtin (unless it's a def made async, below);
 //   - it's `filter(lambda ..., ...)` or `filter(None, ...)`: Python's own
 //     filter(function, iterable), which our filter(object_type, ...) shadows.
 //     Any other first argument is treated as ours.
 // A plain assignment (`media = media()`) doesn't count as shadowing, so
 // that line still works.
 //
-// Calls inside a regular (non-async) def still get `await`, which Python
-// rejects as a SyntaxError pointing at that line -- clearer than the
-// "coroutine has no attribute" error leaving it out would cause later.
+// A plain `def` whose own body ends up with an `await` (one inserted here,
+// or one written by hand) becomes `async def`, and calls to it by name are
+// awaited too -- which can make *its* callers async in turn, so the
+// rewrite repeats until nothing new turns async. That only happens to a def
+// it's safe for, one that is:
+//   - not a method (`obj.method()` calls can't be traced back to it);
+//   - not decorated (the decorator may expect a plain function);
+//   - not a generator (`for x in gen()` would need `async for`);
+//   - only ever called by name, never passed around as a value --
+//     `sorted(items, key=f)` would get a coroutine back instead of a result.
+// Any other def keeps its inserted `await` and fails with Python's
+// SyntaxError ("'await' outside async function") at that line -- clearer
+// than the "coroutine has no attribute" error leaving it out would cause
+// later. A def the Gramplet writes as `async def` itself is left alone,
+// calls included: it can await (or gather) those itself. Lambdas can't be
+// async at all.
 export const AUTO_AWAIT_PY = `
 import ast as _ast
+import copy as _copy
 from pyodide.code import CodeRunner as _CodeRunner
 
 _AUTO_AWAIT_NAMES = frozenset({
@@ -48,6 +62,8 @@ _AUTO_AWAIT_NAMES = frozenset({
     "repositories", "sources", "citations", "media", "notes", "tags",
     "begin_changes", "end_changes",
 })
+
+_SCOPES = (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.Lambda, _ast.ClassDef)
 
 
 def _defined_names(tree):
@@ -61,14 +77,60 @@ def _defined_names(tree):
     return names
 
 
+def _own_nodes(func):
+    # Everything in a def's body except what's inside a nested def, lambda
+    # or class (comprehensions included, since they share its async-ness).
+    stack = list(func.body)
+    while stack:
+        node = stack.pop()
+        yield node
+        if not isinstance(node, _SCOPES):
+            stack.extend(_ast.iter_child_nodes(node))
+
+
+def _promotable_defs(tree):
+    # Names of the plain defs that may become async def (see autoAwait.ts).
+    call_funcs = {id(node.func) for node in _ast.walk(tree) if isinstance(node, _ast.Call)}
+    plain, excluded = set(), set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Load) and id(node) not in call_funcs:
+            excluded.add(node.id)
+        elif isinstance(node, _ast.ClassDef):
+            excluded.add(node.name)
+            for item in node.body:
+                if isinstance(item, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                    excluded.add(item.name)
+        elif isinstance(node, _ast.AsyncFunctionDef):
+            excluded.add(node.name)
+        elif isinstance(node, (_ast.Import, _ast.ImportFrom)):
+            excluded.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
+        elif isinstance(node, _ast.FunctionDef):
+            if node.decorator_list or any(isinstance(n, (_ast.Yield, _ast.YieldFrom)) for n in _own_nodes(node)):
+                excluded.add(node.name)
+            else:
+                plain.add(node.name)
+    return plain - excluded
+
+
 class _AutoAwait(_ast.NodeTransformer):
-    def __init__(self, shadowed):
-        # A stack of scopes: names defined anywhere, then one set of
+    def __init__(self, shadowed, promotable, promoted):
+        # A stack of scopes: names defined anywhere (minus the defs being
+        # made async, whose calls now need awaiting), then one set of
         # parameter names per enclosing def/lambda.
-        self.scopes = [shadowed]
+        self.scopes = [shadowed - promoted]
+        self.promotable = promotable
+        self.promoted = promoted
+        # One flag per enclosing def/lambda/class: has its own body got an
+        # await in it yet?
+        self.awaits = []
+        self.wants_async = set()
 
     def _shadowed(self, name):
         return any(name in scope for scope in self.scopes)
+
+    def _mark_await(self):
+        if self.awaits:
+            self.awaits[-1] = True
 
     def visit_FunctionDef(self, node):
         args = node.args
@@ -78,21 +140,50 @@ class _AutoAwait(_ast.NodeTransformer):
         if args.kwarg:
             params.append(args.kwarg)
         self.scopes.append({param.arg for param in params})
+        self.awaits.append(False)
         self.generic_visit(node)
         self.scopes.pop()
+        has_await = self.awaits.pop()
+        if isinstance(node, _ast.FunctionDef) and node.name in self.promotable:
+            if has_await:
+                self.wants_async.add(node.name)
+            if node.name in self.promoted:
+                fields = {field: getattr(node, field, None) for field in node._fields}
+                return _ast.copy_location(_ast.AsyncFunctionDef(**fields), node)
         return node
 
     visit_AsyncFunctionDef = visit_FunctionDef
     visit_Lambda = visit_FunctionDef
 
+    def visit_ClassDef(self, node):
+        self.awaits.append(False)
+        self.generic_visit(node)
+        self.awaits.pop()
+        return node
+
     def visit_Await(self, node):
         # Already awaited: visit the call's arguments, not the call itself.
+        self._mark_await()
         self.generic_visit(node.value if isinstance(node.value, _ast.Call) else node)
+        return node
+
+    def visit_AsyncFor(self, node):
+        self._mark_await()
+        self.generic_visit(node)
+        return node
+
+    visit_AsyncWith = visit_AsyncFor
+
+    def visit_comprehension(self, node):
+        if node.is_async:
+            self._mark_await()
+        self.generic_visit(node)
         return node
 
     def visit_Call(self, node):
         self.generic_visit(node)
         if self._needs_await(node):
+            self._mark_await()
             return _ast.copy_location(_ast.Await(value=node), node)
         return node
 
@@ -100,7 +191,11 @@ class _AutoAwait(_ast.NodeTransformer):
         func = node.func
         if isinstance(func, _ast.Attribute):
             return isinstance(func.value, _ast.Name) and func.value.id == "db" and not self._shadowed("db")
-        if not isinstance(func, _ast.Name) or func.id not in _AUTO_AWAIT_NAMES or self._shadowed(func.id):
+        if not isinstance(func, _ast.Name) or self._shadowed(func.id):
+            return False
+        if func.id in self.promoted:
+            return True
+        if func.id not in _AUTO_AWAIT_NAMES:
             return False
         if func.id == "filter" and node.args:
             first = node.args[0]
@@ -110,7 +205,17 @@ class _AutoAwait(_ast.NodeTransformer):
 
 
 def _auto_await_tree(tree):
-    return _ast.fix_missing_locations(_AutoAwait(_defined_names(tree)).visit(tree))
+    # Repeats until no new def turns async: each pass awaits calls to the
+    # defs the last one made async, which can give their callers an await.
+    shadowed = _defined_names(tree)
+    promotable = _promotable_defs(tree)
+    promoted = set()
+    while True:
+        transformer = _AutoAwait(shadowed, promotable, promoted)
+        result = transformer.visit(_copy.deepcopy(tree))
+        if transformer.wants_async <= promoted:
+            return _ast.fix_missing_locations(result)
+        promoted = promoted | transformer.wants_async
 
 
 def _auto_await_source(source):
