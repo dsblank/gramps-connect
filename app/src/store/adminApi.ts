@@ -6,11 +6,7 @@
 // DeleteOtherTreeUser/EditUserTree/MakeAdmin), distinct from the
 // ROLE_OWNER-level per-tree maintenance (reindex/repair/upgrade schema/
 // restore-from-backup/delete-all-objects) that AdministrationDialog.tsx
-// deliberately does not cover -- see its own doc comment. There is no site
-// settings (GET/PUT /api/config/) client: gramps-web-api deprecated storing
-// config in the database in 3.24 (#1050) and drops those endpoints in 4.0,
-// so SMTP/BASE_URL/FRONTEND_URL belong in the server's env vars or config
-// file.
+// deliberately does not cover -- see its own doc comment.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 
