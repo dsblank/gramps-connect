@@ -17,6 +17,7 @@ import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } fr
 import { createTableSql, insertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
 import type { OrderBy, ViewConfig } from "./views";
 import type { TreeChangeNotification } from "./historyPoll";
+import { getHomePersonHandle } from "./homePersonPreference";
 
 export type RowState = "unloaded" | "loading" | "loaded";
 export type ViewStatus = "idle" | "loading" | "ready" | "error";
@@ -802,6 +803,7 @@ export class ViewStore {
         this.status = "ready";
         this.applyDefaultSelection();
         this.emit();
+        this.preferHomePersonDefault();
         return;
       } catch {
         await clearOpfs(this.view.opfsFilename);
@@ -823,6 +825,34 @@ export class ViewStore {
     } finally {
       this.suppressSelectionClear = false;
     }
+    this.preferHomePersonDefault();
+  }
+
+  /** On the People view's first load this session, moves the default
+   * selection from row 0 to the home person (homePersonPreference.ts), if
+   * one is set and the user hasn't already picked something -- including a
+   * handle arriving via the URL, which navigateToHandle() applies
+   * concurrently and which always wins. Stays flagged as a *default*
+   * selection, so it's kept out of the URL just like row 0 would be (see
+   * applyDefaultSelection()). Fire-and-forget: the table is already
+   * showing by now, and row 0 is a fine fallback if this fails. */
+  private preferHomePersonDefault(): void {
+    if (this.view.key !== "person") return;
+    const home = getHomePersonHandle();
+    if (!home || !this.selectionIsDefault || this.selectedHandle === home) return;
+    this.findGlobalIndex(home).then((index) => {
+      // Re-checked after the round trip: a click, a URL jump, or a filter
+      // in the meantime all mean the user has moved on.
+      if (index === null || !this.selectionIsDefault || this.whereExpr !== null || this.pickerExpr !== null) return;
+      this.selectedIndex = index;
+      this.selectedHandle = home;
+      this.selectedHandles = [home];
+      this.selectedIndices = [index];
+      this.rangeAnchorIndex = index;
+      this.emit();
+    }).catch((err) => {
+      console.error(`[${this.view.label}] home person default selection failed`, err);
+    });
   }
 
   /** The where_expr actually sent to the server: `whereExpr` (the
