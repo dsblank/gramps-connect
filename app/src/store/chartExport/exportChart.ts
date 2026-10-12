@@ -100,6 +100,20 @@ function saveBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/** Browsers resolve SVG 2's bare `href`, but plenty of standalone SVG
+ * consumers (Inkscape < 1.0, Illustrator, older viewers and converters)
+ * only know SVG 1.1's `xlink:href` -- without it they drop every
+ * `<image>` (chart photos). A saved .svg carries both. */
+export function addXlinkHrefs(svg: SVGSVGElement): void {
+  const XLINK_NS = "http://www.w3.org/1999/xlink";
+  // Declared up front so the serializer writes `xlink:` rather than
+  // inventing an `ns1:`-style prefix per element.
+  svg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK_NS);
+  for (const el of Array.from(svg.querySelectorAll("[href]"))) {
+    if (!el.hasAttributeNS(XLINK_NS, "href")) el.setAttributeNS(XLINK_NS, "xlink:href", el.getAttribute("href")!);
+  }
+}
+
 /** The text the chart actually draws (not `<style>` rules). */
 function chartText(svg: SVGSVGElement): string {
   return Array.from(svg.querySelectorAll("text"))
@@ -167,6 +181,20 @@ export function flattenTextPaths(svg: SVGSVGElement): void {
   }
 }
 
+/** Runs `fn` with `svg` attached, offscreen and invisible, to the document
+ * -- layout (getStartPositionOfChar, computed styles) only exists there. */
+async function withAttached<T>(svg: SVGSVGElement, fn: () => T | Promise<T>): Promise<T> {
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-100000px;top:0;visibility:hidden";
+  host.appendChild(svg);
+  document.body.appendChild(host);
+  try {
+    return await fn();
+  } finally {
+    host.remove();
+  }
+}
+
 async function exportPdf(
   svg: SVGSVGElement,
   width: number,
@@ -202,16 +230,10 @@ async function exportPdf(
     adaptForSvg2pdf(svg);
     // svg2pdf reads a few things (stylesheets, computed sizes) that only
     // resolve on an element that's actually in a document.
-    const host = document.createElement("div");
-    host.style.cssText = "position:fixed;left:-100000px;top:0;visibility:hidden";
-    host.appendChild(svg);
-    document.body.appendChild(host);
-    try {
+    await withAttached(svg, async () => {
       flattenTextPaths(svg);
       await svg2pdf(svg, doc, { x: layout.x, y: layout.y, width: layout.width, height: layout.height });
-    } finally {
-      host.remove();
-    }
+    });
   }
   saveBlob(doc.output("blob"), filename);
   return { pdfRasterized: rasterized };
@@ -230,6 +252,11 @@ export async function exportChart(live: SVGSVGElement, baseName: string, options
 
   switch (options.format) {
     case "svg":
+      // librsvg (GNOME's Files/Image Viewer, most Linux thumbnailers) has no
+      // `<textPath>` support at all, so curved labels go out as placed glyphs
+      // just like in a PDF.
+      await withAttached(svg, () => flattenTextPaths(svg));
+      addXlinkHrefs(svg);
       saveBlob(new Blob([serialize(svg)], { type: "image/svg+xml;charset=utf-8" }), `${baseName}.svg`);
       return {};
     case "png":

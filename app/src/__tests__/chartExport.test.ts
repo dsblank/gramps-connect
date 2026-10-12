@@ -2,7 +2,7 @@
 // Chart export: page layout math, PDF font coverage, and the live-SVG ->
 // standalone-SVG preparation every format shares (store/chartExport/).
 import { afterEach, describe, expect, it } from "vitest";
-import { rasterSize } from "../store/chartExport/exportChart";
+import { addXlinkHrefs, rasterSize } from "../store/chartExport/exportChart";
 import { layoutOnPage } from "../store/chartExport/paperSizes";
 import { pdfFontsCover } from "../store/chartExport/pdfFonts";
 import { exportTransformOf, prepareExportSvg } from "../store/chartExport/prepareSvg";
@@ -166,5 +166,18 @@ describe("exportTransformOf", () => {
     const svg = liveChart();
     svg.querySelector("#content")!.setAttribute("data-export-transform", "rotate(0)");
     expect(exportTransformOf(svg)).toBe("");
+  });
+});
+
+describe("addXlinkHrefs", () => {
+  it("mirrors every href as xlink:href, declared, for SVG 1.1 consumers", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.innerHTML = '<defs><path id="a" d="M0 0"/></defs><text><textPath href="#a">x</textPath></text><image href="data:,"/>';
+    addXlinkHrefs(svg);
+    const out = new XMLSerializer().serializeToString(svg);
+    expect(out).toContain('xmlns:xlink="http://www.w3.org/1999/xlink"');
+    expect(out).toContain('xlink:href="#a"');
+    expect(out).toContain('xlink:href="data:,"');
+    expect(out).toContain('href="#a"');
   });
 });
