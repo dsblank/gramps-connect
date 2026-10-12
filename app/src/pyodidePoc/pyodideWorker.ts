@@ -1040,8 +1040,10 @@ def and_filters(*clauses):
     e.g. and_filters(get_filter(), "gender == 1") builds on the view's
     current filter without needing an \`if\` to avoid a leading/dangling
     "and". Returns None (filter()'s own default) if every clause is
-    falsy, never an empty string."""
-    return " and ".join(c for c in clauses if c) or None
+    falsy, never an empty string. Each clause is parenthesized, so one
+    with an "or" in it ("a or b") stays together rather than binding to
+    its neighbor."""
+    return " and ".join(f"({c})" for c in clauses if c) or None
 
 
 # set_column_titles()/row(): named and shaped after Gramps desktop's own
@@ -1551,6 +1553,18 @@ def _name_label(name):
         s for s in (_field(sn, "surname") for sn in (_field(name, "surname_list") or [])) if s
     )
     return f"{given} {surnames}".strip()
+
+def name_of(person_or_name):
+    """A person's display name -- given name, then surnames ("Root
+    Ancestor"), the label row() shows without the Gramps ID. Takes a
+    person (a real Person, or a record from people()/get_raw_object(), or
+    a filter() result with "primary_name" in what=) or one of their names
+    (person.primary_name, an entry of person.alternate_names). "" for
+    None."""
+    if person_or_name is None:
+        return ""
+    primary = _field(person_or_name, "primary_name")
+    return _name_label(primary if primary is not None else person_or_name)
 
 def _describe_object(value):
     # Lightweight, dbase-free counterpart to Gramps desktop's

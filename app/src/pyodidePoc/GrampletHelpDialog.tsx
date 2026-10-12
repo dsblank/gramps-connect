@@ -174,6 +174,12 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                 )}
               />
               <SymbolRow
+                symbol="name_of(person)"
+                meaning={t(
+                  "A person's name as text -- given name, then surnames (\"Root Ancestor\"), as row() labels them. Also takes one of their names, e.g. name_of(person.alternate_names[0])."
+                )}
+              />
+              <SymbolRow
                 symbol="html(markup)"
                 meaning={t(
                   "Shows raw HTML/SVG instead of a table -- a hand-built SVG string, or a chart library's own render() output. Reaches the page exactly as given, scripts and event handlers included (e.g. pygal's own hover tooltips) -- Gramplet code runs with the same trust as your own account."
