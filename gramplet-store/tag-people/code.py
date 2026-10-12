@@ -34,17 +34,14 @@ else:
         st.info("Choose a tag to add.")
     else:
         tag = by_name[name]
-        # Only each person's tags come back from filter() -- cheap -- so the
-        # people who already have the tag are skipped without fetching them.
-        matches = filter("person", where=where, what=["tag_list"], limit=None)
-        untagged = [p["handle"] for p in matches if tag.handle not in (p["tag_list"] or [])]
+        # The server picks out the people in the filter who don't have the
+        # tag yet, and people() hands them back as whole records, ready to
+        # change -- one request, however many there are.
+        total = count("person", where=where)
+        untagged = people(and_filters(where, f"not any(tags, handle == {tag.handle!r})"), limit=None)
         if not untagged:
             st.success(f"Everyone in the filter already has the tag {name}.")
         else:
-            bar = st.progress(0, text=f"Tagging {len(untagged)} people...")
-            for i, handle in enumerate(untagged):
-                bar.progress((i + 1) / len(untagged), text=f"Tagging {len(untagged)} people...")
-                person = get_raw_object("person", handle)
+            for person in untagged:
                 person.tag_list.append(tag.handle)
-            bar.empty()
-            st.info(f"{len(untagged)} of {len(matches)} people in the filter get the tag {name} -- see the list below.")
+            st.info(f"{len(untagged)} of {total} people in the filter get the tag {name} -- see the list below.")

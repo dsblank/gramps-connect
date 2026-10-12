@@ -1,5 +1,5 @@
 # =============================================================================
-# 01 - Hello Table
+# Hello Table
 # =============================================================================
 # The smallest useful Gramplet: run a query against the tree and show the
 # results as a table. Start here if you have never written a Gramplet
@@ -26,8 +26,8 @@
 # hood -- it's inserted for you automatically. The condition below is
 # evaluated entirely on the server (it can reach through relationships,
 # e.g. birth.date, even though we're not asking to see that field back --
-# see 07_relationship_queries.py for how to pull related fields like this
-# one back into the table too).
+# see Crossing Relationships for how to pull related fields like this one
+# back into the table too).
 #
 # and_filters(get_filter(), ...) layers this Gramplet's own condition on
 # top of whatever filter is currently applied on the People view it's a
@@ -56,8 +56,8 @@ for person in matches:
 # person.primary_name.first_name is the same value as
 # person["primary_name"]["first_name"]. Use whichever reads better. Reach
 # for this whenever you want to *compute* something from a field, or show
-# a field row()'s own object rendering doesn't surface -- see
-# 02_person_lookup.py and onward for that.
+# a field row()'s own object rendering doesn't surface -- see Person
+# Lookup for that.
 if matches:
     example = matches[0]
     given = example.primary_name.first_name

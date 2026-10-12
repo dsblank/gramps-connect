@@ -46,7 +46,7 @@
 # Demonstrates:
 #   - filter()'s `what` crossing a *chain* of relationships
 #     (birth -> place -> enclosed_by -> enclosed_by -> ...), not just the
-#     single hop born-in.py's "birth.place.title" uses
+#     single hop Born In's "birth.place.title" uses
 #   - reading a Gramps enum struct (`place_type.value`, PlaceType.COUNTRY
 #     == 1) back out of a filter() row -- the same struct-field shape
 #     age-at-death-histogram's "birth.date.sortval" uses for Dates
@@ -84,7 +84,7 @@ rows = filter(
     "person",
     where=and_filters(get_filter(), "birth.place.handle is not None"),
     what=[f"{hop}.name.value" for hop in hops] + [f"{hop}.place_type.value" for hop in hops],
-    limit=5000,
+    limit=None,
 )
 
 counts = Counter()

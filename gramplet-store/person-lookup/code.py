@@ -1,5 +1,5 @@
 # =============================================================================
-# 02 - Person Lookup, by Gramps ID
+# Person Lookup, by Gramps ID
 # =============================================================================
 # Looks up one specific person by their Gramps ID (the "I0001"-style id
 # shown in the first column of the People list) and walks their events by
@@ -10,9 +10,8 @@
 #   - db.get_person_from_gramps_id() / db.get_person_from_handle()
 #   - a REAL gramps.gen.lib.Person object (not just a DataDict) -- the
 #     same object type and methods Gramps Desktop addons use
-#   - walking a relationship by hand (event_ref_list -> db.get_event_from_
-#     handle) when you need more than filter()'s built-in birth/death
-#     shortcuts give you
+#   - following a person's event references to the events themselves, and
+#     on to their places -- one request per kind of record, not per record
 #   - importing gramps.gen.lib directly, for its Person.MALE/FEMALE/...
 #     constants
 # =============================================================================
@@ -34,9 +33,6 @@ else:
     # A real gramps.gen.lib.Person's fields are plain attributes -- no
     # get_primary_name()-style boilerplate needed, though those methods
     # exist too if you're used to them from Desktop addon code.
-    name = person.primary_name
-    full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
-
     # gramps.gen.lib is the real Gramps library -- the same one Gramps
     # Desktop itself is built on. Its Person class defines the MALE/
     # FEMALE/UNKNOWN/OTHER constants person.gender is one of.
@@ -48,7 +44,7 @@ else:
         Person.OTHER: "Other",
     }.get(person.gender, "Unknown")
 
-    html(f"<h3>{full_name}</h3>")
+    html(f"<h3>{name_of(person)}</h3>")
     print("Gramps ID:", person.gramps_id)
     print("Gender:", gender_label)
 
@@ -56,11 +52,18 @@ else:
     # plus a role (.role, e.g. "Primary"), not the event itself. This is
     # exactly the "handle, look it up yourself" indirection Gramps Desktop
     # uses internally too. filter()'s own where= clause can jump straight
-    # to birth/death for a *query* (see 07_relationship_queries.py) --
+    # to birth/death for a *query* (see Crossing Relationships) --
     # this is the by-hand equivalent for a single record you already have,
-    # covering every event, not just birth/death.
+    # covering every event, not just birth/death. events() fetches them
+    # all in one request ("handle in [...]" needs at least one handle,
+    # hence the "if"), and places() then fetches every place they name.
+    handles = [ref.ref for ref in person.event_ref_list]
+    by_handle = {e.handle: e for e in events(f"handle in {handles!r}", limit=None)} if handles else {}
+    place_handles = [e.place for e in by_handle.values() if e.place]
+    place_of = {p.handle: p for p in places(f"handle in {place_handles!r}", limit=None)} if place_handles else {}
+
     set_column_titles("Role", "Type", "Date", "Place")
     for event_ref in person.event_ref_list:
-        event = db.get_event_from_handle(event_ref.ref)
-        place = db.get_place_from_handle(event.place) if event.place else None
-        row(str(event_ref.role), str(event.type), event.date, place)
+        event = by_handle.get(event_ref.ref)
+        if event is not None:
+            row(str(event_ref.role), str(event.type), event.date, place_of.get(event.place))

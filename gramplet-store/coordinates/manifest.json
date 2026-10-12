@@ -2,7 +2,7 @@
   "id": "coordinates",
   "name": "Coordinates",
   "description": "Latitude and longitude of every place the selected person (and their families) have an event at.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "detail",
   "views": [

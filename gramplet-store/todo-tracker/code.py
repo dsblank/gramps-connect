@@ -1,18 +1,18 @@
 # =============================================================================
-# 08 - Research To-Do Tracker
+# Research To-Do Tracker
 # =============================================================================
 # Lists research notes (Note.type == NoteType.RESEARCH) and lets you
 # toggle between "only ones mentioning TODO" and "all research notes"
 # with a checkbox -- a small, useful research-tracking Gramplet, and a
 # second worked example of the st.checkbox() + dynamic "where" pattern
-# from 04_interactive_search.py, this time over Notes instead of People.
+# from People Search, this time over Notes instead of People.
 #
 # Demonstrates:
 #   - collections/tags: any(t.name == '...' for t in tags)
 #   - a Note's own type field (NoteType.RESEARCH, .TODO, ...)
 #   - combining a widget's value into a "where" string built from fixed
 #     pieces (safe here with no f-string, since nothing is user-typed --
-#     contrast with 04_interactive_search.py's repr()-quoted surname,
+#     contrast with People Search's repr()-quoted surname,
 #     needed there because that value *is* user-typed)
 # =============================================================================
 
@@ -32,17 +32,20 @@ matching_notes = notes(where, order=[{"column": "change", "direction": "desc"}],
 
 st.write(f"{len(matching_notes)} research note(s)")
 
+# A Note's own tag_list holds handles, not the tags themselves -- the same
+# handle-indirection event_ref_list uses. Every tag these notes use, in one
+# request ("handle in [...]" needs at least one handle, hence the "if").
+tag_handles = sorted({h for note in matching_notes for h in note.tag_list})
+tag_name = {t.handle: t.name for t in tags(f"handle in {tag_handles!r}", limit=None)} if tag_handles else {}
+
 set_column_titles("Note", "Tags", "Text")
 for note in matching_notes:
-    # A Note's own tag_list holds handles, not the tags themselves -- the
-    # same handle-indirection event_ref_list uses (see
-    # 02_person_lookup.py). db.get_tag_from_handle() resolves each one.
-    tag_names = [db.get_tag_from_handle(h).name for h in note.tag_list]
+    tag_names = [tag_name[h] for h in note.tag_list if h in tag_name]
 
     # note.text is a StyledText object (Gramps supports bold/italic runs
     # within a note); .string is its plain-text content with no markup.
     # (row(note) alone already shows a short auto-generated snippet -- see
-    # 01_hello_table.py's comment on row() and objects -- this one is
+    # Hello Table's comment on row() and records -- this one is
     # deliberately longer, which is why it's worth its own column here.)
     snippet = note.text.string.strip().replace("\n", " ")
     if len(snippet) > 80:

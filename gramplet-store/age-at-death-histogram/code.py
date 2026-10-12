@@ -23,13 +23,13 @@ from plotly.subplots import make_subplots
 # GrampletHelpDialog's "where" section) -- sortval is the date's position
 # on the calendar as a plain number of days, which is what makes "person
 # has both a birth and a death date" expressible as a where clause at all.
+# It's 0 for an event with no date recorded, and None when there's no such
+# event, so "> 0" is what means "has a date".
 #
-# filter() rather than people(): with limit=5000, people() would mean
-# 5000 full-object network fetches for a histogram that only needs two
-# dates -- see 05_pygal_charts.py's own comment on this same trade-off.
-# There's no db method that reaches a related field like birth.date back
-# into the result at all (see 07_relationship_queries.py), so filter()
-# is the only way to get this cheaply, not a shortcut around db.
+# filter() with what= rather than whole records: people() would download
+# every field of every person for a histogram that only needs two dates
+# -- see Pygal Charts' own comment on this same trade-off. limit=None means
+# everyone, fetched in pages of 1000 behind the scenes.
 #
 # and_filters(get_filter(), ...) layers this Gramplet's own "has both
 # dates" requirement on top of whatever filter is currently applied on
@@ -44,10 +44,10 @@ rows = filter(
     "person",
     where=and_filters(
         get_filter(),
-        "birth.date.sortval is not None and death.date.sortval is not None",
+        "birth.date.sortval > 0 and death.date.sortval > 0",
     ),
     what=["birth.date", "death.date"],
-    limit=5000,
+    limit=None,
 )
 
 # sortval is a day count (not a year), so this is ordinary arithmetic, not

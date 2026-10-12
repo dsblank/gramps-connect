@@ -3,9 +3,7 @@ person = get_selected()
 if person is None:
     html("<i>A person is not selected</i>")
 else:
-    name = person.primary_name
-    full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
-    html(f"<h3>Attributes for {full_name}</h3>")
+    html(f"<h3>Attributes for {name_of(person)}</h3>")
     if person.attribute_list:
         set_column_titles("Type", "Value")
         for attr in person.attribute_list:

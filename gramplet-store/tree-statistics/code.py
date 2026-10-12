@@ -1,5 +1,5 @@
 # =============================================================================
-# 03 - Tree Statistics
+# Tree Statistics
 # =============================================================================
 # A quick "how big is this tree?" summary -- one row per record type, plus
 # a couple of derived numbers computed from cheap db.get_number_of*()
@@ -35,11 +35,13 @@ for label, total in counts:
 # db.get_number_of(object_type, where=...): db's own get_number_of_*()
 # methods (above) always count the whole tree, with no where= parameter --
 # this is the conditional counterpart, for when the count itself needs a
-# filter.
-total_people = db.get_number_of_people()
+# filter. A birth with no date recorded has a sortval of 0, and someone
+# with no birth event at all has none (None) -- "missing a recorded birth
+# date" counts both.
+total_people = counts[0][1]
 women = db.get_number_of("person", where="gender == Person.FEMALE")
 men = db.get_number_of("person", where="gender == Person.MALE")
-no_birth_date = db.get_number_of("person", where="birth.date.sortval is None")
+no_birth_date = db.get_number_of("person", where="birth.date.sortval is None or birth.date.sortval == 0")
 
 html("<hr>")
 print(f"Total people: {total_people}")

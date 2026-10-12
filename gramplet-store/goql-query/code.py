@@ -1,7 +1,7 @@
 #
-# The "type it yourself" companion to person-filter.py/interactive-search.py
-# in this same folder: those build a where= clause out of a handful of
-# named widgets (given name, surname, gender, ...). This one hands you the
+# The "type it yourself" companion to People Search: that one builds a
+# where= clause out of a handful of named widgets (given name, surname,
+# gender, ...). This one hands you the
 # raw GOQL text box instead -- the exact same syntax as the People view's
 # own search box (click its (i) button for the full field/relationship
 # reference for this record type) -- plus a second box naming exactly
@@ -15,7 +15,7 @@
 #     "birth.date" or "primary_name.surname_list[0].surname" is exactly as
 #     valid in the columns box below as it is in the where box
 #   - a filter()-returned row is a DataDict keyed by that same expression
-#     string (see 05_pygal_charts.py's own r.surname), so a dotted key
+#     string (see Pygal Charts' own r.surname), so a dotted key
 #     needs square brackets, not dot access: row["birth.date"], not
 #     row.birth.date -- the key really is the literal string "birth.date"
 #   - st.error() for a query the server rejects, st.info() for a hint
@@ -34,7 +34,7 @@ if not columns:
 else:
     # and_filters(get_filter(), ...) layers this on top of whatever filter
     # is currently applied on the People view this Gramplet is a tab of --
-    # same as person-filter.py/interactive-search.py (see the manifest's
+    # same as People Search (see the manifest's
     # listensToFilter) -- and tolerates an empty where box (None, same as
     # leaving where= out entirely).
     where = and_filters(get_filter(), where_text or None)

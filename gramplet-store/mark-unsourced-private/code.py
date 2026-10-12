@@ -14,39 +14,30 @@
 #   - changing a record by assigning to it: person.private = True
 #   - begin_changes()/end_changes(): naming the group of changes, which is
 #     what the tree's history shows for it
-#   - finding records cheaply with filter() first, then fetching whole
-#     records (get_raw_object()) only for the ones that will change --
-#     filter() results only hold some fields, so they can't be changed
+#   - one where= clause that finds exactly the records to change, and
+#     people() handing them back whole -- ready to change -- in one request
+#     (filter() results only hold some fields, so they can't be changed)
 # =============================================================================
 
-# 1. Public people with no citations of their own -- the server does this
-#    part. Only their event references come back, not whole records.
-bar = st.progress(0, text="Finding public people with no citations of their own...")
-candidates = filter(
-    "person",
-    where=and_filters(get_filter("person"), "private == False", "not any(c for c in citations)"),
-    what=["event_ref_list"],
+# The same test as People Without Sources -- any(events, ...) follows each
+# event reference to its event, any(event_ref_list, ...) looks inside each
+# reference itself -- plus "still public". The server does all of it.
+NO_SOURCES = (
+    "not any(citations)"
+    " and not any(event_ref_list, any(citation_list))"
+    " and not any(events, any(citations))"
+)
+bar = st.progress(0, text="Finding public people with no sources...")
+unsourced = people(
+    and_filters(get_filter("person"), "private == False", NO_SOURCES),
     order=[{"column": "surname", "direction": "asc"}],
     limit=None,
 )
 
-# 2. Every event that does have a citation, as a set of handles.
-bar.progress(0, text="Finding events that have citations...")
-cited_events = {event["handle"] for event in filter("event", where="any(c for c in citations)", limit=None)}
-
-# 3. Keep the people none of whose events (or event references) is cited.
-unsourced = [
-    person["handle"]
-    for person in candidates
-    if not any(ref["citation_list"] or ref["ref"] in cited_events for ref in person["event_ref_list"] or [])
-]
-
-# 4. Mark them private -- one group of changes, saved together.
+# Mark them private -- one group of changes, saved together.
 if unsourced:
     begin_changes("Mark unsourced people private")
-    for i, handle in enumerate(unsourced):
-        bar.progress((i + 1) / len(unsourced), text="Marking them private...")
-        person = get_raw_object("person", handle)
+    for person in unsourced:
         person.private = True
     end_changes()
     st.info(f"{len(unsourced)} public people have no sources at all -- see the list below.")

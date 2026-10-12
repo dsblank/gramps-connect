@@ -1,5 +1,5 @@
 # =============================================================================
-# 05 - Charts with pygal
+# Charts with pygal
 # =============================================================================
 # Two small charts -- top surnames as a bar chart, gender split as a pie
 # chart -- using pygal, an SVG charting library that's pre-bundled and
@@ -15,21 +15,16 @@ import pygal
 from collections import Counter
 
 # ---- Chart 1: top 10 surnames --------------------------------------------
-# filter() rather than people() here: people() with limit=5000 would mean
-# 5000 separate network fetches, one full object per match (see
-# 04_interactive_search.py's own comment on this) -- much too slow for a
-# chart that only needs one field. filter()'s own 'what' list keeps this
-# to a small, fixed number of requests regardless: only surname crosses
-# the network, not every field on every person, and 5000 (comfortably
-# above the 1000-per-request server cap) is paged through transparently.
-# There's no db method that can do this -- reaching past db here isn't
-# a shortcut, it's the only way to stay this cheap at this scale.
+# filter() with what= rather than whole records: people() would download
+# every field of every person, for a chart that only needs one. With
+# what=["surname"] only surnames cross the network, and limit=None
+# (everyone) is paged through 1000 at a time behind the scenes.
 #
 # where=get_filter() layers this on top of whatever filter is currently
 # applied on whichever People-typed view this Gramplet is a tab of (see
 # the manifest's views/listensToFilter) -- so both charts below cover the
 # filtered list, not always the whole tree.
-rows = filter("person", where=get_filter(), what=["surname"], limit=5000)
+rows = filter("person", where=get_filter(), what=["surname"], limit=None)
 surname_counts = Counter(r.surname for r in rows if r.surname)
 top_surnames = surname_counts.most_common(10)
 
@@ -43,7 +38,7 @@ html(bar.render())
 
 # ---- Chart 2: gender split --------------------------------------------
 # db.get_number_of(..., where=...) -- the conditional counterpart to
-# db.get_number_of_people(), same reasoning as 03_tree_statistics.py's own
+# db.get_number_of_people(), same reasoning as Tree Statistics' own
 # use of it. and_filters(get_filter(), ...) narrows each count to the
 # current filter, same as Chart 1 above -- and the "total" used for the
 # "other" slice is counted the same filtered way (rather than

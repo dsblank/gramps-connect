@@ -1,20 +1,15 @@
 # =============================================================================
-# 07 - Crossing Relationships
+# Crossing Relationships
 # =============================================================================
-# A "where" condition can reach one hop across a relationship -- a
-# person's birth event, a family's father, an event's place -- to filter
-# on, even though people()/families()/etc. themselves always return a
-# whole, unrelated object with no way to ask for a related field back
-# directly (that's a deliberately internal capability of the lower-level
-# function they're built on, not part of the public API -- see
-# 04_interactive_search.py's own comment on why). Getting a related
-# field back for *display* is instead the same by-hand lookup
-# 02_person_lookup.py already shows: read this file after that one.
+# A "where" condition can reach across relationships -- a person's birth
+# event, a family's father, an event's place -- to filter on. what= can
+# reach across them the same way to hand a related field back
+# ("birth.place" is the handle of the birth event's place), without
+# fetching the birth event itself.
 #
 # Demonstrates:
 #   - a dotted "where" condition crossing a relationship
-#   - resolving a related field for display via db's own methods, the
-#     same handle-indirection technique as 02_person_lookup.py
+#   - a dotted what= field crossing one, to get a related value back
 #   - any(...)/len(...) over a one-to-many collection (events,
 #     children, citations, ...)
 # =============================================================================
@@ -39,23 +34,23 @@ born_and_died_same_place = people(
     limit=50,
 )
 
-
-def birth_place(person):
-    # birth_ref_index is -1 when no birth event is recorded; otherwise
-    # it's this person's own index into event_ref_list for their birth --
-    # the same indirection 02_person_lookup.py walks for every event, just
-    # narrowed to the one we already know we want.
-    if person.birth_ref_index < 0:
-        return None
-    event = db.get_event_from_handle(person.event_ref_list[person.birth_ref_index].ref)
-    return db.get_place_from_handle(event.place) if event.place else None
-
+# Each one's birth place handle, through their birth event, in one request
+# -- then the places themselves in one more. "handle in [...]" needs at
+# least one handle, hence the "if"s.
+handles = [p.handle for p in born_and_died_same_place]
+birth_place_of = (
+    {r.handle: r["birth.place"] for r in filter("person", where=f"handle in {handles!r}", what=["birth.place"], limit=None)}
+    if handles
+    else {}
+)
+place_handles = [h for h in birth_place_of.values() if h]
+place_of = {p.handle: p for p in places(f"handle in {place_handles!r}", limit=None)} if place_handles else {}
 
 set_column_titles("Person", "Birth & death place")
 for person in born_and_died_same_place:
-    # A Place object renders as a clickable link too, same as person does
-    # -- row() special-cases any primary Gramps object, not just Person.
-    row(person, birth_place(person))
+    # A place renders as a clickable link too, same as a person does --
+    # row() special-cases any primary Gramps record, not just Person.
+    row(person, place_of.get(birth_place_of.get(person.handle)))
 
 # ---- any()/len() over a collection -----------------------------------
 # Not every relationship is one-to-one (a person has exactly one birth

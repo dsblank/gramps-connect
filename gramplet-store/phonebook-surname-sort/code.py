@@ -1,5 +1,5 @@
 # =============================================================================
-# 09 - Installing a third-party package with %pip install
+# Installing a third-party package with %pip install
 # =============================================================================
 # Sorts surnames the way a phone book does -- ignoring accents, so "Muller"
 # and "Müller" land next to each other -- using the `unidecode` package
@@ -10,7 +10,7 @@
 #   - %pip install (Jupyter-magic syntax -- rewritten into a real
 #     micropip.install() call for you before your code runs)
 #   - only works for *pure-Python* packages (no compiled/C-extension code)
-#     -- pygal and matplotlib (05/06) don't need this because they're
+#     -- pygal, plotly and matplotlib don't need this because they're
 #     pre-bundled, but most small pure-Python utility packages on PyPI
 #     install fine this way
 # =============================================================================
@@ -22,10 +22,11 @@
 
 from unidecode import unidecode
 
-# filter() rather than people(): only surname is needed here, and
-# people() would mean 5000 full-object network fetches to get it -- see
-# 05_pygal_charts.py's own comment on this same trade-off.
-rows = filter("person", what=["surname"], limit=5000)
+# filter() with what= rather than whole records: only surname is needed
+# here, and people() would download every field of every person to get it
+# -- see Pygal Charts' own comment on this same trade-off. limit=None means
+# everyone, fetched in pages of 1000 behind the scenes.
+rows = filter("person", what=["surname"], limit=None)
 surnames = sorted({r.surname for r in rows if r.surname}, key=unidecode)
 
 set_column_titles("Surname", "Sorts as")

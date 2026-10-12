@@ -1,5 +1,5 @@
 # =============================================================================
-# 11 - Reacting to the Selected Record
+# Reacting to the Selected Record
 # =============================================================================
 # Shows extra detail about whichever record is currently open in this
 # list's own detail pane -- the closest equivalent here to a Gramps
@@ -31,8 +31,9 @@
 #     gen.lib resolving that object, so this import is free, not a new cost.
 #   - get_home_person() + db.get_relationship() -- the same
 #     "Relationship to home person" Gramps desktop puts in its status bar
-#   - reusing 02_person_lookup.py's by-hand event-walk technique, plus the
-#     equivalent for a Family (parents/children instead of events)
+#   - Person Lookup's event-walk technique (every event, then every place,
+#     one request each), plus the equivalent for a Family (parents and
+#     children in one request)
 # =============================================================================
 
 from gramps.gen.lib import Family, Person
@@ -44,9 +45,7 @@ if record is None:
 
 elif isinstance(record, Person):
     person = record
-    name = person.primary_name
-    full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
-    html(f"<h3>{full_name}</h3>")
+    html(f"<h3>{name_of(person)}</h3>")
 
     # The Home person (set on the Home page) and how this person relates
     # to them. Argument order matters: the result describes the *second*
@@ -64,18 +63,27 @@ elif isinstance(record, Person):
         relationship = db.get_relationship(home_person, person)
         print(f"Relationship to Home person: {relationship or 'not related'}")
 
-    # Same handle-indirection technique as 02_person_lookup.py: event_ref_
-    # list holds handles, not the events themselves.
+    # Same technique as Person Lookup: event_ref_list holds handles, not
+    # the events themselves, so fetch every event in one request and then
+    # every place they name in one more. "handle in [...]" needs at least
+    # one handle, hence the "if"s.
+    handles = [ref.ref for ref in person.event_ref_list]
+    by_handle = {e.handle: e for e in events(f"handle in {handles!r}", limit=None)} if handles else {}
+    place_handles = [e.place for e in by_handle.values() if e.place]
+    place_of = {p.handle: p for p in places(f"handle in {place_handles!r}", limit=None)} if place_handles else {}
     set_column_titles("Role", "Type", "Date", "Place")
     for event_ref in person.event_ref_list:
-        event = db.get_event_from_handle(event_ref.ref)
-        place = db.get_place_from_handle(event.place) if event.place else None
-        row(str(event_ref.role), str(event.type), event.date, place)
+        event = by_handle.get(event_ref.ref)
+        if event is not None:
+            row(str(event_ref.role), str(event.type), event.date, place_of.get(event.place))
 
 elif isinstance(record, Family):
     family = record
-    father = db.get_person_from_handle(family.father_handle) if family.father_handle else None
-    mother = db.get_person_from_handle(family.mother_handle) if family.mother_handle else None
+    # Both parents and every child in one request.
+    child_handles = [ref.ref for ref in family.child_ref_list]
+    wanted = [h for h in [family.father_handle, family.mother_handle] + child_handles if h]
+    members = {p.handle: p for p in people(f"handle in {wanted!r}", limit=None)} if wanted else {}
+    father, mother = members.get(family.father_handle), members.get(family.mother_handle)
 
     set_column_titles("Role", "Person")
     row("Father", father)
@@ -84,8 +92,8 @@ elif isinstance(record, Family):
     html("<hr>")
     print(f"{len(family.child_ref_list)} child(ren):")
     set_column_titles("Child")
-    for child_ref in family.child_ref_list:
-        row(db.get_person_from_handle(child_ref.ref))
+    for handle in child_handles:
+        row(members.get(handle))
 
 else:
     # Every other type (Event, Place, Source, ...) -- row() renders

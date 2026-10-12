@@ -3,52 +3,36 @@ person = get_selected()
 if person is None:
     html("<i>A person is not selected</i>")
 else:
-    name = person.primary_name
-    full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
-    html(f"<h3>Children of {full_name}</h3>")
+    html(f"<h3>Children of {name_of(person)}</h3>")
     if not person.family_list:
         html("<i>This person is not a parent in any recorded family</i>")
     else:
-        def event_ref_handle(a_person, ref_index):
-            # birth_ref_index/death_ref_index is -1 when no such event is
-            # recorded -- see 07_relationship_queries.py's birth_place()
-            # for the same indirection over a single person. A plain `def`
-            # can't contain the `await` the auto-await preprocessor would
-            # insert for a db.*() call (only top-level code -- what this
-            # whole script already runs as -- supports that), so this
-            # helper only ever touches the person object already in hand,
-            # never db itself; the two db.get_event_from_handle() calls
-            # below stay inline in the loop instead.
-            if ref_index < 0:
-                return None
-            return a_person.event_ref_list[ref_index].ref
+        # One request per kind of record, not one per record: every family,
+        # then every spouse and child, then the children's birth and death
+        # dates (what= reaches through to each one's birth/death event).
+        # "handle in [...]" needs at least one handle, hence the "if"s.
+        by_handle = {f.handle: f for f in families(f"handle in {person.family_list!r}", limit=None)}
+        my_families = [by_handle[h] for h in person.family_list if h in by_handle]
+        spouse_of = {
+            f.handle: f.mother_handle if f.father_handle == person.handle else f.father_handle
+            for f in my_families
+        }
+        child_handles = [ref.ref for f in my_families for ref in f.child_ref_list]
+        wanted = [h for h in list(spouse_of.values()) + child_handles if h]
+        relatives = {p.handle: p for p in people(f"handle in {wanted!r}", limit=None)} if wanted else {}
+        dates = {
+            d.handle: d
+            for d in filter("person", where=f"handle in {child_handles!r}", what=["birth.date", "death.date"], limit=None)
+        } if child_handles else {}
 
         set_column_titles("Child", "Birth Date", "Death Date", "Spouse")
-        for family_handle in person.family_list:
-            family = db.get_family_from_handle(family_handle)
-            spouse_handle = (
-                family.mother_handle if family.father_handle == person.handle else family.father_handle
-            )
-            spouse = db.get_person_from_handle(spouse_handle) if spouse_handle else None
-            for child_ref in family.child_ref_list:
-                child = db.get_person_from_handle(child_ref.ref)
-
-                # Not db.get_event_from_handle(...).date in one
-                # expression -- with await inserted, `.date` would apply
-                # to the call's result *before* await runs, not after
-                # (the same reason 02_person_lookup.py's own event/place
-                # lookups are always two separate statements), so the
-                # event is resolved on its own line first.
-                birth_handle = event_ref_handle(child, child.birth_ref_index)
-                birth_date = None
-                if birth_handle:
-                    birth_event = db.get_event_from_handle(birth_handle)
-                    birth_date = birth_event.date
-
-                death_handle = event_ref_handle(child, child.death_ref_index)
-                death_date = None
-                if death_handle:
-                    death_event = db.get_event_from_handle(death_handle)
-                    death_date = death_event.date
-
-                row(child, birth_date, death_date, spouse if spouse else "Unknown")
+        for family in my_families:
+            spouse = relatives.get(spouse_of[family.handle])
+            for ref in family.child_ref_list:
+                child_dates = dates.get(ref.ref, {})
+                row(
+                    relatives.get(ref.ref),
+                    child_dates.get("birth.date"),
+                    child_dates.get("death.date"),
+                    spouse or "Unknown",
+                )

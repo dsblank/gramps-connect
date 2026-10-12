@@ -1,5 +1,5 @@
 #
-# The plural companion to relationship.py in this same folder: that one
+# The plural companion to Relationship to Home Person: that one
 # shows the single most direct relationship (what Gramps Desktop's status
 # bar shows), this one shows every distinct path, with the common
 # ancestors each goes through.
@@ -10,7 +10,7 @@
 # calculator appends the spouse relationship first and then the blood
 # paths. Descent from one ancestor down two separate lines does it too.
 # On ordinary data this is a one-row table saying exactly what
-# relationship.py already said, so prefer that one unless you actually
+# Relationship to Home Person already said, so prefer that one unless you actually
 # want every path: this is the more expensive call of the two, since it
 # can't stop at the first answer it finds.
 
@@ -40,11 +40,18 @@ else:
             # back than that.
             html("<i>No relationship found</i>")
         else:
+            # Every common ancestor named anywhere below, in one request.
+            ancestor_handles = sorted({h for entry in entries for h in entry["common_ancestors"]})
+            ancestors_by_handle = (
+                {p.handle: p for p in people(f"handle in {ancestor_handles!r}", limit=None)}
+                if ancestor_handles
+                else {}
+            )
             set_column_titles("Relationship", "Through common ancestor")
             for entry in entries:
                 # Handles, not resolved objects -- the same convention
-                # get_backlinks() uses, so the ones actually displayed get
-                # looked up here. A relationship the calculator found by
+                # get_backlinks() uses, so they're looked up in the
+                # ancestors fetched above. A relationship the calculator found by
                 # more than one path is a single entry with several
                 # ancestors (it merges paths that come out with identical
                 # wording), so this is one row per ancestor with the
@@ -59,6 +66,5 @@ else:
                 else:
                     label = entry["relationship_string"]
                     for ancestor_handle in ancestors:
-                        ancestor = db.get_person_from_handle(ancestor_handle)
-                        row(label, ancestor)
+                        row(label, ancestors_by_handle.get(ancestor_handle))
                         label = ""

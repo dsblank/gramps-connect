@@ -2,7 +2,7 @@
   "id": "children",
   "name": "Children",
   "description": "The children of the selected person, with their birth and death dates and other parent.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "detail",
   "views": [

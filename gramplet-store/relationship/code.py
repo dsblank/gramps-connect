@@ -23,13 +23,6 @@ else:
     elif home_person.handle == person.handle:
         html("<i>This is your Home person</i>")
     else:
-        name = person.primary_name
-        full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
-        home_name = home_person.primary_name
-        home_full_name = (
-            f"{home_name.first_name} {' '.join(s.surname for s in home_name.surname_list)}".strip()
-        )
-
         # Argument order is what makes this read the right way round: the
         # result describes the *second* person in terms of the first, so
         # (home_person, person) gives "son"/"niece"/... meaning the
@@ -47,6 +40,6 @@ else:
         row(home_person, relationship or "Not related")
 
         if relationship:
-            html(f"{full_name} is {home_full_name}'s {relationship}.")
+            html(f"{name_of(person)} is {name_of(home_person)}'s {relationship}.")
         else:
-            html(f"No relationship found between {full_name} and {home_full_name}.")
+            html(f"No relationship found between {name_of(person)} and {name_of(home_person)}.")

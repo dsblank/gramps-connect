@@ -92,11 +92,14 @@ if st.button("Find possible duplicates"):
         st.success(f"No possible duplicates among {len(everyone)} people.")
     shown = pairs[:SHOW_AT_MOST]
     if shown:
+        # Everyone in the pairs shown, as whole records, in one request.
+        bar.progress(1, text="Loading names...")
+        handles = sorted({p["handle"] for pair in shown for p in pair})
+        by_handle = {p.handle: p for p in people(f"handle in {handles!r}", limit=None)}
         set_column_titles("Person", "Possible duplicate", "Birth years")
-        for i, (a, b) in enumerate(shown):
-            bar.progress((i + 1) / len(shown), text="Loading names...")
+        for a, b in shown:
             years = " / ".join(str(birth_year(p[BIRTH]) or "?") for p in (a, b))
-            row(db.get_person_from_handle(a["handle"]), db.get_person_from_handle(b["handle"]), years)
+            row(by_handle.get(a["handle"]), by_handle.get(b["handle"]), years)
     if len(pairs) > SHOW_AT_MOST:
         print(f"Showing the first {SHOW_AT_MOST}.")
     bar.empty()

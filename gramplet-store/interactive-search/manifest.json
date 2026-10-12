@@ -1,8 +1,8 @@
 {
   "id": "interactive-search",
-  "name": "Interactive Search",
-  "description": "A live search box over People: type a surname, pick a sort field, filter to no recorded death date -- updates as you type.",
-  "version": "1.2.0",
+  "name": "People Search",
+  "description": "A live search over People: given name, surname, gender, no recorded death date and sort order, within the current filter if one is applied -- with a reset button.",
+  "version": "2.0.0",
   "author": "Gramps Connect",
   "category": "example",
   "views": [

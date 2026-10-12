@@ -2,7 +2,7 @@
   "id": "relationship",
   "name": "Relationship to Home Person",
   "description": "How the selected person is related to your Home person -- the same wording Gramps Desktop's status bar shows.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "detail",
   "views": [

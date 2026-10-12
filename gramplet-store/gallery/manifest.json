@@ -2,7 +2,7 @@
   "id": "gallery",
   "name": "Gallery",
   "description": "The media records attached to the selected person.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "detail",
   "views": [

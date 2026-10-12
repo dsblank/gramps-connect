@@ -5,9 +5,7 @@ if person is None:
 else:
     from gramps.gen.lib import EventRoleType, EventType, Person
 
-    name = person.primary_name
-    full_name = f"{name.first_name} {' '.join(s.surname for s in name.surname_list)}".strip()
-    html(f"<h3>{full_name}</h3>")
+    html(f"<h3>{name_of(person)}</h3>")
 
     print("Gramps ID:", person.gramps_id)
     gender_label = {Person.MALE: "Male", Person.FEMALE: "Female", Person.OTHER: "Other"}.get(
@@ -19,8 +17,7 @@ else:
         html("<h4>Alternate Names</h4>")
         set_column_titles("Name", "Type")
         for alt in person.alternate_names:
-            alt_name = f"{alt.first_name} {' '.join(s.surname for s in alt.surname_list)}".strip()
-            row(alt_name, str(alt.type))
+            row(name_of(alt), str(alt.type))
 
     # Only the first-recorded parent family, same as Gramps Desktop's own
     # Person Details gramplet -- a person can be a child in more than one
@@ -28,35 +25,34 @@ else:
     # summary, not a full family list (see the Children plugin for that,
     # from the parent's side).
     if person.parent_family_list:
-        family = db.get_family_from_handle(person.parent_family_list[0])
-        father = db.get_person_from_handle(family.father_handle) if family.father_handle else None
-        mother = db.get_person_from_handle(family.mother_handle) if family.mother_handle else None
+        family = db.get_raw_family_data(person.parent_family_list[0])
+        # Both parents in one request.
+        parent_handles = [h for h in (family.father_handle, family.mother_handle) if h]
+        parents = {p.handle: p for p in people(f"handle in {parent_handles!r}")} if parent_handles else {}
+        father, mother = parents.get(family.father_handle), parents.get(family.mother_handle)
         html("<h4>Parents</h4>")
         set_column_titles("Parent", "Name")
         row("Father", father if father else "Unknown")
         row("Mother", mother if mother else "Unknown")
 
     # Primary-role birth/baptism/death/burial only -- the same four events
-    # Gramps Desktop's Person Details gramplet shows. Resolved inline in a
-    # top-level loop rather than a helper function -- a plain `def` can't
-    # contain the `await` the auto-await preprocessor inserts for
-    # db.get_event_from_handle() (see children.py's own comment on the
-    # same issue).
+    # Gramps Desktop's Person Details gramplet shows: the first of each
+    # type, in the person's own event order. Every primary event in one
+    # request, then their places in one more. These are records, not real
+    # objects, so an event's type is compared by its .value.
+    primary = [ref.ref for ref in person.event_ref_list if ref.role == EventRoleType.PRIMARY]
+    by_handle = {e.handle: e for e in events(f"handle in {primary!r}", limit=None)} if primary else {}
+    ordered = [by_handle[h] for h in primary if h in by_handle]
     life_events = []
     for event_type in (EventType.BIRTH, EventType.BAPTISM, EventType.DEATH, EventType.BURIAL):
-        for event_ref in person.event_ref_list:
-            if event_ref.role != EventRoleType.PRIMARY:
-                continue
-            event = db.get_event_from_handle(event_ref.ref)
-            if event.type == event_type:
-                life_events.append(event)
-                break
+        life_events += [e for e in ordered if e.type.value == event_type][:1]
     if life_events:
+        place_handles = [e.place for e in life_events if e.place]
+        place_of = {p.handle: p for p in places(f"handle in {place_handles!r}")} if place_handles else {}
         html("<h4>Life Events</h4>")
         set_column_titles("Event", "Date", "Place")
         for event in life_events:
-            place = db.get_place_from_handle(event.place) if event.place else None
-            row(str(event.type), event.date, place)
+            row(str(event.type), event.date, place_of.get(event.place))
 
     # The same three attributes Gramps Desktop's Person Details gramplet
     # singles out for display.

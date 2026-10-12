@@ -2,7 +2,7 @@
   "id": "backlinks",
   "name": "Backlinks",
   "description": "Every other record in the tree that refers to the selected person.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "detail",
   "views": [
