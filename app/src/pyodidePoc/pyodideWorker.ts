@@ -613,26 +613,63 @@ async def get_raw_object(object_type, handle):
 
 def _make_object_list_function(object_type):
     """Builds one of the people()/families()/.../tags() convenience
-    functions below: filter() to find matching handles (cheap), then
-    get_raw_object() each one to get the whole object back as a DataDict.
-    Still does one network round trip per matched item (via get_raw_object),
-    so 'limit' matters just as much here as it does for filter() itself."""
+    functions below: one filter() request (per 1000 matches) that asks for
+    every top-level field of the type, so each result is already the whole
+    object, exactly as Gramps stores it -- the same DataDict Gramps
+    desktop's db._iter_raw_<type>_data() yields. The field names are the
+    ones Gramps itself stores for the
+    class (object_to_dict() of an empty one -- what json_data holds), so a
+    field added there is picked up with no change here. Not get_schema():
+    it leaves out a few stored fields (Family.complete, Media.thumb).
 
-    async def _list_function(where=None, order=None, limit=50):
-        results = await filter(object_type, where=where, order=order, limit=limit)
-        records = [await get_raw_object(object_type, result["handle"]) for result in results]
-        # None: deleted earlier in this run (changesBootstrap.ts's delete()),
-        # which a dry run's server-side filter() can't know about.
-        return [record for record in records if record is not None]
+    With 'what', just those fields instead, the same as filter(). Not
+    given a "_class": a DataDict with one is taken for a whole record, and
+    printing it would build a real Gramps object from the partial data."""
+    class_name = object_type.capitalize()
+    fields = None
+    booleans = None
+
+    async def _list_function(where=None, what=None, order=None, limit=50):
+        nonlocal fields, booleans
+        import json as _json
+        if what is not None:
+            items = await filter(object_type, where=where, what=what, order=order, limit=limit)
+            # Skips what this run deleted, like the whole records below.
+            return [item for item in items if _changes_lookup(object_type, item["handle"], "raw") is not None]
+        if fields is None:
+            import gramps.gen.lib
+            from gramps.gen.lib.json_utils import object_to_dict
+            stored = object_to_dict(getattr(gramps.gen.lib, class_name)())
+            # filter() always asks for handle already.
+            fields = [name for name in stored if name != "handle"]
+            # A field that's also an indexed column (private) comes back as
+            # that column's value -- 0/1 on SQLite, not the JSON's true/false.
+            booleans = [name for name, value in stored.items() if isinstance(value, bool)]
+        args_json = _json.dumps({"where": where, "what": fields, "order": order, "limit": limit})
+        records = []
+        for item in _json.loads(await _bridge.filter(object_type, args_json)):
+            handle = item["handle"]
+            # Same as get_raw_object(): this run's own copy wins, if it has one.
+            record = _changes_lookup(object_type, handle, "raw")
+            if record is _CH_MISS:
+                for name in booleans:
+                    if item.get(name) is not None:
+                        item[name] = bool(item[name])
+                # Already what json_data holds -- no _fix_object_dict(), which
+                # would drop Family.complete the way it does for a POST body.
+                record = _changes_track_raw(object_type, handle, item)
+            # None: deleted earlier in this run (changesBootstrap.ts's delete()),
+            # which a dry run's server-side filter() can't know about.
+            if record is not None:
+                records.append(record)
+        return records
 
     return _list_function
 
 
-# One convenience function per object type -- filter() + get_raw_object()
-# combined, for a Gramplet that wants whole objects without writing that
-# loop itself. Still two network round trips per matched item under the
-# hood (one from filter(), one per get_raw_object() call), so these are no
-# cheaper than doing it by hand -- just less to type.
+# One convenience function per object type, for a Gramplet that wants whole
+# objects rather than filter()'s chosen fields. One request per 1000
+# matches, the same as filter() -- just more data per match.
 people = _make_object_list_function("person")
 families = _make_object_list_function("family")
 events = _make_object_list_function("event")
@@ -1317,7 +1354,7 @@ def print(*args, sep=" ", end="\\n", **kwargs):
             )
             return
     _flush_table()
-    _gramplet_print_buffer.append(sep.join(str(a) for a in args) + end)
+    _gramplet_print_buffer.append(sep.join(_safe_str(a) for a in args) + end)
     # Pushes what the result would look like right now (not yet flushed
     # into _gramplet_blocks -- see _report_progress() below) back to the
     # main thread immediately, so a print()-then-time.sleep() loop shows
@@ -1417,7 +1454,40 @@ def _pp(value):
         return _format_date(value.modifier, tuple(value.dateval), value.text)
     if _is_stdlib_datetime(value):
         return _format_stdlib_datetime(value)
-    return str(value)
+    return _safe_str(value)
+
+def _safe_str(value):
+    # str() that can't fail, for print() and _pp(). Never Gramps' own
+    # DataDict.__str__: it builds a real object from the dict first, which
+    # raises for a partial record (a filter() result has no "_class"),
+    # raises again for a read-only one (it caches the object into the
+    # dict), and for a whole record only gives "<...Person object at 0x..>".
+    if isinstance(value, str):
+        return value
+    if _is_primary_dict(value) or _is_primary_object(value):
+        return _describe_object(value)
+    if _is_date_dict(value) or _is_date_object(value):
+        return _pp(value)
+    if isinstance(value, dict):
+        plain = {k: v for k, v in value.items() if k != "_object"}
+        if "_class" in plain:
+            # A type, name, ... -- Gramps' own text if it has any
+            # ("Birth"), the plain dict if it's only the default repr.
+            try:
+                from gramps.gen.lib.json_utils import data_to_object
+                text = str(data_to_object(plain))
+                if not (text.startswith("<") and " object at 0x" in text):
+                    return text
+            except Exception:
+                pass
+        return dict.__repr__(plain)
+    try:
+        return str(value)
+    except Exception:
+        try:
+            return repr(value)
+        except Exception:
+            return object.__repr__(value)
 
 # Primary-object cells: a row() argument that's a whole Person/Event/...
 # (real gramps.gen.lib object, or its raw JSON/DataDict form -- the same

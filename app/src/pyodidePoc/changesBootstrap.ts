@@ -239,7 +239,7 @@ class _ChangeDict(dict):
         dict.clear(self)
 
     def __str__(self):
-        return str(self._ch_root._ch_object_for(self))
+        return _safe_str(self)
 
 
 def _ch_list_mutator(name):
@@ -386,9 +386,8 @@ def _changes_lookup(object_type, handle, form):
 
 
 def _changes_track_raw(object_type, handle, fixed):
-    from gramps.gen.lib.json_utils import DataDict
     if not _ch_allowed:
-        return DataDict(fixed)
+        return _safe_data_dict_class()(fixed)
     canonical = _ch_canonical(fixed)
     # _ChangeDict copies every container, so canonical stays untouched as
     # the snapshot.
@@ -410,16 +409,48 @@ def _changes_track_object(object_type, handle, fixed):
     return obj
 
 
+_ch_safe_class = None
 _ch_partial_class = None
+
+
+def _safe_data_dict_class():
+    # A DataDict whose str() -- so print(), f-strings, str.format() -- can't
+    # fail: see _safe_str(). Gramps' own builds a real object from the dict
+    # first, which raises for a partial record (no "_class"). Whatever it
+    # hands back for record.name / record.list[0] is wrapped the same way,
+    # so person.primary_name prints as data too, not "<...Name object>".
+    global _ch_safe_class
+    if _ch_safe_class is None:
+        from gramps.gen.lib.json_utils import DataDict, DataList
+
+        def wrap(value):
+            if type(value) is DataDict:
+                return _SafeDataDict(value)
+            if type(value) is DataList:
+                return _SafeDataList(value)
+            return value
+
+        class _SafeDataDict(DataDict):
+            def __str__(self):
+                return _safe_str(self)
+
+            def __getattr__(self, key):
+                return wrap(DataDict.__getattr__(self, key))
+
+        class _SafeDataList(DataList):
+            def __getitem__(self, position):
+                return wrap(DataList.__getitem__(self, position))
+
+        _ch_safe_class = _SafeDataDict
+    return _ch_safe_class
 
 
 def _changes_partial(item):
     global _ch_partial_class
-    from gramps.gen.lib.json_utils import DataDict
     if not _ch_allowed:
-        return DataDict(item)
+        return _safe_data_dict_class()(item)
     if _ch_partial_class is None:
-        class _PartialDict(DataDict):
+        class _PartialDict(_safe_data_dict_class()):
             def __setattr__(self, key, value):
                 raise TypeError(_CH_PARTIAL)
 

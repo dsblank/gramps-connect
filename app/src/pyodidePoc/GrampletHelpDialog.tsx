@@ -42,9 +42,9 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
           <Table verticalSpacing={6} withRowBorders={false}>
             <Table.Tbody>
               <SymbolRow
-                symbol="people(where=None, order=None, limit=50)"
+                symbol="people(where=None, what=None, order=None, limit=50)"
                 meaning={t(
-                  "Every person matching where (a query -- see below), as full records, in one call. Same for families(), events(), places(), repositories(), sources(), citations(), media(), notes(), tags(). limit=None means every match -- each one is its own fetch, so on a big tree that takes a while (a good use for progress(), below)."
+                  "Every person matching where (a query -- see below), as full records, in one call. Same for families(), events(), places(), repositories(), sources(), citations(), media(), notes(), tags(). limit=None means every match -- one request per 1000, but every field of every record, so on a big tree that's a lot to download: pass what= (a list of field names, as for filter()) if you only need a few."
                 )}
               />
               <SymbolRow

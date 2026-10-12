@@ -34,13 +34,12 @@
 //     object on that first access and delegates to it.
 //   - `people`/`families`/`events`/`places`/`repositories`/`sources`/
 //     `citations`/`media`/`notes`/`tags` -- one convenience function per
-//     object type, each `filter(object_type, where, order, limit)` then
-//     `get_raw_object()` on every match, e.g.:
+//     object type, each one `filter(object_type, where, order, limit)`
+//     request asking for every field Gramps stores for the type, so each
+//     match comes back whole and exactly as stored -- the same data Gramps
+//     desktop's `db._iter_raw_<type>_data()` yields -- or, given `what`,
+//     just those fields, like `filter()` itself, e.g.:
 //       `for person in people("gender == 1"): print(person.primary_name.first_name)`
-//     Still one network round trip per matched item under the hood (via
-//     `get_raw_object`), so `limit` matters here exactly as it does for
-//     `filter` itself -- no cheaper than doing the loop by hand, just
-//     less to type.
 //   - `db` -- a single instance of pyodideWorker.ts's `Db` class, named
 //     and shaped after Gramps desktop's own `DbReadBase`
 //     (gramps/gen/db/generic.py): `db.get_person_from_handle(handle)`
