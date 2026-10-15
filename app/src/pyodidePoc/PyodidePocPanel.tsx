@@ -13,7 +13,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { ActionIcon, Alert, Box, Group, Loader, Menu, ScrollArea, Tabs, Text, Tooltip, UnstyledButton } from "@mantine/core";
-import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
 import { getHomePersonHandle } from "../store/homePersonPreference";
 import { getViewStore } from "../store/registry";
@@ -24,6 +23,7 @@ import { grampletKind } from "./grampletManifest";
 import { GrampletResultView, type RunStatus } from "./GrampletResultView";
 import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import type { Gramplet, GrampletOutputResponse, PyodideWorkerResponse } from "./types";
+import { answerTokenRequest } from "./workerToken";
 import classes from "./PyodidePocPanel.module.css";
 
 // Pulls in prismjs/react-simple-code-editor -- lazy for the same reason
@@ -193,6 +193,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       // message belongs to whichever run was posted most recently.
       worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
         const data = event.data;
+        if (answerTokenRequest(worker, data)) return;
         // st.progress()'s value for a window's minimized chip -- the bar
         // itself arrives in the "progress" output snapshot.
         if (data.type === "run-progress") return;
@@ -468,9 +469,6 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   //     selection change) and record it in runningRef. getWorker()'s own
   //     onmessage handler (set up once, not here) tracks it from here on,
   //     whether or not this tab stays selected until it finishes.
-  // `cancelled` guards only the getToken() gap in case 3: a real async
-  // call (may silently refresh), so a fast tab switch away before it
-  // resolves shouldn't register/post a run for a tab already abandoned.
   // Nothing runs while the panel is collapsed -- a result nobody can see
   // isn't worth booting Pyodide for (a first run downloads ~12MB of
   // wasm/stdlib, plus any packages the Gramplet imports), the same
@@ -544,64 +542,32 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     // the "Running…" flicker, not the setResponse(null) above.
     const priorResponse = rerunningSameGramplet ? response : null;
 
-    let cancelled = false;
     const runId = crypto.randomUUID();
-    (async () => {
-      setRunStatus("queued");
-      if (!rerunningSameGramplet) {
-        setResponse(null);
-      }
-      let token: string;
-      try {
-        token = await getToken();
-      } catch (err) {
-        if (!cancelled) {
-          const errorResponse: GrampletOutputResponse = {
-            type: "error",
-            text: err instanceof Error ? err.message : String(err),
-            blocks: [],
-            runId,
-          };
-          setRunStatus("error");
-          setResponse(errorResponse);
-          resultCacheRef.current.set(cacheKey, {
-            code: gramplet.code,
-            runNonce,
-            selectedHandle,
-            whereExpr,
-            status: "error",
-            response: errorResponse,
-          });
-        }
-        return;
-      }
-      if (cancelled) return;
-      runIdToGrampletRef.current.set(runId, cacheKey);
-      runningRef.current.set(cacheKey, {
-        code: gramplet.code,
-        runNonce,
-        selectedHandle,
-        whereExpr,
-        runId,
-        status: "queued",
-        response: priorResponse,
-      });
-      getWorker().postMessage({
-        type: "run-gramplet",
-        code: gramplet.code,
-        token,
-        runId,
-        grampletId: gramplet.id,
-        selectedType,
-        selectedHandle,
-        whereExpr,
-        filterType: viewKey,
-        homePersonHandle: getHomePersonHandle(),
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setRunStatus("queued");
+    if (!rerunningSameGramplet) {
+      setResponse(null);
+    }
+    runIdToGrampletRef.current.set(runId, cacheKey);
+    runningRef.current.set(cacheKey, {
+      code: gramplet.code,
+      runNonce,
+      selectedHandle,
+      whereExpr,
+      runId,
+      status: "queued",
+      response: priorResponse,
+    });
+    getWorker().postMessage({
+      type: "run-gramplet",
+      code: gramplet.code,
+      runId,
+      grampletId: gramplet.id,
+      selectedType,
+      selectedHandle,
+      whereExpr,
+      filterType: viewKey,
+      homePersonHandle: getHomePersonHandle(),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, gramplets, runNonce, selectionNonce, viewKey, collapsed]);
 
@@ -614,7 +580,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
   // resultCacheRef. Unlike the effect, this always posts a genuinely new
   // run -- a widget click is itself the reason to rerun, so there's no
   // cache lookup to short-circuit here.
-  async function runWidgetEvent(key: string, value: unknown) {
+  function runWidgetEvent(key: string, value: unknown) {
     const gramplet = gramplets.find((g) => g.id === activeId);
     if (!gramplet) return;
     const cacheKey = gramplet.id;
@@ -634,20 +600,6 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     // blocks through "queued"/"loading" now specifically so a widget
     // rerun updates in place (the clicked button/input stays on screen)
     // instead of flickering out to placeholder text and back.
-    let token: string;
-    try {
-      token = await getToken();
-    } catch (err) {
-      const errorResponse: GrampletOutputResponse = {
-        type: "error",
-        text: err instanceof Error ? err.message : String(err),
-        blocks: [],
-        runId,
-      };
-      setRunStatus("error");
-      setResponse(errorResponse);
-      return;
-    }
     runIdToGrampletRef.current.set(runId, cacheKey);
     runningRef.current.set(cacheKey, {
       code: gramplet.code,
@@ -667,7 +619,6 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
     getWorker().postMessage({
       type: "run-gramplet",
       code: gramplet.code,
-      token,
       runId,
       grampletId: gramplet.id,
       selectedType,

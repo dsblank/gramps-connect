@@ -5,7 +5,12 @@ import { act, renderWithProviders, screen } from "../../testUtils/renderWithProv
 import type { MainViewContext } from "../grampletContext";
 import type { Gramplet, PyodideWorkerResponse, RunGrampletRequest } from "../types";
 
-vi.mock("../../auth/auth", () => ({ getToken: vi.fn(async () => "tok"), hasPermissions: vi.fn(() => true) }));
+const auth = vi.hoisted(() => ({
+  getToken: vi.fn(async () => "tok"),
+  refreshTokenNow: vi.fn(async () => "fresh"),
+  hasPermissions: vi.fn(() => true),
+}));
+vi.mock("../../auth/auth", () => auth);
 const commit = vi.hoisted(() => ({
   canChangeData: vi.fn(() => true),
   commitChangeGroup: vi.fn(async (message: string, items: unknown[]) => ({ message, transaction: items })),
@@ -79,7 +84,7 @@ function renderWindow(gramplet: Gramplet = GRAMPLET) {
   return renderWithProviders(<GrampletWindow entry={entry} zIndex={150} chipRight={16} cascadeIndex={0} />);
 }
 
-/** Lets postRun()'s `await getToken()` settle. */
+/** Lets pending promises (a token or commit answer) settle. */
 async function flush() {
   await act(async () => {});
 }
@@ -100,7 +105,6 @@ describe("GrampletWindow", () => {
     const worker = FakeWorker.instances[0];
     expect(worker.lastRun).toMatchObject({
       type: "run-gramplet",
-      token: "tok",
       code: "print(get_filter())",
       grampletId: "g1",
       selectedType: "person",
@@ -125,6 +129,30 @@ describe("GrampletWindow", () => {
     expect(screen.getByText("all done")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(isAnyGrampletRunning()).toBe(false);
+  });
+
+  it("answers the worker's token requests, even for a run a newer one replaced", async () => {
+    renderWindow({ ...GRAMPLET, id: "g5" });
+    await flush();
+    const worker = FakeWorker.instances[0];
+    expect(worker.lastRun).not.toHaveProperty("token");
+    const tokenResults = () => worker.posted.filter((m) => (m as { type: string }).type === "token-result");
+
+    worker.emit({ type: "need-token", requestId: "t1", force: false });
+    await flush();
+    expect(tokenResults()).toEqual([{ type: "token-result", requestId: "t1", ok: true, token: "tok" }]);
+
+    // After a 401: a forced refresh, answered for a stale run too.
+    worker.emit({ type: "need-token", requestId: "t2", force: true }, "stale-run");
+    await flush();
+    expect(auth.refreshTokenNow).toHaveBeenCalled();
+    expect(tokenResults()[1]).toEqual({ type: "token-result", requestId: "t2", ok: true, token: "fresh" });
+
+    // The session itself has ended.
+    auth.getToken.mockRejectedValueOnce(new Error("not logged in"));
+    worker.emit({ type: "need-token", requestId: "t3", force: false });
+    await flush();
+    expect(tokenResults()[2]).toEqual({ type: "token-result", requestId: "t3", ok: false, error: "not logged in" });
   });
 
   it("a widget click reruns with the run's own context, not whatever the main view shows now", async () => {

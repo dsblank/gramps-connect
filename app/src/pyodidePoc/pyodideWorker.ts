@@ -137,17 +137,8 @@ async function ensureCatalogPackagesForCode(pyodide: PyodideInterface, code: str
   }
 }
 
-// Set fresh from each RunGrampletRequest, read by the bridge functions
-// below -- the worker can't call getToken() itself (reads localStorage,
-// not available inside a Worker), so the main thread resolves a token and
-// hands it over per-message instead -- and again mid-run via a
-// SetTokenRequest (see types.ts), for a long window-Gramplet run that
-// outlives the token it started with.
-let currentToken = "";
-
 // The RunGrampletRequest currently executing (see runOne() below) -- read
-// by bridge.reportProgress() to tag its own message, the same way currentToken
-// above is read by the bridge's network calls. Safe to keep as one shared
+// by bridge.reportProgress() to tag its own message. Safe to keep as one shared
 // variable rather than threading it through every call: onmessage below
 // never runs two requests' Python concurrently, so there's only ever one
 // meaningful value for this at a time.
@@ -164,6 +155,53 @@ let pendingRunProgressTimer: ReturnType<typeof setTimeout> | null = null;
 // A real run's save requests waiting on the main thread's commit-result
 // (see bridge.commitChanges() below), by requestId.
 const pendingCommits = new Map<string, { resolve: () => void; reject: (err: Error) => void }>();
+
+// Network calls waiting on the main thread's token-result (see
+// requestToken() below), by requestId.
+const pendingTokens = new Map<string, { resolve: (token: string) => void; reject: (err: Error) => void }>();
+
+// Set when the main thread couldn't produce a token at all -- the session
+// has ended (auth.ts already logged out) -- so runOne() reports
+// SESSION_EXPIRED_TEXT rather than a traceback through whichever bridge
+// call happened to notice first. Reset per run.
+let sessionExpired = false;
+const SESSION_EXPIRED_TEXT = "Your session has expired. Sign in again, then rerun this Gramplet.";
+
+/** An access token from the main thread (see `need-token` in types.ts) --
+ * the worker can't call getToken() itself (sessionStorage isn't available
+ * inside a Worker), and asking per call rather than keeping a copy is what
+ * lets auth.ts refresh it ahead of expiry for a run of any length. */
+function requestToken(force: boolean): Promise<string> {
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    pendingTokens.set(requestId, { resolve, reject });
+    reply({ type: "need-token", runId: currentRunId, requestId, force });
+  });
+}
+
+/** fetch() with the session's Bearer token. A 401 is retried once with a
+ * freshly minted token (requestToken(true)), for a token the server
+ * already considers expired though the client's clock didn't. A token the
+ * main thread can't produce marks the run sessionExpired; `name` is the
+ * Python-facing function, for that error's message. */
+async function authFetch(
+  name: string,
+  url: string,
+  init: { method?: string; headers?: Record<string, string>; body?: string } = {}
+): Promise<Response> {
+  const send = async (force: boolean) => {
+    let token: string;
+    try {
+      token = await requestToken(force);
+    } catch {
+      sessionExpired = true;
+      throw new Error(`${name}(): ${SESSION_EXPIRED_TEXT}`);
+    }
+    return fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } });
+  };
+  const res = await send(false);
+  return res.status === 401 ? send(true) : res;
+}
 
 /** Sends the latest throttled-away run-progress now, if any -- from its
  * own trailing timer, and before a run's final blocks/error reply so the
@@ -253,9 +291,9 @@ const bridge = {
     const items: unknown[] = [];
     let after: string | undefined;
     while (items.length < limit) {
-      const res = await fetch(`${API_BASE}${endpoint}`, {
+      const res = await authFetch("filter", `${API_BASE}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           select,
           where_expr: args.where ?? undefined,
@@ -275,9 +313,7 @@ const bridge = {
   async getObject(objectType: string, handle: string): Promise<string> {
     const base = objectEndpointBase(objectType);
     if (!base) throw new Error(`get_object(): unknown object type ${JSON.stringify(objectType)}`);
-    const res = await fetch(`${API_BASE}${base}${encodeURIComponent(handle)}`, {
-      headers: { Authorization: `Bearer ${currentToken}` },
-    });
+    const res = await authFetch("get_object", `${API_BASE}${base}${encodeURIComponent(handle)}`);
     if (!res.ok) throw await bridgeError("get_object", res);
     return res.text();
   },
@@ -292,9 +328,7 @@ const bridge = {
   async getBacklinks(objectType: string, handle: string): Promise<string> {
     const base = objectEndpointBase(objectType);
     if (!base) throw new Error(`get_backlinks(): unknown object type ${JSON.stringify(objectType)}`);
-    const res = await fetch(`${API_BASE}${base}${encodeURIComponent(handle)}?backlinks=true`, {
-      headers: { Authorization: `Bearer ${currentToken}` },
-    });
+    const res = await authFetch("get_backlinks", `${API_BASE}${base}${encodeURIComponent(handle)}?backlinks=true`);
     if (!res.ok) throw await bridgeError("get_backlinks", res);
     const data = (await res.json()) as { backlinks?: Record<string, string[]> };
     return JSON.stringify(data.backlinks ?? {});
@@ -314,9 +348,7 @@ const bridge = {
   // own default.
   async relationship(handle1: string, handle2: string, depth: number): Promise<string> {
     const path = `/api/relations/${encodeURIComponent(handle1)}/${encodeURIComponent(handle2)}`;
-    const res = await fetch(`${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`, {
-      headers: { Authorization: `Bearer ${currentToken}` },
-    });
+    const res = await authFetch("get_relationship", `${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`);
     if (!res.ok) throw await bridgeError("get_relationship", res);
     return res.text();
   },
@@ -330,9 +362,7 @@ const bridge = {
   // pass through here.
   async relationships(handle1: string, handle2: string, depth: number): Promise<string> {
     const path = `/api/relations/${encodeURIComponent(handle1)}/${encodeURIComponent(handle2)}/all`;
-    const res = await fetch(`${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`, {
-      headers: { Authorization: `Bearer ${currentToken}` },
-    });
+    const res = await authFetch("get_relationships", `${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`);
     if (!res.ok) throw await bridgeError("get_relationships", res);
     return res.text();
   },
@@ -346,9 +376,9 @@ const bridge = {
     const { where } = JSON.parse(argsJson) as { where: string | null };
     const endpoint = OBJECT_QUERY_ENDPOINTS[objectType];
     if (!endpoint) throw new Error(`count(): unknown object type ${JSON.stringify(objectType)}`);
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    const res = await authFetch("count", `${API_BASE}${endpoint}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentToken}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ select: ["handle"], where_expr: where ?? undefined, limit: 1, count: true }),
     });
     if (!res.ok) throw await bridgeError("count", res);
@@ -1770,9 +1800,9 @@ let queuedRequest: RunGrampletRequest | null = null;
 let running = false;
 
 async function runOne(request: RunGrampletRequest): Promise<void> {
-  const { code, token, runId } = request;
-  currentToken = token;
+  const { code, runId } = request;
   currentRunId = runId;
+  sessionExpired = false;
   // A previous run's throttled-away progress belongs to that run --
   // drop it rather than send it tagged with this one's runId.
   if (pendingRunProgressTimer !== null) clearTimeout(pendingRunProgressTimer);
@@ -1922,7 +1952,7 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
     flushRunProgress();
     reply({
       type: "error",
-      text: err instanceof Error ? err.message : String(err),
+      text: sessionExpired ? SESSION_EXPIRED_TEXT : err instanceof Error ? err.message : String(err),
       blocks,
       runId,
       ...(changes.length > 0 ? { changes } : {}),
@@ -1931,10 +1961,13 @@ async function runOne(request: RunGrampletRequest): Promise<void> {
 }
 
 self.onmessage = (event: MessageEvent<PyodideWorkerRequest>) => {
-  if (event.data.type === "set-token") {
-    // Not a run: takes effect for the current run's next network call,
-    // and never touches queuedRequest.
-    currentToken = event.data.token;
+  if (event.data.type === "token-result") {
+    // Not a run: the answer a waiting requestToken() call needs, and
+    // never touches queuedRequest.
+    const pending = pendingTokens.get(event.data.requestId);
+    pendingTokens.delete(event.data.requestId);
+    if (event.data.ok) pending?.resolve(event.data.token);
+    else pending?.reject(new Error(event.data.error));
     return;
   }
   if (event.data.type === "commit-result") {

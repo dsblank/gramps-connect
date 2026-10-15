@@ -249,12 +249,6 @@ export interface CatalogEntry {
 export interface RunGrampletRequest {
   type: "run-gramplet";
   code: string;
-  /** Read by the main thread (getToken()) before posting -- the worker
-   * can't call getToken() itself, since that reads localStorage, not
-   * available inside a Worker. Known PoC limitation: this is a snapshot,
-   * not refreshed mid-run, so a Gramplet running longer than the token's
-   * lifetime would start failing its own filter()/get_object() calls. */
-  token: string;
   /** Generated fresh by the caller (PyodidePocPanel.tsx/GrampletEditDialog.
    * tsx) for every request, e.g. a switched-to tab's own run -- echoed back
    * on every PyodideWorkerResponse for this run (see below) so the caller
@@ -339,25 +333,23 @@ export interface RunGrampletRequest {
   grampletLabel?: string;
 }
 
-/** Replaces the token the worker's network calls use, mid-run -- for a
- * long window-Gramplet run outliving the token RunGrampletRequest.token
- * snapshotted at its start. Handled immediately, outside the run queue, so
- * it never displaces a queued run. Only takes effect between the run's own
- * awaits (a CPU-bound Python loop doesn't yield to onmessage), which is
- * where its network calls happen anyway. */
-export interface SetTokenRequest {
-  type: "set-token";
-  token: string;
-}
+/** The main thread's answer to a `need-token` message (see
+ * PyodideWorkerResponse and workerToken.ts) -- handled immediately,
+ * outside the run queue, since a network call is waiting on it. `ok:
+ * false` means the session itself has ended (the refresh token was
+ * rejected, and auth.ts has already logged out). */
+export type TokenResultRequest =
+  | { type: "token-result"; requestId: string; ok: true; token: string }
+  | { type: "token-result"; requestId: string; ok: false; error: string };
 
 /** The main thread's answer to a `commit-changes` message (see
  * PyodideWorkerResponse) -- handled immediately, outside the run queue,
- * like SetTokenRequest, since the run is waiting on it. */
+ * like TokenResultRequest, since the run is waiting on it. */
 export type CommitResultRequest =
   | { type: "commit-result"; requestId: string; ok: true }
   | { type: "commit-result"; requestId: string; ok: false; error: string };
 
-export type PyodideWorkerRequest = RunGrampletRequest | SetTokenRequest | CommitResultRequest;
+export type PyodideWorkerRequest = RunGrampletRequest | TokenResultRequest | CommitResultRequest;
 
 /** One record in a POST /api/transactions/ payload (gramps-web-api's own
  * raw transaction format, also what it returns for a saved transaction,
@@ -500,6 +492,16 @@ export type PyodideWorkerResponse =
    * CommitResultRequest carrying the same `requestId`. The run waits for
    * that answer. */
   | { type: "commit-changes"; runId: string; requestId: string; message: string; items: TransactionItem[] }
+  /** A network call needs an access token: answer with a
+   * TokenResultRequest carrying the same `requestId` (workerToken.ts's
+   * answerTokenRequest() does it). The worker never keeps a token of its
+   * own -- auth.ts's getToken() refreshes ahead of expiry, which a copy
+   * handed over at the start of a run couldn't, e.g. for a page left open
+   * long enough for the 15-minute access token to lapse. `force` follows a
+   * 401: mint a new one even if the current one looks unexpired (clock
+   * skew). Answer it whatever `runId` is -- an unanswered request leaves a
+   * superseded run stuck, holding up the worker's queue. */
+  | { type: "need-token"; runId: string; requestId: string; force: boolean }
   /** `blocks` here is whatever the run produced before it crashed (also
    * flushed via pyodideWorker.ts's `_finalize_blocks()`) -- often the most
    * useful part of a traceback-only failure, so it isn't dropped on the
@@ -511,5 +513,9 @@ export type PyodideWorkerResponse =
  * (only a Gramplet window's real run sends it) and `run-progress`,
  * which only a Gramplet window's minimized chip uses; the panel and editor
  * ignore it (an st.progress() bar still shows in their output, via the
- * ordinary `progress` snapshot). */
-export type GrampletOutputResponse = Exclude<PyodideWorkerResponse, { type: "run-progress" } | { type: "commit-changes" }>;
+ * ordinary `progress` snapshot). Also excludes `need-token`, answered
+ * before any of that. */
+export type GrampletOutputResponse = Exclude<
+  PyodideWorkerResponse,
+  { type: "run-progress" } | { type: "commit-changes" } | { type: "need-token" }
+>;

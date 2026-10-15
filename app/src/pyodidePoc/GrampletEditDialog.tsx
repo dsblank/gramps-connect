@@ -21,7 +21,6 @@
 // this Gramplet actually does.
 import { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Checkbox, Group, Loader, Modal, Radio, Select, Stack, Switch, Text, TextInput, Textarea } from "@mantine/core";
-import { getToken } from "../auth/auth";
 import { InfoButton } from "../components/InfoButton";
 import { canAuthorGramplets, fetchGramplets, fetchGrampletManifest, saveGrampletManifest, uploadGramplet } from "./grampletMedia";
 import { getHomePersonHandle } from "../store/homePersonPreference";
@@ -32,6 +31,7 @@ import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import { t } from "../i18n/i18n";
 import { PythonCodeEditor } from "./PythonCodeEditor";
 import type { Gramplet, GrampletKind, GrampletOutputResponse, PyodideWorkerResponse } from "./types";
+import { answerTokenRequest } from "./workerToken";
 
 export type GrampletEditorTarget =
   | {
@@ -207,9 +207,11 @@ export function GrampletEditDialog({
     // longer matches what's still on screen, so that one still clears it.
     if (!widgetEvent) setRunResponse(null);
     try {
-      const token = await getToken();
       const worker = getWorker();
       worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
+        // Before the staleness check: a superseded run waiting on a token
+        // would otherwise never finish, holding up the next one.
+        if (answerTokenRequest(worker, event.data)) return;
         // Stale -- pyodideWorker.ts serializes execution but can't cancel a
         // still-running earlier Gramplet outright (see activeRunIdRef's own
         // doc comment above), so a message for a run superseded by a later
@@ -245,7 +247,6 @@ export function GrampletEditDialog({
       worker.postMessage({
         type: "run-gramplet",
         code: gramplet.code,
-        token,
         runId,
         grampletId: gramplet.id,
         // No view context here -- this is the standalone preview, not

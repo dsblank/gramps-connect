@@ -21,7 +21,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Alert, Badge, Box, Button, Group, Loader, Paper, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { getToken } from "../auth/auth";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
 import { t } from "../i18n/i18n";
 import { confirmDialog } from "../store/confirmDialog";
@@ -36,6 +35,7 @@ import {
   restartGrampletWindow, setGrampletWindowMinimized, type GrampletWindowEntry,
 } from "../store/grampletWindows";
 import type { GrampletOutputResponse, PyodideWorkerResponse, RunGrampletRequest } from "./types";
+import { answerTokenRequest } from "./workerToken";
 
 // Pulls in prismjs/react-simple-code-editor -- lazy, like every other
 // GrampletEditDialog opener, so a window that's never edited never loads it.
@@ -48,10 +48,6 @@ const MIN_HEIGHT = 200;
 /** How far each further window is offset from the previous one when no
  * position of its own was remembered. */
 const CASCADE_STEP = 28;
-/** How often a running window re-checks its login token (getToken()
- * refreshes it when it's close to expiring) and hands a changed one to its
- * worker -- see SetTokenRequest in types.ts. */
-const TOKEN_REFRESH_MS = 60_000;
 
 interface Geometry {
   left: number;
@@ -149,17 +145,11 @@ export function GrampletWindow({
   // the run was cancelled still lands here (it did get saved), but one from
   // a run a newer run has replaced is refused instead.
   const savedForRunRef = useRef<{ runId: string; groups: CommittedGroup[] }>({ runId: "", groups: [] });
-  const tokenTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const minimizedRef = useRef(minimized);
   minimizedRef.current = minimized;
   const paperRef = useRef<HTMLDivElement | null>(null);
 
   const running = runStatus === "queued" || runStatus === "loading";
-
-  function stopTokenRefresh() {
-    if (tokenTimerRef.current !== null) clearInterval(tokenTimerRef.current);
-    tokenTimerRef.current = null;
-  }
 
   function releaseWorker() {
     workerRef.current?.terminate();
@@ -171,7 +161,6 @@ export function GrampletWindow({
   useEffect(
     () => () => {
       releaseWorker();
-      stopTokenRefresh();
       setGrampletRunning(gramplet.id, false);
       forgetWorker(gramplet.id);
     },
@@ -205,7 +194,6 @@ export function GrampletWindow({
   }
 
   function finishRun() {
-    stopTokenRefresh();
     setGrampletRunning(gramplet.id, false);
     markWorkerIdle(gramplet.id, releaseWorker);
   }
@@ -215,6 +203,7 @@ export function GrampletWindow({
       const worker = new Worker(new URL("./pyodideWorker.ts", import.meta.url), { type: "module" });
       worker.onmessage = (event: MessageEvent<PyodideWorkerResponse>) => {
         const data = event.data;
+        if (answerTokenRequest(worker, data)) return;
         if (data.type === "commit-changes") {
           handleCommit(worker, data.runId, data.requestId, data.message, data.items);
           return;
@@ -270,7 +259,7 @@ export function GrampletWindow({
     }
   }
 
-  async function postRun(request: Omit<RunGrampletRequest, "token" | "runId">) {
+  function postRun(request: Omit<RunGrampletRequest, "runId">) {
     const runId = crypto.randomUUID();
     activeRunIdRef.current = runId;
     savedForRunRef.current = { runId, groups: [] };
@@ -280,33 +269,9 @@ export function GrampletWindow({
     setRunStatus("queued");
     setGrampletRunning(gramplet.id, true);
     forgetWorker(gramplet.id);
-    let token: string;
-    try {
-      token = await getToken();
-    } catch (err) {
-      setRunStatus("error");
-      setResponse({ type: "error", text: err instanceof Error ? err.message : String(err), blocks: [], runId });
-      setGrampletRunning(gramplet.id, false);
-      return;
-    }
-    if (activeRunIdRef.current !== runId) return; // Cancelled while getting the token.
-    const full: RunGrampletRequest = { ...request, token, runId };
+    const full: RunGrampletRequest = { ...request, runId };
     lastRequestRef.current = full;
-    const worker = getWorker();
-    worker.postMessage(full);
-    stopTokenRefresh();
-    let lastToken = token;
-    tokenTimerRef.current = setInterval(async () => {
-      try {
-        const fresh = await getToken();
-        if (fresh !== lastToken && workerRef.current === worker) {
-          lastToken = fresh;
-          worker.postMessage({ type: "set-token", token: fresh });
-        }
-      } catch (err) {
-        console.warn("[gramplet window] token refresh failed", err);
-      }
-    }, TOKEN_REFRESH_MS);
+    getWorker().postMessage(full);
   }
 
   /** The window's one fresh run, when it opens, reading the main view's
@@ -318,7 +283,7 @@ export function GrampletWindow({
     const ctx = readMainViewContext();
     setResponse(null);
     setProgress(null);
-    void postRun({
+    postRun({
       type: "run-gramplet",
       code: gramplet.code,
       grampletId: gramplet.id,
@@ -347,14 +312,13 @@ export function GrampletWindow({
   function handleWidgetEvent(key: string, value: unknown) {
     const last = lastRequestRef.current;
     if (!last) return;
-    const { token: _token, runId: _runId, ...request } = last;
-    void postRun({ ...request, widgetEvent: { key, value } });
+    const { runId: _runId, ...request } = last;
+    postRun({ ...request, widgetEvent: { key, value } });
   }
 
   function handleCancel() {
     releaseWorker();
     activeRunIdRef.current = "";
-    stopTokenRefresh();
     setGrampletRunning(gramplet.id, false);
     forgetWorker(gramplet.id);
     // Keep whatever it had printed so far: the last mid-run snapshot,
