@@ -1,0 +1,71 @@
+# Per-client rate limits on /api/*, imported into each site block of
+# deploy/Caddyfile (`import ratelimit.caddy`). Kept in its own file so a
+# host with a customized, uncommitted Caddyfile only needs that one import
+# line, and limit changes arrive with a plain `git pull`.
+#
+# Why: gunicorn runs a few sync workers on what is often a 1-vCPU host, and
+# requests queue behind each other with no fairness -- one browser tab
+# stuck firing requests in a loop once pinned a droplet's CPU and pushed
+# every other user's page loads past 100 seconds. These limits cap any one
+# client well below what the server can handle, answering the excess with
+# 429 + Retry-After instead of queueing it.
+#
+# Keyed by client IP: Caddy is the internet-facing hop here, so
+# {http.request.remote.host} is the real client address. IPv6 clients are
+# grouped by /64, the usual per-household/per-host allocation, so cycling
+# addresses within one doesn't dodge the limit. Each kind of request gets
+# a `_burst` zone that allows a short spike and a `_sustained` zone that
+# stops a steady stream from holding the server at that spike rate.
+#
+# - api: every /api/* request except the images below. Normal use,
+#   including a full background fill of a large tree's views (1000 rows
+#   per request), stays well under both.
+# - images: media thumbnails, crops, and zoom tiles. A chart or graph with
+#   many photos legitimately requests hundreds of these at once, and
+#   gramps-web-api serves them from its on-disk thumbnail/tile cache after
+#   the first time, so they get a looser zone of their own instead of
+#   counting against `api`.
+#
+# Static frontend files (not /api/*) aren't limited: they're cheap, and a
+# first page load fetches many of them at once.
+rate_limit {
+	zone api_burst {
+		match {
+			path /api/*
+			not path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
+		}
+		key {http.request.remote.host}
+		events 100
+		window 10s
+		ipv6_prefix 64
+	}
+	zone api_sustained {
+		match {
+			path /api/*
+			not path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
+		}
+		key {http.request.remote.host}
+		events 600
+		window 2m
+		ipv6_prefix 64
+	}
+	zone images_burst {
+		match {
+			path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
+		}
+		key {http.request.remote.host}
+		events 400
+		window 10s
+		ipv6_prefix 64
+	}
+	zone images_sustained {
+		match {
+			path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
+		}
+		key {http.request.remote.host}
+		events 2000
+		window 2m
+		ipv6_prefix 64
+	}
+	log_key
+}

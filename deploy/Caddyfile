@@ -8,6 +8,7 @@
 # real domain points at this server, replace this whole file with:
 #
 #   example.com {
+#       import ratelimit.caddy
 #       reverse_proxy app:5000
 #   }
 #
@@ -22,6 +23,9 @@
 	tls internal {
 		on_demand
 	}
+
+	# Per-client limits on /api/* -- see ratelimit.caddy.
+	import ratelimit.caddy
 
 	reverse_proxy app:5000
 }

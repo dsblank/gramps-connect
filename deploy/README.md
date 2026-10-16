@@ -226,12 +226,35 @@ CA to your system/browser trust store if you want the warning gone without
 a real domain). Port 80 redirects to 443.
 
 **Once a real domain points at this server**, edit `deploy/Caddyfile`:
-replace the `:443 { tls internal ... }` block with `example.com {
-reverse_proxy app:5000 }` and delete the `:80` block — Caddy handles ACME
+replace the `:443 { tls internal ... }` block with an `example.com { ... }` block
+holding two lines, `import ratelimit.caddy` and `reverse_proxy app:5000`, and delete the `:80` block — Caddy handles ACME
 issuance, renewal, and the port-80 redirect automatically for a real
 domain, no `tls` directive needed. Also update `PUBLIC_URL` in
 `deploy/.env` to the real `https://` domain, then `docker compose -f
 deploy/docker-compose.yml up -d` to pick up both changes.
+
+## Rate limiting
+
+`caddy` limits how many `/api/*` requests any one client IP can make
+(`deploy/ratelimit.caddy`), so a single misbehaving browser tab, script,
+or user can't saturate the server and stall everyone else. Requests over
+the limit get `429 Too Many Requests` with a `Retry-After` header; static
+frontend files are never limited.
+
+| Zone | Applies to | Limit per IP |
+|---|---|---|
+| `api_burst` / `api_sustained` | `/api/*` except images | 100 per 10s / 600 per 2 min |
+| `images_burst` / `images_sustained` | media thumbnails, crops, zoom tiles | 400 per 10s / 2000 per 2 min |
+
+Normal use stays well under these. To change them, edit
+`deploy/ratelimit.caddy`, then `docker compose restart caddy`.
+
+The stock Caddy image doesn't include rate limiting, so `caddy` runs
+`ghcr.io/<owner>/gramps-connect-caddy`, built from
+`deploy/Dockerfile.caddy` by the same `build-docker.yml` workflow as the
+app image. If you replace `deploy/Caddyfile` with your own (a real
+domain, see [TLS](#tls)), keep the `import ratelimit.caddy` line inside
+each site block, or the limits silently stop applying.
 
 ## Notes
 

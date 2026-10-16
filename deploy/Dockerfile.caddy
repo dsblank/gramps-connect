@@ -1,0 +1,11 @@
+# Stock Caddy plus the caddy-ratelimit module (deploy/ratelimit.caddy's
+# `rate_limit` directive) -- the official caddy:*-alpine image ships
+# without it, and Caddy modules can only be added by recompiling.
+# Prebuilt and pushed to GHCR by .github/workflows/build-docker.yml
+# alongside the app image, so a small host never has to run a Go build.
+FROM caddy:2.11.7-builder-alpine AS builder
+RUN xcaddy build \
+    --with github.com/mholt/caddy-ratelimit@v0.1.1-0.20260612195517-5625512f24f6
+
+FROM caddy:2.11.7-alpine
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy

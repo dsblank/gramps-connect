@@ -145,9 +145,16 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: caddy:2-alpine
+    # Stock Caddy plus the caddy-ratelimit module (deploy/ratelimit.caddy),
+    # prebuilt by build-docker.yml the same way as the app image; `build:`
+    # is the local fallback.
+    image: ghcr.io/dsblank/gramps-connect-caddy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./ratelimit.caddy:/etc/caddy/ratelimit.caddy:ro
       - caddy-data:/data
       - caddy-config:/config
     ports:
