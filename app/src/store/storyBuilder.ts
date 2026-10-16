@@ -13,6 +13,7 @@ import { API_BASE } from "../config";
 import { zipRefs, type ObjectDetail, type RawRef } from "./objectDetail";
 import { describeMoment, isSubjectRole, joinNames } from "./storyText";
 import type { VisualData } from "./visualData";
+import { apiFetch } from "./apiFetch";
 
 // A point is mostly a reference, not a description: place title,
 // coordinates, date, and photo mime are derived at render time by
@@ -91,7 +92,7 @@ function personDisplayName(person: RawPerson | undefined): string {
  * refetched individually here rather than read off `detail.extended`. */
 async function fetchFamilyDetail(token: string, handle: string): Promise<any | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/families/${encodeURIComponent(handle)}?extend=all`, {
+    const res = await apiFetch(`${API_BASE}/api/families/${encodeURIComponent(handle)}?extend=all`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -120,7 +121,7 @@ function extractFamilyMembers(familyRaw: any): { spouses: RawPerson[]; children:
  * at presentation time rather than storing it in the spec. */
 export async function fetchMediaMime(token: string, handle: string): Promise<string | undefined> {
   try {
-    const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
+    const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return undefined;
@@ -151,7 +152,7 @@ function makeMediaResolver(token: string) {
 
   async function fetchPlaceMediaList(handle: string): Promise<MediaRefLike[]> {
     try {
-      const res = await fetch(`${API_BASE}/api/places/${encodeURIComponent(handle)}`, {
+      const res = await apiFetch(`${API_BASE}/api/places/${encodeURIComponent(handle)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return [];

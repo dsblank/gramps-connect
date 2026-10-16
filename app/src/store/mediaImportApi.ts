@@ -9,6 +9,7 @@
 // that reference them."
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 export interface MediaImportCounts {
   missing: number;
@@ -54,7 +55,7 @@ export async function listMissingMedia(token: string): Promise<MissingMediaPage>
     page: "1",
     pagesize: String(MISSING_MEDIA_DISPLAY_LIMIT),
   });
-  const res = await fetch(`${API_BASE}/api/media/?${query}`, {
+  const res = await apiFetch(`${API_BASE}/api/media/?${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -68,7 +69,7 @@ export async function listMissingMedia(token: string): Promise<MissingMediaPage>
 // the status code (201 per import_media.py's post(), though nothing here
 // depends on that specific code).
 export async function postMediaZip(token: string, file: File): Promise<MediaImportPostResult> {
-  const res = await fetch(`${API_BASE}/api/media/archive/upload/zip`, {
+  const res = await apiFetch(`${API_BASE}/api/media/archive/upload/zip`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: file,

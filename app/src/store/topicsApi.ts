@@ -11,6 +11,7 @@ import { fetchPage, PAGE_SIZE, parseErrorMessage } from "./api";
 import { deleteObject } from "./objectsApi";
 import { formatTopicMessageText, parseTopicMessageText, buildTopicMessageExpr } from "./topicText";
 import { TOPICS_VIEW, TOPIC_MESSAGES_VIEW } from "./views";
+import { apiFetch } from "./apiFetch";
 
 export const TOPIC_TYPE = "topic";
 export const TOPIC_MESSAGE_TYPE = "topic-message";
@@ -62,7 +63,7 @@ export async function createTopic(token: string, title: string, description?: st
   const spec: TopicSpec = { title };
   if (description) spec.description = description;
   if (participants && participants.length > 0) spec.participants = participants;
-  const res = await fetch(`${API_BASE}/api/notes/`, {
+  const res = await apiFetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({
@@ -79,13 +80,13 @@ export async function createTopic(token: string, title: string, description?: st
  * EditObject, same as any other object edit (renaming/curating a topic is
  * a curation action, not the low-bar "post a message" one). */
 export async function updateTopic(token: string, handle: string, spec: TopicSpec): Promise<void> {
-  const getRes = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+  const getRes = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!getRes.ok) throw new Error(await parseErrorMessage(getRes));
   const obj = await getRes.json();
   obj.text = { string: JSON.stringify(spec) };
-  const putRes = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+  const putRes = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(obj),
@@ -100,7 +101,7 @@ export async function updateTopic(token: string, handle: string, spec: TopicSpec
  * anyone who can create objects at all post in an existing topic, not just
  * whoever also holds EditObject. */
 export async function postTopicMessage(token: string, topicHandle: string, author: string, message: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/notes/`, {
+  const res = await apiFetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({
@@ -123,13 +124,13 @@ export async function postTopicMessage(token: string, topicHandle: string, autho
 export async function updateTopicMessage(
   token: string, handle: string, topicHandle: string, author: string, message: string
 ): Promise<void> {
-  const getRes = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+  const getRes = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!getRes.ok) throw new Error(await parseErrorMessage(getRes));
   const obj = await getRes.json();
   obj.text = { string: formatTopicMessageText(topicHandle, author, message) };
-  const putRes = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+  const putRes = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(obj),
@@ -149,12 +150,12 @@ export async function updateTopicMessage(
  * surfaced -- the message itself still sent successfully either way. */
 export async function touchTopic(token: string, handle: string): Promise<void> {
   try {
-    const getRes = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+    const getRes = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!getRes.ok) return;
     const obj = await getRes.json();
-    await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+    await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(obj),

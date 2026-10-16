@@ -13,6 +13,7 @@ import { getViewStore } from "./registry";
 import { buildFamilyStory, buildPersonStory, type StoryOptions, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
 import type { ViewConfig } from "./views";
+import { apiFetch } from "./apiFetch";
 
 export const STORY_TYPE = "story";
 
@@ -23,7 +24,7 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
 }
 
 export async function createStoryNote(token: string, spec: StorySpec): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/notes/`, {
+  const res = await apiFetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ text: { string: JSON.stringify(spec) }, type: STORY_TYPE }),

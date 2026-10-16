@@ -11,6 +11,7 @@ import { preprocessPipInstalls } from "./pipInstall";
 import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
 import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, TransactionItem, PyodideWorkerResponse, RunGrampletRequest } from "./types";
+import { apiFetch } from "../store/apiFetch";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -179,7 +180,7 @@ function requestToken(force: boolean): Promise<string> {
   });
 }
 
-/** fetch() with the session's Bearer token. A 401 is retried once with a
+/** apiFetch() with the session's Bearer token. A 401 is retried once with a
  * freshly minted token (requestToken(true)), for a token the server
  * already considers expired though the client's clock didn't. A token the
  * main thread can't produce marks the run sessionExpired; `name` is the
@@ -197,7 +198,7 @@ async function authFetch(
       sessionExpired = true;
       throw new Error(`${name}(): ${SESSION_EXPIRED_TEXT}`);
     }
-    return fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } });
+    return apiFetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } });
   };
   const res = await send(false);
   return res.status === 401 ? send(true) : res;

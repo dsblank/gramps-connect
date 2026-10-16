@@ -8,6 +8,7 @@ import type { Feature, Position } from "geojson";
 import { kml } from "@tmcw/togeojson";
 import { getToken } from "../auth/auth";
 import { API_BASE } from "../config";
+import { apiFetch } from "./apiFetch";
 
 /** Media handle -> its parsed features, module-level so MapCanvas's overlay
  * and useVisualData's position guess never both fetch the same file, and
@@ -28,7 +29,7 @@ function fetchKmlFeatures(handle: string): Promise<Feature[]> {
   const promise = (async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}/file`, {
+      const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}/file`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return [];

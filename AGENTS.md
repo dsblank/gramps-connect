@@ -28,3 +28,18 @@
   parses every row, and a path through another record (`birth.date.sortval`)
   adds a lookup per row. Only the flat secondary columns (`surname`,
   `given_name`, `gramps_id`, ...) are indexed.
+
+## Talking to gramps-web-api
+
+- Every request to gramps-web-api goes through `apiFetch()`
+  (`app/src/store/apiFetch.ts`), never plain `fetch()`. It's a drop-in
+  replacement (same arguments, same `Response`) and the one place for
+  anything that should apply to all API traffic: today a cap on requests
+  in flight and automatic retry of `429 Too Many Requests` (the deploy
+  stack's Caddy rate limits). Plain `fetch()` is only for non-API URLs
+  (Wikidata, GitHub, static `/lang/` or `/pyodide/` files, `blob:` URLs).
+- API images shown straight from a URL (`<img src>`, SVG `<image>`, e.g.
+  `mediaThumbnailUrl()`) can't go through `apiFetch()`; use
+  `useApiImageSrc()` (React) or `retryApiImageOnError()` (D3) from
+  `app/src/store/apiImage.ts` so a rate-limited load retries instead of
+  showing a broken image.

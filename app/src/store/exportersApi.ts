@@ -8,6 +8,7 @@
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { jobResultMessages } from "./jobsPromote";
+import { apiFetch } from "./apiFetch";
 
 export interface ExporterSummary {
   /** Plugin display name, still carrying its GTK mnemonic marker
@@ -26,7 +27,7 @@ export interface ExporterSummary {
  * server disables (DISABLED_EXPORTERS in gramps_webapi.const, currently
  * `gpkg`). Eight formats on a stock install. */
 export async function listExporters(token: string): Promise<ExporterSummary[]> {
-  const res = await fetch(`${API_BASE}/api/exporters/`, {
+  const res = await apiFetch(`${API_BASE}/api/exporters/`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -55,7 +56,7 @@ export async function runExport(
   params: Record<string, string>
 ): Promise<RunExportResult> {
   const query = new URLSearchParams(params);
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/api/exporters/${encodeURIComponent(extension)}/file?${query}`,
     { method: "POST", headers: { Authorization: `Bearer ${token}` } }
   );

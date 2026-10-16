@@ -4,6 +4,7 @@
 // server-side; same shape as importApi.ts's wrappers around the importer.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 /** gramps.gen.plug.report's CATEGORY_* constants, which the API passes
  * through as `category`, paired with the section names desktop Gramps
@@ -42,7 +43,7 @@ export interface ReportDetail extends ReportSummary {
  * instantiating every report's option class against the database (which,
  * for the person-valued options, walks every person in the tree). */
 export async function listReports(token: string): Promise<ReportSummary[]> {
-  const res = await fetch(`${API_BASE}/api/reports/?include_help=false`, {
+  const res = await apiFetch(`${API_BASE}/api/reports/?include_help=false`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -52,7 +53,7 @@ export async function listReports(token: string): Promise<ReportSummary[]> {
 /** GET /api/reports/<id> -- with the options help this time (the endpoint
  * includes it by default), which is what parseReportOptions() renders. */
 export async function getReport(token: string, id: string): Promise<ReportDetail> {
-  const res = await fetch(`${API_BASE}/api/reports/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${API_BASE}/api/reports/${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -76,7 +77,7 @@ export async function runReport(
   options: Record<string, string>
 ): Promise<RunReportResult> {
   const query = new URLSearchParams({ options: JSON.stringify(options) });
-  const res = await fetch(`${API_BASE}/api/reports/${encodeURIComponent(id)}/file?${query}`, {
+  const res = await apiFetch(`${API_BASE}/api/reports/${encodeURIComponent(id)}/file?${query}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });

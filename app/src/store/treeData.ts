@@ -12,6 +12,7 @@ import { parseErrorMessage } from "./api";
 import { getViewStore } from "./registry";
 import { mediaThumbnailUrl } from "./mediaCrop";
 import type { VisualSubject } from "../hash";
+import { apiFetch } from "./apiFetch";
 
 /** Shared shape for a family record as returned under a person's own
  * `families` (families they parent) or `parent_family_list` (families
@@ -278,7 +279,7 @@ export async function fetchTreeData(token: string, grampsId: string, nAnc: numbe
     ],
   };
   const url = `${API_BASE}/api/people/?rules=${encodeURIComponent(JSON.stringify(rules))}&profile=self&extend=primary_parent_family,parent_family_list,family_list`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await apiFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
   // A bare array, not gramps-web's own {data: [...]} envelope -- this GET
@@ -573,7 +574,7 @@ export function groupChildrenByFamily(children: TreeNode[]): ChildFamilyGroup[] 
  * Bare object, no envelope -- same as objectDetail.ts's own by-handle GET. */
 export async function fetchPersonByHandle(token: string, handle: string): Promise<TreePersonRaw> {
   const url = `${API_BASE}/api/people/${encodeURIComponent(handle)}?profile=self&extend=primary_parent_family,parent_family_list,family_list`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await apiFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return (await res.json()) as TreePersonRaw;
 }
@@ -689,7 +690,7 @@ export async function fetchBatchAncestorExpansion(token: string, grampsIds: stri
     rules: grampsIds.map((id) => ({ name: "IsLessThanNthGenerationAncestorOf", values: [id, 2] })),
   };
   const url = `${API_BASE}/api/people/?rules=${encodeURIComponent(JSON.stringify(rules))}&profile=self&extend=primary_parent_family,family_list`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await apiFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
   if (Array.isArray(body)) return body as TreePersonRaw[];

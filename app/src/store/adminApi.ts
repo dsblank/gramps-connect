@@ -9,6 +9,7 @@
 // deliberately does not cover -- see its own doc comment.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
@@ -36,7 +37,7 @@ export interface Tree {
  * TreesResource.get()'s own fallback. AdministrationDialog only renders this
  * tab behind hasPermissions("ViewOtherTree") so that fallback never shows. */
 export async function fetchTrees(token: string): Promise<Tree[]> {
-  const res = await fetch(`${API_BASE}/api/trees/`, { headers: authHeaders(token) });
+  const res = await apiFetch(`${API_BASE}/api/trees/`, { headers: authHeaders(token) });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return res.json();
 }
@@ -45,7 +46,7 @@ export async function fetchTrees(token: string): Promise<Tree[]> {
  * metadata's `server.multi_tree` first (fetchMetadata in metadataApi.ts)
  * and hide the control entirely rather than let this throw. */
 export async function createTree(token: string, name: string): Promise<Tree> {
-  const res = await fetch(`${API_BASE}/api/trees/`, {
+  const res = await apiFetch(`${API_BASE}/api/trees/`, {
     method: "POST",
     headers: jsonHeaders(token),
     body: JSON.stringify({ name }),
@@ -55,7 +56,7 @@ export async function createTree(token: string, name: string): Promise<Tree> {
 }
 
 export async function renameTree(token: string, treeId: string, name: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/trees/${encodeURIComponent(treeId)}`, {
+  const res = await apiFetch(`${API_BASE}/api/trees/${encodeURIComponent(treeId)}`, {
     method: "PUT",
     headers: jsonHeaders(token),
     body: JSON.stringify({ name }),
@@ -64,7 +65,7 @@ export async function renameTree(token: string, treeId: string, name: string): P
 }
 
 export async function setTreeEnabled(token: string, treeId: string, enabled: boolean): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/trees/${encodeURIComponent(treeId)}/${enabled ? "enable" : "disable"}`, {
+  const res = await apiFetch(`${API_BASE}/api/trees/${encodeURIComponent(treeId)}/${enabled ? "enable" : "disable"}`, {
     method: "POST",
     headers: authHeaders(token),
   });
@@ -104,7 +105,7 @@ export const ROLE_LABELS: Record<number, string> = {
  * (ROLE_ADMIN) makes UsersResource.get() return the all_trees=True listing
  * rather than scoping to the caller's own tree. */
 export async function fetchAllUsers(token: string): Promise<AdminUser[]> {
-  const res = await fetch(`${API_BASE}/api/users/`, { headers: authHeaders(token) });
+  const res = await apiFetch(`${API_BASE}/api/users/`, { headers: authHeaders(token) });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return res.json();
 }
@@ -113,7 +114,7 @@ export async function createUser(
   token: string,
   user: { name: string; email: string; full_name: string; password: string; role: number; tree?: string },
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/users/${encodeURIComponent(user.name)}/`, {
+  const res = await apiFetch(`${API_BASE}/api/users/${encodeURIComponent(user.name)}/`, {
     method: "POST",
     headers: jsonHeaders(token),
     body: JSON.stringify({
@@ -137,7 +138,7 @@ export async function updateUser(
   name: string,
   fields: { email?: string; full_name?: string; name_new?: string; role?: number; tree?: string },
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/users/${encodeURIComponent(name)}/`, {
+  const res = await apiFetch(`${API_BASE}/api/users/${encodeURIComponent(name)}/`, {
     method: "PUT",
     headers: jsonHeaders(token),
     body: JSON.stringify(fields),
@@ -156,7 +157,7 @@ export async function updateUser(
  * This is the only admin/owner-initiated path to a changed password for
  * someone else. */
 export async function triggerPasswordReset(token: string, name: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/users/${encodeURIComponent(name)}/password/reset/trigger/`, {
+  const res = await apiFetch(`${API_BASE}/api/users/${encodeURIComponent(name)}/password/reset/trigger/`, {
     method: "POST",
     headers: authHeaders(token),
   });
@@ -164,7 +165,7 @@ export async function triggerPasswordReset(token: string, name: string): Promise
 }
 
 export async function deleteUser(token: string, name: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/users/${encodeURIComponent(name)}/`, {
+  const res = await apiFetch(`${API_BASE}/api/users/${encodeURIComponent(name)}/`, {
     method: "DELETE",
     headers: authHeaders(token),
   });

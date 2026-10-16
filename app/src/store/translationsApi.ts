@@ -7,10 +7,11 @@
 // `grampsStrings` corpus (GrampsJs.js's _loadStrings), reused unchanged here.
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
+import { apiFetch } from "./apiFetch";
 
 export async function fetchTranslations(strings: string[], lang: string): Promise<Record<string, string>> {
   const token = await getToken();
-  const res = await fetch(`${API_BASE}/api/translations/${lang}`, {
+  const res = await apiFetch(`${API_BASE}/api/translations/${lang}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ strings }),
@@ -33,7 +34,7 @@ export async function fetchTranslations(strings: string[], lang: string): Promis
  * directly) rather than hardcoding language names client-side. */
 export async function fetchLanguages(): Promise<{ language: string; native: string }[]> {
   const token = await getToken();
-  const res = await fetch(`${API_BASE}/api/translations/?sort=native`, {
+  const res = await apiFetch(`${API_BASE}/api/translations/?sort=native`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return [];

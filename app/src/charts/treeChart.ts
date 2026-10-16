@@ -32,6 +32,7 @@ import { curveBumpX, link } from "d3-shape";
 import "d3-transition";
 import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { personThumbnailUrl, type TreeNode } from "../store/treeData";
+import { retryApiImageOnError } from "../store/apiImage";
 import { lifeEventDate } from "../store/lifeEventDates";
 
 const BOX_WIDTH = 190;
@@ -301,7 +302,10 @@ function treeChartCore(
     .attr("height", IMG_SIZE)
     .attr("preserveAspectRatio", "xMidYMid slice")
     .attr("clip-path", (d) => `url(#imgclip-${orientation}-${d.data.id})`)
-    .attr("xlink:href", (d) => thumbnailUrl(d)!);
+    .attr("xlink:href", (d) => thumbnailUrl(d)!)
+    .on("error", function () {
+      retryApiImageOnError(this);
+    });
 
   // Text starts further right of a box that has a thumbnail, to clear it --
   // per-node, since only some boxes in a tree have one.

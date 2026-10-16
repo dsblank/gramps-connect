@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Image } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { mediaThumbnailUrl } from "../../store/mediaCrop";
+import { useApiImageSrc } from "../../store/apiImage";
 import { ImageLightbox } from "./ImageLightbox";
 
 /** MIME types gramps-web-api's thumbnailer actually handles (see
@@ -66,20 +67,22 @@ export function MediaThumbnail({ handle, mime, size, radius = "sm", zoomable = f
     };
   }, [handle, mime]);
 
-  if (!isThumbnailable(mime) || !token || failed) return null;
+  const image = useApiImageSrc(token && isThumbnailable(mime) ? mediaThumbnailUrl(handle, size, token, { rect }) : null);
+
+  if (!isThumbnailable(mime) || !token || failed || !image.src) return null;
 
   const showZoom = zoomable && mime?.startsWith("image/");
 
   return (
     <>
       <Image
-        src={mediaThumbnailUrl(handle, size, token, { rect })}
+        src={image.src}
         alt=""
         w={size}
         h={size}
         fit="cover"
         radius={radius}
-        onError={() => setFailed(true)}
+        onError={image.onError}
         onClick={showZoom ? () => setLightboxOpen(true) : undefined}
         style={showZoom ? { cursor: "zoom-in" } : undefined}
       />

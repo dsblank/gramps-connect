@@ -13,6 +13,7 @@ import { parseErrorMessage } from "./api";
 import { endpointBaseFor } from "./objectDetail";
 import type { ViewConfig } from "./views";
 import { assignGrampsIds } from "./grampsIds";
+import { apiFetch } from "./apiFetch";
 
 export interface TransactionEntry {
   type: "add" | "update" | "delete";
@@ -44,7 +45,7 @@ export async function createObjects(
   // and rolls the whole batch back, so one retry with fresh IDs covers it.
   for (let attempt = 0; ; attempt++) {
     const { objects: prepared, assigned } = await assignGrampsIds(token, objects);
-    const res = await fetch(`${API_BASE}/api/objects/`, {
+    const res = await apiFetch(`${API_BASE}/api/objects/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(prepared),
@@ -68,7 +69,7 @@ export async function fetchPlainObject(
   view: ViewConfig,
   handle: string
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
+  const res = await apiFetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -110,7 +111,7 @@ export async function updateObject(
   handle: string,
   data: Record<string, unknown>
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
+  const res = await apiFetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(repairForSave(data)),
@@ -125,7 +126,7 @@ export async function updateObject(
  * Source even if now unreferenced). No client-side orphan cleanup is
  * attempted here; see DeleteButton.tsx's doc comment. */
 export async function deleteObject(token: string, view: ViewConfig, handle: string): Promise<void> {
-  const res = await fetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
+  const res = await apiFetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

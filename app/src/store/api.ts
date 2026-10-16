@@ -5,6 +5,7 @@
 import { API_BASE } from "../config";
 import { toSelectEntry } from "./sql";
 import type { ColumnConfig, OrderBy, ViewConfig } from "./views";
+import { apiFetch } from "./apiFetch";
 
 // Server-side max (see QueryBodyArgs.limit's Range(min=1, max=1000) in
 // gramps-web-api's object_query.py) -- fewer round trips for a fixed
@@ -19,7 +20,7 @@ export interface QueryPage {
 }
 
 export async function login(username: string, password: string): Promise<{ accessToken: string; refreshToken: string }> {
-  const res = await fetch(`${API_BASE}/api/token/`, {
+  const res = await apiFetch(`${API_BASE}/api/token/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -36,7 +37,7 @@ export async function login(username: string, password: string): Promise<{ acces
  * invalid or revoked -- the caller's only recourse at that point is a
  * fresh login. */
 export async function refreshAccessToken(refreshToken: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/token/refresh/`, {
+  const res = await apiFetch(`${API_BASE}/api/token/refresh/`, {
     method: "POST",
     headers: { Authorization: `Bearer ${refreshToken}` },
   });
@@ -98,7 +99,7 @@ export async function fetchPage(
   // caller needs.
   columns: ColumnConfig[] = view.columns
 ): Promise<{ page: QueryPage; totalCount: number | null }> {
-  const res = await fetch(`${API_BASE}${view.endpoint}`, {
+  const res = await apiFetch(`${API_BASE}${view.endpoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -28,6 +28,7 @@ type OnExpandUp = (clusterId: string, sibling: TreePersonRaw) => void;
 import { t } from "../../i18n/i18n";
 import { lifeEventDate } from "../../store/lifeEventDates";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
+import { useApiImageSrc } from "../../store/apiImage";
 
 const CARD_WIDTH = 150;
 // At least 2x CARD_WIDTH: a compact card's name and dates sit on one row
@@ -417,7 +418,8 @@ function FamilySquareCard({
   // Date badges follow the display settings (lifeEventDates.ts).
   useDisplayFormatVersion();
   const name = [person.profile?.name_given, person.profile?.name_surname].filter(Boolean).join(" ") || t("(unnamed person)");
-  const thumb = !compact && token ? personThumbnailUrl(token, person, 100) : null;
+  const image = useApiImageSrc(!compact && token ? personThumbnailUrl(token, person, 100) : null);
+  const thumb = image.src;
   return (
     <Paper
       ref={cardRef}
@@ -461,7 +463,7 @@ function FamilySquareCard({
         </Stack>
       ) : (
         <Stack align="center" gap={4}>
-          <Avatar src={thumb ?? undefined} radius="sm" size={48}>
+          <Avatar src={thumb ?? undefined} imageProps={{ onError: image.onError }} radius="sm" size={48}>
             {!thumb && name.slice(0, 1)}
           </Avatar>
           <Text size="xs" fw={600} ta="center" lineClamp={2}>{name}</Text>

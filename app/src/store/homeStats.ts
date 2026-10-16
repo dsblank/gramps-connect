@@ -8,6 +8,7 @@ import { API_BASE } from "../config";
 import { fetchPage, parseErrorMessage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
 import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ViewConfig } from "./views";
+import { apiFetch } from "./apiFetch";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -149,7 +150,7 @@ export async function fetchRecentlyChanged(token: string, limit: number): Promis
   });
   let hits: SearchHit[];
   try {
-    const res = await fetch(`${API_BASE}/api/search/?${params}`, {
+    const res = await apiFetch(`${API_BASE}/api/search/?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -275,7 +276,7 @@ interface RawHomePerson {
  * null on 404 -- the person was deleted, or is private to this user --
  * same as fetchByHandle's empty result did. */
 export async function fetchHomePerson(token: string, handle: string): Promise<QueryItem | null> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/api/people/${encodeURIComponent(handle)}?keys=handle,gramps_id,primary_name`,
     { headers: { Authorization: `Bearer ${token}` } }
   );

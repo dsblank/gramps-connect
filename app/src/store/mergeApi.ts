@@ -7,6 +7,7 @@ import { endpointBaseFor, fetchObjectExtended, getBacklinks } from "./objectDeta
 import { fetchPlainObject, updateObject, deleteObject } from "./objectsApi";
 import { VIEWS, TAG_VIEW } from "./views";
 import type { ViewConfig } from "./views";
+import { apiFetch } from "./apiFetch";
 
 /** The view.key values gramps-web-api actually has a merge route for
  * (resources/merge.py + api/__init__.py:272-398) -- excludes the app's
@@ -80,7 +81,7 @@ export async function mergeObjects(
   titanicHandle: string,
   args?: Record<string, unknown>
 ): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(phoenixHandle)}/merge/${encodeURIComponent(titanicHandle)}`,
     {
       method: "POST",
@@ -101,7 +102,7 @@ export function namespaceFor(view: ViewConfig): string {
 /** POST /api/objects/delete-by-handle/ -- deletes every handle in one
  * request/transaction, unlike looping objectsApi.ts's single deleteObject. */
 export async function deleteObjectsBulk(token: string, view: ViewConfig, handles: string[]): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/objects/delete-by-handle/`, {
+  const res = await apiFetch(`${API_BASE}/api/objects/delete-by-handle/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ namespace: namespaceFor(view), handles }),

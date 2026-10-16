@@ -7,11 +7,12 @@
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { FreshTokenRequiredError } from "./deleteApi";
+import { apiFetch } from "./apiFetch";
 
 export type TaskPostResult = { kind: "task"; task: { id: string } } | { kind: "done"; result: unknown };
 
 async function postTask(token: string, url: string): Promise<TaskPostResult> {
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await apiFetch(`${API_BASE}${url}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -59,7 +60,7 @@ export type RestorePostResult = { kind: "task"; task: { id: string } } | { kind:
  * deleteAllObjects -- a 401 here means the caller should re-login (see
  * DeleteAllDialog.tsx's own handling) rather than a generic failure. */
 async function postRestore(token: string, file: File, dryRun: boolean): Promise<RestorePostResult> {
-  const res = await fetch(`${API_BASE}/api/importers/gramps/file/restore?dry_run=${dryRun}`, {
+  const res = await apiFetch(`${API_BASE}/api/importers/gramps/file/restore?dry_run=${dryRun}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: file,

@@ -12,6 +12,7 @@ import {
   uploadMedia,
 } from "./jobsApi";
 import { clickDownloadLink } from "./downloadFile";
+import { apiFetch } from "./apiFetch";
 
 export type JobKind = "report" | "export";
 
@@ -197,7 +198,7 @@ export async function describeGenericJob(token: string, kind: JobKind, url: stri
   if (id) {
     try {
       const query = kind === "report" ? "?include_help=false" : "";
-      const res = await fetch(`${API_BASE}/api/${apiPath}/${encodeURIComponent(id)}${query}`, {
+      const res = await apiFetch(`${API_BASE}/api/${apiPath}/${encodeURIComponent(id)}${query}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) name = stripMnemonic(((await res.json()).name as string | undefined) ?? name);

@@ -5,6 +5,7 @@
 // archive's own `url` when run_task() ran it inline.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 export type RunMediaExportResult =
   | { kind: "task"; taskId: string }
@@ -15,7 +16,7 @@ export type RunMediaExportResult =
  * export) and hands back either a task to poll or, once run inline, the
  * finished archive's download `url` directly. */
 export async function runMediaExport(token: string): Promise<RunMediaExportResult> {
-  const res = await fetch(`${API_BASE}/api/media/archive/`, {
+  const res = await apiFetch(`${API_BASE}/api/media/archive/`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });

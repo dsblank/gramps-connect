@@ -12,6 +12,7 @@ import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import type { ViewConfig } from "./views";
 import { getDisplaySettings } from "./displaySettings";
+import { apiFetch } from "./apiFetch";
 
 /** The subset of ref-wrapper fields any of gramps-web-api's *ReferenceSchema
  * classes (ChildReferenceSchema, EventReferenceSchema, PersonReferenceSchema,
@@ -77,7 +78,7 @@ export async function fetchObjectExtended(
   const url =
     `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1` +
     (nameFormat ? `&name_format=${encodeURIComponent(nameFormat)}` : "");
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });

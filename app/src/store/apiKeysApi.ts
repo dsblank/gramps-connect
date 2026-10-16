@@ -8,6 +8,7 @@
 // Creating, listing and removing all need EditOwnUser.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 const BASE = `${API_BASE}/api/users/-/access-tokens/sync/tokens/`;
 
@@ -32,7 +33,7 @@ export class ApiKeysUnsupported extends Error {}
 
 /** Oldest first, as the server returns them. */
 export async function listApiKeys(token: string): Promise<ApiKeyInfo[]> {
-  const res = await fetch(BASE, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await apiFetch(BASE, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 404) throw new ApiKeysUnsupported();
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return res.json();
@@ -42,7 +43,7 @@ export async function listApiKeys(token: string): Promise<ApiKeyInfo[]> {
  * 100 characters; a user holds at most 20 keys (409 "Maximum number of
  * access tokens reached"). The server's messages are readable as-is. */
 export async function createApiKey(token: string, label: string): Promise<CreatedApiKey> {
-  const res = await fetch(BASE, {
+  const res = await apiFetch(BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ label }),
@@ -53,7 +54,7 @@ export async function createApiKey(token: string, label: string): Promise<Create
 
 /** 204 on success; 404 if it's already gone. */
 export async function deleteApiKey(token: string, id: number): Promise<void> {
-  const res = await fetch(`${BASE}${id}/`, {
+  const res = await apiFetch(`${BASE}${id}/`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

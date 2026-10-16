@@ -239,7 +239,10 @@ deploy/docker-compose.yml up -d` to pick up both changes.
 (`deploy/ratelimit.caddy`), so a single misbehaving browser tab, script,
 or user can't saturate the server and stall everyone else. Requests over
 the limit get `429 Too Many Requests` with a `Retry-After` header; static
-frontend files are never limited.
+frontend files are never limited. Gramps Connect itself waits
+and retries a 429 automatically (and keeps at most 6 API requests in
+flight at once), so a user who hits a limit sees things slow down rather
+than errors.
 
 | Zone | Applies to | Limit per IP |
 |---|---|---|

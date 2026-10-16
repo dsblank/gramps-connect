@@ -21,6 +21,7 @@ import { API_BASE } from "../config";
 import type { GqlFilterNamespace, GqlFilterParam, GqlFilterPreset } from "../data/gqlFilterPresets";
 import { getOrCreateTagHandle, tagAndDescribeMedia, updateMediaFile, uploadMedia, deleteMedia } from "./jobsApi";
 import { MEDIA_VIEW, viewForNamespace } from "./views";
+import { apiFetch } from "./apiFetch";
 
 export const CUSTOM_RULE_TAG_NAME = "Custom Rule";
 const CUSTOM_RULE_MIME = "application/json";
@@ -87,7 +88,7 @@ export async function fetchCustomRules(): Promise<CustomRule[]> {
   const rules = await Promise.all(
     page.items.map(async (item): Promise<CustomRule | null> => {
       try {
-        const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file`, {
+        const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(await parseErrorMessage(res));

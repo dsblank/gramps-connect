@@ -6,6 +6,7 @@
 // GET /api/metadata/server/ (fetchServerMetadata).
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 /** Only the fields this app reads -- the response carries a good deal more
  * (researcher, surnames, search-index state, OCR/chat availability), and
@@ -128,7 +129,7 @@ export function fetchServerMetadata(token: string): Promise<Metadata> {
 }
 
 async function getMetadata(token: string, path: string): Promise<Metadata> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   // Status only, deliberately: the body of a failure here is either a JWT
@@ -159,7 +160,7 @@ export interface Researcher {
 }
 
 export async function fetchResearcher(token: string): Promise<Researcher> {
-  const res = await fetch(`${API_BASE}/api/metadata/researcher/`, {
+  const res = await apiFetch(`${API_BASE}/api/metadata/researcher/`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -167,7 +168,7 @@ export async function fetchResearcher(token: string): Promise<Researcher> {
 }
 
 export async function updateResearcher(token: string, data: Researcher): Promise<Researcher> {
-  const res = await fetch(`${API_BASE}/api/metadata/researcher/`, {
+  const res = await apiFetch(`${API_BASE}/api/metadata/researcher/`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(data),

@@ -21,6 +21,7 @@ import { DateFormat, getLocale } from "@gramps-connect/gramps-date";
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 /** One entry of Gramps' place_formats.xml (gen/display/place.py's
  * PlaceFormat). `levels` is desktop's slice syntax ("1:", ":-1", "p" offsets
@@ -226,14 +227,14 @@ export function chooseGrampsFormat(settings: DisplaySettings, localeCode: string
 // -- REST --
 
 async function fetchTreeConfig(token: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/api/trees/-/config`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await apiFetch(`${API_BASE}/api/trees/-/config`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
   return body && typeof body === "object" && !Array.isArray(body) ? body : {};
 }
 
 async function putTreeConfig(token: string, config: Record<string, unknown>): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/trees/-/config`, {
+  const res = await apiFetch(`${API_BASE}/api/trees/-/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(config),
@@ -286,7 +287,7 @@ export interface CustomNameFormat extends NameFormatOption {
  * BUILTIN_NAME_FORMATS), with negative numbers. Usually empty. */
 export async function fetchCustomNameFormats(): Promise<CustomNameFormat[]> {
   const token = await getToken();
-  const res = await fetch(`${API_BASE}/api/name-formats/`, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await apiFetch(`${API_BASE}/api/name-formats/`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = (await res.json()) as { number: number; name: string; format: string }[];
   return body.map(({ number, name, format }) => {

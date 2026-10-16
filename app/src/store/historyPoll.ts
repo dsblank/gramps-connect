@@ -11,6 +11,7 @@
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { fetchLatestTransactionId } from "./cacheMeta";
+import { apiFetch } from "./apiFetch";
 
 export type TreeChangeOp = "INSERT" | "UPDATE" | "DELETE";
 
@@ -140,7 +141,7 @@ export function pollHistory(
         afterId = result.id;
         bootstrapped = true;
       }
-      const res = await fetch(
+      const res = await apiFetch(
         `${API_BASE}/api/transactions/history/?after_id=${afterId}&sort=id&page=1&pagesize=${POLL_PAGESIZE}`,
         {
           headers: {

@@ -7,6 +7,7 @@ import { API_BASE } from "../config";
 import { parseErrorMessage, fetchPage } from "./api";
 import { fetchPlainObject, updateObject } from "./objectsApi";
 import { MEDIA_VIEW, TAG_VIEW } from "./views";
+import { apiFetch } from "./apiFetch";
 
 export type TaskState = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE" | string;
 
@@ -24,7 +25,7 @@ export interface TaskStatus {
 /** GET /api/tasks/<task_id> -- polled by jobsPoll.ts's fast, dispatch-scoped
  * loop until the task leaves PENDING/STARTED. */
 export async function getTaskStatus(token: string, taskId: string): Promise<TaskStatus> {
-  const res = await fetch(`${API_BASE}/api/tasks/${encodeURIComponent(taskId)}`, {
+  const res = await apiFetch(`${API_BASE}/api/tasks/${encodeURIComponent(taskId)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -45,7 +46,7 @@ export interface TaskListItem {
  * caller, unless they hold PERM_VIEW_OTHER_USER). Polled by jobsPoll.ts's
  * slow catch-up sweep to discover jobs whose dispatching tab is gone. */
 export async function listOwnTasks(token: string): Promise<TaskListItem[]> {
-  const res = await fetch(`${API_BASE}/api/tasks/?include_state=true`, {
+  const res = await apiFetch(`${API_BASE}/api/tasks/?include_state=true`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -63,7 +64,7 @@ export async function downloadProcessedFile(
   token: string,
   url: string
 ): Promise<{ blob: Blob; contentType: string } | null> {
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await apiFetch(`${API_BASE}${url}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (res.status === 404) return null;
@@ -86,7 +87,7 @@ export async function downloadProcessedFile(
  * response is a transaction (one "add" entry) rather than the object
  * itself -- same shape POST returns for any object type. */
 export async function uploadMedia(token: string, blob: Blob, mimeType: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/media/`, {
+  const res = await apiFetch(`${API_BASE}/api/media/`, {
     method: "POST",
     headers: { "Content-Type": mimeType, Authorization: `Bearer ${token}` },
     body: blob,
@@ -113,7 +114,7 @@ export async function uploadMedia(token: string, blob: Blob, mimeType: string): 
  * Save whenever someone edits only the description/place and leaves the
  * shapes themselves untouched -- found live. */
 export async function updateMediaFile(token: string, handle: string, blob: Blob, mimeType: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}/file`, {
+  const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}/file`, {
     method: "PUT",
     headers: { "Content-Type": mimeType, Authorization: `Bearer ${token}` },
     body: blob,
@@ -164,7 +165,7 @@ export async function getOrCreateTagHandle(token: string, name: string): Promise
   const { page } = await fetchPage(TAG_VIEW, token, null, false, `name == ${JSON.stringify(name)}`, TAG_VIEW.orderBy, 1);
   if (page.items.length > 0) return page.items[0].handle;
 
-  const res = await fetch(`${API_BASE}/api/tags/`, {
+  const res = await apiFetch(`${API_BASE}/api/tags/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ name }),
@@ -203,7 +204,7 @@ export async function tagAndDescribeMedia(
   fileName?: string,
   noteHandle?: string
 ): Promise<void> {
-  const getRes = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
+  const getRes = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!getRes.ok) throw new Error(await parseErrorMessage(getRes));
@@ -219,7 +220,7 @@ export async function tagAndDescribeMedia(
   if (noteHandle) {
     obj.note_list = [...(((obj.note_list as string[]) ?? [])), noteHandle];
   }
-  const putRes = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
+  const putRes = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(obj),
@@ -240,7 +241,7 @@ export const JOB_REPORT_NOTE_HEADER = "Export report: ";
  * line each) and returns its handle. Not private: it's about the export
  * file, so whoever can see that Media should see what it's missing. */
 export async function createJobReportNote(token: string, desc: string, messages: string[]): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/notes/`, {
+  const res = await apiFetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({
@@ -261,7 +262,7 @@ export async function createJobReportNote(token: string, desc: string, messages:
 export async function findJobReportNotes(token: string, noteHandles: string[]): Promise<string[]> {
   const found: string[] = [];
   for (const handle of noteHandles) {
-    const res = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+    const res = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) continue;
@@ -277,7 +278,7 @@ export async function findJobReportNotes(token: string, noteHandles: string[]): 
 /** DELETE /api/notes/{handle} -- for a job report note going away with the
  * export Media it belonged to. */
 export async function deleteNote(token: string, handle: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+  const res = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -289,7 +290,7 @@ export async function deleteNote(token: string, handle: string): Promise<void> {
  * Media today, not something the Output view's "Delete the export?" flow
  * introduces). */
 export async function deleteMedia(token: string, handle: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
+  const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

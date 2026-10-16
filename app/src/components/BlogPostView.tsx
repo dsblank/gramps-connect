@@ -13,6 +13,7 @@ import { Alert, Anchor, Box, Group, Image, Loader, Modal, ScrollArea, SimpleGrid
 import { getToken } from "../auth/auth";
 import { fetchObjectExtended, zipRefs, type ObjectDetail } from "../store/objectDetail";
 import { mediaThumbnailUrl } from "../store/mediaCrop";
+import { useApiImageSrc } from "../store/apiImage";
 import { BLOG_VIEW, formatChange, formatChangeTitle } from "../store/views";
 import { MediaThumbnail } from "./related/MediaThumbnail";
 import { NoteText } from "./related/NoteText";
@@ -51,10 +52,13 @@ function HeroImage({ handle, mime, rect }: { handle: string; mime?: string; rect
     };
   }, [isImage]);
 
-  if (!isImage || !token) return null;
+  const image = useApiImageSrc(isImage && token ? mediaThumbnailUrl(handle, 1200, token, { rect }) : null);
+
+  if (!image.src) return null;
   return (
     <Image
-      src={mediaThumbnailUrl(handle, 1200, token, { rect })}
+      src={image.src}
+      onError={image.onError}
       alt=""
       mah={480}
       w="auto"

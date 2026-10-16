@@ -11,6 +11,7 @@ import { snippetFor } from "./searchSnippet";
 import { t } from "../../i18n/i18n";
 import { VisualFrame } from "./VisualFrame";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
+import { apiFetch } from "../../store/apiFetch";
 
 // Point 5 of the "make it a Google results page" request this view was
 // redesigned for: a bounded top-N rather than an unbounded scroll -- each
@@ -263,7 +264,7 @@ function RecordThumbnail({ hit }: { hit: SearchHit }) {
     (async () => {
       try {
         const token = await getToken();
-        const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(mediaHandle)}`, {
+        const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(mediaHandle)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok || cancelled) return;

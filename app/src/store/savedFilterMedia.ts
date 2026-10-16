@@ -20,6 +20,7 @@ import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import type { FilterTree } from "./goqlFilterTree";
 import { getOrCreateTagHandle, tagAndDescribeMedia, updateMediaFile, uploadMedia, deleteMedia } from "./jobsApi";
 import { MEDIA_VIEW } from "./views";
+import { apiFetch } from "./apiFetch";
 
 export const SAVED_FILTER_TAG_NAME = "Saved Filter";
 const SAVED_FILTER_MIME = "application/json";
@@ -72,7 +73,7 @@ export async function fetchSavedFilters(): Promise<SavedFilter[]> {
   const filters = await Promise.all(
     page.items.map(async (item): Promise<SavedFilter | null> => {
       try {
-        const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file`, {
+        const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(await parseErrorMessage(res));

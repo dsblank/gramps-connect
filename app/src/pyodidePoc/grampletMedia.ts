@@ -29,6 +29,7 @@ import { uploadMedia, updateMediaFile, setMediaDesc, getOrCreateTagHandle, tagAn
 import { validateGrampletKindFields } from "./grampletManifest";
 import { OBJECT_TYPES } from "./objectEndpoints";
 import type { Gramplet } from "./types";
+import { apiFetch } from "../store/apiFetch";
 
 export const GRAMPLET_TAG_NAME = "Gramplet";
 const GRAMPLET_MIME = "application/json";
@@ -212,7 +213,7 @@ async function loadGramplets(): Promise<Gramplet[]> {
       if (cached && checksum && cached.checksum === checksum) return cached.gramplet;
       let text: string;
       try {
-        const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file`, {
+        const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(item.handle)}/file`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -246,7 +247,7 @@ async function loadGramplets(): Promise<Gramplet[]> {
  * that list may be stale by the time a dialog opened from it is saved. */
 export async function fetchGrampletManifest(handle: string): Promise<Gramplet> {
   const token = await getToken();
-  const res = await fetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}/file`, {
+  const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}/file`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));

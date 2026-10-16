@@ -19,13 +19,14 @@
 // one-shot download click resolves).
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 export async function fetchAuthedBlobUrl(
   path: string,
   token: string,
   signal?: AbortSignal
 ): Promise<string> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await apiFetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });

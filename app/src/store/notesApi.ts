@@ -8,6 +8,7 @@ import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { attachRefListEntry } from "./refListApi";
 import type { ViewConfig } from "./views";
+import { apiFetch } from "./apiFetch";
 
 /** Appends `noteHandle` to an arbitrary object's `note_list` -- the
  * structural way a Note "references" another object in Gramps' own data
@@ -29,7 +30,7 @@ export async function attachNoteToObject(
  * to tell a live-synced note's type apart (topic, topic-message, story, or
  * a plain note) before deciding how to notify. */
 export async function fetchNoteRaw(token: string, handle: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
+  const res = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));

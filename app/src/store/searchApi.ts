@@ -8,6 +8,7 @@
 // boxes do.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 /** One hit from the index. `object` carries the same raw, un-`extend`ed
  * fields summaryLine() (components/related/summary.ts) already knows how
@@ -68,7 +69,7 @@ export async function fetchSearch(
     pagesize: String(pagesize),
   });
   if (objectType) params.set("type", objectType);
-  const res = await fetch(`${API_BASE}/api/search/?${params}`, {
+  const res = await apiFetch(`${API_BASE}/api/search/?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });

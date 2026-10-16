@@ -9,6 +9,7 @@
 // request here for a 304 to short-circuit.
 import { API_BASE } from "../config";
 import type { ViewConfig } from "./views";
+import { apiFetch } from "./apiFetch";
 
 /** ViewConfig.key -> gramps-web-api's obj_class, for the real Gramps
  * record types this app can show a history for. draftStack.ts has a
@@ -87,7 +88,7 @@ export async function fetchObjectHistory(
   // (gramps-web-api's api/__init__.py), and Flask 404s a request that adds
   // one rather than redirecting (strict_slashes only auto-redirects the
   // other direction: a slash-terminated route hit without the slash).
-  const res = await fetch(`${API_BASE}/api/transactions/history/objects/${objClass}/${objHandle}?${params}`, {
+  const res = await apiFetch(`${API_BASE}/api/transactions/history/objects/${objClass}/${objHandle}?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`object history fetch failed: ${res.status}`);

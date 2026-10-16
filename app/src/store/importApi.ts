@@ -6,6 +6,7 @@
 // reusing trackJob()'s fire-and-forget, promotion-shaped flow.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 // Matches gramps-web's GrampsjsImport.js supported-extension list minus
 // .gpkg (Gramps package), which gramps-web-api's importer can't handle
@@ -72,7 +73,7 @@ async function postImportFile(
   file: File,
   dryRun: boolean
 ): Promise<ImportPostResult> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE}/api/importers/${encodeURIComponent(ext)}/file?dry_run=${dryRun}`,
     {
       method: "POST",

@@ -4,6 +4,7 @@
 // gramps-web's own "Delete all objects" admin screen (GrampsjsDeleteAll.js).
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 // ObjectCountsSchema's fixed field set (gramps-web-api's schemas.py) --
 // also what DeleteObjectsQueryArgs' `namespaces` validates against.
@@ -46,7 +47,7 @@ export async function deleteAllObjects(
 ): Promise<DeletePostResult> {
   const isEverything = namespaces.length >= DELETE_NAMESPACES.length;
   const query = isEverything ? "" : `?namespaces=${namespaces.join(",")}`;
-  const res = await fetch(`${API_BASE}/api/objects/delete/${query}`, {
+  const res = await apiFetch(`${API_BASE}/api/objects/delete/${query}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });

@@ -7,6 +7,7 @@
 // the app does.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
+import { apiFetch } from "./apiFetch";
 
 export interface OwnUser {
   name: string;
@@ -16,7 +17,7 @@ export interface OwnUser {
 }
 
 export async function fetchOwnUser(token: string): Promise<OwnUser> {
-  const res = await fetch(`${API_BASE}/api/users/-/`, {
+  const res = await apiFetch(`${API_BASE}/api/users/-/`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -32,7 +33,7 @@ export async function updateOwnUser(
   token: string,
   fields: { email?: string; full_name?: string; name_new?: string },
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/users/-/`, {
+  const res = await apiFetch(`${API_BASE}/api/users/-/`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(fields),
@@ -49,7 +50,7 @@ export async function changeOwnPassword(
   oldPassword: string,
   newPassword: string,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/users/-/password/change`, {
+  const res = await apiFetch(`${API_BASE}/api/users/-/password/change`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),

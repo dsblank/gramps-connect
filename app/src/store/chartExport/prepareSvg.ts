@@ -18,6 +18,7 @@
 // setExportCloneHook to redo that part on the copy.
 // An SVG without `data-export-content` can still be exported, just only
 // as "current view".
+import { apiFetch } from "../apiFetch";
 
 export type ExportArea = "whole" | "view";
 /** "light" renders with the light theme's colors whatever the app is
@@ -202,7 +203,7 @@ async function inlineImages(svg: SVGSVGElement): Promise<void> {
       if (!cache.has(href)) {
         cache.set(
           href,
-          fetch(href)
+          apiFetch(href)
             .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
             .then(blobToDataUrl)
             .catch(() => null),

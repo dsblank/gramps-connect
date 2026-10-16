@@ -20,6 +20,7 @@ import { API_BASE } from "../config";
 import { getToken, getTreeId, getCurrentUsername } from "../auth/auth";
 import { fetchMetadata } from "./metadataApi";
 import type { ViewConfig } from "./views";
+import { apiFetch } from "./apiFetch";
 
 const META_TABLE = "_cache_meta";
 
@@ -185,7 +186,7 @@ function fetchLatestTransactionIdOnce(token: string): Promise<LatestTransactionI
   if (!latestIdPromise || latestIdPromiseToken !== token) {
     latestIdPromiseToken = token;
     latestIdPromise = (async () => {
-      const res = await fetch(`${API_BASE}/api/transactions/history/?page=1&pagesize=1&sort=-id`, {
+      const res = await apiFetch(`${API_BASE}/api/transactions/history/?page=1&pagesize=1&sort=-id`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return { ok: false, status: res.status, id: 0 };
@@ -248,7 +249,7 @@ interface HistoryTransactionForWalk {
 async function tableTouchedSince(afterId: number, table: string): Promise<boolean | null> {
   try {
     const token = await getToken();
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE}/api/transactions/history/?after_id=${afterId}&sort=id&page=1&pagesize=${STALE_CHECK_PAGESIZE}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );

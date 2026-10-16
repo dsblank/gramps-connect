@@ -10,6 +10,7 @@ import { getToken, hasPermissions } from "../auth/auth";
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "../store/api";
 import type { TransactionItem } from "./types";
+import { apiFetch } from "../store/apiFetch";
 
 /** /api/transactions/ needs all three, i.e. Editor and above. */
 export const CHANGE_DATA_PERMISSIONS = ["AddObject", "EditObject", "DeleteObject"];
@@ -27,7 +28,7 @@ export interface CommittedGroup {
 
 async function postTransaction(query: string, items: TransactionItem[]): Promise<TransactionItem[]> {
   const token = await getToken();
-  const res = await fetch(`${API_BASE}/api/transactions/?${query}`, {
+  const res = await apiFetch(`${API_BASE}/api/transactions/?${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(items),
