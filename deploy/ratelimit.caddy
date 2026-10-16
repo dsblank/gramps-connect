@@ -10,12 +10,21 @@
 # client well below what the server can handle, answering the excess with
 # 429 + Retry-After instead of queueing it.
 #
-# Keyed by client IP: Caddy is the internet-facing hop here, so
-# {http.request.remote.host} is the real client address. IPv6 clients are
-# grouped by /64, the usual per-household/per-host allocation, so cycling
-# addresses within one doesn't dodge the limit. Each kind of request gets
-# a `_burst` zone that allows a short spike and a `_sustained` zone that
-# stops a steady stream from holding the server at that spike rate.
+# Keyed by client IP, {http.vars.client_ip}. With Caddy as the
+# internet-facing hop (the default setup), that's simply the connecting
+# address, and a client-supplied X-Forwarded-For is ignored, so it can't be
+# spoofed to dodge the limit. If another proxy sits in front of Caddy
+# (Cloudflare, a cloud load balancer, Traefik, ...), every request arrives
+# from that proxy's few addresses and ALL users would share one limit --
+# declare the proxy in deploy/Caddyfile's global `trusted_proxies` option
+# (see the example there) and client_ip becomes the real client from
+# X-Forwarded-For instead. IPv6 clients are grouped by /64, the usual
+# per-household/per-host allocation, so cycling addresses within one
+# doesn't dodge the limit.
+#
+# Each kind of request gets a `_burst` zone that allows a short spike and
+# a `_sustained` zone that stops a steady stream from holding the server
+# at that spike rate.
 #
 # - api: every /api/* request except the images below. Normal use,
 #   including a full background fill of a large tree's views (1000 rows
@@ -34,7 +43,7 @@ rate_limit {
 			path /api/*
 			not path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
 		}
-		key {http.request.remote.host}
+		key {http.vars.client_ip}
 		events 100
 		window 10s
 		ipv6_prefix 64
@@ -44,7 +53,7 @@ rate_limit {
 			path /api/*
 			not path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
 		}
-		key {http.request.remote.host}
+		key {http.vars.client_ip}
 		events 600
 		window 2m
 		ipv6_prefix 64
@@ -53,7 +62,7 @@ rate_limit {
 		match {
 			path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
 		}
-		key {http.request.remote.host}
+		key {http.vars.client_ip}
 		events 400
 		window 10s
 		ipv6_prefix 64
@@ -62,7 +71,7 @@ rate_limit {
 		match {
 			path_regexp ^/api/media/[^/]+/(thumbnail|cropped|tile)/
 		}
-		key {http.request.remote.host}
+		key {http.vars.client_ip}
 		events 2000
 		window 2m
 		ipv6_prefix 64

@@ -25,10 +25,14 @@
 //
 // - Retries 429 Too Many Requests (deploy/ratelimit.caddy's per-client
 //   limits, or gramps-web-api's own Flask-Limiter on login endpoints) up
-//   to MAX_RETRIES times, waiting for the response's Retry-After plus a
-//   little jitter. Safe for writes too: a 429 is always refused before any
-//   handler runs, so nothing is applied twice. The wait doesn't hold a
-//   slot. After the last retry the 429 is returned to the caller as-is.
+//   to MAX_RETRIES times, waiting the full Retry-After plus a little
+//   jitter -- never less, since an early retry is refused again for
+//   certain. A Retry-After longer than MAX_RETRY_WAIT_MS (2 minutes, the
+//   longest window in ratelimit.caddy) isn't waited out at all: the 429
+//   goes straight back to the caller rather than hanging the request. Safe
+//   for writes too: a 429 is always refused before any handler runs, so
+//   nothing is applied twice. The wait doesn't hold a slot. After the last
+//   retry the 429 is returned to the caller as-is.
 //
 // Every request's body must be replayable for the retry, which holds for
 // the string/FormData/Blob/URLSearchParams bodies used throughout; a
@@ -45,7 +49,7 @@ export interface ApiFetchOptions {
 }
 
 export const MAX_RETRIES = 3;
-const MAX_RETRY_WAIT_MS = 30_000;
+const MAX_RETRY_WAIT_MS = 120_000;
 const FALLBACK_RETRY_MS = [1000, 2000, 4000];
 
 interface Lane {
@@ -107,21 +111,29 @@ function sleep(ms: number, signal: AbortSignal | null | undefined): Promise<void
   });
 }
 
-/** Retry-After as either delta-seconds or an HTTP-date, plus 0-20% jitter
- * so a queue of requests limited together doesn't retry in lockstep. */
-export function retryDelayMs(retryAfter: string | null, attempt: number, now = Date.now()): number {
-  let ms = FALLBACK_RETRY_MS[Math.min(attempt, FALLBACK_RETRY_MS.length - 1)];
+/** 0-20% extra, so a queue of requests limited together doesn't retry in
+ * lockstep. Only ever added -- never waits less than asked. */
+function withJitter(ms: number): number {
+  return ms * (1 + Math.random() * 0.2);
+}
+
+/** The 1s/2s/4s wait before retry number `attempt + 1` when the server
+ * gave no Retry-After (and for apiImage.ts, which never sees one). */
+export function backoffMs(attempt: number): number {
+  return withJitter(FALLBACK_RETRY_MS[Math.min(attempt, FALLBACK_RETRY_MS.length - 1)]);
+}
+
+/** How long to wait before retrying a 429: its Retry-After (delta-seconds
+ * or an HTTP-date) plus jitter, else backoffMs(). null when Retry-After
+ * asks for longer than MAX_RETRY_WAIT_MS -- not worth retrying. */
+export function retryDelayMs(retryAfter: string | null, attempt: number, now = Date.now()): number | null {
   if (retryAfter) {
     const seconds = Number(retryAfter);
-    if (Number.isFinite(seconds)) {
-      ms = seconds * 1000;
-    } else {
-      const date = Date.parse(retryAfter);
-      if (!Number.isNaN(date)) ms = date - now;
-    }
+    const date = Date.parse(retryAfter);
+    const ms = Number.isFinite(seconds) ? seconds * 1000 : !Number.isNaN(date) ? date - now : null;
+    if (ms !== null) return ms > MAX_RETRY_WAIT_MS ? null : withJitter(Math.max(ms, 0));
   }
-  ms = Math.min(Math.max(ms, 0), MAX_RETRY_WAIT_MS);
-  return ms * (1 + Math.random() * 0.2);
+  return backoffMs(attempt);
 }
 
 export async function apiFetch(input: string | URL, init?: RequestInit, options?: ApiFetchOptions): Promise<Response> {
@@ -139,6 +151,10 @@ export async function apiFetch(input: string | URL, init?: RequestInit, options?
     const wait = retryDelayMs(res.headers.get("Retry-After"), attempt);
     const method = init?.method ?? "GET";
     const path = String(input).replace(/[?#].*$/, "");
+    if (wait === null) {
+      console.warn(`[apiFetch] 429, Retry-After too long to wait out: ${method} ${path}`);
+      return res;
+    }
     console.warn(`[apiFetch] 429, retry ${attempt + 1}/${MAX_RETRIES} in ${(wait / 1000).toFixed(1)}s: ${method} ${path}`);
     await sleep(wait, signal);
   }

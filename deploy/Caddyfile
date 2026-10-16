@@ -1,5 +1,19 @@
 {
 	auto_https disable_redirects
+
+	# Only if another proxy or CDN sits in front of Caddy: list its
+	# addresses so the rate limits (ratelimit.caddy) see each real client
+	# from X-Forwarded-For instead of lumping every user under the proxy's
+	# IP. Leave it out when Caddy faces the internet directly -- trusting
+	# X-Forwarded-For from anyone would let clients spoof their way past
+	# the limits. E.g. a load balancer on a private network:
+	#
+	#   servers {
+	#       trusted_proxies static private_ranges
+	#   }
+	#
+	# or Cloudflare: `trusted_proxies static` followed by its published
+	# ranges (https://www.cloudflare.com/ips/).
 }
 
 # No public domain configured yet -- Caddy generates and persists its own

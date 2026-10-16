@@ -118,6 +118,27 @@ describe("apiFetch", () => {
     expect(fn).toHaveBeenCalledTimes(4);
   });
 
+  it("waits out a long Retry-After in full instead of retrying early", async () => {
+    vi.useFakeTimers();
+    const fn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 429, headers: { "Retry-After": "100" } }))
+      .mockResolvedValueOnce(new Response("done"));
+    vi.stubGlobal("fetch", fn);
+    const result = apiFetch("/api/x");
+    await vi.advanceTimersByTimeAsync(99_999);
+    expect(fn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await result).status).toBe(200);
+  });
+
+  it("returns a 429 at once when Retry-After is longer than 2 minutes", async () => {
+    const fn = vi.fn(() => Promise.resolve(new Response("", { status: 429, headers: { "Retry-After": "600" } })));
+    vi.stubGlobal("fetch", fn);
+    expect((await apiFetch("/api/x")).status).toBe(429);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it("stops waiting to retry when aborted", async () => {
     vi.useFakeTimers();
     const fn = vi.fn(() => Promise.resolve(new Response("", { status: 429, headers: { "Retry-After": "10" } })));
@@ -149,9 +170,14 @@ describe("retryDelayMs", () => {
     expect([0, 1, 2, 5].map((a) => retryDelayMs(null, a))).toEqual([1000, 2000, 4000, 4000]);
   });
 
-  it("caps the wait at 30s and adds up to 20% jitter", () => {
-    expect(retryDelayMs("3600", 0)).toBe(30_000);
+  it("honours a Retry-After up to 2 minutes in full, plus up to 20% jitter", () => {
+    expect(retryDelayMs("120", 0)).toBe(120_000);
     vi.spyOn(Math, "random").mockReturnValue(0.5);
-    expect(retryDelayMs("1", 0)).toBe(1100);
+    expect(retryDelayMs("90", 0)).toBeCloseTo(99_000);
+  });
+
+  it("gives up on a Retry-After longer than 2 minutes", () => {
+    expect(retryDelayMs("121", 0)).toBeNull();
+    expect(retryDelayMs("3600", 0)).toBeNull();
   });
 });

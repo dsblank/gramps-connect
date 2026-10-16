@@ -16,7 +16,7 @@
 // An onError can't see the status code, so a genuinely missing image
 // costs MAX_RETRIES extra requests over ~7s before its fallback shows.
 import { useCallback, useEffect, useState } from "react";
-import { MAX_RETRIES, retryDelayMs } from "./apiFetch";
+import { MAX_RETRIES, backoffMs } from "./apiFetch";
 
 export function withRetryHint(url: string, attempt: number): string {
   if (attempt === 0) return url;
@@ -38,7 +38,7 @@ export function useApiImageSrc(url: string | null): { src: string | null; onErro
     if (!state.waiting) return;
     const timer = setTimeout(
       () => setState((s) => (s.url === state.url ? { ...s, attempt: s.attempt + 1, waiting: false } : s)),
-      retryDelayMs(null, state.attempt),
+      backoffMs(state.attempt),
     );
     return () => clearTimeout(timer);
   }, [state.waiting, state.attempt, state.url]);
@@ -77,5 +77,5 @@ export function retryApiImageOnError(el: SVGImageElement | HTMLImageElement): vo
     } else {
       el.setAttribute("src", next);
     }
-  }, retryDelayMs(null, attempt));
+  }, backoffMs(attempt));
 }

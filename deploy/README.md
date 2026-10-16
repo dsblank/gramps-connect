@@ -252,6 +252,16 @@ than errors.
 Normal use stays well under these. To change them, edit
 `deploy/ratelimit.caddy`, then `docker compose restart caddy`.
 
+**Behind another proxy or CDN** (Cloudflare, a cloud load balancer,
+Traefik in front of Caddy, ...), every request reaches Caddy from the
+proxy's own addresses, so all users would share one limit and the site
+would throttle almost at once. Tell Caddy to trust that proxy by adding
+`servers { trusted_proxies static <its address ranges> }` to the global
+options block at the top of `deploy/Caddyfile` (there's a commented
+example there); the limits then apply per real client, read from
+`X-Forwarded-For`. Don't set it when Caddy faces the internet directly:
+clients could then fake that header to get around the limits.
+
 The stock Caddy image doesn't include rate limiting, so `caddy` runs
 `ghcr.io/<owner>/gramps-connect-caddy`, built from
 `deploy/Dockerfile.caddy` by the same `build-docker.yml` workflow as the
