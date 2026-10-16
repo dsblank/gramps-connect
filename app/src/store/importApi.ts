@@ -79,7 +79,8 @@ async function postImportFile(
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: file,
-    }
+    },
+    { lane: "long" }
   );
   if (res.status === 202) {
     const body = await res.json();

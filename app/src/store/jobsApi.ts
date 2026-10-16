@@ -91,7 +91,7 @@ export async function uploadMedia(token: string, blob: Blob, mimeType: string): 
     method: "POST",
     headers: { "Content-Type": mimeType, Authorization: `Bearer ${token}` },
     body: blob,
-  });
+  }, { lane: "long" });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return addedHandle(await res.json());
 }
@@ -118,7 +118,7 @@ export async function updateMediaFile(token: string, handle: string, blob: Blob,
     method: "PUT",
     headers: { "Content-Type": mimeType, Authorization: `Bearer ${token}` },
     body: blob,
-  });
+  }, { lane: "long" });
   if (res.status === 409) return;
   if (!res.ok) throw new Error(await parseErrorMessage(res));
 }

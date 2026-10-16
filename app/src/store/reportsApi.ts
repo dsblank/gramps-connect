@@ -80,7 +80,7 @@ export async function runReport(
   const res = await apiFetch(`${API_BASE}/api/reports/${encodeURIComponent(id)}/file?${query}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, { lane: "long" });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
   if (res.status === 202) return { kind: "task", taskId: body.task.id };

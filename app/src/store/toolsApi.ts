@@ -64,7 +64,7 @@ async function postRestore(token: string, file: File, dryRun: boolean): Promise<
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: file,
-  });
+  }, { lane: "long" });
   if (res.status === 401) {
     throw new FreshTokenRequiredError();
   }

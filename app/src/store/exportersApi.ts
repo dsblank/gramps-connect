@@ -58,7 +58,8 @@ export async function runExport(
   const query = new URLSearchParams(params);
   const res = await apiFetch(
     `${API_BASE}/api/exporters/${encodeURIComponent(extension)}/file?${query}`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+    { lane: "long" }
   );
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();

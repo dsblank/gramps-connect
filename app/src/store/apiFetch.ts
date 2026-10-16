@@ -8,12 +8,20 @@
 //
 // What it does today:
 //
-// - Caps requests in flight at MAX_IN_FLIGHT; the rest wait in a FIFO
+// - Caps requests in flight per lane; the rest wait in that lane's FIFO
 //   queue. Without this, a burst (or a runaway loop) could open hundreds
 //   of requests at once, which Chrome rejects outright with
 //   net::ERR_INSUFFICIENT_RESOURCES and which piles up behind gunicorn's
 //   few workers on the server. A slot frees as soon as response headers
-//   arrive, not when the body finishes.
+//   arrive, not when the body finishes -- so a plain file download holds
+//   one only briefly.
+//
+//   Two lanes, chosen explicitly at the call site: "normal" (the default,
+//   6 at once) and "long" (2 at once), passed as apiFetch(url, init,
+//   { lane: "long" }). "long" is for requests the server works on before
+//   it replies at all -- uploads, synchronous report/export generation --
+//   so a few of those can't leave a click in the UI waiting behind them,
+//   while a many-file upload still can't open unbounded requests.
 //
 // - Retries 429 Too Many Requests (deploy/ratelimit.caddy's per-client
 //   limits, or gramps-web-api's own Flask-Limiter on login endpoints) up
@@ -30,13 +38,26 @@
 // its own queue. API images loaded by URL rather than fetched (<img src>,
 // SVG <image>) get the matching retry from apiImage.ts.
 
-const MAX_IN_FLIGHT = 6;
+export type ApiLane = "normal" | "long";
+export interface ApiFetchOptions {
+  /** See the header comment; defaults to "normal". */
+  lane?: ApiLane;
+}
+
 export const MAX_RETRIES = 3;
 const MAX_RETRY_WAIT_MS = 30_000;
 const FALLBACK_RETRY_MS = [1000, 2000, 4000];
 
-let inFlight = 0;
-const waiting: Array<() => void> = [];
+interface Lane {
+  max: number;
+  inFlight: number;
+  waiting: Array<() => void>;
+}
+
+const lanes: Record<ApiLane, Lane> = {
+  normal: { max: 6, inFlight: 0, waiting: [] },
+  long: { max: 2, inFlight: 0, waiting: [] },
+};
 
 function abortError(signal: AbortSignal): unknown {
   return signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
@@ -44,31 +65,31 @@ function abortError(signal: AbortSignal): unknown {
 
 /** Resolves once a slot is free (FIFO), or rejects if `signal` aborts
  * first -- in which case the request never takes a slot at all. */
-function acquireSlot(signal: AbortSignal | null | undefined): Promise<void> {
+function acquireSlot(lane: Lane, signal: AbortSignal | null | undefined): Promise<void> {
   if (signal?.aborted) return Promise.reject(abortError(signal));
-  if (inFlight < MAX_IN_FLIGHT) {
-    inFlight++;
+  if (lane.inFlight < lane.max) {
+    lane.inFlight++;
     return Promise.resolve();
   }
   return new Promise((resolve, reject) => {
     const grant = () => {
       signal?.removeEventListener("abort", onAbort);
-      inFlight++;
+      lane.inFlight++;
       resolve();
     };
     const onAbort = () => {
-      const i = waiting.indexOf(grant);
-      if (i >= 0) waiting.splice(i, 1);
+      const i = lane.waiting.indexOf(grant);
+      if (i >= 0) lane.waiting.splice(i, 1);
       reject(abortError(signal!));
     };
-    waiting.push(grant);
+    lane.waiting.push(grant);
     signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
-function releaseSlot(): void {
-  inFlight--;
-  waiting.shift()?.();
+function releaseSlot(lane: Lane): void {
+  lane.inFlight--;
+  lane.waiting.shift()?.();
 }
 
 function sleep(ms: number, signal: AbortSignal | null | undefined): Promise<void> {
@@ -103,15 +124,16 @@ export function retryDelayMs(retryAfter: string | null, attempt: number, now = D
   return ms * (1 + Math.random() * 0.2);
 }
 
-export async function apiFetch(input: string | URL, init?: RequestInit): Promise<Response> {
+export async function apiFetch(input: string | URL, init?: RequestInit, options?: ApiFetchOptions): Promise<Response> {
   const signal = init?.signal;
+  const lane = lanes[options?.lane ?? "normal"];
   for (let attempt = 0; ; attempt++) {
-    await acquireSlot(signal);
+    await acquireSlot(lane, signal);
     let res: Response;
     try {
       res = await fetch(input, init);
     } finally {
-      releaseSlot();
+      releaseSlot(lane);
     }
     if (res.status !== 429 || attempt >= MAX_RETRIES) return res;
     const wait = retryDelayMs(res.headers.get("Retry-After"), attempt);
@@ -122,7 +144,7 @@ export async function apiFetch(input: string | URL, init?: RequestInit): Promise
   }
 }
 
-/** Test-only: the queue's current depth. */
-export function _apiFetchState(): { inFlight: number; waiting: number } {
-  return { inFlight, waiting: waiting.length };
+/** Test-only: a lane's current queue depth. */
+export function _apiFetchState(lane: ApiLane = "normal"): { inFlight: number; waiting: number } {
+  return { inFlight: lanes[lane].inFlight, waiting: lanes[lane].waiting.length };
 }

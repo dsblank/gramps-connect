@@ -38,6 +38,10 @@
   in flight and automatic retry of `429 Too Many Requests` (the deploy
   stack's Caddy rate limits). Plain `fetch()` is only for non-API URLs
   (Wikidata, GitHub, static `/lang/` or `/pyodide/` files, `blob:` URLs).
+  Pass `{ lane: "long" }` as the third argument for a request the server
+  works on before replying at all (uploads, synchronous report/export
+  generation), so it can't hold up ordinary requests; plain downloads
+  don't need it.
 - API images shown straight from a URL (`<img src>`, SVG `<image>`, e.g.
   `mediaThumbnailUrl()`) can't go through `apiFetch()`; use
   `useApiImageSrc()` (React) or `retryApiImageOnError()` (D3) from

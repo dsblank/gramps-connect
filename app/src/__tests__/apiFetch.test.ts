@@ -44,6 +44,32 @@ describe("apiFetch", () => {
     expect(_apiFetchState()).toEqual({ inFlight: 0, waiting: 0 });
   });
 
+  it("runs long-lane requests 2 at a time, without blocking the normal lane", async () => {
+    const { fn, pending } = controllableFetch();
+    vi.stubGlobal("fetch", fn);
+    const uploads = Array.from({ length: 4 }, (_, i) => apiFetch(`/api/upload/${i}`, { method: "POST" }, { lane: "long" }));
+    await flush();
+    expect(_apiFetchState("long")).toEqual({ inFlight: 2, waiting: 2 });
+
+    // The normal lane still has all 6 slots while uploads are stuck.
+    const normal = Array.from({ length: 6 }, (_, i) => apiFetch(`/api/x/${i}`));
+    await flush();
+    expect(_apiFetchState("normal")).toEqual({ inFlight: 6, waiting: 0 });
+    expect(fn).toHaveBeenCalledTimes(8);
+
+    // Finishing one upload starts the next queued upload, not a normal one.
+    pending[0].resolve(new Response("ok"));
+    await flush();
+    expect(pending[8].url).toBe("/api/upload/2");
+
+    pending.slice(1).forEach((p) => p.resolve(new Response("ok")));
+    await flush();
+    pending.slice(9).forEach((p) => p.resolve(new Response("ok")));
+    await Promise.all([...uploads, ...normal]);
+    expect(_apiFetchState("long")).toEqual({ inFlight: 0, waiting: 0 });
+    expect(_apiFetchState("normal")).toEqual({ inFlight: 0, waiting: 0 });
+  });
+
   it("frees the slot when fetch rejects", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("network"))));
     await expect(apiFetch("/api/x")).rejects.toThrow("network");

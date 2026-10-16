@@ -19,7 +19,7 @@ export async function runMediaExport(token: string): Promise<RunMediaExportResul
   const res = await apiFetch(`${API_BASE}/api/media/archive/`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-  });
+  }, { lane: "long" });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
   if (res.status === 202) return { kind: "task", taskId: body.task.id };

@@ -73,7 +73,7 @@ export async function postMediaZip(token: string, file: File): Promise<MediaImpo
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: file,
-  });
+  }, { lane: "long" });
   if (res.status === 202) {
     const body = await res.json();
     return { kind: "task", task: body.task };
