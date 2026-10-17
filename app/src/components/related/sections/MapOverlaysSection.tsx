@@ -5,7 +5,7 @@ import { confirmDialog } from "../../../store/confirmDialog";
 import { fetchObjectExtended, getBacklinks, zipRefs } from "../../../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../../../store/refListApi";
 import { buildSimpleSearchExpr } from "../../../store/simpleSearch";
-import { KML_MIME } from "../../../store/visualData";
+import { isMapFileMime, mapFileMimeExpr } from "../../../store/mapFileMime";
 import { MEDIA_VIEW, PLACE_VIEW } from "../../../store/views";
 import { summaryLine } from "../summary";
 import { AttachControl } from "../AttachControl";
@@ -23,16 +23,17 @@ const MapItemEditorDialog = lazy(() =>
 
 // Same convention as MapItemEditorDialog.tsx's own imageOnlyExpr -- an
 // always-on mime filter ANDed into whatever the user types, so the "Add map
-// overlay" picker's default browse-all list is already narrowed to KML
-// files, not just once something's searched for.
-function kmlOnlyExpr(term: string): string | null {
+// overlay" picker's default browse-all list is already narrowed to map
+// files (KML/GeoJSON/GPX), not just once something's searched for.
+function mapFileOnlyExpr(term: string): string | null {
   const termExpr = buildSimpleSearchExpr(["gramps_id", "desc", "path"])(term);
-  const fixed = `mime == "${KML_MIME}"`;
+  const fixed = mapFileMimeExpr();
   return termExpr ? `(${termExpr}) and ${fixed}` : fixed;
 }
 
-/** A place's own map overlays -- its `media_list` filtered down to KML
- * files (see MapItemEditorDialog.tsx). A map overlay can be attached to more
+/** A place's own map overlays -- its `media_list` filtered down to map
+ * files (KML/GeoJSON/GPX, see mapFileMime.ts; MapItemEditorDialog.tsx
+ * draws and writes the KML ones). A map overlay can be attached to more
  * than one place (e.g. a boundary that covers several nearby settlements),
  * but not to the *same* place twice -- picking an "existing" one already on
  * this place in the "+ Add map overlay" picker (AttachControl.tsx's `onPick`
@@ -42,7 +43,7 @@ function kmlOnlyExpr(term: string): string | null {
  * than a second "Edit" trigger duplicated here. */
 export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionProps) {
   const rows = zipRefs<{ mime?: string; desc?: string; path?: string }>(detail.media_list, detail.extended?.media)
-    .filter(({ target }) => target?.mime === KML_MIME);
+    .filter(({ target }) => isMapFileMime(target?.mime));
   const canAttach = hasPermissions("EditObject");
   const canCreate = hasPermissions("AddObject");
   const [adding, setAdding] = useState(false);
@@ -89,7 +90,7 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
           targetHandle={detail.handle}
           pickerView={MEDIA_VIEW}
           listField="media_list"
-          buildExpr={kmlOnlyExpr}
+          buildExpr={mapFileOnlyExpr}
           itemLabel="map overlay"
           onPick={handlePickExisting}
           onCreateNew={canCreate ? () => setAdding(true) : undefined}

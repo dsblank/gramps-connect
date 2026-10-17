@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from "react";
 import { Box, Button, Loader } from "@mantine/core";
 import { hasPermissions } from "../../auth/auth";
 import type { ObjectDetail } from "../../store/objectDetail";
-import { KML_MIME } from "../../store/visualData";
+import { KML_MIME } from "../../store/mapFileMime";
 import { t } from "../../i18n/i18n";
 
 // maplibre-gl and terra-draw are the heaviest thing this app can pull in
@@ -21,6 +21,9 @@ const MapItemEditorDialog = lazy(() =>
  * nothing here to edit, so this renders nothing for any other mime. */
 export function MediaKmlEditButton({ detail, onSaved }: { detail: ObjectDetail; onSaved: () => void }) {
   const [opened, setOpened] = useState(false);
+  // KML only, though GeoJSON/GPX files draw as overlays too: the editor
+  // saves by writing KML over this same file, which would silently replace
+  // a GeoJSON/GPX original (and a GPX track's times/elevations with it).
   if (detail.mime !== KML_MIME || !hasPermissions("EditObject")) return null;
 
   const label = t("Edit this map item's overlay");

@@ -11,6 +11,7 @@ import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
 import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
+import { isMapFileMime } from "./mapFileMime";
 import { gtkColorToCss } from "../components/related/color";
 import iconPerson from "../assets/icons/gramps-person.svg";
 import iconFamily from "../assets/icons/gramps-family.svg";
@@ -648,10 +649,6 @@ export const CITATION_VIEW: ViewConfig = {
   ],
 };
 
-// Same literal as visualData.ts's own KML_MIME -- not imported from there
-// to avoid a cycle (visualData.ts already imports from this file).
-const KML_MIME = "application/vnd.google-earth.kml+xml";
-
 // Same tag name as grampletMedia.ts's own GRAMPLET_TAG_NAME -- not imported
 // from there (pyodidePoc/ pulls in auth/jobsApi/etc., which this file has no
 // business depending on) so the literal is duplicated instead.
@@ -669,7 +666,7 @@ const GRAMPLET_TAG_NAME = "Gramplet";
 function mediaCategory(mime: unknown, item?: Record<string, unknown>): string {
   if (Number(item?.is_gramplet ?? 0) > 0) return "Gramplet";
   const value = typeof mime === "string" ? mime : "";
-  if (value === KML_MIME) return "Map overlay";
+  if (isMapFileMime(value)) return "Map overlay";
   if (value.startsWith("image/")) return "Image";
   if (value.startsWith("video/")) return "Video";
   if (value.startsWith("audio/")) return "Audio";

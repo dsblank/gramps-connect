@@ -8,6 +8,7 @@ import { parseErrorMessage, fetchPage } from "./api";
 import { fetchPlainObject, updateObject } from "./objectsApi";
 import { MEDIA_VIEW, TAG_VIEW } from "./views";
 import { apiFetch } from "./apiFetch";
+import { mapFileMimeForName } from "./mapFileMime";
 
 export type TaskState = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE" | string;
 
@@ -140,6 +141,25 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
   return added.handle;
 }
 
+/** uploadMedia() with the file's type -- its extension's, for a map file
+ * (see mapFileMime.ts's mapFileMimeForName: browsers report "" for .gpx and
+ * .geojson, which would upload as application/octet-stream and never show
+ * as a map overlay), else the browser's. A server older than gramps-web-api
+ * v3.24.0 can't name a file of a type outside the host's mime.types (GPX
+ * is in none of them) and fails the upload with a 500, so a map file
+ * retries as application/octet-stream, which every server can name -- not
+ * as the browser's type, which on Linux is often the very same
+ * application/gpx+xml (found live). */
+async function uploadMediaAsType(token: string, file: File): Promise<string> {
+  const mapType = mapFileMimeForName(file.name);
+  if (!mapType) return uploadMedia(token, file, file.type || "application/octet-stream");
+  try {
+    return await uploadMedia(token, file, mapType);
+  } catch {
+    return uploadMedia(token, file, "application/octet-stream");
+  }
+}
+
 /** uploadMedia() plus a best-effort `desc` of the file's own name -- shared
  * by every "drop/pick a file to create a Media object" entry point
  * (RefPickerField.tsx's MediaListField, useMediaDrop.ts's global drop
@@ -147,7 +167,7 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
  * Not fatal if the desc PUT fails; the Media object itself is already
  * created either way. */
 export async function uploadMediaFile(token: string, file: File): Promise<string> {
-  const handle = await uploadMedia(token, file, file.type || "application/octet-stream");
+  const handle = await uploadMediaAsType(token, file);
   try {
     const obj = await fetchPlainObject(token, MEDIA_VIEW, handle);
     obj.desc = file.name;

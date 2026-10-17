@@ -18,7 +18,7 @@ import {
 } from "../store/wikidataApi";
 import { featuresToKml } from "../store/kmlWrite";
 import { setMediaDesc, uploadMedia } from "../store/jobsApi";
-import { KML_MIME } from "../store/visualData";
+import { KML_MIME } from "../store/mapFileMime";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";

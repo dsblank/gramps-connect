@@ -1,11 +1,13 @@
-// Fetching and reading a Place's attached KML file(s) -- shared between
-// MapCanvas.tsx (which draws every currently-plotted place's shape) and
-// useVisualData.ts (which needs a rough position for a place that has a
-// KML attachment but no lat/long of its own, see PendingKmlPlace). Both
-// callers go through the same per-media-handle cache below, so a file
-// fetched for one purpose is free the next time the other asks for it.
-import type { Feature, Position } from "geojson";
-import { kml } from "@tmcw/togeojson";
+// Fetching and reading a Place's attached map file(s) -- KML, GeoJSON or
+// GPX (see mapFileMime.ts) -- shared between MapCanvas.tsx (which draws
+// every currently-plotted place's shape) and useVisualData.ts (which needs
+// a rough position for a place that has a map file attached but no
+// lat/long of its own, see PendingKmlPlace). Both callers go through the
+// same per-media-handle cache below, so a file fetched for one purpose is
+// free the next time the other asks for it. Named for KML, the only format
+// this app writes; every format is read into the same GeoJSON features.
+import type { Feature, GeoJsonObject, Geometry, Position } from "geojson";
+import { gpx, kml } from "@tmcw/togeojson";
 import { getToken } from "../auth/auth";
 import { API_BASE } from "../config";
 import { apiFetch } from "./apiFetch";
@@ -18,7 +20,52 @@ import { apiFetch } from "./apiFetch";
  * see invalidateKmlFeatures below. */
 const featureCache = new Map<string, Promise<Feature[]>>();
 
-/** A single KML media object's shapes, as GeoJSON. The same jwt-bearing
+/** A GeoJSON or GPX file's own colours, in the simplestyle convention
+ * (`stroke`/`fill`/`fill-opacity`/`marker-color`, which both GeoJSON tools
+ * and @tmcw/togeojson's gpx() use), copied onto the `color`/`opacity`
+ * properties every map layer actually reads (see MapCanvas.tsx's
+ * KML_FILL_LAYER). Fills only what's missing, so an explicit `color` wins.
+ * Not applied to KML: this app's own KML carries `color` already, and
+ * leaving foreign KML alone keeps every existing overlay looking the same. */
+function applySimplestyle(feature: Feature): Feature {
+  const props = feature.properties ?? {};
+  const isRegion = feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon";
+  const color = props.color ?? (isRegion ? props.fill ?? props.stroke : props.stroke ?? props["marker-color"]);
+  const opacity = props.opacity ?? (isRegion ? props["fill-opacity"] : undefined);
+  if (color === props.color && opacity === props.opacity) return feature;
+  return { ...feature, properties: { ...props, color, opacity } };
+}
+
+/** A GeoJSON file's features: a FeatureCollection, a single Feature or a
+ * bare Geometry are all valid GeoJSON documents. */
+function geoJsonFeatures(doc: GeoJsonObject): Feature<Geometry | null>[] {
+  if (doc.type === "FeatureCollection") return (doc as { features?: Feature<Geometry | null>[] }).features ?? [];
+  if (doc.type === "Feature") return [doc as Feature<Geometry | null>];
+  return [{ type: "Feature", geometry: doc as Geometry, properties: {} }];
+}
+
+/** A map file's text, as GeoJSON features. The format is read off the
+ * content (GeoJSON is JSON; GPX and KML differ by root element) rather
+ * than the media object's stored mime, which a file attached by another
+ * client may not have set to anything this app recognizes. Throws on
+ * unparseable text; features with no geometry are dropped -- a KML
+ * Placemark without Point/LineString/Polygon (see @tmcw/togeojson's
+ * KMLOptions.skipNullGeometry), or a GeoJSON Feature with `geometry: null`,
+ * is of no use to a caller here, so dropped rather than threaded through
+ * as `Feature<Geometry | null>` everywhere downstream. */
+export function parseMapFile(text: string): Feature[] {
+  const hasGeometry = (f: Feature<Geometry | null>): f is Feature => f.geometry != null;
+  if (text.trimStart().startsWith("{")) {
+    return geoJsonFeatures(JSON.parse(text) as GeoJsonObject).filter(hasGeometry).map(applySimplestyle);
+  }
+  const dom = new DOMParser().parseFromString(text, "text/xml");
+  if (dom.documentElement.localName === "gpx") {
+    return gpx(dom).features.filter(hasGeometry).map(applySimplestyle);
+  }
+  return kml(dom).features.filter(hasGeometry);
+}
+
+/** A single map file's shapes, as GeoJSON. The same jwt-bearing
  * fetch every other media read in this app uses (see
  * MediaThumbnail.tsx/GeneratedItemActions.tsx). A file that fails to fetch
  * or parse contributes nothing rather than failing the whole caller -- one
@@ -33,13 +80,7 @@ function fetchKmlFeatures(handle: string): Promise<Feature[]> {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return [];
-      const text = await res.text();
-      const dom = new DOMParser().parseFromString(text, "text/xml");
-      // A Placemark with no Point/LineString/Polygon converts to a null
-      // geometry (see @tmcw/togeojson's KMLOptions.skipNullGeometry) -- of
-      // no use to a caller here, so dropped rather than threaded through as
-      // `Feature<Geometry | null>` everywhere downstream.
-      return kml(dom).features.filter((f): f is Feature => f.geometry !== null);
+      return parseMapFile(await res.text());
     } catch {
       return [];
     }
@@ -380,6 +421,65 @@ export async function fetchAllKmlRegions(handles: string[]): Promise<KmlRegion[]
     }
   }
   return regions;
+}
+
+/** A line (a route, a GPS track) attached to a place -- the counterpart to
+ * KmlRegion for OverlayLayersPanel.tsx's list, which shows lines alongside
+ * images and regions. Points get no row: a GPX file can carry dozens of
+ * waypoints, which would bury the rest of the list. */
+export interface KmlLine {
+  kmlHandle: string;
+  /** Same per-file feature index as KmlRegion.indexInFile -- see
+   * fetchAllKmlRegions' own comment on why it lines up with MapCanvas.tsx's. */
+  indexInFile: number;
+  name?: string;
+  /** Every vertex, across all of a multi-part line's parts -- only ever used
+   * for its bounding box (the panel's click-to-fly). */
+  coords: [number, number][];
+}
+
+/** Every vertex of `feature` if it's a line: a LineString, a MultiLineString
+ * (a GPX track with several segments) or a GeometryCollection of only
+ * LineStrings (how @tmcw/togeojson reads a KML MultiGeometry -- see
+ * polygonRingsOf). `[]` for anything else, meaning "not a line". */
+function lineCoordsOf(feature: Feature): Position[] {
+  const geometry = feature.geometry;
+  if (geometry?.type === "LineString") return geometry.coordinates;
+  if (geometry?.type === "MultiLineString") return geometry.coordinates.flat();
+  if (geometry?.type === "GeometryCollection" && geometry.geometries.length > 0
+    && geometry.geometries.every((g) => g.type === "LineString")) {
+    return geometry.geometries.flatMap((g) => (g.type === "LineString" ? g.coordinates : []));
+  }
+  return [];
+}
+
+/** True for a feature fetchAllKmlLines lists and MapCanvas.tsx's shapes
+ * effect lets the panel hide/dim -- shared for the same reason as
+ * isKmlRegion: the two must never drift apart. A region is never a line. */
+export function isKmlLine(feature: Feature): boolean {
+  return !isKmlRegion(feature) && lineCoordsOf(feature).length > 0;
+}
+
+/** Every line across a place's map file(s) -- fetchAllKmlRegions' twin,
+ * counting indexInFile the same way. */
+export async function fetchAllKmlLines(handles: string[]): Promise<KmlLine[]> {
+  if (handles.length === 0) return [];
+  const collections = await Promise.all(handles.map(fetchKmlFeatures));
+  const lines: KmlLine[] = [];
+  for (let h = 0; h < handles.length; h++) {
+    let indexInFile = 0;
+    for (const feature of collections[h]) {
+      if (feature.properties?.["@geometry-type"] === "groundoverlay" || !isKmlLine(feature)) {
+        indexInFile++;
+        continue;
+      }
+      const name = (feature.properties?.name as string | undefined) || undefined;
+      lines.push({
+        kmlHandle: handles[h], indexInFile: indexInFile++, name, coords: lineCoordsOf(feature) as [number, number][],
+      });
+    }
+  }
+  return lines;
 }
 
 /** Drops a handle's cached parse -- called after MapItemEditorDialog.tsx

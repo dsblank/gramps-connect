@@ -7,7 +7,7 @@ import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
 import {
-  fetchAllKmlFeatures, fetchAllKmlImageOverlays, isKmlRegion, kmlBounds, kmlOverlayBounds, unionBounds,
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, isKmlLine, isKmlRegion, kmlBounds, kmlOverlayBounds, unionBounds,
 } from "../../store/kmlMedia";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
@@ -444,10 +444,12 @@ export function MapCanvas({
         paint: {
           "line-color": ["coalesce", ["get", "color"], markColor],
           "line-width": 2,
-          // `hidden` is only ever set on a Polygon (see the shapes effect
-          // below) -- a bare LineString route never has it, so this only
-          // ever suppresses a hidden region's own outline, never a route.
-          "line-opacity": ["case", ["boolean", ["get", "hidden"], false], 0, 1],
+          // `hidden` hides a region's outline or a bare line alike (both
+          // stamped in the shapes effect below). `lineOpacity` is a line's
+          // own view-time override from OverlayLayersPanel.tsx, stamped on
+          // lines only -- a region's outline stays fully opaque, its slider
+          // dims the fill (`opacity`) instead.
+          "line-opacity": ["case", ["boolean", ["get", "hidden"], false], 0, ["coalesce", ["get", "lineOpacity"], 1]],
         },
       });
       map.addLayer({
@@ -676,6 +678,15 @@ export function MapCanvas({
           // copies of this test drifting apart is exactly how this feature's
           // key stopped lining up with that list's row for it in the first
           // place.
+          if (isKmlLine(feature)) {
+            // Same key fetchAllKmlLines/OverlayLayersPanel.tsx's line row uses.
+            const key = `line:${kmlHandle}:${indexInFile}`;
+            features.push({
+              ...feature,
+              properties: { ...feature.properties, lineOpacity: overrides.get(key), hidden: hidden.has(key) },
+            });
+            return;
+          }
           if (!isKmlRegion(feature)) {
             features.push(feature);
             return;

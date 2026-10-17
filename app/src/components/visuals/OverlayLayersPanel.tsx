@@ -1,5 +1,5 @@
-// A live "layers" list for every image overlay and drawn region attached to
-// the currently-plotted places -- lets someone with several overlapping
+// A live "layers" list for every image overlay, drawn region and line (a
+// route, a GPS track) attached to the currently-plotted places -- lets someone with several overlapping
 // historical-map overlays (see the plan) see them, jump the map to one,
 // dim one independently of the others, and hide one from view, all without
 // opening MapItemEditorDialog.tsx's full drawing editor.
@@ -16,25 +16,29 @@ import { Checkbox, Collapse, Group, Paper, ScrollArea, Slider, Stack, Text, Unst
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { formatDisplayDate } from "../../store/placeIndex";
 import type { MapPlace } from "../../store/visualData";
-import { fetchAllKmlImageOverlays, fetchAllKmlRegions, type KmlImageOverlay, type KmlRegion } from "../../store/kmlMedia";
+import {
+  fetchAllKmlImageOverlays, fetchAllKmlLines, fetchAllKmlRegions, type KmlImageOverlay, type KmlLine, type KmlRegion,
+} from "../../store/kmlMedia";
 import { overlayDateVisible } from "./mapStyles";
 import { t } from "../../i18n/i18n";
 
+type RowKind = "image" | "region" | "line";
+
 /** A row's own identity, shared with MapCanvas.tsx so a checked-off or
- * opacity-overridden item there matches back to the exact overlay or region
- * this panel is showing a control for. */
-function rowKey(kind: "image" | "region", kmlHandle: string, indexInFile: number): string {
+ * opacity-overridden item there matches back to the exact overlay, region
+ * or line this panel is showing a control for. */
+function rowKey(kind: RowKind, kmlHandle: string, indexInFile: number): string {
   return `${kind}:${kmlHandle}:${indexInFile}`;
 }
 
 interface OverlayRow {
-  kind: "image" | "region";
+  kind: RowKind;
   kmlHandle: string;
   indexInFile: number;
   name?: string;
   /** This item's own saved opacity (from MapItemEditorDialog.tsx) -- what
    * the slider below shows/starts at absent an override for this row (see
-   * `opacityOverrides`). */
+   * `opacityOverrides`). Always 1 for a line, which has no saved opacity. */
   opacity: number;
   placeTitle: string;
   /** [west, south, east, north] -- the bounding box of an image's 4 corners,
@@ -44,9 +48,9 @@ interface OverlayRow {
    * overlay is bigger than the current view, not just ease sideways at
    * whatever zoom the map already happened to be at. */
   bounds: [number, number, number, number];
-  /** Images only -- see KmlImageOverlay.order. Regions have no stacking
-   * concept of their own yet, so they simply list after every image,
-   * in whatever order fetchAllKmlRegions happened to return them. */
+  /** Images only -- see KmlImageOverlay.order. Regions and lines have no
+   * stacking concept of their own yet, so they simply list after every
+   * image (regions, then lines), in whatever order they were fetched. */
   order: number;
 }
 
@@ -71,6 +75,19 @@ function regionToRow(region: KmlRegion, placeTitle: string): OverlayRow {
     kind: "region", kmlHandle: region.kmlHandle, indexInFile: region.indexInFile, name: region.name,
     opacity: region.opacity, placeTitle, bounds: boundsOf(verts), order: Infinity,
   };
+}
+
+function lineToRow(line: KmlLine, placeTitle: string): OverlayRow {
+  return {
+    kind: "line", kmlHandle: line.kmlHandle, indexInFile: line.indexInFile, name: line.name,
+    opacity: 1, placeTitle, bounds: boundsOf(line.coords), order: Infinity,
+  };
+}
+
+function untitled(kind: RowKind): string {
+  if (kind === "image") return t("Untitled overlay");
+  if (kind === "region") return t("Untitled region");
+  return t("Untitled line");
 }
 
 interface OverlayLayersPanelProps {
@@ -116,12 +133,16 @@ export function OverlayLayersPanel({
     const placeByKmlHandle = new Map(
       places.flatMap((place) => place.kmlMedia.map((handle) => [handle, place] as const))
     );
-    Promise.all([fetchAllKmlImageOverlays(handles), fetchAllKmlRegions(handles)]).then(([overlays, regions]) => {
+    Promise.all([
+      fetchAllKmlImageOverlays(handles), fetchAllKmlRegions(handles), fetchAllKmlLines(handles),
+    ]).then(([overlays, regions, lines]) => {
       if (cancelled) return;
-      const imageRows = overlays.map((o) => imageToRow(o, placeByKmlHandle.get(o.kmlHandle)?.title ?? ""));
-      const regionRows = regions.map((r) => regionToRow(r, placeByKmlHandle.get(r.kmlHandle)?.title ?? ""));
+      const titleOf = (kmlHandle: string) => placeByKmlHandle.get(kmlHandle)?.title ?? "";
+      const imageRows = overlays.map((o) => imageToRow(o, titleOf(o.kmlHandle)));
+      const regionRows = regions.map((r) => regionToRow(r, titleOf(r.kmlHandle)));
+      const lineRows = lines.map((l) => lineToRow(l, titleOf(l.kmlHandle)));
       imageRows.sort((a, b) => a.order - b.order);
-      setRows([...imageRows, ...regionRows]);
+      setRows([...imageRows, ...regionRows, ...lineRows]);
     });
     return () => {
       cancelled = true;
@@ -179,7 +200,7 @@ export function OverlayLayersPanel({
                       style={{ flex: 1, minWidth: 0, textAlign: "left" }}
                     >
                       <Text size="xs" fw={500} truncate c={shown ? undefined : "dimmed"}>
-                        {row.name || (row.kind === "image" ? t("Untitled overlay") : t("Untitled region"))}
+                        {row.name || untitled(row.kind)}
                       </Text>
                       <Text size="xs" c="dimmed" truncate>
                         {row.placeTitle}

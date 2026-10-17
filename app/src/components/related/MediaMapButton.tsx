@@ -1,10 +1,10 @@
 import { Button, Group, Tooltip } from "@mantine/core";
 import { formatHash } from "../../hash";
 import { getBacklinks, type ObjectDetail } from "../../store/objectDetail";
-import { KML_MIME } from "../../store/visualData";
+import { isMapFileMime } from "../../store/mapFileMime";
 import { t } from "../../i18n/i18n";
 
-/** A KML media object's own "see it on the map" button -- deliberately not
+/** A map file's (KML/GeoJSON/GPX) own "see it on the map" button -- deliberately not
  * folded into VisualButtons.tsx, whose Map/Timeline/Tree buttons scope a
  * visual to a *subject* (a person's events, a place's descendants, ...) and
  * Media has none of its own to scope to. This means something else: jump to
@@ -13,13 +13,13 @@ import { t } from "../../i18n/i18n";
  * place subject" effect selects that place automatically so the shape is
  * already drawn on arrival, not one more click away. */
 export function MediaMapButton({ detail }: { detail: ObjectDetail }) {
-  if (detail.mime !== KML_MIME) return null;
+  if (!isMapFileMime(detail.mime)) return null;
   const places = (getBacklinks(detail).place ?? []) as { handle: string; title?: string }[];
   if (places.length === 0) return null;
   return (
     <Group gap="xs" wrap="wrap">
       {places.map((place) => (
-        <Tooltip key={place.handle} label={t("See this KML file's shape on the map")} withArrow>
+        <Tooltip key={place.handle} label={t("See this file's shape on the map")} withArrow>
           <Button
             component="a"
             href={formatHash({ viewKey: "map", subject: { type: "place", handle: place.handle } })}

@@ -21,12 +21,7 @@ import { getViewStore } from "./registry";
 import { formatEventType, parseHandleList } from "./views";
 import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
 import { loadDisplaySettings } from "./displaySettings";
-
-/** The one MIME type this app overlays on the map -- a place's attached
- * KML file (a field boundary, a route, ...), drawn as its own vector shape
- * rather than just a pin. What Python's mimetypes module (and so Gramps'
- * own media-add) resolves a ".kml" file to. */
-export const KML_MIME = "application/vnd.google-earth.kml+xml";
+import { isMapFileMime } from "./mapFileMime";
 
 /** A cached Place that has usable coordinates. */
 export interface MapPlace {
@@ -40,7 +35,8 @@ export interface MapPlace {
   /** Gregorian years of those events, ascending, for the time filter.
    * Events with no usable date contribute nothing. */
   years: number[];
-  /** Handles of this place's attached media whose mime is KML_MIME -- what
+  /** Handles of this place's attached map files (KML, GeoJSON or GPX --
+   * see mapFileMime.ts), each drawn as its own vector shape -- what
    * lets MapCanvas fetch and overlay them when this place is selected.
    * Empty for the common case of a place with no such attachment. */
   kmlMedia: string[];
@@ -55,7 +51,7 @@ export interface MapPlace {
 /** A place with no lat/long of its own, but a KML attachment that might
  * supply one -- see useVisualData.ts, which fetches each of these and, once
  * a position can be read out of the file, promotes it into a real MapPlace
- * (via KML_MIME's own coordinates, which the KML spec always has). Kept
+ * (via the file's own coordinates, which every map file format carries). Kept
  * separate from MapPlace rather than giving that a nullable lat/long: every
  * other reader of `data.places` (search, the time filter, scope resolution,
  * ...) wants "plottable, definitely has coordinates" to keep meaning that
@@ -310,7 +306,7 @@ export function readVisualData(): VisualData {
       else childPlaces.set(parent, [handle]);
     }
     const kmlMedia = parseHandleList(mediaRefs)
-      .filter((mediaHandle) => mimeByMediaHandle.get(mediaHandle) === KML_MIME);
+      .filter((mediaHandle) => isMapFileMime(mimeByMediaHandle.get(mediaHandle)));
     const coords = parseCoords(latText, longText);
     if (!coords) {
       // No lat/long of its own, but a KML file's own coordinates (the KML
