@@ -36,6 +36,7 @@ import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
 import { startCatchupSweep } from "./store/jobsPoll";
+import { watchRememberedIndexTasks } from "./store/searchIndexWatch";
 import { startAppUpdateCheck } from "./store/appUpdateCheck";
 import { loadUserDirectory } from "./store/userDirectory";
 import { loadKnownUsersFromDirectory } from "./store/knownUsers";
@@ -434,6 +435,10 @@ function AuthenticatedApp() {
   useEffect(() => {
     return startCatchupSweep(jobsPollCallbacks);
   }, []);
+
+  // A search reindex an import/restore left running when it reloaded the
+  // page -- see searchIndexWatch.ts. Same once-per-app lifetime.
+  useEffect(() => watchRememberedIndexTasks(), []);
 
   // Background username -> full_name resolution for the chat views
   // (ChatBubble.tsx) -- fire-and-forget so it's already warm by the time a

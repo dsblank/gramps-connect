@@ -4,6 +4,7 @@ import { getToken, isTokenFresh } from "../auth/auth";
 import { FreshTokenRequiredError } from "../store/deleteApi";
 import { clearAllOpfs } from "../store/opfs";
 import { describeTaskFailure, waitForTask } from "../store/taskApi";
+import { rememberIndexTasks } from "../store/searchIndexWatch";
 import { previewRestore, runRestore, type RestoreSummary } from "../store/toolsApi";
 import { ReloginDialog } from "./ReloginDialog";
 import { t } from "../i18n/i18n";
@@ -88,6 +89,7 @@ export function RestoreBackupDialog({ opened, onClose }: RestoreBackupDialogProp
         if (status.state !== "SUCCESS") {
           throw new Error(describeTaskFailure(status));
         }
+        rememberIndexTasks(status.result_object);
       }
       await clearAllOpfs();
       window.location.reload();

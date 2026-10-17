@@ -12,6 +12,7 @@ import {
 } from "../store/importApi";
 import { clearAllOpfs } from "../store/opfs";
 import { describeTaskFailure, waitForTask } from "../store/taskApi";
+import { rememberIndexTasks } from "../store/searchIndexWatch";
 import { t } from "../i18n/i18n";
 
 type Stage = "select" | "previewing" | "preview" | "importing" | "done" | "error";
@@ -157,6 +158,7 @@ export function ImportDialog({ opened, onClose }: ImportDialogProps) {
           throw new Error(describeTaskFailure(status));
         }
         outcome = parseImportResult(status.result_object);
+        rememberIndexTasks(status.result_object);
       } else {
         outcome = result.result;
       }
