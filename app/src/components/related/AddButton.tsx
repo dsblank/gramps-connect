@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Textarea, TextInput } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { createBlogPost } from "../../store/blogApi";
+import { pickAndAddMedia } from "../../store/addMedia";
 import { getViewStore } from "../../store/registry";
 import { createTopic } from "../../store/topicsApi";
 import { openTopicWindow } from "../../store/topicWindows";
@@ -159,11 +160,17 @@ function NewBlogPostButton() {
  *
  * "story" is excluded the same way MenuBar.tsx excludes it from its own Add
  * dropdown: a blank story has no person to attach to, only the person-scoped
- * generate flow creates one. Media/Output have no create dialog at all (not
- * in EDITABLE_TYPES), so nothing renders for those. */
+ * generate flow creates one. Media has no create dialog (not in
+ * EDITABLE_TYPES) -- a new one starts from a file, so its button opens the
+ * file picker instead (store/addMedia.ts), same as MenuBar's "Add media…".
+ * Output has neither, so nothing renders for it. */
 export function AddButton({ view, draftStack }: { view: ViewConfig; draftStack?: UseDraftStack }) {
   if (view.key === "topics") return <NewTopicButton />;
   if (view.key === "blog") return <NewBlogPostButton />;
+  if (view.key === "media") {
+    if (!hasPermissions(PERM_ADD_OBJ)) return null;
+    return <Button size="xs" onClick={pickAndAddMedia}>{t("Add media")}</Button>;
+  }
 
   const type = view.key as DraftType;
   const canAdd =

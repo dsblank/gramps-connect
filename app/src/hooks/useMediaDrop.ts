@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { getToken, hasPermissions } from "../auth/auth";
-import { uploadMediaFile } from "../store/jobsApi";
+import { addedFilesLabel, uploadMediaFiles } from "../store/addMedia";
 import { attachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
 import { DRAFT_TYPE_LABELS, MEDIA_CAPABLE_TYPES, type DraftEntry, type DraftType, type UseDraftStack } from "../store/draftStack";
@@ -82,17 +82,9 @@ function hasFiles(e: DragEvent): boolean {
 
 async function handleDrop(files: File[], draftStack: UseDraftStack, activeKey: string) {
   const target = resolveDropTarget(draftStack, activeKey);
-  const token = await getToken();
-  const uploaded: string[] = [];
-  for (const file of files) {
-    try {
-      uploaded.push(await uploadMediaFile(token, file));
-    } catch (err: any) {
-      notifications.show({ color: "red", title: "Media upload failed", message: err.message ?? String(err) });
-    }
-  }
+  const uploaded = await uploadMediaFiles(files);
   if (uploaded.length === 0) return;
-  const plural = uploaded.length > 1 ? `${uploaded.length} files` : "File";
+  const plural = addedFilesLabel(uploaded.length);
 
   if (target.kind === "draft") {
     const existing = (target.draft.data.media_list as MediaRef[] | undefined) ?? [];
@@ -108,6 +100,7 @@ async function handleDrop(files: File[], draftStack: UseDraftStack, activeKey: s
 
   if (target.kind === "viewed") {
     try {
+      const token = await getToken();
       // Sequential, not Promise.all: attachRefListEntry is its own
       // GET-then-PUT round trip, so concurrent calls for more than one
       // dropped file would race and each overwrite the other's append.
@@ -144,8 +137,8 @@ export function useMediaDrop(draftStack: UseDraftStack, activeKey: string): Medi
 
   useEffect(() => {
     // Every outcome above (draft/viewed/none) ends in uploadMediaFile, an
-    // AddObject-only call -- same gate ListHeader.tsx's "New Media" button
-    // hides itself behind. Skip wiring the listeners at all for a role that
+    // AddObject-only call -- same gate the Media list's "Add media" button
+    // (AddButton.tsx) and MenuBar's "Add media…" hide themselves behind. Skip wiring the listeners at all for a role that
     // lacks it, rather than showing the overlay for a drop that can only
     // 403: unlike a role change (which forces a reload, see auth.ts's
     // logout()/refreshTokenNow() docs), this never needs to re-evaluate

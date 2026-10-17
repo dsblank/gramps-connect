@@ -20,6 +20,7 @@ import { formatHash } from "../hash";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
 import { runMediaExport } from "../store/mediaExportApi";
+import { pickAndAddMedia } from "../store/addMedia";
 import { exportLabel, downloadArchiveLocally } from "../store/jobsPromote";
 import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
@@ -417,6 +418,9 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               perm: type === "family" ? [PERM_ADD_OBJ, PERM_EDIT_OBJ] : PERM_ADD_OBJ,
               onClick: () => draftStack.openDraft(type),
             })),
+            // Media has no create dialog: a new one always starts from a
+            // file, so this opens the file picker instead (store/addMedia.ts).
+            { label: t("Add media…"), perm: PERM_ADD_OBJ, onClick: pickAndAddMedia },
           ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already
