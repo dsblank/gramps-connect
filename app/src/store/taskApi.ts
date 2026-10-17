@@ -11,7 +11,9 @@ function sleep(ms: number): Promise<void> {
 }
 
 const POLL_MS = 1500;
-const ACTIVE_STATES = new Set(["PENDING", "STARTED", "PROGRESS"]);
+/** Task states meaning "not finished yet". PROGRESS is a running task that
+ * has reported progress (e.g. export_db's "Exporting..."), not a failure. */
+export const ACTIVE_STATES: ReadonlySet<string> = new Set(["PENDING", "STARTED", "PROGRESS"]);
 
 /** Polls GET /api/tasks/<id> until the task leaves PENDING/STARTED/PROGRESS.
  * Long-running tasks (imports especially) can easily outlive a 15-minute

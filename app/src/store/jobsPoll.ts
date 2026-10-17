@@ -8,6 +8,7 @@
 // (server-side) is already the durable record.
 import { getCurrentUsername, getToken } from "../auth/auth";
 import { getTaskStatus, listOwnTasks } from "./jobsApi";
+import { ACTIVE_STATES } from "./taskApi";
 import {
   promoteJob,
   downloadArchiveLocally,
@@ -75,7 +76,7 @@ export function trackJob(taskId: string, kind: JobKind, callbacks: JobsPollCallb
     }
     try {
       const status = await getTaskStatus(token, taskId);
-      if (status.state === "PENDING" || status.state === "STARTED") {
+      if (ACTIVE_STATES.has(status.state)) {
         setTimeout(poll, DISPATCH_POLL_MS);
         return;
       }

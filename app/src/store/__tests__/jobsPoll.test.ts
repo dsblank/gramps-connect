@@ -19,7 +19,7 @@ vi.mock("../jobsPromote", async (importOriginal) => ({
 import { getCurrentUsername } from "../../auth/auth";
 import { getTaskStatus, listOwnTasks, type TaskListItem, type TaskStatus } from "../jobsApi";
 import { promoteJob, downloadArchiveLocally } from "../jobsPromote";
-import { sweepOnce } from "../jobsPoll";
+import { sweepOnce, trackJob } from "../jobsPoll";
 
 function task(overrides: Partial<TaskListItem> = {}): TaskListItem {
   return {
@@ -122,5 +122,33 @@ describe("sweepOnce", () => {
     expect(downloadArchiveLocally).toHaveBeenCalledWith("test-token", "/api/media/archive/abc.zip", "desc");
     expect(onDownloaded).toHaveBeenCalledWith("desc", "export");
     expect(onPromoted).not.toHaveBeenCalled();
+  });
+});
+
+describe("trackJob", () => {
+  beforeEach(() => {
+    vi.mocked(getTaskStatus).mockReset();
+    vi.mocked(promoteJob).mockReset().mockResolvedValue({ handle: "h1", desc: "d", hasReport: false });
+  });
+
+  // A running export that has reported progress ("Exporting...") is in
+  // PROGRESS -- it must keep being polled, not be reported as failed.
+  it("keeps polling through PROGRESS and promotes on SUCCESS", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(getTaskStatus)
+        .mockResolvedValueOnce({ state: "PROGRESS", result_object: { progress: 0.5 } })
+        .mockResolvedValueOnce(successStatus("/api/exporters/gramps/file/processed/x.gramps"));
+      const callbacks = { onPromoted: vi.fn(), onDownloaded: vi.fn(), onFailed: vi.fn() };
+
+      trackJob("t1", "export", callbacks, "desc");
+      await vi.runAllTimersAsync();
+
+      expect(getTaskStatus).toHaveBeenCalledTimes(2);
+      expect(callbacks.onFailed).not.toHaveBeenCalled();
+      expect(callbacks.onPromoted).toHaveBeenCalledWith({ handle: "h1", desc: "d", hasReport: false }, "export");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
