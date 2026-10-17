@@ -48,6 +48,51 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
   return access_token as string;
 }
 
+/** What each tree-locking task (gramps-web-api v3.24.0+'s LOCK_WRITE and
+ * search-index locks) is called in a "something is already running"
+ * message -- a phrase that fits "<it> is still running". */
+const LOCKED_TASK_LABELS: Record<string, string> = {
+  import_file: "An import",
+  import_media_archive: "A media import",
+  restore_backup: "A backup restore",
+  restore_backup_archive: "A backup restore",
+  create_backup: "A backup",
+  check_repair_database: "Check and Repair",
+  upgrade_database_schema: "A database upgrade",
+  delete_objects: "A delete",
+  search_reindex_full: "A search index rebuild",
+  search_reindex_full_semantic: "A search index rebuild",
+};
+
+/** A 409 `task_locked` (gramps-web-api v3.24.0+: a tree-changing task, or
+ * a second full reindex, while another one runs) names only the blocking
+ * task's id -- looked up here so the message can say what it is, who
+ * started it and when. Falls back to the server's own message if the
+ * lookup fails (e.g. a Member can't see another user's task). */
+export async function describeTaskLocked(serverMessage: string, taskId: unknown): Promise<string> {
+  const fallback = `${serverMessage}. Try again once it has finished.`;
+  if (typeof taskId !== "string") return fallback;
+  try {
+    // Dynamic: auth.ts imports this module, so a static import would be a cycle.
+    const { getToken, getCurrentUsername } = await import("../auth/auth");
+    const res = await apiFetch(`${API_BASE}/api/tasks/${encodeURIComponent(taskId)}`, {
+      headers: { Authorization: `Bearer ${await getToken()}` },
+    });
+    if (!res.ok) return fallback;
+    const task = (await res.json()) as { name?: string; user_name?: string; created_at?: string };
+    const what = (task.name && LOCKED_TASK_LABELS[task.name]) || "Another task";
+    const by = task.user_name && task.user_name !== getCurrentUsername() ? ` by ${task.user_name}` : "";
+    const started = task.created_at ? new Date(task.created_at) : null;
+    const at = started && !Number.isNaN(started.getTime())
+      ? ` at ${started.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      : "";
+    const startedPart = by || at ? ` (started${by}${at})` : "";
+    return `${what}${startedPart} is still running on this tree. Try again once it has finished.`;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function parseErrorMessage(res: Response): Promise<string> {
   // QueryLangError etc. come back as {"error": {"code", "message"}} --
   // surface .message (e.g. "invalid syntax: ...") rather than the raw
@@ -55,6 +100,9 @@ export async function parseErrorMessage(res: Response): Promise<string> {
   const body = await res.text();
   try {
     const parsed = JSON.parse(body);
+    if (parsed?.error?.type === "task_locked" && typeof parsed.error.message === "string") {
+      return describeTaskLocked(parsed.error.message, parsed.error.task?.id);
+    }
     if (typeof parsed?.error?.message === "string") return parsed.error.message;
     // A bare flask abort(422) etc. carries no message, just flask-smorest's
     // default {"code": 422, "status": "Unprocessable Entity"} -- a status
