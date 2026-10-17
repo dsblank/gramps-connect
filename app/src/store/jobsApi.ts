@@ -143,8 +143,8 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
 
 /** uploadMedia() with the file's type -- its extension's, for a map file
  * (see mapFileMime.ts's mapFileMimeForName: browsers report "" for .gpx and
- * .geojson, which would upload as application/octet-stream and never show
- * as a map overlay), else the browser's. A server older than gramps-web-api
+ * .geojson, which would upload as application/octet-stream and never be
+ * recognized as a map file), else the browser's. A server older than gramps-web-api
  * v3.24.0 can't name a file of a type outside the host's mime.types (GPX
  * is in none of them) and fails the upload with a 500, so a map file
  * retries as application/octet-stream, which every server can name -- not

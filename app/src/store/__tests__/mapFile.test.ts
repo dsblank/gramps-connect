@@ -7,9 +7,13 @@ vi.mock("../../auth/auth", () => ({ getToken: vi.fn().mockResolvedValue("tok") }
 vi.mock("../apiFetch", () => ({ apiFetch: vi.fn() }));
 
 import { apiFetch } from "../apiFetch";
-import { fetchAllKmlFeatures, fetchAllKmlLines, fetchAllKmlRegions, isKmlLine, isKmlRegion, parseMapFile } from "../kmlMedia";
 import {
-  GEOJSON_MIME, GPX_MIME, KML_MIME, isMapFileMime, mapFileMimeExpr, mapFileMimeForName,
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, fetchAllKmlLines, fetchAllKmlRegions, fetchOverlaySource, isKmlLine,
+  isKmlRegion, parseMapFile,
+} from "../kmlMedia";
+import { mapItemToGeoJson } from "../mapFileWrite";
+import {
+  GEOJSON_MIME, GPX_MIME, KML_MIME, isMapFileMime, mapFileMimeForName,
 } from "../mapFileMime";
 
 describe("mapFileMime", () => {
@@ -27,10 +31,6 @@ describe("mapFileMime", () => {
     expect(mapFileMimeForName("farm.kml")).toBe(KML_MIME);
     expect(mapFileMimeForName("photo.jpg")).toBeNull();
     expect(mapFileMimeForName("README")).toBeNull();
-  });
-
-  it("builds a where_expr listing every type", () => {
-    expect(mapFileMimeExpr()).toBe(`mime in ["${KML_MIME}", "${GEOJSON_MIME}", "${GPX_MIME}"]`);
   });
 });
 
@@ -136,5 +136,28 @@ describe("fetchAllKmlLines", () => {
     const regions = await fetchAllKmlRegions(["h-lines"]);
     expect(regions.map((r) => r.indexInFile)).toEqual([0]);
     expect(isKmlRegion(features[0])).toBe(true);
+  });
+});
+
+describe("mapItemToGeoJson round trip", () => {
+  it("reads back shapes, image overlays and the source it was made from", async () => {
+    const shape: Feature = {
+      type: "Feature",
+      properties: { name: "Farm", color: "#00aa00", opacity: 0.4, note: { by: "survey" } },
+      geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
+    };
+    const corners: [[number, number], [number, number], [number, number], [number, number]] = [[0, 1], [1, 1], [1, 0], [0, 0]];
+    const text = mapItemToGeoJson([shape], [{ handle: "img1", corners, name: "1850 map", opacity: 0.6, order: 10 }], "src1");
+    vi.mocked(apiFetch).mockImplementation(async () => new Response(text));
+
+    // The image overlay is drawn as an image, not as a shape.
+    const features = await fetchAllKmlFeatures(["h-roundtrip"]);
+    expect(features).toEqual([shape]);
+    expect(await fetchAllKmlImageOverlays(["h-roundtrip"])).toEqual([{
+      imageHandle: "img1", corners, kmlHandle: "h-roundtrip", name: "1850 map", opacity: 0.6, order: 10, indexInFile: 0,
+    }]);
+    expect(await fetchOverlaySource("h-roundtrip")).toBe("src1");
+    // Region rows still point at the right feature with an overlay after it.
+    expect((await fetchAllKmlRegions(["h-roundtrip"])).map((r) => [r.indexInFile, r.name, r.opacity])).toEqual([[0, "Farm", 0.4]]);
   });
 });

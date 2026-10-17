@@ -21,6 +21,7 @@ import { GeneratedItemActions } from "./related/GeneratedItemActions";
 import { MediaMapButton } from "./related/MediaMapButton";
 import { MediaViewButton } from "./related/MediaViewButton";
 import { MediaKmlEditButton } from "./related/MediaKmlEditButton";
+import { MakeOverlayButton } from "./related/MakeOverlayButton";
 import { MediaGrampletEditButton } from "./related/MediaGrampletEditButton";
 import { MediaEditButton } from "./related/MediaEditButton";
 import { DiscussButton } from "./related/DiscussButton";
@@ -563,6 +564,7 @@ export function RelatedPanel({
             <>
               <MediaEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
               <MediaKmlEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
+              <MakeOverlayButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
               <MediaGrampletEditButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
             </>
           )}

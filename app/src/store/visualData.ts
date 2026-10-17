@@ -21,7 +21,7 @@ import { getViewStore } from "./registry";
 import { formatEventType, parseHandleList } from "./views";
 import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
 import { loadDisplaySettings } from "./displaySettings";
-import { isMapFileMime } from "./mapFileMime";
+import { GEOJSON_MIME } from "./mapFileMime";
 
 /** A cached Place that has usable coordinates. */
 export interface MapPlace {
@@ -35,8 +35,8 @@ export interface MapPlace {
   /** Gregorian years of those events, ascending, for the time filter.
    * Events with no usable date contribute nothing. */
   years: number[];
-  /** Handles of this place's attached map files (KML, GeoJSON or GPX --
-   * see mapFileMime.ts), each drawn as its own vector shape -- what
+  /** Handles of this place's attached map overlays (mapOverlays.ts),
+   * each drawn as its own vector shape -- what
    * lets MapCanvas fetch and overlay them when this place is selected.
    * Empty for the common case of a place with no such attachment. */
   kmlMedia: string[];
@@ -223,14 +223,15 @@ export function readVisualData(): VisualData {
   const placeSnapshot = placeStore.getSnapshot();
   const eventSnapshot = eventStore.getSnapshot();
 
-  // Handle -> mime, for turning a place's media_refs (handles only) into
-  // the ones actually worth overlaying. Reads whatever the Media cache
+  // The overlays among every cached Media object (mapOverlays.ts: a
+  // GeoJSON file with the overlay tag), for turning a place's media_refs
+  // (handles only) into the ones actually worth overlaying. Reads whatever the Media cache
   // has loaded so far, same "first prefix, then whatever a background fill
   // adds" honesty as the places/events read below.
-  const mimeByMediaHandle = new Map<string, string>();
-  for (const row of mediaStore.readColumns(["handle", "mime"])) {
-    const [handle, mime] = row as [string, string | null];
-    if (mime) mimeByMediaHandle.set(handle, mime);
+  const overlayHandles = new Set<string>();
+  for (const row of mediaStore.readColumns(["handle", "mime", "is_map_overlay"])) {
+    const [handle, mime, isOverlay] = row as [string, string | null, number | null];
+    if (mime === GEOJSON_MIME && Number(isOverlay) > 0) overlayHandles.add(handle);
   }
 
   const events: TimelineEvent[] = [];
@@ -306,7 +307,7 @@ export function readVisualData(): VisualData {
       else childPlaces.set(parent, [handle]);
     }
     const kmlMedia = parseHandleList(mediaRefs)
-      .filter((mediaHandle) => isMapFileMime(mimeByMediaHandle.get(mediaHandle)));
+      .filter((mediaHandle) => overlayHandles.has(mediaHandle));
     const coords = parseCoords(latText, longText);
     if (!coords) {
       // No lat/long of its own, but a KML file's own coordinates (the KML

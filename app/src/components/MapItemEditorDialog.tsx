@@ -21,17 +21,19 @@ import { getToken } from "../auth/auth";
 import { fetchAuthedBlobUrl } from "../store/authedFetch";
 import { formatHash } from "../hash";
 import {
-  fetchAllKmlFeatures, fetchAllKmlImageOverlays, invalidateKmlFeatures, mercatorBearing, mercatorDistance, rotatePoint,
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, fetchOverlaySource, invalidateKmlFeatures, mercatorBearing, mercatorDistance, rotatePoint,
   scalePoint, type OverlayCorners,
 } from "../store/kmlMedia";
-import { featuresToKml, type ImageOverlay } from "../store/kmlWrite";
-import { uploadMedia, updateMediaFile, setMediaDesc } from "../store/jobsApi";
+import { mapItemToGeoJson, type ImageOverlay } from "../store/mapFileWrite";
+import { assembleForSaving, lockPart, prepareForEditing, type EditableGeometry, type EditSession, type SavedPart } from "../store/mapEditModel";
+import { createOverlay } from "../store/mapOverlays";
+import { updateMediaFile, setMediaDesc } from "../store/jobsApi";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { fetchObjectExtended, getBacklinks } from "../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../store/refListApi";
 import { getViewStore } from "../store/registry";
 import { buildSimpleSearchExpr } from "../store/simpleSearch";
-import { KML_MIME } from "../store/mapFileMime";
+import { GEOJSON_MIME } from "../store/mapFileMime";
 import { parseCoords } from "../store/visualData";
 import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { readVisualColors } from "./visuals/cssVar";
@@ -85,6 +87,8 @@ export type MapItemEditorTarget =
   // "+ Add overlay" on an existing, already-located place left the map
   // exactly there).
   | { kind: "new"; place: { handle: string; title: string; lat?: string; long?: string } }
+  // Always a map overlay (mapOverlays.ts) -- a GeoJSON file this app
+  // wrote, saved back in place.
   | { kind: "edit"; handle: string };
 
 /** One placed-and-sized image overlay in this dialog -- always 4 explicit
@@ -184,6 +188,13 @@ const TERRA_DRAW_LAYERS = ["td-polygon", "td-polygon-outline", "td-linestring", 
  * is drawn by this separate, independent geojson source/layer stacked on
  * top of terra-draw's own -- purely visual, never saved from directly
  * (handleSave reads terra-draw's own snapshot, this is a mirror of it). */
+/** Shapes loaded from the file that terra-draw can't edit (see
+ * mapEditModel.ts's lockPart) -- drawn dashed underneath, so they're still
+ * visible, and saved back exactly as they were. */
+const LOCKED_SOURCE = "locked-shapes";
+const LOCKED_FILL_LAYER = "locked-shapes-fill";
+const LOCKED_LINE_LAYER = "locked-shapes-line";
+
 const LABEL_PREVIEW_SOURCE = "label-preview";
 const LABEL_PREVIEW_LAYER = "label-preview-text";
 
@@ -431,11 +442,13 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // Whether the canvas currently holds anything worth saving -- Save stays
   // disabled at zero, same as every create dialog's own empty-state guard.
   const [hasFeatures, setHasFeatures] = useState(false);
-  // Set once loading an existing file finds a shape terra-draw can't
-  // represent (a KML MultiGeometry/GeometryCollection) -- blocks the
-  // canvas entirely rather than silently dropping the offending shape,
-  // since a save from a partially-loaded file would delete it for real.
-  const [tooComplex, setTooComplex] = useState(false);
+  // What was set aside when loading an existing file (mapEditModel.ts) --
+  // the properties, multi-part groups and track times terra-draw doesn't
+  // keep, put back by handleSave. Null for a new item.
+  const sessionRef = useRef<EditSession | null>(null);
+  // How many of the file's shapes terra-draw couldn't take, shown locked.
+  const [lockedCount, setLockedCount] = useState(0);
+  const [lockedNoticeDismissed, setLockedNoticeDismissed] = useState(false);
   // The media object's own `desc` -- blank to start for a new item, loaded
   // from the existing object for an edit (see the effect below). Optional,
   // like every other field a bare Media object starts without.
@@ -869,6 +882,17 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         // session: images first, geometries on top, matching how a photo
         // of an old map should sit relative to pins/routes drawn over it.
         map.addLayer({ id: OVERLAY_ANCHOR_LAYER, type: "background", paint: { "background-opacity": 0 } });
+        map.addSource(LOCKED_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: LOCKED_FILL_LAYER, type: "fill", source: LOCKED_SOURCE,
+          filter: ["==", ["geometry-type"], "Polygon"],
+          paint: { "fill-color": ["coalesce", ["get", "color"], "#888888"], "fill-opacity": 0.15 },
+        });
+        map.addLayer({
+          id: LOCKED_LINE_LAYER, type: "line", source: LOCKED_SOURCE,
+          filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
+          paint: { "line-color": ["coalesce", ["get", "color"], "#888888"], "line-width": 2, "line-dasharray": [2, 2] },
+        });
         draw.start();
         draw.setMode("select");
         // Added after draw.start() so it stacks above terra-draw's own
@@ -1341,38 +1365,32 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     }
     fetchAllKmlFeatures([target.handle]).then((features) => {
       if (cancelled || features.length === 0) return;
-      const loadable: { type: "Feature"; geometry: Point | LineString | Polygon; properties: { mode: DrawMode; color?: string; name?: string; opacity?: number } }[] = [];
-      for (const feature of features) {
-        const geometry = feature.geometry;
-        // A direct literal check here (rather than a separate
-        // geometry->mode lookup) so TypeScript narrows `geometry` itself
-        // to terra-draw's GeoJSONStoreGeometries union for the push below
-        // -- a MultiGeometry/GeometryCollection fails it and blocks the
-        // whole load (see tooComplex's own doc comment).
-        if (!geometry || (geometry.type !== "Point" && geometry.type !== "LineString" && geometry.type !== "Polygon")) {
-          setTooComplex(true);
-          return;
-        }
-        const featureMode: DrawMode =
-          geometry.type === "Point" ? "point" : geometry.type === "LineString" ? "linestring" : "polygon";
-        // Round-tripped through tokml/togeojson as a plain string
-        // ExtendedData value (same as color), so it needs the same numeric
-        // coercion+range check kmlMedia.ts's own image-overlay opacity
-        // parsing already does -- undefined (not just any junk value)
-        // falls through to readOpacity's own opacityRef default.
-        const opacityRaw = Number(feature.properties?.opacity);
-        const opacity = Number.isFinite(opacityRaw) && opacityRaw >= 0 && opacityRaw <= 1 ? opacityRaw : undefined;
-        loadable.push({
-          type: "Feature", geometry,
-          properties: {
-            mode: featureMode, color: feature.properties?.color as string | undefined,
-            name: feature.properties?.name as string | undefined,
-            ...(geometry.type === "Polygon" ? { opacity } : {}),
-          },
-        });
-      }
-      draw.addFeatures(loadable);
-      for (const feature of loadable) extendBounds(bounds, feature.geometry);
+      // Split into single, 2D parts with everything terra-draw won't keep
+      // set aside (mapEditModel.ts), so a multi-part shape, a GPS track or
+      // a property this editor doesn't know survives the save.
+      const session = prepareForEditing(features);
+      sessionRef.current = session;
+      const parts = [...session.parts];
+      const results = draw.addFeatures(parts.map((part) => ({
+        type: "Feature" as const,
+        geometry: part.geometry,
+        properties: {
+          mode: part.mode, sourceKey: part.sourceKey, color: part.color, name: part.name,
+          ...(part.mode === "polygon" ? { opacity: part.opacity } : {}),
+        },
+      })) as GeoJSONStoreFeatures[]);
+      // terra-draw quietly skips a feature it rejects (a polygon that
+      // crosses itself, say) -- locked instead, so the save keeps it.
+      results.forEach((result, i) => {
+        if (!result.valid) lockPart(session, parts[i].sourceKey);
+      });
+      const locked = [...session.locked.values()];
+      setLockedCount(locked.length);
+      (map.getSource(LOCKED_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData({
+        type: "FeatureCollection",
+        features: locked.map((part) => ({ type: "Feature", geometry: part.geometry, properties: { color: part.color } })),
+      });
+      for (const part of [...parts, ...locked]) extendBounds(bounds, part.geometry);
     }).catch((err: Error) => {
       if (!cancelled) setError(err.message);
     }).finally(() => {
@@ -1423,26 +1441,25 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   async function handleSave() {
     const draw = drawRef.current;
     if (!draw) return;
-    // Geometry plus color (and, for a region, opacity) only -- terra-draw's
-    // own other bookkeeping properties (mode, id, ...) aren't meaningful
-    // outside the editor and have no KML counterpart worth writing. Both
-    // ride through as plain ExtendedData properties (see kmlWrite.ts's own
-    // doc comment on why that beats KML's simplestyle styling here).
+    // Geometry plus the editor's own color/name (and, for a region,
+    // opacity) and the part's sourceKey -- terra-draw's other bookkeeping
+    // properties (mode, id, ...) mean nothing outside the editor. Everything
+    // set aside when the file was loaded is put back by assembleForSaving.
     //
     // Also excluded: terra-draw's own selection-mode guidance points --
     // the small vertex/midpoint handle dots it draws on a shape's corners
     // and edges while selected. Select mode stores those as ordinary Point
     // features in the same snapshot (tagged `selectionPoint`/`midPoint`),
-    // so saving mid-selection without this filter wrote them into the KML
+    // so saving mid-selection without this filter wrote them into the file
     // as if they were real map-item points, and MapCanvas/StoryMapBackground
     // (which render every unnamed Point as a small circle) then reproduced
     // the edit-mode handle look in read-only views. Found live.
-    const features: Feature[] = draw.getSnapshot()
+    const savedParts: SavedPart[] = draw.getSnapshot()
       .filter((f) => f.geometry != null && !f.properties?.selectionPoint && !f.properties?.midPoint)
       .map((f) => {
         // Trimmed, and omitted entirely rather than written as "" -- a
         // label point placed but never typed into should round-trip as a
-        // plain, nameless point (see kmlWrite.ts/MapCanvas.tsx: presence of
+        // plain, nameless point (see MapCanvas.tsx: presence of
         // `name` is itself what marks a point as a label), not an
         // invisible label with empty text.
         const name = (f.properties?.name as string | undefined)?.trim();
@@ -1451,16 +1468,17 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         const regionOpacity = f.geometry.type === "Polygon"
           ? (f.properties?.opacity as number | undefined) ?? opacity
           : undefined;
+        const sourceKey = f.properties?.sourceKey;
         return {
-          type: "Feature",
-          geometry: f.geometry,
-          properties: {
-            color: (f.properties?.color as string | undefined) ?? color,
-            ...(name ? { name } : {}),
-            ...(regionOpacity !== undefined ? { opacity: regionOpacity } : {}),
-          },
+          ...(typeof sourceKey === "string" ? { sourceKey } : {}),
+          geometry: f.geometry as EditableGeometry,
+          color: (f.properties?.color as string | undefined) ?? color,
+          ...(name ? { name } : {}),
+          ...(regionOpacity !== undefined ? { opacity: regionOpacity } : {}),
         };
       });
+    const session = sessionRef.current ?? { parts: [], sources: new Map(), locked: new Map() };
+    const features = assembleForSaving(session, savedParts);
     if (features.length === 0 && overlays.length === 0) return;
     setSaving(true);
     setError(null);
@@ -1469,17 +1487,16 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       const imageOverlays: ImageOverlay[] = overlays.map(({ handle, corners, name, opacity, order }) => ({
         handle, corners, name, opacity, order,
       }));
-      const blob = new Blob([featuresToKml(features, imageOverlays)], { type: KML_MIME });
       const trimmedDesc = desc.trim();
       let handle: string;
       if (target.kind === "new") {
-        handle = await uploadMedia(token, blob, KML_MIME);
+        handle = await createOverlay(token, features, imageOverlays, trimmedDesc);
         // Immediate feedback rather than waiting on historyPoll's next
         // tick (same reasoning as draftStack.ts's saveAll/useMediaDrop.ts):
         // visualData.ts's kmlMedia derivation cross-references a place's
         // media_list against the Media ViewStore's own local `mime`
         // column, so this new handle has to land there before the Map
-        // view can recognize it as a KML overlay.
+        // view can recognize it as a map overlay.
         getViewStore("media").requeryDebounced();
         notifications.show({
           color: "green",
@@ -1492,7 +1509,11 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
         });
       } else {
         handle = target.handle;
-        await updateMediaFile(token, handle, blob, KML_MIME);
+        // Re-read, not kept from the load: the file it was made from, if
+        // any (mapFileWrite.ts's SOURCE_PROPERTY), so the link survives.
+        const source = await fetchOverlaySource(handle);
+        const blob = new Blob([mapItemToGeoJson(features, imageOverlays, source)], { type: GEOJSON_MIME });
+        await updateMediaFile(token, handle, blob, GEOJSON_MIME);
         invalidateKmlFeatures(handle);
         notifications.show({ color: "blue", title: t("Map overlay updated"), message: t("Its shapes have been saved.") });
         onSaved?.();
@@ -1707,7 +1728,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             </Button>
             <Button
               size="sm" onClick={handleSave} loading={saving}
-              disabled={tooComplex || (!hasFeatures && overlays.length === 0) || !place || !desc.trim()}
+              disabled={(!hasFeatures && overlays.length === 0 && lockedCount === 0) || !place || !desc.trim()}
             >
               {t("Save")}
             </Button>
@@ -1790,7 +1811,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
             buttons rather than new icon assets -- this codebase's existing
             convention for one-off controls (see EditButton.tsx's own doc
             comment on why it uses a text glyph instead). */}
-        {!tooComplex && (
+        {(
           <Stack
             gap={4}
             p={6}
@@ -1959,13 +1980,15 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
           </Group>
         )}
 
-        {tooComplex && (
+        {lockedCount > 0 && !lockedNoticeDismissed && (
           <Alert
             color="yellow"
-            title={t("This file's shapes are too complex to edit here")}
-            style={{ position: "absolute", top: 116, left: 12, right: 12, zIndex: 3, maxWidth: 480 }}
+            title={lockedCount === 1 ? t("1 shape can't be edited here") : `${lockedCount} ${t("shapes can't be edited here")}`}
+            withCloseButton
+            onClose={() => setLockedNoticeDismissed(true)}
+            style={{ position: "absolute", bottom: 12, right: 12, zIndex: 3, maxWidth: 360 }}
           >
-            {t("It contains a combined shape (a KML MultiGeometry) rather than a single point, line, or polygon per placemark.")}
+            {t("For example, a region with a hole in it, or one whose outline crosses itself. It's drawn dashed, and saved exactly as it was.")}
           </Alert>
         )}
 

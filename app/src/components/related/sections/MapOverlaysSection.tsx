@@ -5,8 +5,11 @@ import { confirmDialog } from "../../../store/confirmDialog";
 import { fetchObjectExtended, getBacklinks, zipRefs } from "../../../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../../../store/refListApi";
 import { buildSimpleSearchExpr } from "../../../store/simpleSearch";
-import { isMapFileMime, MAP_FILE_ACCEPT, mapFileMimeExpr } from "../../../store/mapFileMime";
-import { addMapFilesToPlace, openFilePicker } from "../../../store/addMedia";
+import { notifications } from "@mantine/notifications";
+import { MAP_FILE_ACCEPT } from "../../../store/mapFileMime";
+import { openFilePicker } from "../../../store/addMedia";
+import { addMapFilesToPlace, isOverlay, overlayWhereExpr } from "../../../store/mapOverlays";
+import { useOverlayTagHandle } from "../../../hooks/useOverlayTagHandle";
 import { MEDIA_VIEW, PLACE_VIEW } from "../../../store/views";
 import { summaryLine } from "../summary";
 import { AttachControl } from "../AttachControl";
@@ -24,17 +27,17 @@ const MapItemEditorDialog = lazy(() =>
 
 // Same convention as MapItemEditorDialog.tsx's own imageOnlyExpr -- an
 // always-on mime filter ANDed into whatever the user types, so the "Add map
-// overlay" picker's default browse-all list is already narrowed to map
-// files (KML/GeoJSON/GPX), not just once something's searched for.
-function mapFileOnlyExpr(term: string): string | null {
+// overlay" picker's default browse-all list is already narrowed to
+// overlays (mapOverlays.ts), not just once something's searched for.
+function overlayOnlyExpr(term: string): string | null {
   const termExpr = buildSimpleSearchExpr(["gramps_id", "desc", "path"])(term);
-  const fixed = mapFileMimeExpr();
+  const fixed = overlayWhereExpr();
   return termExpr ? `(${termExpr}) and ${fixed}` : fixed;
 }
 
-/** A place's own map overlays -- its `media_list` filtered down to map
- * files (KML/GeoJSON/GPX, see mapFileMime.ts; MapItemEditorDialog.tsx
- * draws and writes the KML ones). A map overlay can be attached to more
+/** A place's own map overlays -- its `media_list` filtered down to
+ * overlays (mapOverlays.ts; MapItemEditorDialog.tsx draws and edits them).
+ * The map files they were made from stay in the place's Media section. A map overlay can be attached to more
  * than one place (e.g. a boundary that covers several nearby settlements),
  * but not to the *same* place twice -- picking an "existing" one already on
  * this place in the "+ Add map overlay" picker (AttachControl.tsx's `onPick`
@@ -43,8 +46,9 @@ function mapFileOnlyExpr(term: string): string | null {
  * Media object's detail, where MediaKmlEditButton.tsx already lives) rather
  * than a second "Edit" trigger duplicated here. */
 export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionProps) {
-  const rows = zipRefs<{ mime?: string; desc?: string; path?: string }>(detail.media_list, detail.extended?.media)
-    .filter(({ target }) => isMapFileMime(target?.mime));
+  const overlayTag = useOverlayTagHandle() ?? null;
+  const rows = zipRefs<{ mime?: string; desc?: string; path?: string; tag_list?: string[] }>(detail.media_list, detail.extended?.media)
+    .filter(({ target }) => isOverlay(target, overlayTag));
   const canAttach = hasPermissions("EditObject");
   const canCreate = hasPermissions("AddObject");
   const [adding, setAdding] = useState(false);
@@ -66,6 +70,30 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
     const token = await getToken();
     await detachRefListEntry(token, PLACE_VIEW, detail.handle, "media_list", handle);
     onRefetch?.();
+  }
+
+  /** "Upload map file": each file is kept as uploaded, in this place's
+   * Media section, with an overlay made from it here. */
+  async function uploadMapFiles(files: File[]) {
+    const result = await addMapFilesToPlace(detail.handle, files);
+    for (const { name, message } of result.failed) {
+      notifications.show({ color: "red", title: "Map file upload failed", message: `${name}: ${message}` });
+    }
+    if (result.empty.length > 0) {
+      notifications.show({
+        color: "yellow",
+        title: t("Nothing to draw"),
+        message: `${result.empty.join(", ")}: ${t("no shapes found, so no overlay was made. The file is attached to this place as ordinary media.")}`,
+      });
+    }
+    if (result.overlays > 0) {
+      notifications.show({
+        color: "green",
+        title: result.overlays === 1 ? t("Map overlay added") : `${result.overlays} ${t("map overlays added")}`,
+        message: t("The original file is kept in this place's Media."),
+      });
+    }
+    if (result.overlays > 0 || result.empty.length > 0) onRefetch?.();
   }
 
   /** AttachControl's own `onPick` override -- a map overlay can be attached
@@ -91,7 +119,7 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
           targetHandle={detail.handle}
           pickerView={MEDIA_VIEW}
           listField="media_list"
-          buildExpr={mapFileOnlyExpr}
+          buildExpr={overlayOnlyExpr}
           itemLabel="map overlay"
           onPick={handlePickExisting}
           onCreateNew={canCreate ? () => setAdding(true) : undefined}
@@ -99,9 +127,7 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
           extraCreateAction={canCreate ? {
             label: t("Upload map file"),
             glyph: "↑",
-            onClick: () => openFilePicker(async (files) => {
-              if (await addMapFilesToPlace(detail.handle, files)) onRefetch?.();
-            }, MAP_FILE_ACCEPT),
+            onClick: () => openFilePicker((files) => void uploadMapFiles(files), MAP_FILE_ACCEPT),
           } : undefined}
         />
       )}

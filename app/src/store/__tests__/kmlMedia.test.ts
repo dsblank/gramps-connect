@@ -6,7 +6,7 @@ import { isKmlRegion } from "../kmlMedia";
 // MapCanvas.tsx's shapes effect both gate their region handling on -- kept
 // in sync via this one shared function after a real bug (found live,
 // 2026-09-09) where a country-level outline (a disjoint MultiPolygon,
-// round-tripped through kmlWrite.ts/tokml/@tmcw/togeojson as a
+// round-tripped through a KML <MultiGeometry> and @tmcw/togeojson as a
 // GeometryCollection of Polygons -- see that function's own doc comment)
 // drew on the map but never appeared in OverlayLayersPanel.tsx's controls,
 // because only the panel's own Polygon-only check excluded it.

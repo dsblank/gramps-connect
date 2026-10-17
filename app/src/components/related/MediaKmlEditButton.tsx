@@ -2,7 +2,8 @@ import { lazy, Suspense, useState } from "react";
 import { Box, Button, Loader } from "@mantine/core";
 import { hasPermissions } from "../../auth/auth";
 import type { ObjectDetail } from "../../store/objectDetail";
-import { KML_MIME } from "../../store/mapFileMime";
+import { isOverlay } from "../../store/mapOverlays";
+import { useOverlayTagHandle } from "../../hooks/useOverlayTagHandle";
 import { t } from "../../i18n/i18n";
 
 // maplibre-gl and terra-draw are the heaviest thing this app can pull in
@@ -12,19 +13,18 @@ import { t } from "../../i18n/i18n";
 const MapItemEditorDialog = lazy(() =>
   import("../MapItemEditorDialog").then((m) => ({ default: m.MapItemEditorDialog })));
 
-/** A KML media object's own "edit its overlay" action -- same header slot as
+/** A map overlay's own "edit its overlay" action -- same header slot as
  * EditButton.tsx's Edit button (which excludes Media, see its own doc
  * comment: a generic Media has no form to edit, only an uploaded file), but
  * for the one Media type this app *can* meaningfully edit in place: its own drawn
  * points/lines/polygons, via MapItemEditorDialog.tsx's terra-draw canvas
- * re-opened on this object's existing shapes. Non-KML media still has
- * nothing here to edit, so this renders nothing for any other mime. */
+ * re-opened on this object's existing shapes. Only overlays (mapOverlays.ts)
+ * -- a map file someone uploaded is never edited itself; its own detail
+ * offers MakeOverlayButton.tsx instead. */
 export function MediaKmlEditButton({ detail, onSaved }: { detail: ObjectDetail; onSaved: () => void }) {
   const [opened, setOpened] = useState(false);
-  // KML only, though GeoJSON/GPX files draw as overlays too: the editor
-  // saves by writing KML over this same file, which would silently replace
-  // a GeoJSON/GPX original (and a GPX track's times/elevations with it).
-  if (detail.mime !== KML_MIME || !hasPermissions("EditObject")) return null;
+  const overlayTag = useOverlayTagHandle() ?? null;
+  if (!isOverlay(detail, overlayTag) || !hasPermissions("EditObject")) return null;
 
   const label = t("Edit this map item's overlay");
 

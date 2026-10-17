@@ -2,17 +2,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../auth/auth", () => ({ getToken: vi.fn().mockResolvedValue("tok") }));
-vi.mock("../jobsApi", () => ({ uploadMediaFile: vi.fn(), uploadMediaFileDetailed: vi.fn() }));
-vi.mock("../refListApi", () => ({ attachRefListEntry: vi.fn() }));
-vi.mock("../views", () => ({ PLACE_VIEW: { key: "place" } }));
+vi.mock("../jobsApi", () => ({ uploadMediaFile: vi.fn() }));
 const requeryDebounced = vi.fn();
 vi.mock("../registry", () => ({ getViewStore: () => ({ requeryDebounced }) }));
 vi.mock("@mantine/notifications", () => ({ notifications: { show: vi.fn() } }));
 
 import { notifications } from "@mantine/notifications";
-import { uploadMediaFile, uploadMediaFileDetailed } from "../jobsApi";
-import { attachRefListEntry } from "../refListApi";
-import { addMapFilesToPlace, openFilePicker, pickAndAddMedia, uploadMediaFiles } from "../addMedia";
+import { uploadMediaFile } from "../jobsApi";
+import { openFilePicker, pickAndAddMedia, uploadMediaFiles } from "../addMedia";
 
 function pickerInput(): HTMLInputElement {
   const input = document.querySelector<HTMLInputElement>('input[type="file"]');
@@ -79,40 +76,5 @@ describe("openFilePicker", () => {
     openFilePicker(() => {}, ".kml,.geojson,.gpx");
     expect(pickerInput().accept).toBe(".kml,.geojson,.gpx");
     click.mockRestore();
-  });
-});
-
-describe("addMapFilesToPlace", () => {
-  beforeEach(() => {
-    vi.mocked(uploadMediaFileDetailed).mockReset();
-    vi.mocked(attachRefListEntry).mockReset().mockResolvedValue(undefined as any);
-    vi.mocked(notifications.show).mockReset();
-  });
-
-  it("attaches each uploaded file to the place, in order", async () => {
-    vi.mocked(uploadMediaFileDetailed)
-      .mockResolvedValueOnce({ handle: "m1", mime: "application/gpx+xml" })
-      .mockResolvedValueOnce({ handle: "m2", mime: "application/geo+json" });
-    expect(await addMapFilesToPlace("p1", [new File(["a"], "a.gpx"), new File(["b"], "b.geojson")])).toBe(2);
-    expect(vi.mocked(attachRefListEntry).mock.calls.map((c) => [c[2], c[4]])).toEqual([
-      ["p1", { _class: "MediaRef", ref: "m1" }],
-      ["p1", { _class: "MediaRef", ref: "m2" }],
-    ]);
-    expect(notifications.show).toHaveBeenCalledWith(expect.objectContaining({ color: "green", title: "2 files added" }));
-  });
-
-  it("still attaches a file an older server stored as a plain file, with a warning", async () => {
-    vi.mocked(uploadMediaFileDetailed).mockResolvedValueOnce({ handle: "m1", mime: "application/octet-stream" });
-    expect(await addMapFilesToPlace("p1", [new File(["a"], "walk.gpx")])).toBe(1);
-    expect(attachRefListEntry).toHaveBeenCalledTimes(1);
-    const shown = vi.mocked(notifications.show).mock.calls.map(([n]) => n);
-    expect(shown).toEqual([expect.objectContaining({ color: "yellow", message: expect.stringContaining("walk.gpx") })]);
-  });
-
-  it("reports a failed upload and attaches nothing for it", async () => {
-    vi.mocked(uploadMediaFileDetailed).mockRejectedValueOnce(new Error("quota exceeded"));
-    expect(await addMapFilesToPlace("p1", [new File(["a"], "a.gpx")])).toBe(0);
-    expect(attachRefListEntry).not.toHaveBeenCalled();
-    expect(notifications.show).toHaveBeenCalledWith(expect.objectContaining({ color: "red", message: "a.gpx: quota exceeded" }));
   });
 });

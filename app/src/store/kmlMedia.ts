@@ -11,6 +11,7 @@ import { gpx, kml } from "@tmcw/togeojson";
 import { getToken } from "../auth/auth";
 import { API_BASE } from "../config";
 import { apiFetch } from "./apiFetch";
+import { IMAGE_OVERLAY_PROPERTY, SOURCE_PROPERTY } from "./mapFileWrite";
 
 /** Media handle -> its parsed features, module-level so MapCanvas's overlay
  * and useVisualData's position guess never both fetch the same file, and
@@ -19,6 +20,9 @@ import { apiFetch } from "./apiFetch";
  * MapItemEditorDialog.tsx's edit flow started replacing one in place --
  * see invalidateKmlFeatures below. */
 const featureCache = new Map<string, Promise<Feature[]>>();
+/** Media handle -> the Media an overlay was made from (mapFileWrite.ts's
+ * SOURCE_PROPERTY), filled in by the same fetch. */
+const sourceByHandle = new Map<string, string>();
 
 /** A GeoJSON or GPX file's own colours, in the simplestyle convention
  * (`stroke`/`fill`/`fill-opacity`/`marker-color`, which both GeoJSON tools
@@ -44,6 +48,20 @@ function geoJsonFeatures(doc: GeoJsonObject): Feature<Geometry | null>[] {
   return [{ type: "Feature", geometry: doc as Geometry, properties: {} }];
 }
 
+/** This app's GeoJSON image overlay (see mapFileWrite.ts), turned into
+ * the same feature @tmcw/togeojson makes of a KML <gx:LatLonQuad>
+ * GroundOverlay -- so fetchAllKmlImageOverlays and everything that skips
+ * overlays read both formats the same way. */
+function asGroundOverlay(feature: Feature): Feature {
+  const props = feature.properties ?? {};
+  if (props[IMAGE_OVERLAY_PROPERTY] !== true || typeof props.image !== "string") return feature;
+  const { [IMAGE_OVERLAY_PROPERTY]: _marker, image, ...rest } = props;
+  return {
+    ...feature,
+    properties: { ...rest, "@geometry-type": "groundoverlay", icon: `${MEDIA_HANDLE_PREFIX}${image}` },
+  };
+}
+
 /** A map file's text, as GeoJSON features. The format is read off the
  * content (GeoJSON is JSON; GPX and KML differ by root element) rather
  * than the media object's stored mime, which a file attached by another
@@ -56,13 +74,30 @@ function geoJsonFeatures(doc: GeoJsonObject): Feature<Geometry | null>[] {
 export function parseMapFile(text: string): Feature[] {
   const hasGeometry = (f: Feature<Geometry | null>): f is Feature => f.geometry != null;
   if (text.trimStart().startsWith("{")) {
-    return geoJsonFeatures(JSON.parse(text) as GeoJsonObject).filter(hasGeometry).map(applySimplestyle);
+    return geoJsonFeatures(JSON.parse(text) as GeoJsonObject).filter(hasGeometry).map(asGroundOverlay).map(applySimplestyle);
   }
   const dom = new DOMParser().parseFromString(text, "text/xml");
   if (dom.documentElement.localName === "gpx") {
     return gpx(dom).features.filter(hasGeometry).map(applySimplestyle);
   }
   return kml(dom).features.filter(hasGeometry);
+}
+
+/** An overlay file's SOURCE_PROPERTY, if it's GeoJSON that has one. */
+function overlaySourceOfText(text: string): string | undefined {
+  if (!text.trimStart().startsWith("{")) return undefined;
+  try {
+    const source = (JSON.parse(text) as Record<string, unknown>)[SOURCE_PROPERTY];
+    return typeof source === "string" ? source : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The Media an overlay was made from, so re-saving it keeps the link. */
+export async function fetchOverlaySource(handle: string): Promise<string | undefined> {
+  await fetchKmlFeatures(handle);
+  return sourceByHandle.get(handle);
 }
 
 /** A single map file's shapes, as GeoJSON. The same jwt-bearing
@@ -80,7 +115,10 @@ function fetchKmlFeatures(handle: string): Promise<Feature[]> {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return [];
-      return parseMapFile(await res.text());
+      const text = await res.text();
+      const source = overlaySourceOfText(text);
+      if (source) sourceByHandle.set(handle, source);
+      return parseMapFile(text);
     } catch {
       return [];
     }
@@ -106,7 +144,7 @@ export async function fetchAllKmlFeatures(handles: string[]): Promise<Feature[]>
  * order (top-left, top-right, bottom-right, bottom-left) and type. */
 export type OverlayCorners = [[number, number], [number, number], [number, number], [number, number]];
 
-/** An image overlay drawn in MapItemEditorDialog.tsx (kmlWrite.ts's
+/** An image overlay drawn in MapItemEditorDialog.tsx (mapFileWrite.ts's
  * ImageOverlay, round-tripped) -- always 4 explicit world corners.
  * MapItemEditorDialog.tsx's move/resize/rotate/corner-drag handles all
  * transform these same 4 points directly (translate, uniform scale-from-
@@ -204,8 +242,8 @@ function lngLatFromMercator([x, y]: [number, number]): [number, number] {
  * since a degree of longitude and a degree of latitude aren't the same
  * ground (or screen) distance away from the equator (found live: a square
  * image's corners visibly stopped being 90 degrees once rotated away from
- * 0). This app's own KML is never meant to be opened in an external KML
- * viewer (see kmlWrite.ts's own doc comment on why), so diverging here
+ * 0). This app's own image overlays are never meant to be opened in an
+ * external viewer (their picture is an app-internal Media reference), so diverging here
  * from what Google Earth's own <LatLonBox><rotation> would render is an
  * acceptable trade for this app always rendering its own files correctly.
  * Pass a negative `rotationDeg` to go the other way (world -> local). */
@@ -279,8 +317,10 @@ function cornersFromBox(
   return corners.map((p) => rotatePoint(p, center, box.rotation)) as OverlayCorners;
 }
 
-/** kmlWrite.ts writes an overlay's href as this marker string (not a real
- * URL) -- see that file's own doc comment on why. */
+/** An image overlay's picture, as a Media handle behind this marker (not a
+ * real URL: an app-internal reference, since a resolvable link would need
+ * an expiring auth token baked in) -- in a KML GroundOverlay's href, and
+ * what asGroundOverlay makes of a GeoJSON one's `image`. */
 const MEDIA_HANDLE_PREFIX = "media-handle:";
 
 /** Every GroundOverlay across a place's KML attachment(s) -- the same
@@ -322,7 +362,7 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
         // corners -- a plain <LatLonBox><rotation>. @tmcw/togeojson's own
         // LatLonBox parsing folds <rotation> straight into the geometry ring
         // it returns (bakes it into already-rotated coordinates) rather than
-        // exposing the raw number anywhere -- so kmlWrite.ts used to also
+        // exposing the raw number anywhere -- so this app's KML writer used to also
         // write it redundantly as a plain ExtendedData property, the same
         // round-trip trick used for a drawn shape's `color`, read back here
         // instead of reverse-engineering the angle from the ring. Missing
@@ -333,7 +373,7 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
         continue;
       }
       // No bbox -- @tmcw/togeojson's getGroundOverlayBox() only omits it for
-      // a <gx:LatLonQuad> overlay (kmlWrite.ts's own output), whose 4 free
+      // a <gx:LatLonQuad> overlay (what this app's KML writer used to write), whose 4 free
       // corners it instead returns as a Polygon ring (closed: first point
       // repeated last). A ring that isn't exactly that shape (a foreign file,
       // or a parse failure) is skipped, same as a missing bbox always was.
@@ -352,9 +392,8 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
  * Polygon sub-geometry of a GeometryCollection. A country-level Wikidata/
  * Commons outline (e.g. the United States) is often a disjoint shape --
  * islands/territories a single Polygon ring can't express -- unlike a
- * state's simpler single-ring Polygon. kmlWrite.ts's featuresToKml
- * round-trips a GeoJSON MultiPolygon through tokml as a KML <MultiGeometry>
- * of several <Polygon>s, and @tmcw/togeojson reads *any* multi-child
+ * state's simpler single-ring Polygon. A KML file stores one as a
+ * <MultiGeometry> of several <Polygon>s, and @tmcw/togeojson reads *any* multi-child
  * Placemark geometry back as a GeometryCollection (never reconstituting
  * MultiPolygon) -- so that's the shape that actually reaches here, not
  * "MultiPolygon" itself (confirmed live, 2026-09-09, round-tripping a
@@ -400,8 +439,8 @@ export async function fetchAllKmlRegions(handles: string[]): Promise<KmlRegion[]
     // Every feature in this file (region or not) counts toward the index --
     // matches fetchAllKmlFeatures' own per-handle array position (it only
     // *filters out* the groundoverlay ones, which never precede a region in
-    // write order -- see kmlWrite.ts's own doc comment on why placemarks
-    // always come before any appended GroundOverlay -- so the position
+    // write order -- see mapFileWrite.ts's mapItemToGeoJson on why image
+    // overlays always come after every shape -- so the position
     // survives that filter unchanged), what this region's own rowKey needs.
     let indexInFile = 0;
     for (const feature of collections[h]) {
@@ -490,6 +529,7 @@ export async function fetchAllKmlLines(handles: string[]): Promise<KmlLine[]> {
  * and a KML file was previously assumed static once uploaded. */
 export function invalidateKmlFeatures(handle: string): void {
   featureCache.delete(handle);
+  sourceByHandle.delete(handle);
 }
 
 function visitCoordinates(coords: unknown, bounds: [number, number, number, number]): void {

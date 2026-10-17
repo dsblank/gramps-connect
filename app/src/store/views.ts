@@ -11,7 +11,7 @@ import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
 import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
-import { isMapFileMime } from "./mapFileMime";
+import { GEOJSON_MIME, isMapFileMime } from "./mapFileMime";
 import { gtkColorToCss } from "../components/related/color";
 import iconPerson from "../assets/icons/gramps-person.svg";
 import iconFamily from "../assets/icons/gramps-family.svg";
@@ -653,6 +653,9 @@ export const CITATION_VIEW: ViewConfig = {
 // from there (pyodidePoc/ pulls in auth/jobsApi/etc., which this file has no
 // business depending on) so the literal is duplicated instead.
 const GRAMPLET_TAG_NAME = "Gramplet";
+// Same tag name as mapOverlays.ts's own OVERLAY_TAG_NAME -- not imported,
+// as mapOverlays.ts imports this file.
+const OVERLAY_TAG_NAME = "Map overlay";
 
 /** MEDIA_VIEW's "category" column -- `mime`'s stored value (still the raw
  * MIME type, aliased through unchanged: see the column's own `select`) plus
@@ -666,7 +669,9 @@ const GRAMPLET_TAG_NAME = "Gramplet";
 function mediaCategory(mime: unknown, item?: Record<string, unknown>): string {
   if (Number(item?.is_gramplet ?? 0) > 0) return "Gramplet";
   const value = typeof mime === "string" ? mime : "";
-  if (isMapFileMime(value)) return "Map overlay";
+  if (Number(item?.is_map_overlay ?? 0) > 0 && value === GEOJSON_MIME) return "Map overlay";
+  // An uploaded KML/GPX/GeoJSON -- what an overlay can be made from.
+  if (isMapFileMime(value)) return "Map file";
   if (value.startsWith("image/")) return "Image";
   if (value.startsWith("video/")) return "Video";
   if (value.startsWith("audio/")) return "Audio";
@@ -705,6 +710,14 @@ export const MEDIA_VIEW: ViewConfig = {
     {
       key: "is_gramplet", label: "Is Gramplet",
       select: `len(tags, name == ${JSON.stringify(GRAMPLET_TAG_NAME)}) as is_gramplet`,
+      sqlType: "INTEGER", hidden: true,
+    },
+    // Hidden: same shape as is_gramplet, for mapOverlays.ts's overlay tag --
+    // read by mediaCategory below and by visualData.ts to find a place's
+    // overlays.
+    {
+      key: "is_map_overlay", label: "Is map overlay",
+      select: `len(tags, name == ${JSON.stringify(OVERLAY_TAG_NAME)}) as is_map_overlay`,
       sqlType: "INTEGER", hidden: true,
     },
     // The MIME type column, but shown as what it means to the user

@@ -42,8 +42,7 @@
     "sql.js": "^1.14.1",
     "svg2pdf.js": "^2.8.1",
     "terra-draw": "^1.32.3",
-    "terra-draw-maplibre-gl-adapter": "^1.4.1",
-    "tokml": "^0.4.0"
+    "terra-draw-maplibre-gl-adapter": "^1.4.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

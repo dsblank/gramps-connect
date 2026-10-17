@@ -1,10 +1,11 @@
 import { Button, Group, Tooltip } from "@mantine/core";
 import { formatHash } from "../../hash";
 import { getBacklinks, type ObjectDetail } from "../../store/objectDetail";
-import { isMapFileMime } from "../../store/mapFileMime";
+import { isOverlay } from "../../store/mapOverlays";
+import { useOverlayTagHandle } from "../../hooks/useOverlayTagHandle";
 import { t } from "../../i18n/i18n";
 
-/** A map file's (KML/GeoJSON/GPX) own "see it on the map" button -- deliberately not
+/** A map overlay's own "see it on the map" button -- deliberately not
  * folded into VisualButtons.tsx, whose Map/Timeline/Tree buttons scope a
  * visual to a *subject* (a person's events, a place's descendants, ...) and
  * Media has none of its own to scope to. This means something else: jump to
@@ -13,7 +14,8 @@ import { t } from "../../i18n/i18n";
  * place subject" effect selects that place automatically so the shape is
  * already drawn on arrival, not one more click away. */
 export function MediaMapButton({ detail }: { detail: ObjectDetail }) {
-  if (!isMapFileMime(detail.mime)) return null;
+  const overlayTag = useOverlayTagHandle() ?? null;
+  if (!isOverlay(detail, overlayTag)) return null;
   const places = (getBacklinks(detail).place ?? []) as { handle: string; title?: string }[];
   if (places.length === 0) return null;
   return (

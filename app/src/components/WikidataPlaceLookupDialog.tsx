@@ -16,9 +16,7 @@ import {
   fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, searchWikidata,
   type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
-import { featuresToKml } from "../store/kmlWrite";
-import { setMediaDesc, uploadMedia } from "../store/jobsApi";
-import { KML_MIME } from "../store/mapFileMime";
+import { createOverlay } from "../store/mapOverlays";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
@@ -130,15 +128,11 @@ async function fetchOutlineMedia(
   for (const feature of features) {
     feature.properties = { ...feature.properties, name: node.label, color };
   }
-  const blob = new Blob([featuresToKml(features)], { type: KML_MIME });
-  const mediaHandle = await uploadMedia(token, blob, KML_MIME);
-  // Best-effort, same as MapItemEditorDialog.tsx's own desc set -- the
-  // outline itself is already saved either way, so a failed desc PUT
-  // shouldn't surface as an Apply error. Named after the place (not e.g.
-  // "Alabama outline"): this is what the Media view's list and
-  // MediaThumbnail's hover text show, and it should read the same way any
-  // other place-named attachment does.
-  await setMediaDesc(token, mediaHandle, node.label).catch(() => {});
+  // A map overlay like any other (mapOverlays.ts), described after the
+  // place (not e.g. "Alabama outline"): this is what the Media view's list
+  // and MediaThumbnail's hover text show, and it should read the same way
+  // any other place-named attachment does.
+  const mediaHandle = await createOverlay(token, features, [], node.label);
   return { _class: "MediaRef", ref: mediaHandle };
 }
 
