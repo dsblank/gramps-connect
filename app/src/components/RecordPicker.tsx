@@ -63,6 +63,18 @@ interface RecordPickerProps {
    * Tag, which has no dialog of its own to open) needs it to know what name
    * to create. */
   onCreateNew?: (query: string) => void;
+  /** A second way to create one, shown beside the "(+) Create X" button --
+   * e.g. MapOverlaysSection.tsx's "Upload map file" next to "draw a new
+   * one". Ignored without `onCreateNew`. */
+  extraCreateAction?: ExtraCreateAction;
+}
+
+export interface ExtraCreateAction {
+  label: string;
+  glyph: string;
+  /** Called straight from the click, so it may open a file picker (which
+   * browsers only allow from a user gesture). */
+  onClick: () => void;
 }
 
 /** A generic single-field "pick an existing record" search -- the shared
@@ -74,6 +86,7 @@ interface RecordPickerProps {
  * to pick from the moment this opens. */
 export function RecordPicker({
   view, searchField, placeholder, onPick, buildExpr, renderLabel, confirmWithButton, createLabel, onCreateNew,
+  extraCreateAction,
 }: RecordPickerProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QueryItem[]>([]);
@@ -129,12 +142,22 @@ export function RecordPicker({
           so it stays exactly as it was. */}
       {onCreateNew && (
         <>
-          <CircleGlyphButton
-            glyph="+"
-            label={`Create ${createLabel}`}
-            textLabel={`Create ${createLabel}`}
-            onClick={() => onCreateNew(query.trim())}
-          />
+          <Group gap="md">
+            <CircleGlyphButton
+              glyph="+"
+              label={`Create ${createLabel}`}
+              textLabel={`Create ${createLabel}`}
+              onClick={() => onCreateNew(query.trim())}
+            />
+            {extraCreateAction && (
+              <CircleGlyphButton
+                glyph={extraCreateAction.glyph}
+                label={extraCreateAction.label}
+                textLabel={extraCreateAction.label}
+                onClick={extraCreateAction.onClick}
+              />
+            )}
+          </Group>
           <Divider label={t("or")} labelPosition="center" />
           <Text size="sm" fw={500}>{`Select existing ${createLabel}`}</Text>
         </>

@@ -5,7 +5,8 @@ import { confirmDialog } from "../../../store/confirmDialog";
 import { fetchObjectExtended, getBacklinks, zipRefs } from "../../../store/objectDetail";
 import { attachRefListEntry, detachRefListEntry } from "../../../store/refListApi";
 import { buildSimpleSearchExpr } from "../../../store/simpleSearch";
-import { isMapFileMime, mapFileMimeExpr } from "../../../store/mapFileMime";
+import { isMapFileMime, MAP_FILE_ACCEPT, mapFileMimeExpr } from "../../../store/mapFileMime";
+import { addMapFilesToPlace, openFilePicker } from "../../../store/addMedia";
 import { MEDIA_VIEW, PLACE_VIEW } from "../../../store/views";
 import { summaryLine } from "../summary";
 import { AttachControl } from "../AttachControl";
@@ -95,6 +96,13 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
           onPick={handlePickExisting}
           onCreateNew={canCreate ? () => setAdding(true) : undefined}
           createLabel="map overlay"
+          extraCreateAction={canCreate ? {
+            label: t("Upload map file"),
+            glyph: "↑",
+            onClick: () => openFilePicker(async (files) => {
+              if (await addMapFilesToPlace(detail.handle, files)) onRefetch?.();
+            }, MAP_FILE_ACCEPT),
+          } : undefined}
         />
       )}
     >

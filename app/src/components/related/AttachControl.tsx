@@ -3,7 +3,7 @@ import { Modal } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { attachRefListEntry, setRefField, type RefListEntry } from "../../store/refListApi";
 import { CircleGlyphButton } from "../CircleGlyphButton";
-import { RecordPicker } from "../RecordPicker";
+import { RecordPicker, type ExtraCreateAction } from "../RecordPicker";
 import { pickerResultLabel } from "../RefPickerField";
 import type { QueryItem } from "../../store/api";
 import type { ViewConfig } from "../../store/views";
@@ -60,6 +60,9 @@ interface AttachControlProps {
   /** Paired with `onCreateNew` -- e.g. "map overlay". Ignored (and may be
    * omitted) without `onCreateNew`. */
   createLabel?: string;
+  /** RecordPicker.tsx's own `extraCreateAction` -- closes this dialog first,
+   * like `onCreateNew`. */
+  extraCreateAction?: ExtraCreateAction;
 }
 
 /** A small, bare circled "+" trigger (CircleGlyphButton.tsx -- meant for a
@@ -93,7 +96,7 @@ interface AttachControlProps {
  * SetFieldControl below for the singular-ref-field counterpart. */
 export function AttachControl({
   targetView, targetHandle, pickerView, listField, buildEntry, itemLabel, onAttached,
-  buildExpr, onPick, onCreateNew, createLabel,
+  buildExpr, onPick, onCreateNew, createLabel, extraCreateAction,
 }: AttachControlProps) {
   const [opened, setOpened] = useState(false);
   if (!hasPermissions("EditObject")) return null;
@@ -128,6 +131,10 @@ export function AttachControl({
           confirmWithButton
           createLabel={createLabel}
           onCreateNew={onCreateNew ? (query) => { setOpened(false); onCreateNew(query); } : undefined}
+          extraCreateAction={extraCreateAction && {
+            ...extraCreateAction,
+            onClick: () => { setOpened(false); extraCreateAction.onClick(); },
+          }}
         />
       </Modal>
     </>

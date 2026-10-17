@@ -24,6 +24,9 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   gpx: GPX_MIME,
 };
 
+/** A file input's `accept` for map files: ".kml,.geojson,.gpx". */
+export const MAP_FILE_ACCEPT = Object.keys(MIME_BY_EXTENSION).map((ext) => `.${ext}`).join(",");
+
 export function isMapFileMime(mime: unknown): boolean {
   return typeof mime === "string" && MAP_FILE_MIMES.includes(mime);
 }

@@ -150,13 +150,17 @@ function addedHandle(trans: { type: string; handle: string }[]): string {
  * retries as application/octet-stream, which every server can name -- not
  * as the browser's type, which on Linux is often the very same
  * application/gpx+xml (found live). */
-async function uploadMediaAsType(token: string, file: File): Promise<string> {
+async function uploadMediaAsType(token: string, file: File): Promise<UploadedMedia> {
   const mapType = mapFileMimeForName(file.name);
-  if (!mapType) return uploadMedia(token, file, file.type || "application/octet-stream");
+  if (!mapType) {
+    const mime = file.type || "application/octet-stream";
+    return { handle: await uploadMedia(token, file, mime), mime };
+  }
   try {
-    return await uploadMedia(token, file, mapType);
+    return { handle: await uploadMedia(token, file, mapType), mime: mapType };
   } catch {
-    return uploadMedia(token, file, "application/octet-stream");
+    const mime = "application/octet-stream";
+    return { handle: await uploadMedia(token, file, mime), mime };
   }
 }
 
@@ -167,7 +171,21 @@ async function uploadMediaAsType(token: string, file: File): Promise<string> {
  * Not fatal if the desc PUT fails; the Media object itself is already
  * created either way. */
 export async function uploadMediaFile(token: string, file: File): Promise<string> {
-  const handle = await uploadMediaAsType(token, file);
+  return (await uploadMediaFileDetailed(token, file)).handle;
+}
+
+/** A new Media object's handle and the type it was stored under. */
+export interface UploadedMedia {
+  handle: string;
+  mime: string;
+}
+
+/** uploadMediaFile(), also saying which type the file was stored as -- for
+ * a caller that needs to know a map file fell back to a plain file on an
+ * older server (see uploadMediaAsType). */
+export async function uploadMediaFileDetailed(token: string, file: File): Promise<UploadedMedia> {
+  const uploaded = await uploadMediaAsType(token, file);
+  const handle = uploaded.handle;
   try {
     const obj = await fetchPlainObject(token, MEDIA_VIEW, handle);
     obj.desc = file.name;
@@ -175,7 +193,7 @@ export async function uploadMediaFile(token: string, file: File): Promise<string
   } catch {
     // best-effort, see above
   }
-  return handle;
+  return uploaded;
 }
 
 /** Finds an existing Tag by exact name (reusing TAG_VIEW's own query
