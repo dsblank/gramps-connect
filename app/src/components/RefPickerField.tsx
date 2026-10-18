@@ -19,10 +19,7 @@ import { t } from "../i18n/i18n";
  * once phase 3 moves it into a dialog too). Leads with the Gramps ID, same
  * convention as every other type's own picker label. */
 export function personLabel(item: QueryItem): string {
-  const given = (item.given_name as string | undefined) ?? "";
-  const surname = (item.surname as string | undefined) ?? "";
-  const name = [given, surname].filter(Boolean).join(" ") || "(unnamed)";
-  return withGrampsId(item.gramps_id as string | undefined, name);
+  return withGrampsId(item.gramps_id as string | undefined, displayName(item.primary_name) || "(unnamed)");
 }
 
 /** A result's display label for the four plain-handle-list picker types
@@ -101,9 +98,7 @@ export function nestedDraftLabel(draft: DraftEntry): string {
   const grampsId = draft.data.gramps_id as string | undefined;
   switch (draft.type) {
     case "person": {
-      const name = (draft.data.primary_name ?? {}) as { first_name?: string; surname_list?: { surname?: string }[] };
-      const value = [name.first_name, name.surname_list?.[0]?.surname].filter(Boolean).join(" ") || "(unnamed)";
-      return withGrampsId(grampsId, value);
+      return withGrampsId(grampsId, displayName(draft.data.primary_name) || "(unnamed)");
     }
     case "tag":
       return (draft.data.name as string | undefined) || "(unnamed)";

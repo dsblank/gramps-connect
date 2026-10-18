@@ -11,6 +11,7 @@
 // this way works uniformly across all 10.
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { displayPlaceTitle, formatDisplayDate } from "../../store/placeIndex";
+import { formatDisplayName } from "../../store/nameDisplay";
 
 // Exported: reused by detailFields.ts for Media's own `date` field.
 export function displayDate(date: unknown): string {
@@ -26,10 +27,7 @@ export function displayDate(date: unknown): string {
  * doesn't resolve past one level -- see FamiliesSection/ParentsSection). */
 export function personName(obj: any): string {
   if (obj?.name_display) return obj.name_display;
-  const name = obj?.primary_name;
-  const surname = name?.surname_list?.[0]?.surname ?? "";
-  const given = name?.first_name ?? "";
-  return [given, surname].filter(Boolean).join(" ") || "(unnamed)";
+  return formatDisplayName(obj?.primary_name) || "(unnamed)";
 }
 
 /** Truncates long free text (Note bodies, Source titles pulled from GEDCOM

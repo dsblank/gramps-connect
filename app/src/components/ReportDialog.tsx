@@ -30,6 +30,7 @@ import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { promoteJob } from "../store/jobsPromote";
 import { t } from "../i18n/i18n";
 import { BUILTIN_NAME_FORMATS, getDisplaySettings } from "../store/displaySettings";
+import { displayNameFormat } from "../store/nameDisplay";
 
 type Stage = "loading" | "ready" | "error";
 
@@ -84,16 +85,17 @@ function initialValues(fields: OptionField[]): Record<string, string> {
 /** The tree's display settings (displaySettings.ts) as values for Gramps'
  * standard report options, so a report reads like the app does:
  * `date_format` is the format's index + 1 (0 is "Default" --
- * stdoptions.add_date_format_option), `name_format` a built-in format's
- * number. Left out when the setting is the server default; only applied
- * above when the report actually offers that value. The place format isn't
+ * stdoptions.add_date_format_option), `name_format` the built-in format's
+ * number (Default resolved, since the report's own 0 means the server's
+ * gramps.ini); left out for a custom format. Only applied above when the
+ * report actually offers that value. The place format isn't
  * here on purpose: the report's `place_format` indexes the *server's*
  * place_formats.xml, which can't be compared with ours. */
 function displayPrefill(): Record<string, string> {
   const settings = getDisplaySettings();
   const prefill: Record<string, string> = { date_format: String(settings.date.format + 1) };
-  const name = BUILTIN_NAME_FORMATS.find((opt) => opt.format === settings.name.format);
-  if (name && name.number !== 0) prefill.name_format = String(name.number);
+  const name = BUILTIN_NAME_FORMATS.find((opt) => opt.number !== 0 && opt.format === displayNameFormat());
+  if (name) prefill.name_format = String(name.number);
   return prefill;
 }
 

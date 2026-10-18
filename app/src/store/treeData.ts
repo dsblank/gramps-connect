@@ -13,6 +13,7 @@ import { getViewStore } from "./registry";
 import { mediaThumbnailUrl } from "./mediaCrop";
 import type { VisualSubject } from "../hash";
 import { apiFetch } from "./apiFetch";
+import { formatDisplayName } from "./nameDisplay";
 
 /** Shared shape for a family record as returned under a person's own
  * `families` (families they parent) or `parent_family_list` (families
@@ -727,11 +728,11 @@ export interface TreeRoot {
 
 async function personRoot(handle: string): Promise<TreeRoot | null> {
   await getViewStore("person").ensureLoaded();
-  const row = getViewStore("person").readRowByHandle(handle, ["gramps_id", "given_name", "surname"]);
+  const row = getViewStore("person").readRowByHandle(handle, ["gramps_id", "primary_name"]);
   if (!row) return null;
-  const [grampsId, given, surname] = row as [string | null, string | null, string | null];
+  const [grampsId, name] = row as [string | null, string | null];
   if (!grampsId) return null;
-  return { handle, grampsId, label: [given, surname].filter(Boolean).join(" ") || "(unnamed person)" };
+  return { handle, grampsId, label: formatDisplayName(name) || "(unnamed person)" };
 }
 
 /** The tree's root person for a routed VisualSubject: the person themselves,

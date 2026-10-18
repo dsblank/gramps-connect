@@ -11,7 +11,7 @@
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import type { ViewConfig } from "./views";
-import { getDisplaySettings } from "./displaySettings";
+import { displayNameFormat, nameFormatParam } from "./nameDisplay";
 import { apiFetch } from "./apiFetch";
 
 /** The subset of ref-wrapper fields any of gramps-web-api's *ReferenceSchema
@@ -73,11 +73,9 @@ export async function fetchObjectExtended(
   signal?: AbortSignal
 ): Promise<ObjectDetail> {
   // Every profile name_display (this person, spouses, parents, children...)
-  // follows the tree's name format; "" = leave it to the server.
-  const nameFormat = getDisplaySettings().name.format;
+  // follows the tree's name format, as names formatted locally do.
   const url =
-    `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1` +
-    (nameFormat ? `&name_format=${encodeURIComponent(nameFormat)}` : "");
+    `${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}?extend=all&profile=all&backlinks=1&${nameFormatParam()}`;
   const res = await apiFetch(url, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
@@ -108,7 +106,7 @@ const detailCache = new Map<string, ObjectDetail>();
 // Includes the name format: a cached detail's profile names were rendered
 // with whatever format was set when it was fetched.
 function detailCacheKey(view: ViewConfig, handle: string): string {
-  return `${view.key}:${handle}:${getDisplaySettings().name.format}`;
+  return `${view.key}:${handle}:${displayNameFormat()}`;
 }
 
 export function getCachedObjectDetail(view: ViewConfig, handle: string): ObjectDetail | undefined {

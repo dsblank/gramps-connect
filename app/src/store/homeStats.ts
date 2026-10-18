@@ -9,6 +9,7 @@ import { fetchPage, parseErrorMessage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
 import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
+import { formatDisplayName, nameFormatParam, type RawName } from "./nameDisplay";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -36,33 +37,10 @@ function cellText(view: ViewConfig, item: QueryItem, key: string): string {
   return typeof displayed === "string" ? displayed : String(stored);
 }
 
-/** Raw-object shapes the Recently Changed labels below read -- whatever
+/** The raw-object shape the Recently Changed labels below read -- whatever
  * gramps-web-api's /api/search/ hit carries as `object` (the plain Gramps
  * JSON, plus `profile` when one was asked for), not a /query/ projection. */
-interface RawSurname {
-  surname?: string;
-  primary?: boolean;
-}
-
-interface RawName {
-  first_name?: string;
-  surname_list?: RawSurname[];
-}
-
 type RawObject = Record<string, any>;
-
-/** "Given Surname", the same everyday label personLabel()/displayName()
- * build -- `surname` mirrors the server's flat `surname` column
- * (Name.get_surname(): the primary Surname, else the first). */
-function nameParts(name: RawName | undefined): { given: string; surname: string } {
-  const surnames = name?.surname_list ?? [];
-  const primary = surnames.find((s) => s.primary) ?? surnames[0];
-  return { given: name?.first_name ?? "", surname: primary?.surname ?? "" };
-}
-
-function joinName(given: string | undefined, surname: string | undefined): string {
-  return [given, surname].filter(Boolean).join(" ");
-}
 
 /** One-line label per type for the Recently Changed list, from a search
  * hit's raw object. Picks the same field(s) each view's own DataTable
@@ -70,13 +48,12 @@ function joinName(given: string | undefined, surname: string | undefined): strin
  * read `profile` (requested as profile=self) since the raw object only
  * carries the parents'/source's handles. */
 const RECENT_LABEL: Record<string, (obj: RawObject) => string> = {
-  person: (o) => {
-    const { given, surname } = nameParts(o.primary_name);
-    return joinName(given, surname) || "(unnamed)";
-  },
+  person: (o) => formatDisplayName(o.primary_name) || "(unnamed)",
+  // name_display: formatted by the server in the tree's name format
+  // (nameFormatParam, sent with the search).
   family: (o) =>
     [o.profile?.father, o.profile?.mother]
-      .map((p) => joinName(p?.name_given, p?.name_surname))
+      .map((p) => p?.name_display)
       .filter(Boolean)
       .join(" & ") || "(family)",
   event: (o) => o.description || (typeof o.type === "string" ? o.type : o.type?.string) || "(event)",
@@ -150,7 +127,7 @@ export async function fetchRecentlyChanged(token: string, limit: number): Promis
   });
   let hits: SearchHit[];
   try {
-    const res = await apiFetch(`${API_BASE}/api/search/?${params}`, {
+    const res = await apiFetch(`${API_BASE}/api/search/?${params}&${nameFormatParam()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(await parseErrorMessage(res));
@@ -265,8 +242,8 @@ interface RawHomePerson {
 }
 
 /** The Home-person panel's one record, as the QueryItem shape
- * RefPickerField.tsx's personLabel() reads (handle/gramps_id/given_name/
- * surname) -- via a plain GET /api/people/<handle>, not api.ts's
+ * RefPickerField.tsx's personLabel() reads (handle/gramps_id/
+ * primary_name) -- via a plain GET /api/people/<handle>, not api.ts's
  * fetchByHandle(). That one is a /query/ POST with a `handle == "..."`
  * where_expr, which for a user without PERM_VIEW_PRIVATE (e.g. the Public
  * guest) runs gramps-web-api's proxied query path: every Person in the tree
@@ -283,8 +260,7 @@ export async function fetchHomePerson(token: string, handle: string): Promise<Qu
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const person: RawHomePerson = await res.json();
-  const { given, surname } = nameParts(person.primary_name);
-  return { handle: person.handle, gramps_id: person.gramps_id ?? "", given_name: given, surname };
+  return { handle: person.handle, gramps_id: person.gramps_id ?? "", primary_name: person.primary_name };
 }
 
 /** Per-type row counts, keyed by STAT_VIEWS' own `key`s. Reuses cacheMeta's

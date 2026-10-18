@@ -9,6 +9,7 @@ import { hasPermissions } from "../auth/auth";
 import { dateLocaleCode, formatPlaceWith, samplePlaceHandle, useDisplayFormatVersion } from "../store/placeIndex";
 import {
   BUILTIN_NAME_FORMATS,
+  DEFAULT_NAME_FORMAT,
   chooseGrampsFormat,
   grampsFormatFor,
   sharedFormatFor,
@@ -82,7 +83,7 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
     () => [
       ...BUILTIN_NAME_FORMATS.map((opt) => ({
         value: String(opt.number),
-        label: opt.number === 0 ? t(opt.name) : `${t(opt.name)}  (${opt.format})`,
+        label: `${t(opt.name)}  (${opt.format || DEFAULT_NAME_FORMAT})`,
         format: opt.format,
         disabled: false,
       })),

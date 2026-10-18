@@ -8,17 +8,14 @@
 import type { ObjectDetail } from "../../store/objectDetail";
 import { displayConfidence } from "../../store/views";
 import { displayDate } from "./summary";
+import { formatDisplayName, type RawName } from "../../store/nameDisplay";
 
-interface Name {
-  first_name?: string;
-  surname_list?: { surname?: string }[];
+interface Name extends RawName {
   type?: string;
 }
 
 function formatName(name: Name): string {
-  const surname = name.surname_list?.[0]?.surname ?? "";
-  const given = name.first_name ?? "";
-  const full = [given, surname].filter(Boolean).join(" ");
+  const full = formatDisplayName(name);
   return name.type ? `${full} (${name.type})` : full;
 }
 

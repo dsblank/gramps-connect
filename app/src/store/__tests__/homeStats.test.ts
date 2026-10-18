@@ -65,7 +65,7 @@ describe("fetchRecentlyChanged", () => {
         }),
         hit("family", "h2", 109, {
           gramps_id: "F1",
-          profile: { father: { name_given: "Bob", name_surname: "Smith" }, mother: { name_given: "Ann", name_surname: "Jones" } },
+          profile: { father: { name_display: "Smith, Bob" }, mother: { name_display: "Jones, Ann" } },
         }),
         hit("event", "h3", 108, { gramps_id: "E1", description: "", type: "Birth" }),
         hit("place", "h4", 107, { gramps_id: "P1", title: "", name: { value: "Springfield" } }),
@@ -78,8 +78,8 @@ describe("fetchRecentlyChanged", () => {
     const items = await fetchRecentlyChanged("tok", 10);
 
     expect(items.map((i) => [i.viewKey, i.grampsId, i.label])).toEqual([
-      ["person", "I1", "Ann Smith"],
-      ["family", "F1", "Bob Smith & Ann Jones"],
+      ["person", "I1", "Maiden Smith, Ann"],
+      ["family", "F1", "Smith, Bob & Jones, Ann"],
       ["event", "E1", "Birth"],
       ["place", "P1", "Springfield"],
       ["citation", "C1", "Census, p. 4"],
@@ -214,7 +214,9 @@ describe("fetchHomePerson", () => {
     const person = await fetchHomePerson("tok", "h1");
 
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/people/h1?keys=handle,gramps_id,primary_name");
-    expect(person).toEqual({ handle: "h1", gramps_id: "I7", given_name: "Eve", surname: "Doe" });
+    expect(person).toEqual({
+      handle: "h1", gramps_id: "I7", primary_name: { first_name: "Eve", surname_list: [{ surname: "Doe" }] },
+    });
   });
 
   it("resolves to null on 404 (deleted, or private to this user)", async () => {

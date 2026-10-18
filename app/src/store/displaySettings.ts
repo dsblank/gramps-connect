@@ -52,9 +52,10 @@ export interface DisplaySettings {
      * `format`. */
     byLanguage: Readonly<Record<string, number>>;
   };
-  /** A Gramps name format *string* ("%f %l %s"), sent as gramps-web-api's
-   * `name_format` request arg -- which takes a string, not a format number.
-   * "" means "don't send it": the server's own preferences.name-format. */
+  /** A Gramps name format *string* ("%f %l %s"): applied client-side by
+   * nameDisplay.ts, and sent as gramps-web-api's `name_format` request arg
+   * (a string, not a format number) for names the server formats. ""
+   * means Default, DEFAULT_NAME_FORMAT. */
   name: { format: string };
   place: {
     /** Desktop's preferences.place-auto: true formats places from their
@@ -75,10 +76,14 @@ export interface DisplaySettings {
  * there's no place_formats.xml, and not editable in its format editor. */
 export const FULL_PLACE_FORMAT: PlaceFormatDef = { name: "Full", levels: ":", language: "", street: 0, reverse: false };
 
-/** Defaults reproduce what gramps-connect already shows with no settings at
- * all: DAY_SHORT_MONTH_YEAR is what views.ts/summary.ts/visualData.ts
- * hardcode today, and the server-default name format is what every request
- * already gets by not sending name_format. */
+/** Desktop's own default name format, "Surname, Given Suffix" (Name.LNFN)
+ * -- what Gramps uses when preferences.name-format is unset, and what the
+ * Default name format means here. Not the server's gramps.ini format: no
+ * endpoint exposes that, and the app formats most names itself. */
+export const DEFAULT_NAME_FORMAT = "%l, %f %s";
+
+/** DAY_SHORT_MONTH_YEAR is what views.ts/summary.ts/visualData.ts showed
+ * before there were settings. */
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   version: 1,
   date: { format: DateFormat.DAY_SHORT_MONTH_YEAR, byLanguage: {} },
@@ -119,7 +124,7 @@ export interface NameFormatOption {
  * LNFN/FN/FNLN/LNFNP, which is what a desktop gramps.ini's
  * preferences.name-format refers to. */
 export const BUILTIN_NAME_FORMATS: NameFormatOption[] = [
-  { number: 0, name: "Server default", format: "" },
+  { number: 0, name: "Default", format: "" },
   { number: 1, name: "Surname, Given Suffix", format: "%l, %f %s" },
   { number: 4, name: "Given", format: "%f" },
   { number: 2, name: "Given Surname Suffix", format: "%f %l %s" },

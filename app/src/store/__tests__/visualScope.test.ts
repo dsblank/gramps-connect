@@ -70,9 +70,9 @@ function name(first: string, surname: string) {
  */
 beforeAll(async () => {
   await register(PERSON_VIEW, [
-    { handle: "bob", gramps_id: "I1", surname: "Jones", given_name: "Bob", event_refs: eventRefs("e1", "e2", "e5"), family_list: ["fam"] },
-    { handle: "alice", gramps_id: "I2", surname: "Vaughan", given_name: "Alice", event_refs: eventRefs("e3"), family_list: ["fam"] },
-    { handle: "nemo", gramps_id: "I3", surname: "Nemo", given_name: "No", event_refs: [], family_list: [] },
+    { handle: "bob", gramps_id: "I1", surname: "Jones", given_name: "Bob", primary_name: name("Bob", "Jones"), event_refs: eventRefs("e1", "e2", "e5"), family_list: ["fam"] },
+    { handle: "alice", gramps_id: "I2", surname: "Vaughan", given_name: "Alice", primary_name: name("Alice", "Vaughan"), event_refs: eventRefs("e3"), family_list: ["fam"] },
+    { handle: "nemo", gramps_id: "I3", surname: "Nemo", given_name: "No", primary_name: name("No", "Nemo"), event_refs: [], family_list: [] },
   ]);
   await register(FAMILY_VIEW, [
     {
@@ -113,7 +113,7 @@ const data: VisualData = {
 describe("resolveScope: person", () => {
   it("takes the person's own events, and the places those happened at", () => {
     const scope = resolveScope({ type: "person", handle: "bob" }, data)!;
-    expect(scope.label).toBe("Bob Jones");
+    expect(scope.label).toBe("Jones, Bob");
     expect([...scope.eventHandles].sort()).toEqual(["e1", "e2", "e5"]);
     // e5 has no place, so it contributes to the timeline's half of the
     // scope but not the map's.
@@ -145,16 +145,16 @@ describe("resolveScope: family", () => {
     // degenerate case father_handle/mother_handle exist to avoid.
     const scope = resolveScope({ type: "family", handle: "fam" }, data)!;
     expect([...scope.eventHandles].sort()).toEqual(["e1", "e2", "e3", "e4", "e5"]);
-    expect(scope.label).toBe("Bob Jones & Alice Vaughan");
+    expect(scope.label).toBe("Jones, Bob & Vaughan, Alice");
   });
 
   it("attributes each event to whichever record contributed it", () => {
     // The point of the whole map: "Cardiff, 2 events" can't tell where they
     // married from where he died. This is what makes that answerable.
     const { contributor } = resolveScope({ type: "family", handle: "fam" }, data)!;
-    expect(contributor.get("e4")).toBe("Bob Jones & Alice Vaughan"); // the marriage
-    expect(contributor.get("e1")).toBe("Bob Jones");
-    expect(contributor.get("e3")).toBe("Alice Vaughan");
+    expect(contributor.get("e4")).toBe("Jones, Bob & Vaughan, Alice"); // the marriage
+    expect(contributor.get("e1")).toBe("Jones, Bob");
+    expect(contributor.get("e3")).toBe("Vaughan, Alice");
   });
 
   it("gives a person scope a uniform attribution", () => {
@@ -162,7 +162,7 @@ describe("resolveScope: family", () => {
     // row -- but the map decides that by counting distinct values, so they
     // still have to be present and identical.
     const { contributor } = resolveScope({ type: "person", handle: "bob" }, data)!;
-    expect(new Set(contributor.values())).toEqual(new Set(["Bob Jones"]));
+    expect(new Set(contributor.values())).toEqual(new Set(["Jones, Bob"]));
   });
 
   it("attributes nothing for a place or event subject", () => {

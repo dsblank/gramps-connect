@@ -8,6 +8,7 @@
 import { createElement, type ReactNode } from "react";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
+import { formatDisplayName, type RawName } from "./nameDisplay";
 import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
@@ -297,21 +298,17 @@ export function formatChangeTitle(unixSeconds: unknown): string {
   return new Date(n * 1000).toLocaleString();
 }
 
-// A father/mother's primary_name select entry returns the full Name
-// struct (first_name, surname_list[0].surname, ...) -- the same shape
-// personToRow already parses in schema.ts, applied here instead to a
-// stored (not top-level-fetched) name. `json` is a JSON-serialized string
-// when this runs as a local-cache column's toDisplay (this column's own
-// `toSql: toSqlJson`), but an already-parsed object when RefPickerField.tsx's
-// pickerResultLabel calls it directly on a live fetchPage result instead
-// (api.ts never serializes what the server already sent as JSON) -- accept
-// either rather than requiring every caller to know which.
+// A primary_name select entry (People's Name column, a family's father/
+// mother) returns the whole Name struct, formatted here in the tree's name
+// format (nameDisplay.ts). `json` is a JSON-serialized string when this runs
+// as a local-cache column's toDisplay (the column's own `toSql: toSqlJson`),
+// but an already-parsed object when RefPickerField.tsx calls it directly on a
+// live fetchPage result instead (api.ts never serializes what the server
+// already sent as JSON) -- accept either rather than requiring every caller
+// to know which.
 export function displayName(json: unknown): string {
   if (!json) return "";
-  const name = typeof json === "string" ? JSON.parse(json) : json;
-  const surname = name.surname_list?.[0]?.surname ?? "";
-  const given = name.first_name ?? "";
-  return [given, surname].filter(Boolean).join(" ") || "(unnamed)";
+  return formatDisplayName(json as RawName | string) || "(unnamed)";
 }
 
 export const PERSON_VIEW: ViewConfig = {
@@ -332,8 +329,17 @@ export const PERSON_VIEW: ViewConfig = {
   },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
-    { key: "surname", label: "Surname", select: "surname", sqlType: "TEXT", secondarySort: "given_name" },
-    { key: "given_name", label: "Given name", select: "given_name", sqlType: "TEXT", secondarySort: "surname" },
+    // In the tree's name format. Sorts the way desktop's People view does
+    // whatever the format: surname, then given name (the hidden columns
+    // below), which is also all the server can sort people by.
+    {
+      key: "primary_name", label: "Name", select: { json_path: ["primary_name"] }, sqlType: "TEXT",
+      sortBy: "surname", secondarySort: "given_name", toSql: toSqlJson, toDisplay: displayName,
+    },
+    // Hidden: the sort keys behind Name, and what person searches and
+    // pickers match on.
+    { key: "surname", label: "Surname", select: "surname", sqlType: "TEXT", hidden: true, secondarySort: "given_name" },
+    { key: "given_name", label: "Given name", select: "given_name", sqlType: "TEXT", hidden: true, secondarySort: "surname" },
     {
       key: "birth_date", label: "Birth", select: { json_path: ["birth", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,

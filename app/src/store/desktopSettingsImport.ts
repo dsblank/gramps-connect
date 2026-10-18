@@ -245,7 +245,7 @@ export function buildImportItems(input: ImportInput): ImportItem[] {
   const nameValue = ini.get("preferences.name-format");
   const nameNumber = intValue(nameValue);
   if (nameValue && nameNumber !== null) {
-    // 0 is "Default", i.e. desktop's own preference -- here, the server's.
+    // 0 is "Default": Surname, Given Suffix, on desktop and here alike.
     const builtin = BUILTIN_NAME_FORMATS.find((opt) => opt.number === nameNumber);
     const custom = nameNumber < 0 ? customNameFormats.find((opt) => opt.number === nameNumber) : undefined;
     const format = builtin?.format ?? (custom?.usable ? custom.format : null);

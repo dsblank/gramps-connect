@@ -18,6 +18,7 @@ import type { VisualSubject } from "../hash";
 import { getViewStore } from "./registry";
 import type { VisualData } from "./visualData";
 import { formatEventType, parseHandleList } from "./views";
+import { formatDisplayName } from "./nameDisplay";
 
 export interface ResolvedScope {
   subject: VisualSubject;
@@ -100,12 +101,12 @@ export function resolveScope(subject: VisualSubject, data: VisualData): Resolved
  * widening this later without a second forced refetch. */
 function resolvePerson(subject: VisualSubject, data: VisualData): ResolvedScope | null {
   const row = getViewStore("person").readRowByHandle(subject.handle, [
-    "given_name", "surname", "event_refs",
+    "primary_name", "event_refs",
   ]);
   if (!row) return null;
-  const [given, surname, eventRefs] = row as [string | null, string | null, string | null];
+  const [name, eventRefs] = row as [string | null, string | null];
   const eventHandles = new Set(parseHandleList(eventRefs));
-  const label = [given, surname].filter(Boolean).join(" ") || "(unnamed person)";
+  const label = formatDisplayName(name) || "(unnamed person)";
   return {
     subject,
     label,
@@ -135,7 +136,7 @@ function resolveFamily(subject: VisualSubject, data: VisualData): ResolvedScope 
   ];
 
   const eventHandles = new Set(parseHandleList(eventRefs));
-  const names = [nameOf(fatherJson), nameOf(motherJson)].filter(Boolean);
+  const names = [formatDisplayName(fatherJson), formatDisplayName(motherJson)].filter(Boolean);
   const label = names.length > 0 ? names.join(" & ") : "(family)";
 
   // The couple's shared events (the marriage) are attributed to the family
@@ -144,7 +145,7 @@ function resolveFamily(subject: VisualSubject, data: VisualData): ResolvedScope 
 
   const personStore = getViewStore("person");
   for (const [parent, parentName] of [
-    [fatherHandle, nameOf(fatherJson)], [motherHandle, nameOf(motherJson)],
+    [fatherHandle, formatDisplayName(fatherJson)], [motherHandle, formatDisplayName(motherJson)],
   ] as const) {
     if (!parent) continue;
     const parentRow = personStore.readRowByHandle(parent, ["event_refs"]);
@@ -234,11 +235,3 @@ function placesOfEvents(eventHandles: Set<string>, data: VisualData): Set<string
   return places;
 }
 
-/** A stored primary_name struct as display text -- the same shape (and the
- * same first-surname-only simplification) FAMILY_VIEW's own Father/Mother
- * columns render, so the chip agrees with the table the user came from. */
-function nameOf(json: string | null): string {
-  if (!json) return "";
-  const name = JSON.parse(json) as { first_name?: string; surname_list?: { surname?: string }[] };
-  return [name.first_name, name.surname_list?.[0]?.surname].filter(Boolean).join(" ");
-}
