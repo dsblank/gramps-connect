@@ -87,15 +87,18 @@ function initialValues(fields: OptionField[]): Record<string, string> {
  * `date_format` is the format's index + 1 (0 is "Default" --
  * stdoptions.add_date_format_option), `name_format` the built-in format's
  * number (Default resolved, since the report's own 0 means the server's
- * gramps.ini); left out for a custom format. Only applied above when the
- * report actually offers that value. The place format isn't
- * here on purpose: the report's `place_format` indexes the *server's*
- * place_formats.xml, which can't be compared with ours. */
+ * gramps.ini); left out for a custom format. `place_format` indexes the
+ * *server's* place_formats.xml, which no endpoint shows us, so only its
+ * format 0 -- always desktop's fixed "Full", the same as ours -- can be
+ * matched; a custom format or titles-only (place.auto off) leave the
+ * report's Default. Only applied above when the report actually offers
+ * that value. */
 function displayPrefill(): Record<string, string> {
   const settings = getDisplaySettings();
   const prefill: Record<string, string> = { date_format: String(settings.date.format + 1) };
   const name = BUILTIN_NAME_FORMATS.find((opt) => opt.number !== 0 && opt.format === displayNameFormat());
   if (name) prefill.name_format = String(name.number);
+  if (settings.place.auto && settings.place.active === 0) prefill.place_format = "0";
   return prefill;
 }
 
