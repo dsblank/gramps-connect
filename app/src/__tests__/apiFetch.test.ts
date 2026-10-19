@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { _apiFetchState, apiFetch, retryDelayMs } from "../store/apiFetch";
+import { _apiFetchState, apiFetch, retryDelayMs, setTokenRenewer } from "../store/apiFetch";
 
 /** A fetch stand-in whose responses the test releases by hand. */
 function controllableFetch() {
@@ -150,6 +150,55 @@ describe("apiFetch", () => {
     controller.abort();
     await settled;
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("apiFetch 401 renewal", () => {
+  afterEach(() => {
+    setTokenRenewer(null);
+    vi.unstubAllGlobals();
+  });
+
+  const authOf = (init?: RequestInit) => new Headers(init?.headers).get("Authorization");
+
+  it("replays a rejected request once with the renewed token, keeping its other headers and body", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(new Response("ok"));
+    vi.stubGlobal("fetch", fetch);
+    const renewer = vi.fn(async () => "new");
+    setTokenRenewer(renewer);
+    const res = await apiFetch("/api/x", {
+      method: "PUT", body: "data", headers: { Authorization: "Bearer old", "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(200);
+    expect(renewer).toHaveBeenCalledWith("old");
+    const [, init] = fetch.mock.calls[1];
+    expect(authOf(init)).toBe("Bearer new");
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    expect(init).toMatchObject({ method: "PUT", body: "data" });
+  });
+
+  it("returns a second 401 rather than renewing again", async () => {
+    const fetch = vi.fn(async () => new Response("", { status: 401 }));
+    vi.stubGlobal("fetch", fetch);
+    const renewer = vi.fn(async () => "new");
+    setTokenRenewer(renewer);
+    expect((await apiFetch("/api/x", { headers: { Authorization: "Bearer old" } })).status).toBe(401);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(renewer).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the 401 when there's no new token, or no Bearer token was sent", async () => {
+    const fetch = vi.fn(async () => new Response("", { status: 401 }));
+    vi.stubGlobal("fetch", fetch);
+    setTokenRenewer(async () => null);
+    expect((await apiFetch("/api/x", { headers: { Authorization: "Bearer old" } })).status).toBe(401);
+    const renewer = vi.fn(async () => "new");
+    setTokenRenewer(renewer);
+    expect((await apiFetch("/api/token/", { method: "POST" })).status).toBe(401);
+    expect(renewer).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
 

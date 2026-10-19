@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+let currentToken = "tok";
+vi.mock("../auth/auth", () => ({ getToken: vi.fn(async () => currentToken) }));
+
 import { retryApiImageOnError, useApiImageSrc, withRetryHint } from "../store/apiImage";
 
 beforeEach(() => {
+  currentToken = "tok";
   vi.useFakeTimers();
   vi.spyOn(Math, "random").mockReturnValue(0);
 });
@@ -46,10 +51,18 @@ describe("useApiImageSrc", () => {
     rerender({ url: "/api/media/h2/thumbnail/100?jwt=tok" });
     expect(result.current.src).toBe("/api/media/h2/thumbnail/100?jwt=tok");
   });
+
+  it("retries with the session's current token", async () => {
+    const { result } = renderHook(() => useApiImageSrc(URL_));
+    currentToken = "newer";
+    act(() => result.current.onError());
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(result.current.src).toBe("/api/media/h1/thumbnail/100?jwt=newer&square=true&checksum=retry-1");
+  });
 });
 
 describe("retryApiImageOnError", () => {
-  it("re-sets an SVG image's href, up to 3 times", () => {
+  it("re-sets an SVG image's href, up to 3 times", async () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     const image = document.createElementNS("http://www.w3.org/2000/svg", "image");
     image.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", URL_);
@@ -58,13 +71,24 @@ describe("retryApiImageOnError", () => {
 
     for (const [delay, attempt] of [[1000, 1], [2000, 2], [4000, 3]] as const) {
       retryApiImageOnError(image);
-      vi.advanceTimersByTime(delay);
+      await vi.advanceTimersByTimeAsync(delay);
       expect(image.getAttribute("href")).toContain(`checksum=retry-${attempt}`);
       expect(image.getAttribute("xlink:href")).toBeNull();
     }
     retryApiImageOnError(image);
-    vi.advanceTimersByTime(10_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(image.getAttribute("href")).toContain("retry-3");
     svg.remove();
+  });
+
+  it("retries with the session's current token", async () => {
+    const image = document.createElement("img");
+    image.setAttribute("src", URL_);
+    document.body.appendChild(image);
+    currentToken = "newer";
+    retryApiImageOnError(image);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(image.getAttribute("src")).toBe("/api/media/h1/thumbnail/100?jwt=newer&square=true&checksum=retry-1");
+    image.remove();
   });
 });

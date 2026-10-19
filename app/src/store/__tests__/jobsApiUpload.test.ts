@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../apiFetch", () => ({ apiFetch: vi.fn() }));
+vi.mock("../apiFetch", () => ({ apiFetch: vi.fn(), setTokenRenewer: vi.fn() }));
 vi.mock("../objectsApi", () => ({
   fetchPlainObject: vi.fn().mockResolvedValue({}),
   updateObject: vi.fn().mockResolvedValue(undefined),

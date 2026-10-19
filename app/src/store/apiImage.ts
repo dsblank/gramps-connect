@@ -13,10 +13,15 @@
 // retry still hits the server's cache. (Any other unknown param is a 422 --
 // its query parser rejects unknown args.)
 //
+// A retry also swaps in the session's current token (withCurrentToken): a
+// URL built before a refresh, or before the computer slept, carries one the
+// server no longer takes.
+//
 // An onError can't see the status code, so a genuinely missing image
 // costs MAX_RETRIES extra requests over ~7s before its fallback shows.
 import { useCallback, useEffect, useState } from "react";
 import { MAX_RETRIES, backoffMs } from "./apiFetch";
+import { getToken } from "../auth/auth";
 
 export function withRetryHint(url: string, attempt: number): string {
   if (attempt === 0) return url;
@@ -27,21 +32,46 @@ export function withRetryHint(url: string, attempt: number): string {
 
 /** For a React <img>/Mantine Image/Avatar: pass `src` and `onError` through.
  * `failed` turns true once every retry has failed. */
+/** `url` with its `?jwt=` swapped for the session's current token
+ * (getToken() refreshing it first if it's about to expire), or unchanged
+ * when that's the one it already has. */
+export async function withCurrentToken(url: string): Promise<string> {
+  const u = new URL(url, location.href);
+  const jwt = u.searchParams.get("jwt");
+  if (!jwt) return url;
+  let token: string;
+  try {
+    token = await getToken();
+  } catch {
+    return url;
+  }
+  if (token === jwt) return url;
+  u.searchParams.set("jwt", token);
+  return u.origin === location.origin ? u.pathname + u.search : u.href;
+}
+
 export function useApiImageSrc(url: string | null): { src: string | null; onError: () => void; failed: boolean } {
-  const [state, setState] = useState({ url, attempt: 0, failed: false, waiting: false });
+  // `retryUrl`: `url` with a current token, for the retries.
+  const [state, setState] = useState({ url, retryUrl: url, attempt: 0, failed: false, waiting: false });
   // A new URL starts over -- reset during render, not in an effect, so the
   // old URL's retry count never leaks onto the new one's first frame.
-  const current = state.url === url ? state : { url, attempt: 0, failed: false, waiting: false };
+  const current = state.url === url ? state : { url, retryUrl: url, attempt: 0, failed: false, waiting: false };
   if (current !== state) setState(current);
 
   useEffect(() => {
     if (!state.waiting) return;
-    const timer = setTimeout(
-      () => setState((s) => (s.url === state.url ? { ...s, attempt: s.attempt + 1, waiting: false } : s)),
-      backoffMs(state.attempt),
-    );
-    return () => clearTimeout(timer);
-  }, [state.waiting, state.attempt, state.url]);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void withCurrentToken(state.retryUrl ?? "").then((retryUrl) => {
+        if (cancelled) return;
+        setState((s) => (s.url === state.url ? { ...s, retryUrl, attempt: s.attempt + 1, waiting: false } : s));
+      });
+    }, backoffMs(state.attempt));
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state.waiting, state.attempt, state.url, state.retryUrl]);
 
   const onError = useCallback(() => {
     setState((s) => {
@@ -51,7 +81,7 @@ export function useApiImageSrc(url: string | null): { src: string | null; onErro
   }, []);
 
   return {
-    src: url && !current.failed ? withRetryHint(url, current.attempt) : null,
+    src: url && current.retryUrl && !current.failed ? withRetryHint(current.retryUrl, current.attempt) : null,
     onError,
     failed: current.failed,
   };
@@ -66,11 +96,12 @@ export function retryApiImageOnError(el: SVGImageElement | HTMLImageElement): vo
   const isSvg = el.tagName.toLowerCase() === "image";
   const original = el.dataset.apiSrc ?? (isSvg ? (el.getAttribute("href") ?? el.getAttribute("xlink:href")) : el.getAttribute("src"));
   if (!original) return;
-  el.dataset.apiSrc = original;
   el.dataset.apiRetry = String(attempt + 1);
-  setTimeout(() => {
+  setTimeout(async () => {
+    const fresh = await withCurrentToken(original);
     if (!el.isConnected) return;
-    const next = withRetryHint(original, attempt + 1);
+    el.dataset.apiSrc = fresh;
+    const next = withRetryHint(fresh, attempt + 1);
     if (isSvg) {
       el.setAttribute("href", next);
       el.removeAttribute("xlink:href");

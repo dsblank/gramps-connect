@@ -34,6 +34,14 @@
 //   nothing is applied twice. The wait doesn't hold a slot. After the last
 //   retry the 429 is returned to the caller as-is.
 //
+// - Replays a request once after a 401 that rejected its Bearer token, with
+//   the token setTokenRenewer()'s function (auth.ts) hands back -- for a
+//   token that went stale on the way: picked up just before the computer
+//   slept, or waiting in a queue or a 429 backoff past its expiry.
+//   getToken() refreshes ahead of expiry, but only for requests that ask it
+//   after the fact. Not registered in the Gramplet worker, which has its own
+//   401 retry (pyodideWorker.ts).
+//
 // Every request's body must be replayable for the retry, which holds for
 // the string/FormData/Blob/URLSearchParams bodies used throughout; a
 // ReadableStream body would not be (none exist today).
@@ -136,9 +144,29 @@ export function retryDelayMs(retryAfter: string | null, attempt: number, now = D
   return backoffMs(attempt);
 }
 
+/** Given the access token a server just rejected, a token to replay the
+ * request with -- or null to give up and return the 401. */
+export type TokenRenewer = (rejected: string) => Promise<string | null>;
+
+let renewToken: TokenRenewer | null = null;
+
+/** auth.ts registers its renewer here at load; apiFetch.ts can't import
+ * auth.ts itself (auth.ts's login requests go through apiFetch, and the
+ * Gramplet worker uses apiFetch without auth.ts at all). */
+export function setTokenRenewer(renewer: TokenRenewer | null): void {
+  renewToken = renewer;
+}
+
+/** The token a "Bearer <token>" Authorization header carries, if any. */
+function bearerToken(init: RequestInit | undefined): string | null {
+  const header = new Headers(init?.headers).get("Authorization");
+  return header?.startsWith("Bearer ") ? header.slice(7) : null;
+}
+
 export async function apiFetch(input: string | URL, init?: RequestInit, options?: ApiFetchOptions): Promise<Response> {
   const signal = init?.signal;
   const lane = lanes[options?.lane ?? "normal"];
+  let renewed = false;
   for (let attempt = 0; ; attempt++) {
     await acquireSlot(lane, signal);
     let res: Response;
@@ -146,6 +174,18 @@ export async function apiFetch(input: string | URL, init?: RequestInit, options?
       res = await fetch(input, init);
     } finally {
       releaseSlot(lane);
+    }
+    if (res.status === 401 && !renewed && renewToken) {
+      renewed = true;
+      const rejected = bearerToken(init);
+      const token = rejected ? await renewToken(rejected) : null;
+      if (token && token !== rejected) {
+        const headers = new Headers(init?.headers);
+        headers.set("Authorization", `Bearer ${token}`);
+        init = { ...init, headers };
+        attempt--; // not a 429 retry
+        continue;
+      }
     }
     if (res.status !== 429 || attempt >= MAX_RETRIES) return res;
     const wait = retryDelayMs(res.headers.get("Retry-After"), attempt);

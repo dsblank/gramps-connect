@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../apiFetch", () => ({ apiFetch: vi.fn() }));
+vi.mock("../apiFetch", () => ({ apiFetch: vi.fn(), setTokenRenewer: vi.fn() }));
 
 import { apiFetch } from "../apiFetch";
 import { fetchBatchAncestorExpansion, fetchTreeData, type TreePersonRaw } from "../treeData";

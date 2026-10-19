@@ -3,14 +3,18 @@
 // expiry tolerance, 429 retry) to fix real-world expiry. Access tokens are
 // short-lived (15 min, see gramps-web-api's JWT_ACCESS_TOKEN_EXPIRES) and
 // refresh tokens are long-lived, so getToken() proactively refreshes ahead
-// of expiry rather than waiting for a 401.
+// of expiry rather than waiting for a 401. A request that still carries an
+// expired token -- it picked the token up just before the computer slept --
+// gets one replay from apiFetch with a renewed one (renewRejectedToken).
 import { login as apiLogin, refreshAccessToken as apiRefreshAccessToken } from "../store/api";
+import { setTokenRenewer } from "../store/apiFetch";
 import { fetchOwnUser } from "../store/usersApi";
 import { API_BASE } from "../config";
 
 const STORAGE_KEY = "gramps-connect.token";
 const REFRESH_STORAGE_KEY = "gramps-connect.refreshToken";
 const USERNAME_STORAGE_KEY = "gramps-connect.username";
+const CLOCK_SKEW_STORAGE_KEY = "gramps-connect.clockSkewMs";
 
 // Refresh a little before the server would actually reject the token, so a
 // request that starts just under the wire doesn't lose the race. Matches
@@ -37,6 +41,11 @@ function writeStored(key: string, value: string) {
 let cachedToken: string | null = readStored(STORAGE_KEY);
 let cachedRefreshToken: string | null = readStored(REFRESH_STORAGE_KEY);
 let cachedUsername: string | null = readStored(USERNAME_STORAGE_KEY);
+// The server's clock minus ours, from the newest access token's `iat`
+// (stamped by the server just before we received it). Expiry is judged on
+// the server's clock: a browser a few minutes slow would otherwise keep
+// sending a token the server already counts as expired.
+let clockSkewMs = Number(readStored(CLOCK_SKEW_STORAGE_KEY)) || 0;
 // Concurrent callers (runQuery's foreground fetch + background fill,
 // several views polling at once) share one in-flight refresh instead of
 // each racing the server with their own.
@@ -59,10 +68,9 @@ export function getAuthSnapshot(): boolean {
 
 export async function login(username: string, password: string): Promise<void> {
   const { accessToken, refreshToken } = await apiLogin(username, password);
-  cachedToken = accessToken;
+  adoptAccessToken(accessToken);
   cachedRefreshToken = refreshToken;
   cachedUsername = username;
-  writeStored(STORAGE_KEY, accessToken);
   writeStored(REFRESH_STORAGE_KEY, refreshToken);
   writeStored(USERNAME_STORAGE_KEY, username);
   emit();
@@ -89,10 +97,9 @@ export function getRefreshToken(): string | null {
 export async function loginWithRefreshToken(refreshToken: string): Promise<void> {
   const accessToken = await apiRefreshAccessToken(refreshToken);
   const user = await fetchOwnUser(accessToken);
-  cachedToken = accessToken;
+  adoptAccessToken(accessToken);
   cachedRefreshToken = refreshToken;
   cachedUsername = user.name;
-  writeStored(STORAGE_KEY, accessToken);
   writeStored(REFRESH_STORAGE_KEY, refreshToken);
   writeStored(USERNAME_STORAGE_KEY, user.name);
   emit();
@@ -114,6 +121,7 @@ export function logout(): void {
     sessionStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(REFRESH_STORAGE_KEY);
     sessionStorage.removeItem(USERNAME_STORAGE_KEY);
+    sessionStorage.removeItem(CLOCK_SKEW_STORAGE_KEY);
   } catch {
     // nothing to clear
   }
@@ -217,6 +225,18 @@ function decodeExpMs(token: string): number | null {
   return typeof claims?.exp === "number" ? claims.exp * 1000 : null;
 }
 
+/** Makes a just-received access token the session's, and re-measures
+ * clockSkewMs from its `iat`. */
+function adoptAccessToken(token: string): void {
+  cachedToken = token;
+  writeStored(STORAGE_KEY, token);
+  const iat = decodeClaims(token)?.iat;
+  if (typeof iat === "number") {
+    clockSkewMs = iat * 1000 - Date.now();
+    writeStored(CLOCK_SKEW_STORAGE_KEY, String(clockSkewMs));
+  }
+}
+
 /** Checks the current access token's `permissions` claim (gramps-web-api's
  * token.py sets this from the user's role, see PERMISSIONS in auth/const.py)
  * for every permission name given -- true only if all are present. Reads
@@ -257,7 +277,7 @@ export function isTokenFresh(): boolean {
 
 function isExpiringSoon(token: string): boolean {
   const expMs = decodeExpMs(token);
-  return expMs === null || expMs < Date.now() + EXPIRY_TOLERANCE_MS;
+  return expMs === null || expMs < Date.now() + clockSkewMs + EXPIRY_TOLERANCE_MS;
 }
 
 async function refreshAccessToken(): Promise<string> {
@@ -267,8 +287,7 @@ async function refreshAccessToken(): Promise<string> {
   }
   try {
     const accessToken = await apiRefreshAccessToken(cachedRefreshToken);
-    cachedToken = accessToken;
-    writeStored(STORAGE_KEY, accessToken);
+    adoptAccessToken(accessToken);
     return accessToken;
   } catch (err) {
     // The refresh token itself is invalid, expired, or revoked -- no way
@@ -299,7 +318,11 @@ export async function refreshTokenNow(): Promise<string> {
 export async function getToken(): Promise<string> {
   if (!cachedToken) throw new Error("not logged in");
   if (!isExpiringSoon(cachedToken)) return cachedToken;
+  return refreshShared();
+}
 
+/** refreshAccessToken(), joined by every concurrent caller. */
+function refreshShared(): Promise<string> {
   if (!refreshing) {
     refreshing = refreshAccessToken().finally(() => {
       refreshing = null;
@@ -307,3 +330,20 @@ export async function getToken(): Promise<string> {
   }
   return refreshing;
 }
+
+/** apiFetch's 401 replay (setTokenRenewer): the token to retry a rejected
+ * request with. One already replaced since the request picked it up just
+ * gets the current one; the current one itself is refreshed -- the server
+ * said no, whatever our clock thinks. Only ever for an access token: the
+ * refresh request itself sends the refresh token, and a 401 there must not
+ * come back here. Null (return the 401 as-is) once not logged in. */
+async function renewRejectedToken(rejected: string): Promise<string | null> {
+  if (!cachedToken || decodeClaims(rejected)?.type !== "access") return null;
+  try {
+    return rejected === cachedToken ? await refreshShared() : await getToken();
+  } catch {
+    return null;
+  }
+}
+
+setTokenRenewer(renewRejectedToken);
