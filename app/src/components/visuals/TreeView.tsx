@@ -310,7 +310,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // mounted graph instead of a hard unmount-then-remount. `ensureClusterLoaded`
   // needs three sequential fetch-and-merge rounds (parents, then their own
   // families, then siblings), so it's its own effect rather than folded into
-  // fetchTreeData's single round trip; the follow-up fetchTreeData call
+  // fetchTreeData; the follow-up fetchTreeData call
   // fetches the focus's own immediate children (nDesc=1) the same way the
   // box-tree's initial load does, since ensureClusterLoaded itself only
   // covers "up" (parents/siblings), not "down".
@@ -549,7 +549,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           // refreshes, which is exactly what a click well into a long
           // browsing session needs.
           const t = await getToken();
-          const rows = await fetchPersonExpansion(t, person.gramps_id, direction);
+          const rows = await fetchPersonExpansion(t, person, direction);
           setData((prev) => mergeTreeData(prev ?? [], rows));
           setToken(t);
           fetchedExpansionsRef.current.add(key);
@@ -625,11 +625,11 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     keys.forEach((key) => expandingRef.current.add(key));
     setExpandingKeys(new Set(expandingRef.current));
     try {
-      const grampsIds = targets
-        .map(({ handle }) => data?.find((p) => p.handle === handle)?.gramps_id)
-        .filter((id): id is string => !!id);
+      const people = targets
+        .map(({ handle }) => data?.find((p) => p.handle === handle))
+        .filter((p): p is TreePersonRaw => !!p);
       const t = await getToken();
-      const rows = await fetchBatchAncestorExpansion(t, grampsIds);
+      const rows = await fetchBatchAncestorExpansion(t, people);
       setData((prev) => mergeTreeData(prev ?? [], rows));
       setToken(t);
       keys.forEach((key) => fetchedExpansionsRef.current.add(key));

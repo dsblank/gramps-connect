@@ -41,18 +41,6 @@ worth every commit).
   open design question, not yet resolved. (Not the same thing as
   duplicate-record merging, which is fully shipped — see "Editing gaps"
   below.)
-- **gramps-web-api filter pushdown**: `GrampsObjectsResource.get()`
-  (`gramps_webapi/api/resources/base.py:589-615`) still unconditionally
-  loads every object via `iter_objects_method()` before applying
-  `filter`/`rules`/`gql`/`oql` — the same discourse-thread perf bug as
-  originally documented (104s for a filtered query on 100k people).
-  Confirmed 2026-09-11: **not** superseded by switching to
-  `ObjectQueryResource` — `app/` still hits this exact vulnerable endpoint
-  today, via `treeData.ts`'s `GET /api/people/?rules=...`
-  (`IsLessThanNthGenerationAncestorOf`/`DescendantOf`), which backs the
-  Tree/fan chart's ancestor/descendant loading and per-node lazy-expand.
-  Every other view already reads through `/query/`'s real SQL pushdown —
-  this rules-based endpoint is the one path left that doesn't.
 - Full object-model UI redesign, design system, search-as-navigation — not
   scoped yet.
 - **Generations graph (`FamilyGraphView.tsx`) descendant-subtree placement**:

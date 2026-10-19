@@ -3,10 +3,10 @@
 // rather than reading the local SQLite caches -- Person/Family don't cache
 // parent_family_list/child_ref_list today, and adding them would force a
 // one-time full recache for every user for a feature most won't open often.
-// See ../../../gramps-web/src/charts/util.js and
-// views/GrampsjsViewTreeChartBase.js's _getPersonRules/_fetchData, which
-// this mirrors: one GET against the classic rule-filtered /api/people/
-// (not the SQL-pushed-down /api/people/query/ views.ts's caches use).
+// Loaded a generation at a time by handle (walkGenerations), not with
+// gramps-web's IsLessThanNthGeneration*Of rules: the rule-filtered
+// /api/people/ loads every person in the tree before filtering (104s on
+// 100k people), while ?handles= looks up just the ones named.
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { getViewStore } from "./registry";
@@ -258,36 +258,106 @@ export function buildDescendantTree(
   return descendantNode(data, handle, 0, baseDepth, expanded, collapsed, relaxed, "p");
 }
 
-/** GET /api/people/?rules=...&profile=self&extend=primary_parent_family,
- * family_list -- the classic rule-filtered endpoint gramps-web's tree charts
- * use, not the SQL-pushed-down /api/people/query/ views.ts's local caches
- * read. `nAnc+1`/`nDesc+1`: IsLessThanNthGenerationAncestorOf/DescendantOf's
- * N counts generations including the root itself (N=1 is self only), so
- * "nAnc ancestor generations beyond the root" needs N = nAnc+1 -- same
- * arithmetic as gramps-web's own _getPersonRules. `parent_family_list` rides
- * along on every call (not just the Family graph's own fetchPersonByHandle
- * below) -- this is the root-keyed effect family mode's own focus-fetch
- * shares with box/fan mode (TreeView.tsx), and ensureClusterLoaded only
- * (re)fetches a person by handle when their row isn't in `data` *at all*;
- * if this call had landed the root's row first without it, that row would
- * never get a second chance to pick it up. */
-export async function fetchTreeData(token: string, grampsId: string, nAnc: number, nDesc: number): Promise<TreePersonRaw[]> {
-  const rules = {
-    function: "or",
-    rules: [
-      { name: "IsLessThanNthGenerationAncestorOf", values: [grampsId, nAnc + 1] },
-      { name: "IsLessThanNthGenerationDescendantOf", values: [grampsId, nDesc + 1] },
-    ],
-  };
-  const url = `${API_BASE}/api/people/?rules=${encodeURIComponent(JSON.stringify(rules))}&profile=self&extend=primary_parent_family,parent_family_list,family_list`;
+/** The person shape TreePersonRaw describes. `parent_family_list` rides
+ * along on every fetch (not just the Family graph's), because
+ * ensureClusterLoaded only (re)fetches a person whose row isn't in `data`
+ * *at all*, and mergeTreeData replaces a row wholesale -- a row landing
+ * without it would never get a second chance to pick it up. */
+const PERSON_PARAMS = "profile=self&extend=primary_parent_family,parent_family_list,family_list";
+
+/** Handles per GET: about 2.5KB of URL, well under servers' request-line
+ * limits. */
+const HANDLES_PER_REQUEST = 100;
+
+/** GET /api/people/?handles=... -- each person looked up directly, no
+ * filtering pass over the whole tree. A handle that's gone (deleted since)
+ * is just left out, as the endpoint does. */
+async function fetchPeopleByHandles(token: string, handles: string[]): Promise<TreePersonRaw[]> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < handles.length; i += HANDLES_PER_REQUEST) chunks.push(handles.slice(i, i + HANDLES_PER_REQUEST));
+  const pages = await Promise.all(
+    chunks.map(async (chunk) => {
+      const url = `${API_BASE}/api/people/?handles=${chunk.map(encodeURIComponent).join(",")}&${PERSON_PARAMS}`;
+      const res = await apiFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(await parseErrorMessage(res));
+      const body = await res.json();
+      if (Array.isArray(body)) return body as TreePersonRaw[];
+      throw new Error(body?.error?.message ?? "Failed to load tree data");
+    }),
+  );
+  return pages.flat();
+}
+
+/** GET /api/people/?gramps_id=... -- a direct lookup too. Null when there's
+ * no such person (any more). */
+async function fetchPersonByGrampsId(token: string, grampsId: string): Promise<TreePersonRaw | null> {
+  const url = `${API_BASE}/api/people/?gramps_id=${encodeURIComponent(grampsId)}&${PERSON_PARAMS}`;
   const res = await apiFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   const body = await res.json();
-  // A bare array, not gramps-web's own {data: [...]} envelope -- this GET
-  // (unlike the paginated /api/people/query/ views.ts's caches use) returns
-  // the matched people directly.
-  if (Array.isArray(body)) return body as TreePersonRaw[];
-  throw new Error(body?.error?.message ?? "Failed to load tree data");
+  return Array.isArray(body) ? ((body[0] as TreePersonRaw | undefined) ?? null) : null;
+}
+
+/** IsLessThanNthGenerationAncestorOf's step: the parents in the person's
+ * first parent family (`primary_parent_family`). */
+function parentsOf(person: TreePersonRaw): string[] {
+  const fam = person.extended?.primary_parent_family;
+  return [fam?.father_handle, fam?.mother_handle].filter((h): h is string => !!h);
+}
+
+/** IsLessThanNthGenerationDescendantOf's step: every child of every family
+ * the person parents, whatever the child's relationship. */
+function childrenOf(person: TreePersonRaw): string[] {
+  return (person.extended?.families ?? []).flatMap((fam) => (fam.child_ref_list ?? []).map((ref) => ref.ref));
+}
+
+/** Walks `generations` steps out from `start` along `step`, fetching each
+ * new generation in one request (per HANDLES_PER_REQUEST) into `loaded`,
+ * which every walk of one load shares so nobody is fetched twice. Like the
+ * Gramps rules, a person reached twice (pedigree collapse) is walked once. */
+async function walkGenerations(
+  token: string,
+  start: TreePersonRaw[],
+  generations: number,
+  step: (person: TreePersonRaw) => string[],
+  loaded: Map<string, TreePersonRaw>,
+): Promise<void> {
+  const seen = new Set(start.map((p) => p.handle));
+  let frontier = start;
+  for (let gen = 0; gen < generations && frontier.length > 0; gen++) {
+    const next = [...new Set(frontier.flatMap(step))].filter((h) => !seen.has(h));
+    next.forEach((h) => seen.add(h));
+    const missing = next.filter((h) => !loaded.has(h));
+    if (missing.length > 0) {
+      for (const person of await fetchPeopleByHandles(token, missing)) loaded.set(person.handle, person);
+    }
+    frontier = next.map((h) => loaded.get(h)).filter((p): p is TreePersonRaw => !!p);
+  }
+}
+
+/** `start` plus `nAnc` generations of ancestors and `nDesc` of
+ * descendants, each direction walked at the same time. */
+async function loadAround(token: string, start: TreePersonRaw[], nAnc: number, nDesc: number): Promise<TreePersonRaw[]> {
+  const loaded = new Map(start.map((p) => [p.handle, p]));
+  await Promise.all([
+    walkGenerations(token, start, nAnc, parentsOf, loaded),
+    walkGenerations(token, start, nDesc, childrenOf, loaded),
+  ]);
+  return Array.from(loaded.values());
+}
+
+/** The person with `grampsId`, `nAnc` ancestor generations and `nDesc + 1`
+ * descendant generations -- what gramps-web's tree charts load with
+ * IsLessThanNthGenerationAncestorOf(id, nAnc + 1) or
+ * IsLessThanNthGenerationDescendantOf(id, nDesc + 1). The two rules count
+ * N differently (ancestor N=1 is the person alone, descendant N=1 is their
+ * children), so descendants go one generation past what's drawn; kept, as
+ * the charts were built on it. Empty when there's no such person. */
+export async function fetchTreeData(token: string, grampsId: string, nAnc: number, nDesc: number): Promise<TreePersonRaw[]> {
+  const root = await fetchPersonByGrampsId(token, grampsId);
+  if (!root) return [];
+  return loadAround(token, [root], nAnc, nDesc + 1);
 }
 
 export interface ClusterSibling {
@@ -568,13 +638,11 @@ export function groupChildrenByFamily(children: TreeNode[]): ChildFamilyGroup[] 
 
 /** GET /api/people/<handle>?profile=self&extend=primary_parent_family,
  * parent_family_list,family_list -- same query shape/TreePersonRaw as
- * fetchTreeData, just a direct by-handle GET (the pattern objectDetail.ts's
- * fetchObjectExtended already uses elsewhere) rather than the rules-based
- * by-gramps_id list endpoint, since the Family graph only ever has handles
- * (child_ref_list entries, parent handles) to work from, never gramps_ids.
- * Bare object, no envelope -- same as objectDetail.ts's own by-handle GET. */
+ * fetchTreeData, for one person (the pattern objectDetail.ts's
+ * fetchObjectExtended already uses elsewhere). Bare object, no envelope --
+ * same as objectDetail.ts's own by-handle GET. */
 export async function fetchPersonByHandle(token: string, handle: string): Promise<TreePersonRaw> {
-  const url = `${API_BASE}/api/people/${encodeURIComponent(handle)}?profile=self&extend=primary_parent_family,parent_family_list,family_list`;
+  const url = `${API_BASE}/api/people/${encodeURIComponent(handle)}?${PERSON_PARAMS}`;
   const res = await apiFetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
   return (await res.json()) as TreePersonRaw;
@@ -661,41 +729,25 @@ export function buildFamilyClusterTree(
 }
 
 /** One person's immediate next generation in one direction -- the per-node
- * lazy-expand fetch, rooted at *that* person instead of the tree's root.
- * `nAnc=1,nDesc=0` (or the reverse) returns exactly the revealed person plus
- * their immediate parents/children, each already carrying their own
- * `extended`, so the newly-drawn boundary is itself immediately correct
- * about whether it needs its own hasMore marker -- no second round-trip. */
+ * lazy-expand fetch, walking out from `person`'s own already-loaded row.
+ * The new people arrive carrying their own `extended`, so the newly-drawn
+ * boundary is itself immediately correct about whether it needs its own
+ * hasMore marker -- no second round-trip. */
 export async function fetchPersonExpansion(
   token: string,
-  grampsId: string,
+  person: TreePersonRaw,
   direction: "ancestor" | "descendant",
 ): Promise<TreePersonRaw[]> {
-  return direction === "ancestor"
-    ? fetchTreeData(token, grampsId, 1, 0)
-    : fetchTreeData(token, grampsId, 0, 1);
+  return direction === "ancestor" ? loadAround(token, [person], 1, 0) : loadAround(token, [person], 0, 1);
 }
 
-/** The fan chart's "Increase depth" button firing fetchPersonExpansion once
- * per boundary wedge was an N+1 round trip -- dozens of tiny GETs at once,
- * each paying full request latency, with the browser's own per-origin
- * connection cap serializing most of them anyway. One `IsLessThanNth
- * GenerationAncestorOf(id, 2)` clause per person, OR'd together in a single
- * rules query (same shape fetchTreeData's own ancestor+descendant OR
- * already uses, just many clauses instead of two), gets the same union of
- * "each of these people plus their immediate parents" in one request. */
-export async function fetchBatchAncestorExpansion(token: string, grampsIds: string[]): Promise<TreePersonRaw[]> {
-  if (grampsIds.length === 0) return [];
-  const rules = {
-    function: "or",
-    rules: grampsIds.map((id) => ({ name: "IsLessThanNthGenerationAncestorOf", values: [id, 2] })),
-  };
-  const url = `${API_BASE}/api/people/?rules=${encodeURIComponent(JSON.stringify(rules))}&profile=self&extend=primary_parent_family,family_list`;
-  const res = await apiFetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(await parseErrorMessage(res));
-  const body = await res.json();
-  if (Array.isArray(body)) return body as TreePersonRaw[];
-  throw new Error(body?.error?.message ?? "Failed to load tree data");
+/** The fan chart's "Increase depth": every boundary wedge's parents at
+ * once, in one request (per HANDLES_PER_REQUEST) rather than one
+ * fetchPersonExpansion per wedge -- dozens of tiny GETs, mostly serialized
+ * behind the browser's per-origin connection cap. */
+export async function fetchBatchAncestorExpansion(token: string, people: TreePersonRaw[]): Promise<TreePersonRaw[]> {
+  if (people.length === 0) return [];
+  return loadAround(token, people, 1, 0);
 }
 
 /** Merges a newly-fetched batch into the flat person list TreeView holds, by
