@@ -540,6 +540,15 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             },
             { label: "System Information", onClick: () => setSystemInfoOpened(true) },
             { label: "Researcher", onClick: () => setResearcherOpened(true) },
+            {
+              // The Gramps Discourse forum's gramps-connect category, where
+              // questions and discussion happen (see the wiki's FAQ). Opens
+              // in a new tab rather than in-app: it's a live site needing
+              // its own login to post.
+              label: "Discussion Forum",
+              onClick: () =>
+                window.open("https://gramps.discourse.group/c/gramps-connect/35", "_blank", "noopener"),
+            },
             { label: "About", onClick: () => setAboutOpened(true), separatorBefore: true },
           ]}
         />
