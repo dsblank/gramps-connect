@@ -7,7 +7,8 @@
 // authenticated GET, not a persistent connection to a Postgres-fronting
 // relay process -- a missed poll (tab backgrounded, laptop asleep) simply
 // gets caught up on the next one, and it works against any backend
-// (sqlite included), not just Postgres.
+// (sqlite included), not just Postgres. Polling pauses outright while the
+// tab is hidden (see pollHistory()) and catches up the moment it's shown.
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { fetchLatestTransactionId } from "./cacheMeta";
@@ -126,9 +127,22 @@ export function pollHistory(
   // ticks until new data actually arrives, an idle steady-state poll gets a
   // bodyless 304 instead of the full change-log fetch + serialize.
   let etag: string | null = null;
+  // True while polling is paused for a hidden tab. Even a bodyless 304
+  // costs the server a full tree open (~60 SQL statements on
+  // SharedPostgreSQL, measured by deploy/loadtest/), so a tab nobody is
+  // looking at shouldn't ask every 5s -- on a hosted server, tabs left
+  // open in the background were most of the load.
+  let paused = false;
 
   async function poll() {
     if (stopped) return;
+    // Only once bootstrapped: the cursor has to be taken at page load, or
+    // changes made between the views' initial fetch and the tab first
+    // being shown would never be reported.
+    if (bootstrapped && isHidden()) {
+      paused = true;
+      return;
+    }
     try {
       const token = await getToken();
       if (!bootstrapped) {
@@ -170,10 +184,22 @@ export function pollHistory(
       if (!stopped) timer = setTimeout(poll, POLL_INTERVAL_MS);
     }
   }
+  function onVisibilityChange() {
+    if (paused && !isHidden()) {
+      paused = false;
+      poll();
+    }
+  }
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibilityChange);
   poll();
 
   return () => {
     stopped = true;
     if (timer) clearTimeout(timer);
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibilityChange);
   };
+}
+
+function isHidden(): boolean {
+  return typeof document !== "undefined" && document.hidden;
 }

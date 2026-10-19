@@ -4,6 +4,12 @@ vi.mock("../../auth/auth", () => ({
   getToken: vi.fn().mockResolvedValue("test-token"),
 }));
 
+// The real one caches its answer for the whole page load, which would leak
+// one test's cursor into the next.
+vi.mock("../cacheMeta", () => ({
+  fetchLatestTransactionId: vi.fn().mockResolvedValue({ ok: true, id: 5 }),
+}));
+
 import { pollHistory, transactionsToNotifications } from "../historyPoll";
 
 function change(obj_class: string, trans_type: number, obj_handle: string) {
@@ -89,9 +95,7 @@ describe("pollHistory", () => {
 
   it("sends the prior ETag as If-None-Match, and a 304 skips onNotifications without advancing the cursor", async () => {
     fetchMock
-      // bootstrap: newest existing transaction id
-      .mockResolvedValueOnce(jsonResponse([{ id: 5, timestamp: 1, changes: [] }]))
-      // first real poll: one new transaction, response carries an ETag
+      // first real poll (the bootstrap cursor, id 5, comes from cacheMeta): one new transaction, response carries an ETag
       .mockResolvedValueOnce(
         jsonResponse(
           [{ id: 6, timestamp: 2, changes: [change("Person", 1, "H1")] }],
@@ -110,12 +114,51 @@ describe("pollHistory", () => {
       [{ table: "person", handle: "H1", op: "UPDATE", changedBy: null }],
       6
     );
-    expect(fetchMock.mock.calls[1][1].headers["If-None-Match"]).toBeUndefined();
+    expect(fetchMock.mock.calls[0][1].headers["If-None-Match"]).toBeUndefined();
 
     await vi.advanceTimersByTimeAsync(5000);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[2][1].headers["If-None-Match"]).toBe('"v1"');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][1].headers["If-None-Match"]).toBe('"v1"');
     expect(onNotifications).toHaveBeenCalledTimes(1);
+
+    stop();
+  });
+
+  it("pauses while the tab is hidden and polls again as soon as it's shown", async () => {
+    const doc = Object.assign(new EventTarget(), { hidden: false });
+    vi.stubGlobal("document", doc);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse([], { ETag: '"v1"' }))
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: 6, timestamp: 2, changes: [change("Person", 1, "H1")] }], { ETag: '"v2"' })
+      );
+
+    const onNotifications = vi.fn();
+    const stop = pollHistory(onNotifications);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    doc.hidden = true;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    doc.hidden = false;
+    doc.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toContain("after_id=5");
+    expect(onNotifications).toHaveBeenCalledWith([{ table: "person", handle: "H1", op: "UPDATE", changedBy: null }], 6);
+
+    stop();
+  });
+
+  it("still takes its cursor (and polls once) when the tab starts out hidden", async () => {
+    vi.stubGlobal("document", Object.assign(new EventTarget(), { hidden: true }));
+    fetchMock.mockResolvedValueOnce(jsonResponse([], { ETag: '"v1"' }));
+
+    const stop = pollHistory(vi.fn());
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 
     stop();
   });
