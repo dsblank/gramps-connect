@@ -1,7 +1,29 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ActionIcon, Alert, Anchor, Box, Group, Loader, Modal, ScrollArea, TypographyStylesProvider } from "@mantine/core";
+import {
+  ActionIcon,
+  Alert,
+  Anchor,
+  Box,
+  CloseButton,
+  Group,
+  Loader,
+  Modal,
+  ScrollArea,
+  Stack,
+  Text,
+  TextInput,
+  TypographyStylesProvider,
+  UnstyledButton,
+} from "@mantine/core";
 import { fetchWikiPage, wikiPageGithubUrl } from "../store/wikiDocsApi";
 import { findWikiAnchor, renderWikiMarkdown } from "../store/wikiMarkdown";
+import {
+  highlightWikiMatches,
+  loadWikiIndex,
+  searchWikiSections,
+  type WikiSearchResult,
+  type WikiSection,
+} from "../store/wikiSearch";
 import { getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 
 interface DocumentationDialogProps {
@@ -40,13 +62,46 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  // Results replace the page while a search is active; picking one hides
+  // them again without clearing the box, so focusing it brings them back.
+  const [showResults, setShowResults] = useState(false);
+  // The search index for `viewLang`, built on first use (see wikiSearch.ts).
+  const [index, setIndex] = useState<{ lang: string; sections: WikiSection[] } | null>(null);
+  const [indexError, setIndexError] = useState<string | null>(null);
+  // The query whose matches are highlighted on the page, set when a page is
+  // opened from a search result and dropped once the reader moves on.
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!opened) return;
     setPage(HOME_PAGE);
     setDocLang(null);
     setHistory([]);
+    setQuery("");
+    setShowResults(false);
+    setHighlight(null);
   }, [opened, lang]);
+
+  function ensureIndex() {
+    if (index?.lang === viewLang) return;
+    setIndexError(null);
+    const forLang = viewLang;
+    loadWikiIndex(forLang)
+      .then((sections) => setIndex({ lang: forLang, sections }))
+      .catch((err) => setIndexError(err.message ?? String(err)));
+  }
+
+  // Following a link into another language mid-search re-indexes in it.
+  useEffect(() => {
+    if (opened && showResults && query.trim()) ensureIndex();
+  }, [opened, viewLang]);
+
+  const results: WikiSearchResult[] = useMemo(
+    () => (index && index.lang === viewLang && query.trim() ? searchWikiSections(index.sections, query, viewLang) : []),
+    [index, viewLang, query],
+  );
 
   useEffect(() => {
     if (!opened) return;
@@ -78,7 +133,22 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     setPendingAnchor(anchor);
   }
 
+  function handleQueryChange(value: string) {
+    setQuery(value);
+    setShowResults(value.trim() !== "");
+    if (!value.trim()) setHighlight(null);
+    ensureIndex();
+    contentRef.current?.scrollTo({ top: 0 });
+  }
+
+  function openResult(result: WikiSearchResult) {
+    setShowResults(false);
+    setHighlight(query);
+    navigateTo(result.section.page, result.section.anchor, null);
+  }
+
   function goBack() {
+    setHighlight(null);
     setHistory((h) => {
       if (h.length === 0) return h;
       const previous = h[h.length - 1];
@@ -92,6 +162,7 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     const link = (e.target as HTMLElement).closest("a[data-wiki-page]");
     if (!link) return;
     e.preventDefault();
+    setHighlight(null);
     // An empty data-wiki-page is a same-page "#fragment" link.
     navigateTo(
       link.getAttribute("data-wiki-page") || page,
@@ -102,6 +173,13 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
 
   const contentHtml = useMemo(() => (content ? renderWikiMarkdown(content) : ""), [content]);
   const sidebarHtml = useMemo(() => (sidebar ? renderWikiMarkdown(sidebar) : ""), [sidebar]);
+
+  // Marks the search's matches on the page (or removes earlier marks). Runs
+  // before the anchor jump below, and again whenever the page's HTML is
+  // put back in the DOM after the search results were showing.
+  useEffect(() => {
+    if (pageRef.current) highlightWikiMatches(pageRef.current, highlight ?? "", contentLang);
+  }, [highlight, contentHtml, contentLang, showResults, loading, error]);
 
   // Runs after the new page's HTML is in the DOM. Translated pages carry the
   // English heading slugs as explicit <a id> anchors (see
@@ -123,6 +201,29 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
       <Group align="stretch" gap={0} h="100%" wrap="nowrap">
         <Box w={220} style={{ borderRight: "1px solid var(--mantine-color-default-border)", flexShrink: 0 }}>
           <ScrollArea h="100%" p="sm" onClickCapture={handlePaneClick}>
+            <TextInput
+              size="xs"
+              mb="sm"
+              placeholder={t("Search...")}
+              aria-label={t("Search")}
+              value={query}
+              onChange={(e) => handleQueryChange(e.currentTarget.value)}
+              onFocus={() => {
+                ensureIndex();
+                if (query.trim()) setShowResults(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && query) {
+                  e.stopPropagation();
+                  handleQueryChange("");
+                } else if (e.key === "Enter" && results.length > 0) {
+                  openResult(results[0]);
+                }
+              }}
+              rightSection={
+                query ? <CloseButton size="xs" aria-label={t("Clear")} onClick={() => handleQueryChange("")} /> : null
+              }
+            />
             {sidebar && (
               <TypographyStylesProvider p={0}>
                 <div dangerouslySetInnerHTML={{ __html: sidebarHtml }} />
@@ -140,20 +241,70 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
             </Anchor>
           </Group>
           <ScrollArea style={{ flex: 1 }} p="lg" viewportRef={contentRef} onClickCapture={handlePaneClick}>
-            {loading && (
+            {showResults && (
+              <SearchResults
+                results={results}
+                ready={index?.lang === viewLang}
+                error={indexError}
+                onOpen={openResult}
+              />
+            )}
+            {!showResults && loading && (
               <Group justify="center" py="xl">
                 <Loader size="sm" />
               </Group>
             )}
-            {error && <Alert color="red">{error}</Alert>}
-            {!loading && !error && content && (
+            {!showResults && error && <Alert color="red">{error}</Alert>}
+            {!showResults && !loading && !error && content && (
               <TypographyStylesProvider p={0}>
-                <div dangerouslySetInnerHTML={{ __html: contentHtml }} />
+                <div ref={pageRef} dangerouslySetInnerHTML={{ __html: contentHtml }} />
               </TypographyStylesProvider>
             )}
           </ScrollArea>
         </Box>
       </Group>
     </Modal>
+  );
+}
+
+interface SearchResultsProps {
+  results: WikiSearchResult[];
+  /** False while the index for the current language is still loading. */
+  ready: boolean;
+  error: string | null;
+  onOpen: (result: WikiSearchResult) => void;
+}
+
+function SearchResults({ results, ready, error, onOpen }: SearchResultsProps) {
+  if (error) return <Alert color="red">{error}</Alert>;
+  if (!ready) {
+    return (
+      <Group justify="center" py="xl">
+        <Loader size="sm" />
+      </Group>
+    );
+  }
+  return (
+    <Stack gap="md">
+      <Text fw={600}>{t("Search results")}</Text>
+      {results.length === 0 && <Text c="dimmed">{t("No matches")}</Text>}
+      {results.map((result) => (
+        <UnstyledButton
+          key={`${result.section.page}#${result.section.anchor ?? ""}`}
+          onClick={() => onOpen(result)}
+          style={{ display: "block" }}
+        >
+          <Text size="xs" c="dimmed">
+            {result.section.pageTitle}
+          </Text>
+          <Text fw={600} c="blue">
+            {result.section.heading ?? result.section.pageTitle}
+          </Text>
+          <Text size="sm">
+            {result.snippet.map((part, i) => (part.match ? <mark key={i}>{part.text}</mark> : part.text))}
+          </Text>
+        </UnstyledButton>
+      ))}
+    </Stack>
   );
 }
