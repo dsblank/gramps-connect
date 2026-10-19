@@ -25,6 +25,14 @@ describe("searchWikidata", () => {
     expect(url.searchParams.get("origin")).toBe("*");
   });
 
+  it("searches in the given language, Wikidata-coded", async () => {
+    const fetchMock = mockFetchSequence([{ search: [] }]);
+    await searchWikidata("Lisboa", undefined, "pt_BR");
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get("language")).toBe("pt-br");
+    expect(url.searchParams.get("uselang")).toBe("pt-br");
+  });
+
   it("maps id/label/description, defaulting a missing description to null", async () => {
     mockFetchSequence([
       {
@@ -129,6 +137,32 @@ describe("fetchWikidataChain", () => {
     const chain = await fetchWikidataChain("Q173");
     expect(chain[0].geoshapeTitle).toBe("Data:Alabama.map");
     expect(chain[1].geoshapeTitle).toBeNull();
+  });
+
+  it("names each level in the first language that has a label, the rest as alternative names", async () => {
+    const munich = entity("Q1726", "Munich");
+    munich.entities.Q1726.labels = {
+      en: { value: "Munich" }, de: { value: "München" }, "pt-br": { value: "Munique" }, fr: { value: "München" },
+    } as never;
+    mockFetchSequence([munich]);
+    const [node] = await fetchWikidataChain("Q1726", undefined, ["de", "pt_BR", "fr", "it"]);
+    // pt_BR keeps the tree's own code; fr's label equals the name, it has none.
+    expect(node).toMatchObject({ label: "München", labelLang: "de", altLabels: [{ value: "Munique", lang: "pt_BR" }] });
+  });
+
+  it("falls back to a base language, then a language-neutral, English or any label", async () => {
+    const place = entity("Qp", "Lisbon");
+    place.entities.Qp.labels = { pt: { value: "Lisboa" }, en: { value: "Lisbon" } } as never;
+    mockFetchSequence([place]);
+    expect((await fetchWikidataChain("Qp", undefined, ["pt_BR"]))[0]).toMatchObject({ label: "Lisboa", labelLang: "pt_BR" });
+
+    const mul = entity("Qm", "Ignored");
+    mul.entities.Qm.labels = { mul: { value: "Neutral" }, en: { value: "English" } } as never;
+    mockFetchSequence([mul]);
+    expect((await fetchWikidataChain("Qm", undefined, ["de"]))[0]).toMatchObject({ label: "Neutral", labelLang: "" });
+
+    mockFetchSequence([entity("Qe", "English only")]);
+    expect((await fetchWikidataChain("Qe", undefined, ["de"]))[0]).toMatchObject({ label: "English only", labelLang: "en" });
   });
 });
 

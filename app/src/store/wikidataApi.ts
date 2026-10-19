@@ -43,10 +43,25 @@ export interface WikidataSearchResult {
   description: string | null;
 }
 
+/** A label as a Gramps PlaceName wants it: `lang` is the code the tree's
+ * place formats ask for ("de", "pt_BR"), not Wikidata's own ("pt-br"), so
+ * a format's language matches it exactly; "" for a language-neutral one. */
+export interface WikidataLabel {
+  value: string;
+  lang: string;
+}
+
 /** One level of a walked P131 chain, leaf (the searched place) first. */
 export interface WikidataPlaceNode {
   qid: string;
+  /** The label in the first requested language that has one (see
+   * fetchWikidataChain), else a language-neutral, English or any label. */
   label: string;
+  labelLang: string;
+  /** Labels in the other requested languages, where they exist and differ
+   * from `label`: a place's alternative names, for place formats in those
+   * languages. */
+  altLabels: WikidataLabel[];
   lat: number | null;
   long: number | null;
   /** Raw P31 ("instance of") QIDs -- kept around for callers that want to
@@ -153,12 +168,15 @@ export function geoshapeColorFor(placeType: string | null, qid: string): string 
 /** name -> candidate QIDs, via Wikidata's own search endpoint (no API key). */
 export async function searchWikidata(
   term: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  language = "en"
 ): Promise<WikidataSearchResult[]> {
+  const code = wikidataCodesFor(language)[0] ?? "en";
   const params = new URLSearchParams({
     action: "wbsearchentities",
     search: term,
-    language: "en",
+    language: code,
+    uselang: code,
     format: "json",
     limit: "5",
     origin: "*", // required for CORS on api.php's anonymous GET (Special:EntityData needs no such param -- see fetchEntity)
@@ -193,8 +211,50 @@ async function fetchEntity(qid: string, signal?: AbortSignal): Promise<WikidataE
   return data.entities[qid];
 }
 
-function readLabel(entity: WikidataEntity, qid: string): string {
-  return entity.labels?.en?.value ?? qid;
+/** A Gramps language code -> the Wikidata label keys to try for it, best
+ * first: "pt_BR" -> ["pt-br", "pt"]. */
+function wikidataCodesFor(lang: string): string[] {
+  const code = lang.trim().toLowerCase().replace(/_/g, "-");
+  if (!code) return [];
+  const base = code.split("-")[0];
+  return base === code ? [code] : [code, base];
+}
+
+function labelIn(entity: WikidataEntity, lang: string): string | null {
+  for (const code of wikidataCodesFor(lang)) {
+    const value = entity.labels?.[code]?.value;
+    if (value) return value;
+  }
+  return null;
+}
+
+/** `languages` in order of preference; the first with a label becomes the
+ * name, the rest alternative names. With none, a "mul" (language-neutral)
+ * label, then English, then whatever label there is, then the QID. */
+function readLabels(entity: WikidataEntity, qid: string, languages: string[]): Pick<WikidataPlaceNode, "label" | "labelLang" | "altLabels"> {
+  const found: WikidataLabel[] = [];
+  for (const lang of languages) {
+    const value = labelIn(entity, lang);
+    if (value && !found.some((l) => l.lang === lang)) found.push({ value, lang });
+  }
+  let primary = found.shift();
+  if (!primary) {
+    const labels = entity.labels ?? {};
+    const mul = labels.mul?.value;
+    const [anyCode, anyLabel] = Object.entries(labels).find(([, l]) => l.value) ?? [];
+    primary = mul
+      ? { value: mul, lang: "" }
+      : labels.en?.value
+        ? { value: labels.en.value, lang: "en" }
+        : anyCode && anyLabel?.value
+          ? { value: anyLabel.value, lang: anyCode }
+          : { value: qid, lang: "" };
+  }
+  return {
+    label: primary.value,
+    labelLang: primary.lang,
+    altLabels: found.filter((l) => l.value !== primary.value),
+  };
 }
 
 function readCoords(entity: WikidataEntity): { lat: number; long: number } | null {
@@ -228,10 +288,13 @@ function readGeoshapeTitle(entity: WikidataEntity): string | null {
  *
  * Cycle-guarded (never re-fetches a QID already in the chain -- a
  * malformed P131 loop just truncates the chain there rather than hanging)
- * and depth-capped at MAX_CHAIN_DEPTH. */
+ * and depth-capped at MAX_CHAIN_DEPTH. `languages` (Gramps codes, best
+ * first) pick each level's name and alternative names -- see readLabels;
+ * an entity fetch already carries every language's label. */
 export async function fetchWikidataChain(
   startQid: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  languages: string[] = ["en"]
 ): Promise<WikidataPlaceNode[]> {
   const chain: WikidataPlaceNode[] = [];
   const visited = new Set<string>();
@@ -243,7 +306,7 @@ export async function fetchWikidataChain(
     const instanceOf = readQidList(entity, "P31");
     chain.push({
       qid,
-      label: readLabel(entity, qid),
+      ...readLabels(entity, qid, languages),
       lat: coords?.lat ?? null,
       long: coords?.long ?? null,
       instanceOf,

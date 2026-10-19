@@ -14,10 +14,12 @@ import { createHandle, createObjects, fetchPlainObject, updateObject } from "../
 import { getViewStore } from "../store/registry";
 import {
   fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, searchWikidata,
-  type WikidataPlaceNode, type WikidataSearchResult,
+  type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
 import { createOverlay } from "../store/mapOverlays";
-import { t } from "../i18n/i18n";
+import { getDisplaySettings } from "../store/displaySettings";
+import { PLACE_TYPE_VALUES, formatPlace, type PlaceRecord } from "../store/placeDisplay";
+import { getI18nSnapshot, t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 
@@ -86,23 +88,49 @@ function effectiveHandle(row: ChainRow): string | null {
   return row.nameMatchRejected ? null : row.existingHandle;
 }
 
-/** Builds `rows[index]`'s own descriptive title -- its label plus every
- * confirmed (non-skipped) ancestor's, leaf-to-root ("Marion County,
- * Indiana, United States") -- the same "own name isn't enough to tell
- * apart from a same-named place elsewhere" reasoning that already drove
- * the leaf's `hierarchyTitle` (see WikidataLookupResult's own doc comment),
- * just applied to every newly-created ancestor row too, not only the leaf.
- * `rows` is root-first (see ChainRow's own doc comment), so this reverses
- * the `[0, index]` slice; `index` itself is always kept regardless of its
- * own `skip` (a skipped row is never created, so this is never called for
- * one), only its ancestors are filtered by it. */
+/** The languages to name places in, best first: the active place format's
+ * language (else the interface language), then every other format's, so
+ * each format finds a name in its own language (see placeDisplay.ts's
+ * nameAt). */
+function placeNameLanguages(): string[] {
+  const { formats, active } = getDisplaySettings().place;
+  const ui = getI18nSnapshot().lang.split(/[_-]/)[0].toLowerCase() || "en";
+  const languages = [(formats[active] ?? formats[0])?.language.trim() || ui];
+  for (const format of formats) {
+    const lang = format.language.trim();
+    if (lang && !languages.includes(lang)) languages.push(lang);
+  }
+  return languages;
+}
+
+/** A Wikidata label as a Gramps PlaceName. */
+function placeName(label: WikidataLabel): Record<string, unknown> {
+  return { _class: "PlaceName", value: label.value, lang: label.lang };
+}
+
+/** Builds `rows[index]`'s own descriptive title in the active place format,
+ * from its label plus every confirmed (non-skipped) ancestor's (Full gives
+ * "Marion County, Indiana, United States") -- what the place shows with
+ * automatic place titles off, so it reads the same as it would with them
+ * on. The hierarchy is Wikidata's, even where a row reuses an existing
+ * place. `rows` is root-first (see ChainRow's own doc comment); `index`
+ * itself is always kept regardless of its own `skip` (a skipped row is
+ * never created, so this is never called for one), only its ancestors are
+ * filtered by it. */
 function hierarchyTitleUpTo(rows: ChainRow[], index: number): string {
-  return rows
-    .slice(0, index + 1)
-    .filter((r, i) => i === index || !r.skip)
-    .reverse()
-    .map((r) => r.node.label)
-    .join(", ");
+  const kept = rows.slice(0, index + 1).filter((r, i) => i === index || !r.skip);
+  const records = new Map<string, PlaceRecord>();
+  kept.forEach((r, i) => {
+    records.set(String(i), {
+      name: { value: r.node.label, lang: r.node.labelLang },
+      altNames: r.node.altLabels,
+      type: Object.prototype.hasOwnProperty.call(PLACE_TYPE_VALUES, r.typeOverride) ? PLACE_TYPE_VALUES[r.typeOverride] : 0,
+      parents: i > 0 ? [{ ref: String(i - 1) }] : [],
+    });
+  });
+  const { formats, active } = getDisplaySettings().place;
+  const leaf = String(kept.length - 1);
+  return formatPlace((h) => records.get(h), leaf, formats[active] ?? formats[0]) ?? rows[index].node.label;
 }
 
 /** Fetches `node`'s Wikidata geoshape (if any), uploads it as a KML Media
@@ -162,15 +190,19 @@ type Phase =
  * WikidataPlaceLookupButton below, the thing that actually holds it. */
 export interface WikidataLookupResult {
   qid: string;
+  /** The leaf's own name -- just its label, never the hierarchy, since
+   * automatic place titles append the enclosing places themselves. */
   label: string;
-  /** Every confirmed row's own label, leaf first up through the root
-   * ("Indianapolis, Marion County, Indiana, United States") -- full
-   * Wikidata labels, not the guessed/edited PlaceType, and not affected by
-   * a row being reused vs newly created (an existing ancestor's own
-   * *title* may differ, but this is about naming the place being edited,
-   * not describing what got created). Used as the fallback title when the
-   * place being edited doesn't already have one -- see
-   * WikidataPlaceLookupButton. */
+  labelLang: string;
+  /** The leaf's labels in the place formats' other languages. */
+  altNames: WikidataLabel[];
+  /** The leaf's title in the active place format, over every confirmed
+   * row (Full gives "Indianapolis, Marion County, Indiana, United States")
+   * -- see hierarchyTitleUpTo. Not affected by a row being reused vs newly
+   * created (an existing ancestor's own *title* may differ, but this is
+   * about naming the place being edited, not describing what got created).
+   * Used as the title when the place being edited doesn't already have
+   * one -- see WikidataPlaceLookupButton. */
   hierarchyTitle: string;
   lat: number | null;
   long: number | null;
@@ -245,7 +277,7 @@ export function WikidataPlaceLookupDialog({
     let cancelled = false;
     const controller = new AbortController();
     setSearching(true);
-    searchWikidata(term, controller.signal)
+    searchWikidata(term, controller.signal, placeNameLanguages()[0])
       .then((hits) => {
         if (!cancelled) setResults(hits);
       })
@@ -264,7 +296,7 @@ export function WikidataPlaceLookupDialog({
   async function handlePick(qid: string) {
     setPhase({ name: "resolving" });
     try {
-      const chain = await fetchWikidataChain(qid); // leaf-first
+      const chain = await fetchWikidataChain(qid, undefined, placeNameLanguages()); // leaf-first
       const token = await getToken();
       const rows: ChainRow[] = [];
       for (let i = chain.length - 1; i >= 0; i--) {
@@ -292,9 +324,13 @@ export function WikidataPlaceLookupDialog({
             // even when the place already exists (see issue #14). name.value
             // holds just the place's own name (not the hierarchical title --
             // see PLACE_VIEW's own title/name split in views.ts), matching
-            // what a Wikidata chain label looks like at every level. A guess,
-            // not a certainty, so it's surfaced as "possible", not "existing".
-            const nameWhereExpr = `name.value == '${escapeQueryLangString(node.label)}'`;
+            // what a Wikidata chain label looks like at every level -- in
+            // any of the languages fetched, since the tree may have named it
+            // in another one. A guess, not a certainty, so it's surfaced as
+            // "possible", not "existing".
+            const nameWhereExpr = [node.label, ...node.altLabels.map((l) => l.value)]
+              .map((label) => `name.value == '${escapeQueryLangString(label)}'`)
+              .join(" or ");
             const { page: namePage } = await fetchPage(PLACE_VIEW, token, null, false, nameWhereExpr, PLACE_VIEW.orderBy, 1);
             const nameMatch = namePage.items[0];
             if (nameMatch) {
@@ -392,7 +428,8 @@ export function WikidataPlaceLookupDialog({
           // label alone, matching what the name-match dedup query above
           // (`name.value == node.label`) expects a future lookup to find.
           title: hierarchyTitleUpTo(rows, rowIndex),
-          name: { _class: "PlaceName", value: row.node.label },
+          name: placeName({ value: row.node.label, lang: row.node.labelLang }),
+          alt_names: row.node.altLabels.length ? row.node.altLabels.map(placeName) : undefined,
           lat: row.node.lat != null ? String(row.node.lat) : undefined,
           long: row.node.long != null ? String(row.node.long) : undefined,
           place_type: row.typeOverride || undefined,
@@ -445,6 +482,8 @@ export function WikidataPlaceLookupDialog({
         onApply({
           qid: leaf.node.qid,
           label: leaf.node.label,
+          labelLang: leaf.node.labelLang,
+          altNames: leaf.node.altLabels,
           hierarchyTitle,
           lat: leaf.node.lat,
           long: leaf.node.long,
@@ -634,6 +673,10 @@ export function applyWikidataLookupResult(
   );
   const existingRefs = (data.placeref_list as { ref?: string }[] | undefined) ?? [];
   const existingMedia = (data.media_list as { ref?: string }[] | undefined) ?? [];
+  const existingAltNames = (data.alt_names as { lang?: string }[] | undefined) ?? [];
+  // A language the place already has a name in keeps it.
+  const namedLangs = new Set([name.lang, ...existingAltNames.map((n) => n.lang)].map((l) => (l as string | undefined) ?? ""));
+  const newAltNames = result.altNames.filter((l) => !namedLangs.has(l.lang)).map(placeName);
   return {
     // Only filled in when there's no title yet -- the common case this
     // bug report came from (a brand-new place, blank title, searched
@@ -641,13 +684,15 @@ export function applyWikidataLookupResult(
     // own title (possibly deliberately different from Wikidata's own label
     // -- "Grandma's farm near Indianapolis") keeps it; this feature only
     // ever adds lat/long/hierarchy on top of an existing title, never
-    // overwrites one.
+    // overwrites one. The name is the bare label: automatic place titles
+    // add the enclosing places from placeref_list themselves.
     ...(currentTitle.trim()
       ? {}
       : {
           title: result.hierarchyTitle,
-          name: { _class: "PlaceName", ...name, value: result.hierarchyTitle },
+          name: { _class: "PlaceName", ...name, value: result.label, lang: result.labelLang },
         }),
+    alt_names: newAltNames.length ? [...existingAltNames, ...newAltNames] : data.alt_names,
     lat: result.lat != null ? String(result.lat) : data.lat,
     long: result.long != null ? String(result.long) : data.long,
     place_type: result.placeType ?? data.place_type,

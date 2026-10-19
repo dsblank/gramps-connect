@@ -28,6 +28,15 @@ export interface PlaceRecord {
 
 export type PlaceLookup = (handle: string) => PlaceRecord | null | undefined;
 
+/** gen/lib/placetype.py's _DATAMAP: untranslated name -> PlaceType value,
+ * for a type known only by name (a Wikidata guess, a typed-in type). */
+export const PLACE_TYPE_VALUES: Readonly<Record<string, number>> = {
+  Unknown: -1, Custom: 0, Country: 1, State: 2, County: 3, City: 4, Parish: 5,
+  Locality: 6, Street: 7, Province: 8, Region: 9, Department: 10,
+  Neighborhood: 11, District: 12, Borough: 13, Municipality: 14, Town: 15,
+  Village: 16, Hamlet: 17, Farm: 18, Building: 19, Number: 20,
+};
+
 // gen/lib/placetype.py: _find_populated_place's [HAMLET, VILLAGE, TOWN,
 // CITY], and NUMBER for the street merge.
 const POPULATED_TYPES = new Set([17, 16, 15, 4]);
