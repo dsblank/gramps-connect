@@ -9,7 +9,7 @@ import { fetchPage, parseErrorMessage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
 import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
-import { formatDisplayName, nameFormatParam, type RawName } from "./nameDisplay";
+import { formatDisplayName, type RawName } from "./nameDisplay";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
  * every VIEWS entry that names a real Gramps object type rather than a
@@ -49,8 +49,8 @@ type RawObject = Record<string, any>;
  * carries the parents'/source's handles. */
 const RECENT_LABEL: Record<string, (obj: RawObject) => string> = {
   person: (o) => formatDisplayName(o.primary_name) || "(unnamed)",
-  // name_display: formatted by the server in the tree's name format
-  // (nameFormatParam, sent with the search).
+  // name_display: formatted by the server in its own default name format --
+  // /api/search/ takes no name_format (see fetchRecentlyChanged).
   family: (o) =>
     [o.profile?.father, o.profile?.mother]
       .map((p) => p?.name_display)
@@ -127,7 +127,10 @@ export async function fetchRecentlyChanged(token: string, limit: number): Promis
   });
   let hits: SearchHit[];
   try {
-    const res = await apiFetch(`${API_BASE}/api/search/?${params}&${nameFormatParam()}`, {
+    // No nameFormatParam(): /api/search/'s query schema has no name_format
+    // and gramps-web-api rejects unknown query args with a 422, which
+    // emptied this panel.
+    const res = await apiFetch(`${API_BASE}/api/search/?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(await parseErrorMessage(res));

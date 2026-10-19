@@ -9,7 +9,6 @@
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { apiFetch } from "./apiFetch";
-import { nameFormatParam } from "./nameDisplay";
 
 /** One hit from the index. `object` carries the same raw, un-`extend`ed
  * fields summaryLine() (components/related/summary.ts) already knows how
@@ -70,8 +69,10 @@ export async function fetchSearch(
     pagesize: String(pagesize),
   });
   if (objectType) params.set("type", objectType);
-  // Profiles' name_display in the tree's name format.
-  const res = await apiFetch(`${API_BASE}/api/search/?${params}&${nameFormatParam()}`, {
+  // No nameFormatParam(): /api/search/'s query schema has no name_format and
+  // gramps-web-api rejects unknown query args with a 422, so profiles'
+  // name_display come in the server's own default name format.
+  const res = await apiFetch(`${API_BASE}/api/search/?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal,
   });

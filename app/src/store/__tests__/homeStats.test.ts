@@ -49,6 +49,8 @@ describe("fetchRecentlyChanged", () => {
     expect(url.searchParams.get("sort")).toBe("-change");
     expect(url.searchParams.get("profile")).toBe("self");
     expect(Number(url.searchParams.get("pagesize"))).toBeGreaterThan(10);
+    // gramps-web-api 422s /api/search/ on an unknown query arg.
+    expect(url.searchParams.has("name_format")).toBe(false);
     expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ Authorization: "Bearer tok" });
   });
 

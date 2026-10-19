@@ -31,6 +31,8 @@ describe("fetchSearch", () => {
     expect(url.searchParams.get("pagesize")).toBe("20");
     expect(url.searchParams.has("type")).toBe(false);
     expect(url.searchParams.has("sort")).toBe(false);
+    // gramps-web-api 422s /api/search/ on an unknown query arg.
+    expect(url.searchParams.has("name_format")).toBe(false);
   });
 
   it("sends type only when a filter is given, for the SearchView type tabs", async () => {
