@@ -58,9 +58,12 @@ export function AboutDialog({ opened, onClose }: AboutDialogProps) {
         </Text>
 
         <Stack gap={2}>
-          <Text size="sm">
-            <b>{t("Signed in as:")}</b> {username ?? "unknown"}
-          </Text>
+          {/* null on the sign-in page, which opens this dialog too. */}
+          {username && (
+            <Text size="sm">
+              <b>{t("Signed in as:")}</b> {username}
+            </Text>
+          )}
           <Text size="sm" style={{ overflowWrap: "anywhere" }}>
             <b>{t("Server:")}</b> {server}
           </Text>

@@ -17,6 +17,7 @@ import { ResearcherDialog } from "./ResearcherDialog";
 import { AboutDialog } from "./AboutDialog";
 import { DocumentationDialog } from "./DocumentationDialog";
 import { formatHash } from "../hash";
+import { DISCUSSION_FORUM_URL } from "../config";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
 import { runMediaExport } from "../store/mediaExportApi";
@@ -547,7 +548,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               // its own login to post.
               label: "Discussion Forum",
               onClick: () =>
-                window.open("https://gramps.discourse.group/c/gramps-connect/35", "_blank", "noopener"),
+                window.open(DISCUSSION_FORUM_URL, "_blank", "noopener"),
             },
             { label: "About", onClick: () => setAboutOpened(true), separatorBefore: true },
           ]}
