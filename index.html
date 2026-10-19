@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gramps Connect</title>
+<meta name="description" content="Gramps Connect: a fast, real-time-collaborative web frontend for Gramps, the free genealogy software.">
+<link rel="icon" href="app/public/favicon-32.png">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f5f6f8;
+    --fg: #1f2328;
+    --muted: #59636e;
+    --border: #d8dee4;
+    --accent: #2f6f4f;
+    --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16191d;
+      --bg-alt: #1e2228;
+      --fg: #e6e8eb;
+      --muted: #9aa4af;
+      --border: #333a42;
+      --accent: #5fb38a;
+      --accent-fg: #0d1a13;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 56px 0 32px; text-align: center; }
+  header img.logo { width: 64px; height: 64px; }
+  h1 { font-size: 2.4rem; margin: 12px 0 8px; }
+  .tagline { font-size: 1.2rem; color: var(--muted); max-width: 640px; margin: 0 auto; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 28px; }
+  .btn {
+    display: inline-block; padding: 10px 20px; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--fg); text-decoration: none; font-weight: 600;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .shot { margin: 16px 0 48px; }
+  .shot img {
+    width: 100%; height: auto; display: block;
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  section { padding: 40px 0; border-top: 1px solid var(--border); }
+  h2 { font-size: 1.5rem; margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+  .card h3 { margin: 0 0 8px; font-size: 1.1rem; }
+  .card p { margin: 0; color: var(--muted); }
+  .note { color: var(--muted); font-size: 0.95rem; }
+  footer { padding: 32px 0 48px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <img class="logo" src="app/src/assets/icons/gramps-connect-logo.svg" alt="">
+  <h1>Gramps Connect</h1>
+  <p class="tagline">
+    A fast, collaborative way to work on a
+    <a href="https://gramps-project.org/">Gramps</a> family tree in your
+    browser, even a very large one, alone or with family.
+  </p>
+  <div class="buttons">
+    <a class="btn primary" href="https://github.com/dsblank/gramps-connect/wiki/Installing">Download for your computer</a>
+    <a class="btn" href="https://github.com/dsblank/gramps-connect/wiki/Deploying">Host it for your family</a>
+    <a class="btn" href="https://github.com/dsblank/gramps-connect/wiki">Read the documentation</a>
+  </div>
+</header>
+
+<div class="shot">
+  <img src="https://github.com/user-attachments/assets/1183bb72-520f-44fb-ace7-d88c84724697"
+       width="1489" height="704" alt="The Gramps Connect window showing a list of people">
+</div>
+
+<section>
+  <h2>What it is</h2>
+  <p>
+    Gramps Connect works on a tree served by
+    <a href="https://github.com/gramps-project/gramps-web-api">Gramps Web API</a>,
+    the Gramps Project's own server. It follows the layout and vocabulary of Gramps itself, so if
+    you've used Gramps before it should feel familiar.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>Fast on small and huge trees</h3>
+      <p>Browsing, sorting and filtering stay quick on trees with tens of
+        thousands of people, because the parts of the tree you're looking at
+        are kept right in your browser.</p>
+    </div>
+    <div class="card">
+      <h3>Work together, live</h3>
+      <p>Several people can edit one tree at once and see each other's
+        changes as they happen. Every record keeps a history of who changed
+        what.</p>
+    </div>
+    <div class="card">
+      <h3>Charts, maps and stories</h3>
+      <p>Ancestor, descendant and fan charts; maps with historical
+        basemaps and old-map overlays; generated life stories, a family
+        blog and photo tagging.</p>
+    </div>
+    <div class="card">
+      <h3>Search your way</h3>
+      <p>Search the whole tree at once, build filters by picking rules from
+        a list, or write queries directly, and save the filters you use
+        often.</p>
+    </div>
+    <div class="card">
+      <h3>Edit everything</h3>
+      <p>Full editing forms for people, families, events, places and more,
+        stacked so you can create a missing record without leaving the one
+        you're on. Drop photos anywhere to attach them.</p>
+    </div>
+    <div class="card">
+      <h3>Familiar to Gramps users</h3>
+      <p>The same views, record types and vocabulary as Gramps, with
+        names, dates and places written in your tree's chosen formats.
+        Settings can be imported straight from Gramps Desktop.</p>
+    </div>
+    <div class="card">
+      <h3>Scripting with Gramplets</h3>
+      <p>Write small Python Gramplets that run right in your browser to
+        add your own views, charts and reports, or install ones others have
+        shared from the Gramplet Store.</p>
+    </div>
+    <div class="card">
+      <h3>Many languages</h3>
+      <p>The interface comes in nearly fifty languages, dates are written
+        the way each language writes them, and the documentation is being
+        translated too.</p>
+    </div>
+    <div class="card">
+      <h3>Import and export</h3>
+      <p>Bring a tree in from a Gramps XML or GEDCOM file and take it back
+        out again whenever you like, so your data is never locked in.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Two ways to use it</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>On your own computer</h3>
+      <p>The desktop build for Windows, macOS and Linux runs entirely on
+        your machine, and nothing you do in it is sent anywhere.
+        <a href="https://github.com/dsblank/gramps-connect/wiki/Installing">Installing</a></p>
+    </div>
+    <div class="card">
+      <h3>Shared on a server</h3>
+      <p>A Docker deployment lets a whole family sign in and work on one
+        tree together, which is where live collaboration comes in.
+        <a href="https://github.com/dsblank/gramps-connect/wiki/Deploying">Deploying</a></p>
+    </div>
+  </div>
+  <p class="note">
+    Gramps Connect is under active development and is not an official
+    release of the Gramps Project. Keep your tree backed up. For a mature,
+    feature-complete option today, see
+    <a href="https://gramps-project.org/download/">Gramps Desktop</a>.
+  </p>
+</section>
+
+<section>
+  <h2>Get involved</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Ask and discuss</h3>
+      <p>Questions, tips and problems go on the
+        <a href="https://gramps.discourse.group/c/gramps-connect/35">Gramps Discourse forum</a>.</p>
+    </div>
+    <div class="card">
+      <h3>Source and issues</h3>
+      <p>Code, bug reports and releases are on
+        <a href="https://github.com/dsblank/gramps-connect">GitHub</a>.</p>
+    </div>
+    <div class="card">
+      <h3>Gramplet Store</h3>
+      <p>Browse and install community Gramplets from inside the app,
+        under the Gramplets menu.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Free software under the AGPL-3.0-or-later licence.
+  Built on <a href="https://gramps-project.org/">Gramps</a> and
+  <a href="https://github.com/gramps-project/gramps-web-api">Gramps Web API</a>.
+</footer>
+
+</div>
+</body>
+</html>
