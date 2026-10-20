@@ -369,10 +369,11 @@ python3 deploy/webapi-requirements.py ~/gramps/gramps-web-api/pyproject.toml \
 import time, so real PyGObject *and* the GTK3 typelibs have to be present
 (`apt install python3-gi gir1.2-gtk-3.0`, or
 `conda install -c conda-forge pygobject gtk3`); `PyICU` is optional but
-silences a localization warning and fixes name sorting. Note that the
-`/api/<type>/query/` endpoints `app/` is built on landed in
-`gramps-project/gramps-web-api` master — an older fork or branch 404s on
-every one of them.
+silences a localization warning and fixes name sorting. Note that `app/`
+needs `gramps-web-api` v3.22.0 or newer: the `/api/<type>/query/`
+endpoints it is built on arrived in v3.21.0 (an older release, fork, or
+branch 404s on every one of them), and per-object change history in
+v3.22.0.
 
 Gramplets run Python in the browser under Pyodide, against locally-built
 wheels that `npm install`'s postinstall step *skips* (with a log line) when
@@ -384,6 +385,44 @@ python3 scripts/build-stub-wheels.py    # gi + orjson stand-ins for Pyodide
 python3 scripts/build-gramps-wheel.py   # gramps.gen.lib as a Pyodide wheel
 node app/scripts/copy-wasm.mjs          # registers them in public/pyodide/
 ```
+
+### Sharing a database with Gramps Web
+
+Instead of a `dev-fixtures/` backend, `app/` can talk to the
+`gramps-web-api` inside a [Gramps Web](https://www.grampsweb.org/) Docker
+container. Both frontends then read and write the same database. The
+[Gramps Web quickstart](https://www.grampsweb.org/install_setup/quickstart/)
+command keeps nothing across container restarts, so add volumes for its
+state, and allow `app/`'s origin through CORS:
+
+```sh
+docker run -p 5055:5000 \
+  -e GRAMPSWEB_TREE=new \
+  -e GRAMPSWEB_CORS_ORIGINS=http://localhost:5173 \
+  -v gramps_db:/root/.gramps/grampsdb \
+  -v gramps_users:/app/users \
+  -v gramps_media:/app/media \
+  -v gramps_index:/app/indexdir \
+  -v gramps_thumb_cache:/app/thumbnail_cache \
+  -v gramps_cache:/app/cache \
+  -v gramps_secret:/app/secret \
+  ghcr.io/gramps-project/grampsweb:latest
+```
+
+Visit `http://localhost:5055` once to create the owner account in Gramps
+Web, then set `VITE_API_BASE=http://localhost:5055` in `app/.env.local`,
+restart `npm run dev -w app`, and sign in with that same account.
+`GRAMPSWEB_CORS_ORIGINS` must match the URL you open `app/` at. The
+quickstart's `-e TREE=new` still works but is deprecated in favor of
+`GRAMPSWEB_TREE`. Gramps Web's own Deployment docs have a
+`docker-compose.yml` with the same volumes plus Celery/Redis for
+background jobs; add `GRAMPSWEB_CORS_ORIGINS` to its environment there.
+
+Edits made in Gramps Web show up in `app/` through live sync. Gramps Web
+shows `app/`'s edits on reload. This needs gramps-web-api v3.22.0 or newer
+(the `/query/` endpoints arrived in v3.21.0 and per-object history in
+v3.22.0). The current `grampsweb:latest` image works; Gramps Web shows its
+API version under Settings → System Information.
 
 ### Deploying
 
