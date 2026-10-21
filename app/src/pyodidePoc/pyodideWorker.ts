@@ -312,10 +312,14 @@ const bridge = {
     }
     return JSON.stringify(items);
   },
-  async getObject(objectType: string, handle: string): Promise<string> {
+  // `missingOk`: a 404 comes back as "null" instead of an error -- for a
+  // handle the app itself remembered (get_home_person()), which may no
+  // longer exist, rather than one the Gramplet asked for.
+  async getObject(objectType: string, handle: string, missingOk = false): Promise<string> {
     const base = objectEndpointBase(objectType);
     if (!base) throw new Error(`get_object(): unknown object type ${JSON.stringify(objectType)}`);
     const res = await authFetch("get_object", `${API_BASE}${base}${encodeURIComponent(handle)}`);
+    if (res.status === 404 && missingOk) return "null";
     if (!res.ok) throw await bridgeError("get_object", res);
     return res.text();
   },
@@ -628,7 +632,7 @@ def _fix_object_dict(object_dict, class_name=None):
     return d_out
 
 
-async def get_object(object_type, handle):
+async def get_object(object_type, handle, _missing_ok=False):
     """Expensive: a real network round trip plus reconstructing a genuine
     gramps.gen.lib object. Only call this for the specific item(s) you
     actually need it for -- never inside a loop over filter() results."""
@@ -638,7 +642,9 @@ async def get_object(object_type, handle):
     known = _changes_lookup(object_type, handle, "object")
     if known is not _CH_MISS:
         return known
-    raw_json = await _bridge.getObject(object_type, handle)
+    raw_json = await _bridge.getObject(object_type, handle, _missing_ok)
+    if raw_json == "null":
+        return None
     data = _json.loads(raw_json)
     return _changes_track_object(object_type, handle, _fix_object_dict(data, object_type.capitalize()))
 
@@ -1100,11 +1106,16 @@ async def get_home_person():
     tree does have a default_person.
 
     Same shape as get_selected() above: one round trip on first call in a
-    run, memoized after that, no \`await\` needed."""
+    run, memoized after that, no \`await\` needed. Also None when the
+    remembered person no longer exists in this tree (deleted, or picked in
+    a different tree) -- the same as the Home page, which then shows no
+    Home person either."""
     global _home_person_object
     if _home_person_object is _UNFETCHED:
         _home_person_object = (
-            await get_object("person", _home_person_handle) if _home_person_handle is not None else None
+            await get_object("person", _home_person_handle, _missing_ok=True)
+            if _home_person_handle is not None
+            else None
         )
     return _home_person_object
 
