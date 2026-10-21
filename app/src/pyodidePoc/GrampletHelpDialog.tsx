@@ -77,6 +77,12 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                   "Every distinct way the two are related, not just the most direct one -- a list of {'relationship_string': ..., 'common_ancestors': [handle, ...]}, empty when they aren't related. For cousins who married, descent down two lines, and the like; on ordinary data it's the single answer db.get_relationship() already gives."
                 )}
               />
+              <SymbolRow
+                symbol="db.get_relationship_paths(person1, person2, max_paths=None)"
+                meaning={t(
+                  "The people connecting the two, nearest path first -- a list of {'people': [{'handle': ..., 'relationship_string': ...}, ...], 'common_ancestors': [handle, ...]}. 'people' runs from person1 up to the common ancestor and down to person2, each labelled with their relationship to person1. Pass max_paths=1 when you only show the nearest: it's much quicker on a deep tree."
+                )}
+              />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">

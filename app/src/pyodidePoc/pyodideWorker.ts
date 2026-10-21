@@ -12,6 +12,7 @@ import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
 import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, TransactionItem, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 import { apiFetch } from "../store/apiFetch";
+import { getRelationshipPaths, type PathPerson, type ServerRelationship } from "../store/relationshipPath";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -366,6 +367,40 @@ const bridge = {
     const res = await authFetch("get_relationships", `${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`);
     if (!res.ok) throw await bridgeError("get_relationships", res);
     return res.text();
+  },
+  // db.get_relationship_paths()'s bridge half -- the walk itself is
+  // store/relationshipPath.ts (one ?handles= request per generation, both
+  // people at once); each person on a path is then labelled by the same
+  // /relations/.../all endpoint relationships() above calls. `maxPaths` 0
+  // means every path.
+  async relationshipPaths(handle1: string, handle2: string, depth: number, maxPaths: number): Promise<string> {
+    const paths = await getRelationshipPaths(
+      handle1,
+      handle2,
+      {
+        async fetchPeople(handles) {
+          const chunks: string[][] = [];
+          for (let i = 0; i < handles.length; i += 100) chunks.push(handles.slice(i, i + 100));
+          const pages = await Promise.all(
+            chunks.map(async (chunk) => {
+              const query = `handles=${chunk.map(encodeURIComponent).join(",")}&extend=primary_parent_family&keys=handle,family_list,extended`;
+              const res = await authFetch("get_relationship_paths", `${API_BASE}/api/people/?${query}`);
+              if (!res.ok) throw await bridgeError("get_relationship_paths", res);
+              return (await res.json()) as PathPerson[];
+            }),
+          );
+          return pages.flat();
+        },
+        async fetchRelationships(h1, h2) {
+          const path = `/api/relations/${encodeURIComponent(h1)}/${encodeURIComponent(h2)}/all`;
+          const res = await authFetch("get_relationship_paths", `${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`);
+          if (!res.ok) throw await bridgeError("get_relationship_paths", res);
+          return (await res.json()) as ServerRelationship[];
+        },
+      },
+      { depth, maxPaths: maxPaths > 0 ? maxPaths : undefined },
+    );
+    return JSON.stringify(paths);
   },
   // get_number_of_<type>()'s bridge half -- limit=1 (only one row's worth
   // of deserialize/privacy-sanitize work, same as filter()'s own per-page
@@ -827,6 +862,33 @@ class Db:
         # relationship_string normalizes that to a plain empty list, so
         # \`if not db.get_relationships(...)\` means what it looks like.
         return [item for item in items if item.get("relationship_string")]
+
+    async def get_relationship_paths(self, person1, person2, depth=15, max_paths=None):
+        """The people connecting two people, not just the wording: a list
+        of paths, nearest first, each {"people": [{"handle": ...,
+        "relationship_string": ...}, ...], "common_ancestors": [handle,
+        ...]}. "people" runs from person1 to person2 inclusive, up to
+        common_ancestors[0] and back down; each relationship_string is that
+        person's relationship *to person1*, in Gramps' own words ("" for
+        person1). common_ancestors is the ancestor the path goes through,
+        plus their spouse when the two are an ancestor couple, and empty
+        for a spouse path ([person1, person2]). Empty list when unrelated
+        within depth.
+
+        Same arguments as get_relationships(), plus max_paths: pass 1 when
+        only the nearest path will be shown -- the ancestor walk then stops
+        as soon as that path is certain, instead of walking all of depth.
+
+        One request per generation walked (both people at once), then one
+        get_relationships()-sized call per person on the paths, made in
+        parallel -- fine for the one pair a Gramplet displays, not for a
+        loop over filter() results."""
+        import json as _json
+        if person1 is None or person2 is None:
+            return []
+        handle1 = person1 if isinstance(person1, str) else person1.handle
+        handle2 = person2 if isinstance(person2, str) else person2.handle
+        return _json.loads(await _bridge.relationshipPaths(handle1, handle2, depth, max_paths or 0))
 
     async def get_number_of(self, object_type, where=None):
         """A conditional count, as a \`db\` method rather than the bare

@@ -1,0 +1,165 @@
+import { describe, expect, it } from "vitest";
+
+import { findRelationshipChains, getRelationshipPaths, type PathFamily, type PathPerson } from "../relationshipPath";
+
+/** A small tree, built as one family per `family()` call below:
+ *
+ *              GF ⚭ GM
+ *            ┌────┴────┐
+ *   AF ⚭ A ⚭ SF        B ⚭ BW
+ *      │      │        │
+ *      H      S        C ⚭ CW
+ *      │ (⚭ HW)        │
+ *      K ───── ⚭ ───── X (adopted)
+ *
+ * H is the "home" person. B is H's uncle (through GF ⚭ GM), C H's first
+ * cousin, X H's first cousin once removed. K (H's child) married X: K and
+ * X are related twice -- as spouses, and as second cousins via GF ⚭ GM.
+ * S is H's half-brother: same mother A, a different father SF. */
+function buildPeople(): Map<string, PathPerson> {
+  const people = new Map<string, PathPerson>();
+  const person = (handle: string) => {
+    let p = people.get(handle);
+    if (!p) {
+      p = { handle, family_list: [], extended: {} };
+      people.set(handle, p);
+    }
+    return p;
+  };
+  const family = (handle: string, father: string, mother: string, children: [string, string?][]) => {
+    const fam: PathFamily = {
+      father_handle: father,
+      mother_handle: mother,
+      child_ref_list: children.map(([ref, rel = "Birth"]) => ({ ref, frel: rel, mrel: "Birth" })),
+    };
+    person(father).family_list!.push(handle);
+    person(mother).family_list!.push(handle);
+    for (const [ref] of children) person(ref).extended = { primary_parent_family: fam };
+  };
+  family("f-g", "GF", "GM", [["A"], ["B"]]);
+  family("f-a", "AF", "A", [["H"]]);
+  family("f-s", "SF", "A", [["S"]]);
+  family("f-b", "B", "BW", [["C"]]);
+  family("f-h", "H", "HW", [["K"]]);
+  family("f-c", "C", "CW", [["X", "Adopted"]]);
+  family("f-k", "K", "X", []);
+  return people;
+}
+
+function fakeDeps(people: Map<string, PathPerson>) {
+  const requests: string[][] = [];
+  return {
+    requests,
+    fetchPeople: async (handles: string[]) => {
+      requests.push(handles);
+      return handles.flatMap((h) => (people.has(h) ? [people.get(h)!] : []));
+    },
+    fetchRelationships: async (h1: string, h2: string) => [
+      { relationship_string: `rel(${h1},${h2})`, common_ancestors: [] as string[] },
+    ],
+  };
+}
+
+describe("findRelationshipChains", () => {
+  it("goes up to the ancestor couple and back down, as one path", async () => {
+    const deps = fakeDeps(buildPeople());
+    const [path, ...rest] = await findRelationshipChains("H", "X", deps);
+    expect(rest).toEqual([]);
+    expect(path.handles).toEqual(["H", "A", "GM", "B", "C", "X"]);
+    // GM before GF: mother-line wins the tie-break, as in the addon.
+    expect(path.commonAncestors).toEqual(["GM", "GF"]);
+    expect(path.handles[path.top]).toBe("GM");
+  });
+
+  it("finds a direct ancestor with no detour", async () => {
+    const deps = fakeDeps(buildPeople());
+    const [path] = await findRelationshipChains("H", "GF", deps);
+    expect(path.handles).toEqual(["H", "A", "GF"]);
+    expect(path.commonAncestors).toEqual(["GF"]);
+  });
+
+  it("goes through the one shared parent for a half-sibling", async () => {
+    const deps = fakeDeps(buildPeople());
+    const [path] = await findRelationshipChains("H", "S", deps);
+    expect(path.handles).toEqual(["H", "A", "S"]);
+    expect(path.commonAncestors).toEqual(["A"]);
+  });
+
+  it("reports a spouse first, then the blood relationship", async () => {
+    const deps = fakeDeps(buildPeople());
+    const paths = await findRelationshipChains("K", "X", deps);
+    expect(paths.map((p) => p.handles)).toEqual([
+      ["K", "X"],
+      ["K", "H", "A", "GM", "B", "C", "X"],
+    ]);
+    expect(paths[0].commonAncestors).toEqual([]);
+  });
+
+  it("returns nothing for unrelated people, or ones beyond depth", async () => {
+    const deps = fakeDeps(buildPeople());
+    expect(await findRelationshipChains("H", "CW", deps)).toEqual([]);
+    // depth counts the person themselves, like Gramps: depth 2 = parents only.
+    expect(await findRelationshipChains("H", "GF", deps, { depth: 2 })).toEqual([]);
+    expect(await findRelationshipChains("H", "GF", deps, { depth: 3 })).toHaveLength(1);
+  });
+
+  it("stops early for maxPaths 1 with the same nearest path", async () => {
+    const people = buildPeople();
+    // Give GF and GM a long line of ancestors that a full walk would load.
+    let child = "GF";
+    for (let i = 0; i < 10; i++) {
+      const fam = { father_handle: `GF${i}`, mother_handle: `GM${i}`, child_ref_list: [{ ref: child, frel: "Birth", mrel: "Birth" }] };
+      people.get(child)!.extended = { primary_parent_family: fam };
+      people.set(`GF${i}`, { handle: `GF${i}`, family_list: [] });
+      people.set(`GM${i}`, { handle: `GM${i}`, family_list: [] });
+      child = `GF${i}`;
+    }
+    const full = fakeDeps(people);
+    const quick = fakeDeps(people);
+    const [fullPath] = await findRelationshipChains("H", "S", full);
+    const [quickPath] = await findRelationshipChains("H", "S", quick, { maxPaths: 1 });
+    expect(quickPath).toEqual(fullPath);
+    expect(quick.requests.length).toBeLessThan(full.requests.length);
+  });
+
+  it("loads each generation of both sides in one request", async () => {
+    const deps = fakeDeps(buildPeople());
+    await findRelationshipChains("H", "X", deps);
+    // The two people, then one request per generation walked -- nothing
+    // for a generation whose people are already loaded.
+    expect(deps.requests).toEqual([
+      ["H", "X"],
+      ["AF", "A", "C", "CW"],
+      ["GF", "GM", "B", "BW"],
+    ]);
+  });
+});
+
+describe("getRelationshipPaths", () => {
+  it("labels each person from the entry going through this path's ancestor", async () => {
+    const deps = {
+      ...fakeDeps(buildPeople()),
+      fetchRelationships: async (_h1: string, h2: string) =>
+        h2 === "X"
+          ? [
+              { relationship_string: "wife", common_ancestors: [] },
+              { relationship_string: "second cousin", common_ancestors: ["GF", "GM"] },
+            ]
+          : [{ relationship_string: `rel-${h2}`, common_ancestors: [h2] }],
+    };
+    const [spouse, blood] = await getRelationshipPaths("K", "X", deps);
+    expect(spouse.people).toEqual([
+      { handle: "K", relationship_string: "" },
+      { handle: "X", relationship_string: "wife" },
+    ]);
+    expect(blood.people.map((p) => p.relationship_string)).toEqual([
+      "",
+      "rel-H",
+      "rel-A",
+      "rel-GM",
+      "rel-B",
+      "rel-C",
+      "second cousin",
+    ]);
+  });
+});
