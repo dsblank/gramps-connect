@@ -104,24 +104,29 @@ export function composeInLaw(anchor: string, relationship: string): string {
  * test can check. */
 export function layoutRelationshipChart(path: RelationshipPath, startLabel: string): Layout {
   const all = path.people;
-  const via = path.via ?? null;
-  const viaIndex = via ? all.findIndex((n) => n.handle === via.handle) : -1;
-  // After an in-law path's marriage, labels are relative to the person
-  // married into the family -- "father" becomes "wife's father".
-  const labels = all.map((n) => n.relationship_string);
-  labels[0] = startLabel;
-  for (let i = viaIndex + 1; viaIndex >= 0 && i < all.length; i++) labels[i] = composeInLaw(labels[viaIndex], labels[i]);
+  const marriages = path.via ?? [];
+  const viaHandles = new Set(marriages.map((m) => m.handle));
+  // After each of an in-law path's marriages, labels are relative to the
+  // spouse on the far side, so they carry on from that spouse's own label:
+  // "father" becomes "wife's father", and on past a second marriage,
+  // "wife's brother's wife".
+  const labels: string[] = [];
+  let anchor: string | null = null;
+  all.forEach((n, i) => {
+    labels.push(i === 0 ? startLabel : anchor === null ? n.relationship_string : composeInLaw(anchor, n.relationship_string));
+    if (viaHandles.has(n.handle)) anchor = labels[i];
+  });
   const labelOf = new Map(all.map((n, i) => [n.handle, labels[i]]));
   const isEnd = (h: string) => h === all[0].handle || h === all[all.length - 1].handle;
-  // The blood part is everyone but the one who married in; they're added
-  // beside their spouse at the end. The partner is on the blood side, so
-  // relative to `via` exactly when the blood side comes after it.
-  const marriedIn = via ? all.find((n) => n.handle === via.married_to) ?? null : null;
-  const nodes = marriedIn ? all.filter((n) => n !== marriedIn) : all;
-  const partnerAfterVia = via !== null && via.married_to === all[0].handle;
+  // The blood part is everyone but those who married in; they're added
+  // beside their spouses at the end. The partner stands beside the common
+  // ancestor, so it's labelled the way the ancestor is.
+  const marriedIn = new Set(marriages.map((m) => m.married_to));
+  const nodes = all.filter((n) => !marriedIn.has(n.handle));
+  const firstVia = marriages.find((m) => m.married_to === all[0].handle);
   const partnerLabel = path.partner
-    ? partnerAfterVia
-      ? composeInLaw(labelOf.get(via!.handle) ?? "", path.partner.relationship_string)
+    ? firstVia
+      ? composeInLaw(labelOf.get(firstVia.handle) ?? "", path.partner.relationship_string)
       : path.partner.relationship_string
     : "";
 
@@ -188,19 +193,19 @@ export function layoutRelationshipChart(path: RelationshipPath, startLabel: stri
     }
   }
 
-  // An in-law path: the one who married in sits beside their spouse --
-  // on the left when they're the first person, on the right when the last.
-  if (via && marriedIn) {
-    const spouse = cards.find((c) => c.node.handle === via.handle);
-    if (spouse) {
-      const onLeft = marriedIn === all[0];
-      const x = onLeft ? spouse.x - LEG_GAP - CARD_W : spouse.x + CARD_W + LEG_GAP;
-      const mid = spouse.y + CARD_H / 2;
-      const gapStart = onLeft ? x + CARD_W : spouse.x + CARD_W;
-      lines.push([[gapStart, mid], [gapStart + LEG_GAP, mid]]);
-      rings.push([gapStart + LEG_GAP / 2, mid]);
-      place(marriedIn, x, spouse.y);
-    }
+  // An in-law path: whoever married in sits beside their spouse -- on the
+  // left when they're the first person, on the right when the last.
+  for (const marriage of marriages) {
+    const spouse = cards.find((c) => c.node.handle === marriage.handle);
+    const node = all.find((n) => n.handle === marriage.married_to);
+    if (!spouse || !node) continue;
+    const onLeft = node === all[0];
+    const x = onLeft ? spouse.x - LEG_GAP - CARD_W : spouse.x + CARD_W + LEG_GAP;
+    const mid = spouse.y + CARD_H / 2;
+    const gapStart = onLeft ? x + CARD_W : spouse.x + CARD_W;
+    lines.push([[gapStart, mid], [gapStart + LEG_GAP, mid]]);
+    rings.push([gapStart + LEG_GAP / 2, mid]);
+    place(node, x, spouse.y);
   }
 
   // Shift everything right if a card landed left of the margin.

@@ -74,14 +74,22 @@ export interface RelationshipPath {
    * path -- they aren't one of them, but a chart draws them beside
    * common_ancestors[0]. Null when there's a single common ancestor. */
   partner: PathNode | null;
-  /** For an in-law path, the marriage it goes through: `handle` is the
-   * first person's spouse ("wife", then her father) or the last person's
-   * spouse ("brother", then his wife), and `married_to` the end of the
-   * path married to them. Everyone after `handle` in `people`, and
-   * `partner` when it's on that side, is labelled relative to `handle`,
-   * not to the first person -- so "father" there reads "wife's father".
-   * Null for a blood relative or a spouse. */
-  via: { handle: string; married_to: string } | null;
+  /** For an in-law path, the marriages it goes through, in path order --
+   * at most one at each end. Empty for a blood relative or a spouse. Each
+   * person after a marriage's `handle` is labelled relative to that
+   * person, not the first one: Lewis, then Luella "wife", then Henry
+   * "father" reads "wife's father"; a second marriage further on carries
+   * on from there ("wife's brother's wife"). `partner` is labelled like
+   * the person it stands beside. */
+  via: InLawMarriage[];
+}
+
+/** One marriage an in-law path goes through: `handle` is the one on the
+ * blood-relationship side, `married_to` the end of the path married to
+ * them (the first person's spouse, or the last person's). */
+export interface InLawMarriage {
+  handle: string;
+  married_to: string;
 }
 
 interface AncestorMap {
@@ -312,10 +320,10 @@ function pickLabel(entries: ServerRelationship[], via: string | null): string {
  * common ancestor is certain.
  *
  * Only when there's no blood relationship and they aren't spouses (the
- * order Gramps itself goes in), in-law paths: through either person's
- * spouse, one marriage at most -- see RelationshipPath.via. Gramps'
- * calculator has no in-law answers of its own, so each label is still its
- * wording, just relative to that spouse. */
+ * order Gramps itself goes in), in-law paths: through a marriage at
+ * either end or both -- see RelationshipPath.via. /relations/ has no
+ * in-law answers of its own, so each label is still Gramps' wording, just
+ * relative to the spouse. */
 export async function getRelationshipPaths(
   handle1: string,
   handle2: string,
@@ -327,33 +335,53 @@ export async function getRelationshipPaths(
 
   const [first, second] = await Promise.all([deps.fetchSpouses(handle1), deps.fetchSpouses(handle2)]);
   const spouseLabel = async (h1: string, h2: string) => pickLabel(await deps.fetchRelationships(h1, h2), null);
-  const found: RelationshipPath[] = [];
-  // handle1's spouse is related to handle2: [handle1, spouse, ...].
-  for (const spouse of first.spouses) {
-    for (const sub of await bloodPaths(spouse, handle2, deps, options)) {
-      found.push({
-        ...sub,
-        people: [
-          { handle: handle1, relationship_string: "", gender: first.gender },
-          { ...sub.people[0], relationship_string: await spouseLabel(handle1, spouse) },
-          ...sub.people.slice(1),
-        ],
-        via: { handle: spouse, married_to: handle1 },
-      });
-    }
-  }
-  // handle2's spouse is related to handle1: [handle1, ..., spouse, handle2].
-  for (const spouse of second.spouses) {
-    for (const sub of await bloodPaths(handle1, spouse, deps, options)) {
-      found.push({
-        ...sub,
-        people: [...sub.people, { handle: handle2, relationship_string: await spouseLabel(spouse, handle2), gender: second.gender }],
-        via: { handle: spouse, married_to: handle2 },
-      });
-    }
-  }
+  // Gramps Desktop's All Relations quick view, the one place Gramps
+  // looks for in-laws: each person and their spouses, and a blood
+  // relationship between any pairing but the two people themselves -- so
+  // at most one marriage at each end ("wife's brother's wife"). Someone on
+  // both sides (both married the same person) is left out, as there.
+  const side1 = [handle1, ...first.spouses];
+  const side2 = [handle2, ...second.spouses].filter((h) => !side1.includes(h));
+  const pairs = side1.flatMap((a) => side2.map((b) => [a, b] as const)).filter(([a, b]) => a !== handle1 || b !== handle2);
+  const found = (
+    await Promise.all(
+      pairs.map(async ([a, b]) => {
+        // Blood only, like Gramps: a spouse of a spouse isn't an in-law.
+        const subs = (await bloodPaths(a, b, deps, options)).filter((sub) => sub.common_ancestors.length > 0);
+        if (subs.length === 0) return [];
+        const [aLabel, bLabel] = await Promise.all([
+          a === handle1 ? "" : spouseLabel(handle1, a),
+          b === handle2 ? "" : spouseLabel(b, handle2),
+        ]);
+        return subs.map((sub): RelationshipPath => {
+          const people = [...sub.people];
+          const via: InLawMarriage[] = [];
+          if (a !== handle1) {
+            // [handle1, spouse a, ...]: a's relatives are labelled relative to a.
+            people[0] = { ...people[0], relationship_string: aLabel };
+            people.unshift({ handle: handle1, relationship_string: "", gender: first.gender });
+            via.push({ handle: a, married_to: handle1 });
+          }
+          if (b !== handle2) {
+            // [..., spouse b, handle2]: handle2 is labelled relative to b.
+            people.push({ handle: handle2, relationship_string: bLabel, gender: second.gender });
+            via.push({ handle: b, married_to: handle2 });
+          }
+          return { ...sub, people, via };
+        });
+      }),
+    )
+  ).flat();
   found.sort((x, y) => x.people.length - y.people.length);
-  return options.maxPaths !== undefined ? found.slice(0, options.maxPaths) : found;
+  // A detour isn't another relationship: wife -> her mother -> his
+  // husband reaches the same father-in-law as wife -> her father. Drop a
+  // path that goes through everyone a shorter one does (Gramps' All
+  // Relations hides these too, as repeats of the same wording).
+  const handleSets = found.map((path) => new Set(path.people.map((n) => n.handle)));
+  const distinct = found.filter((path, i) =>
+    handleSets.slice(0, i).every((shorter, j) => found[j].people.length === path.people.length || ![...shorter].every((h) => handleSets[i].has(h))),
+  );
+  return options.maxPaths !== undefined ? distinct.slice(0, options.maxPaths) : distinct;
 }
 
 async function bloodPaths(
@@ -379,7 +407,7 @@ async function bloodPaths(
       // covers the couple's other spouse too.
       const partnerHandle = chain.commonAncestors[1];
       return {
-        via: null,
+        via: [],
         common_ancestors: chain.commonAncestors,
         partner: partnerHandle
           ? {

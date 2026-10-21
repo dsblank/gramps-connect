@@ -53,13 +53,17 @@ else:
         if "relationship_chart" in globals():
             paths = db.get_relationship_paths(home_person, person, max_paths=1)
 
-        # Gramps itself has no in-law answers ("" above), but the path
-        # search does: through a marriage, labelled relative to the spouse
-        # -- so the sentence joins the two, "wife's father".
+        # The server has no in-law answers ("" above), but the path search
+        # does: through a marriage at either end, the people past it
+        # labelled relative to the spouse -- so the sentence carries the
+        # labels on, "wife's father", "wife's brother's wife".
         if not relationship and paths and paths[0].get("via"):
-            people = paths[0]["people"]
-            via = next(p for p in people if p["handle"] == paths[0]["via"]["handle"])
-            relationship = f"{via['relationship_string']}'s {people[-1]['relationship_string']}"
+            married = {m["handle"] for m in paths[0]["via"]}
+            prefix = ""
+            for p in paths[0]["people"][1:]:
+                relationship = prefix + p["relationship_string"]
+                if p["handle"] in married:
+                    prefix = relationship + "'s "
 
         if relationship:
             html(f"{escape(name_of(person))} is {escape(name_of(home_person))}'s <b>{escape(relationship)}</b>.")

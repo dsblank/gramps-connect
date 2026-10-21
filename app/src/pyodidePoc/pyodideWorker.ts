@@ -897,13 +897,14 @@ class Db:
         unrelated within depth. relationship_chart(path) draws one.
 
         Only when there's no blood relationship and they aren't spouses,
-        in-law paths, through one marriage: each has "via": {"handle": h,
-        "married_to": m}, None otherwise. h is person1's spouse (then
-        her relatives) or person2's spouse (whose relative person1 is),
-        and m the end of the path married to h. Everyone after h in
-        "people" is labelled relative to h, not person1: Lewis, then
-        Luella "wife", then Henry "father" -- her father, so Lewis's
-        "wife's father". Gramps' own calculator has no in-law answers.
+        in-law paths, through a marriage at either end or both (as Gramps
+        Desktop's All Relations finds them): "via" lists those marriages
+        in path order, each {"handle": h, "married_to": m} -- h on the
+        blood side, m the end of the path married to h -- and is empty
+        for every other path. Everyone after h in "people" is labelled
+        relative to h: Lewis, Luella "wife", Henry "father" is Lewis's
+        "wife's father", and a second marriage carries on from there
+        ("wife's brother's wife"). /relations/ has no in-law answers.
 
         Same arguments as get_relationships(), plus max_paths: pass 1 when
         only the nearest path will be shown -- the ancestor walk then stops
