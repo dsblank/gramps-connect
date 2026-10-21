@@ -17,10 +17,13 @@
 
 from html import escape
 
-CARD_W, CARD_H = 188, 58
-ROW_H = CARD_H + 34
+CARD_W = 188
+CARD_H = 58  # one line of name; NAME_LINE more when a name wraps
+NAME_LINE = 16
+ROW_GAP = 34  # between one generation's cards and the next
 LEG_GAP = 24  # between the two legs' cards
 PAD = 8
+NAME_CHARS = 21  # what fits on one line of a card, at worst
 
 
 def year_of(date):
@@ -44,38 +47,69 @@ def clip(text, limit=24):
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def card(x, y, handle, info, label, kind):
+def name_lines(info):
+    # A long name wraps onto a second line at a space rather than being
+    # cut short; only a name too long for two lines loses its end.
+    name = name_of(info) or "(unnamed)"
+    if len(name) <= NAME_CHARS:
+        return [name]
+    cut = name.rfind(" ", 0, NAME_CHARS + 1)
+    if cut <= 0:
+        return [clip(name, NAME_CHARS)]
+    return [name[:cut], clip(name[cut + 1:], NAME_CHARS)]
+
+
+def card(x, y, handle, info, label, kind, card_h):
     # kind: "end" (the Home or selected person), "top" (common ancestor),
     # or "" (in between). The left stripe is the person's gender.
     gender = {0: "f", 1: "m"}.get(info.get("gender"), "u")
-    name = escape(clip(name_of(info) or "(unnamed)", 22))
+    lines = name_lines(info)
+    name = "".join(
+        f'<tspan x="{x + 14}" dy="{0 if i == 0 else NAME_LINE}">{escape(line)}</tspan>'
+        for i, line in enumerate(lines)
+    )
+    # The name, years and label as one block, centred in the card --
+    # which is taller than a one-line name needs when another name in the
+    # chart wraps.
+    top = y + (card_h - (CARD_H + NAME_LINE * (len(lines) - 1))) / 2
     years = escape(lifespan(info))
     label = escape(clip(label, 32))
     return f"""
 <a href="#/person/{handle}">
-  <title>{name}</title>
-  <rect class="rp-card rp-{kind or 'mid'}" x="{x}" y="{y}" width="{CARD_W}" height="{CARD_H}" rx="7"/>
-  <rect class="rp-g-{gender}" x="{x}" y="{y + 6}" width="4" height="{CARD_H - 12}" rx="2"/>
-  <text x="{x + 14}" y="{y + 20}" class="rp-name">{name}</text>
-  <text x="{x + 14}" y="{y + 35}" class="rp-dim">{years}</text>
-  <text x="{x + 14}" y="{y + 50}" class="rp-label">{label}</text>
+  <title>{escape(name_of(info) or "(unnamed)")}</title>
+  <rect class="rp-card rp-{kind or 'mid'}" x="{x}" y="{y}" width="{CARD_W}" height="{card_h}" rx="7"/>
+  <rect class="rp-g-{gender}" x="{x}" y="{y + 6}" width="4" height="{card_h - 12}" rx="2"/>
+  <text y="{top + 20}" class="rp-name">{name}</text>
+  <text x="{x + 14}" y="{top + 35 + NAME_LINE * (len(lines) - 1)}" class="rp-dim">{years}</text>
+  <text x="{x + 14}" y="{top + 50 + NAME_LINE * (len(lines) - 1)}" class="rp-label">{label}</text>
 </a>"""
 
 
-def ladder(path, info, partner_label):
+def rings(x, y):
+    # The marriage sign as two linked rings -- the ⚭ character itself is
+    # tiny or missing in many fonts. The first ring is filled so it hides
+    # the line behind it; the second isn't, so the two look linked.
+    return (
+        f'<circle class="rp-ring rp-ring-fill" cx="{x - 3.5}" cy="{y}" r="5.5"/>'
+        f'<circle class="rp-ring" cx="{x + 3.5}" cy="{y}" r="5.5"/>'
+    )
+
+
+def ladder(path, info, partner_label, card_h):
+    row_h = card_h + ROW_GAP
     nodes = path["people"]
     anc = path["common_ancestors"]
     if not anc:
         # A spouse: two cards side by side, joined.
         left, right = PAD, PAD + CARD_W + LEG_GAP
-        mid = PAD + CARD_H / 2
+        mid = PAD + card_h / 2
         parts = [
             f'<line class="rp-line" x1="{left + CARD_W}" y1="{mid}" x2="{right}" y2="{mid}"/>',
-            f'<text class="rp-wed" x="{left + CARD_W + LEG_GAP / 2}" y="{mid - 6}" text-anchor="middle">⚭</text>',
-            card(left, PAD, nodes[0]["handle"], info[nodes[0]["handle"]], "Home person", "end"),
-            card(right, PAD, nodes[1]["handle"], info[nodes[1]["handle"]], nodes[1]["relationship_string"], "end"),
+            rings(left + CARD_W + LEG_GAP / 2, mid),
+            card(left, PAD, nodes[0]["handle"], info[nodes[0]["handle"]], "Home person", "end", card_h),
+            card(right, PAD, nodes[1]["handle"], info[nodes[1]["handle"]], nodes[1]["relationship_string"], "end", card_h),
         ]
-        return parts, right + CARD_W + PAD, PAD * 2 + CARD_H
+        return parts, right + CARD_W + PAD, PAD * 2 + card_h
 
     top = next(i for i, n in enumerate(nodes) if n["handle"] == anc[0])
     left_leg = nodes[:top][::-1]  # just below the ancestor, down to the Home person
@@ -83,7 +117,7 @@ def ladder(path, info, partner_label):
     legs = [leg for leg in (left_leg, right_leg) if leg]
     width = PAD * 2 + CARD_W * max(len(legs), len(anc)) + LEG_GAP * (max(len(legs), len(anc)) - 1)
     rows = 1 + max(len(left_leg), len(right_leg))
-    height = PAD * 2 + CARD_H + ROW_H * (rows - 1)
+    height = PAD * 2 + card_h + row_h * (rows - 1)
     centre = width / 2
     parts = []
 
@@ -93,9 +127,8 @@ def ladder(path, info, partner_label):
 
     if len(anc) == 2:
         xs = [centre - LEG_GAP / 2 - CARD_W, centre + LEG_GAP / 2]
-        mid = PAD + CARD_H / 2
+        mid = PAD + card_h / 2
         parts.append(f'<line class="rp-line" x1="{xs[0] + CARD_W}" y1="{mid}" x2="{xs[1]}" y2="{mid}"/>')
-        parts.append(f'<text class="rp-wed" x="{centre}" y="{mid - 6}" text-anchor="middle">⚭</text>')
         # The legs hang from the middle of the couple's line, like a family
         # tree's own drop line.
         drop_x, drop_y = centre, mid
@@ -104,11 +137,11 @@ def ladder(path, info, partner_label):
         # label comes from partner_label.
         labels = [nodes[top]["relationship_string"], partner_label]
         for x, h, label in zip(xs, anc, labels):
-            parts.append(card(x, PAD, h, info[h], label, "top"))
+            parts.append(card(x, PAD, h, info[h], label, "top", card_h))
     else:
-        drop_x, drop_y = centre, PAD + CARD_H
+        drop_x, drop_y = centre, PAD + card_h
         label = "Home person" if top == 0 else nodes[top]["relationship_string"]
-        parts.append(card(centre - CARD_W / 2, PAD, anc[0], info[anc[0]], label, kind_of(top) or "top"))
+        parts.append(card(centre - CARD_W / 2, PAD, anc[0], info[anc[0]], label, kind_of(top) or "top", card_h))
 
     # Each leg: a column of cards, the first joined to the ancestor row by
     # an elbow, the rest by straight lines.
@@ -116,18 +149,22 @@ def ladder(path, info, partner_label):
         columns = [(left_leg, centre - LEG_GAP / 2 - CARD_W / 2), (right_leg, centre + LEG_GAP / 2 + CARD_W / 2)]
     else:
         columns = [(legs[0], centre)] if legs else []
-    elbow_y = PAD + CARD_H + (ROW_H - CARD_H) / 2
+    elbow_y = PAD + card_h + ROW_GAP / 2
     for leg, cx in columns:
         parts.append(
-            f'<path class="rp-line" d="M{drop_x},{drop_y} V{elbow_y} H{cx} V{PAD + ROW_H}"/>'
+            f'<path class="rp-line" d="M{drop_x},{drop_y} V{elbow_y} H{cx} V{PAD + row_h}"/>'
         )
         for row, node in enumerate(leg, start=1):
-            y = PAD + ROW_H * row
+            y = PAD + row_h * row
             if row > 1:
-                parts.append(f'<line class="rp-line" x1="{cx}" y1="{y - ROW_H + CARD_H}" x2="{cx}" y2="{y}"/>')
+                parts.append(f'<line class="rp-line" x1="{cx}" y1="{y - ROW_GAP}" x2="{cx}" y2="{y}"/>')
             index = nodes.index(node)
             label = "Home person" if index == 0 else node["relationship_string"]
-            parts.append(card(cx - CARD_W / 2, y, node["handle"], info[node["handle"]], label, kind_of(index)))
+            parts.append(card(cx - CARD_W / 2, y, node["handle"], info[node["handle"]], label, kind_of(index), card_h))
+    # The couple's rings go on last, over the drop lines that start at
+    # their middle.
+    if len(anc) == 2:
+        parts.append(rings(centre, PAD + card_h / 2))
     return parts, width, height
 
 
@@ -146,7 +183,10 @@ def chart(path, home_person):
         info.setdefault(h, {})
     anc = path["common_ancestors"]
     partner_label = (db.get_relationship(home_person, anc[1]) or "") if len(anc) == 2 else ""
-    parts, width, height = ladder(path, info, partner_label)
+    # Every card the same height: taller throughout when any name wraps.
+    wraps = any(len(name_lines(i)) > 1 for i in info.values())
+    card_h = CARD_H + NAME_LINE if wraps else CARD_H
+    parts, width, height = ladder(path, info, partner_label, card_h)
     # Mantine's own theme variables, so the chart follows light/dark mode.
     # Class names are prefixed: html() output shares the page's styles.
     style = """
@@ -157,7 +197,8 @@ def chart(path, home_person):
       .rp-line { fill: none; stroke: var(--mantine-color-dimmed); stroke-width: 1.5; }
       .rp-name { font-size: 13px; font-weight: 600; fill: var(--mantine-color-text); }
       .rp-dim { font-size: 11px; fill: var(--mantine-color-dimmed); }
-      .rp-wed { font-size: 18px; fill: var(--mantine-color-dimmed); }
+      .rp-ring { fill: none; stroke: var(--mantine-color-dimmed); stroke-width: 1.5; }
+      .rp-ring-fill { fill: var(--mantine-color-body); }
       .rp-label { font-size: 11px; font-style: italic; fill: var(--mantine-primary-color-light-color); }
       .rp-g-m { fill: #5b8fd6; } .rp-g-f { fill: #d66b9b; } .rp-g-u { fill: var(--mantine-color-dimmed); }
     """
