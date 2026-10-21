@@ -19,6 +19,7 @@ import {
 } from "./EmbeddedListFields";
 import { StoryEditor } from "./story/StoryEditor";
 import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
+import { CoordinateFields } from "./CoordinateFields";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -39,6 +40,9 @@ type FieldSpec =
   | { kind: "placeNameDate"; label: string }
   | { kind: "placeNameLang"; label: string }
   | { kind: "wikidataLookup" }
+  // Place.lat + Place.long together (CoordinateFields.tsx): the pair is
+  // checked as one, and pasting "lat, long" into either fills both.
+  | { kind: "coordinates" }
   | { kind: "styledText"; key: string; label: string }
   | { kind: "storyEditor"; key: string; label: string }
   | {
@@ -146,8 +150,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "place_type", label: "Type", placeholder: TYPE_HINT },
       { kind: "placeNameDate", label: "Date" },
       { kind: "placeNameLang", label: "Language" },
-      { kind: "text", key: "lat", label: "Latitude" },
-      { kind: "text", key: "long", label: "Longitude" },
+      { kind: "coordinates" },
       { kind: "switch", key: "private", label: "Private" },
       { kind: "urlList", key: "urls", label: "Web links" },
       CITATIONS_FIELD, NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
@@ -575,6 +578,15 @@ export function ObjectEditDialog({
             key="wikidataLookup"
             stackId={`${draft.handle}-wikidata`}
             data={draft.data}
+            onChange={onChange}
+          />
+        );
+      case "coordinates":
+        return (
+          <CoordinateFields
+            key="coordinates"
+            lat={(draft.data.lat as string | undefined) ?? ""}
+            long={(draft.data.long as string | undefined) ?? ""}
             onChange={onChange}
           />
         );

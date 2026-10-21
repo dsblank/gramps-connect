@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coordinateLetters, parseCoordinate } from "../placeCoords";
+import { coordinateLetters, parseCoordinate, splitCoordinatePair } from "../placeCoords";
 import { COORDINATE_LETTERS } from "../coordinateLetters";
 import { parseCoords } from "../visualData";
 import fixture from "./placeCoords.fixture.json";
@@ -91,5 +91,35 @@ describe("parseCoords", () => {
   it("uses the given interface language's letters", () => {
     const [, long] = parseCoords("42°41'55\"N", "2°53'44\"O", "fr")!;
     expect(long).toBeLessThan(0);
+  });
+});
+
+describe("splitCoordinatePair", () => {
+  it.each([
+    ["42.69861, 2.89556", "42.69861", "2.89556"], // Google Maps
+    ["42.6986,2.8956", "42.6986", "2.8956"],
+    ["-33.8688, 151.2093", "-33.8688", "151.2093"],
+    ["42,6986, 2,8956", "42.6986", "2.8956"], // decimal commas, as Gramps
+    ["42° 41′ 55″ N, 2° 53′ 44″ E", "42° 41′ 55″ N", "2° 53′ 44″ E"],
+    ["  42.6986 ,  2.8956  ", "42.6986", "2.8956"],
+  ])("splits %j", (text, lat, long) => {
+    expect(splitCoordinatePair(text)).toEqual({ lat, long });
+  });
+
+  it.each([
+    "42.6986", // one value
+    "42,6986", // one value with a decimal comma, not 42 / 6986
+    "42,5", // ditto, though 42 / 5 would be in range
+    "Perpignan, France",
+    "1, 2, 3",
+    "91, 2",
+    "42, 181",
+  ])("leaves %j to paste normally", (text) => {
+    expect(splitCoordinatePair(text)).toBeNull();
+  });
+
+  it("reads letters in the given language", () => {
+    expect(splitCoordinatePair("42°41'55\"N, 2°53'44\"O", "fr")).toEqual({ lat: "42°41'55\"N", long: "2°53'44\"O" });
+    expect(splitCoordinatePair("42°41'55\"N, 2°53'44\"O", "en")).toBeNull();
   });
 });

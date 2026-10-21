@@ -4,6 +4,7 @@ import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { UrlListField, type Url } from "./EmbeddedListFields";
 import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { DateInput } from "./DateInput";
+import { CoordinateFields } from "./CoordinateFields";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
@@ -96,15 +97,10 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           value={(name.lang as string | undefined) ?? ""}
           onChange={(e) => onChange({ name: { _class: "PlaceName", ...name, lang: e.currentTarget.value } })}
         />
-        <TextInput
-          label={t("Latitude")}
-          value={(data.lat as string | undefined) ?? ""}
-          onChange={(e) => onChange({ lat: e.currentTarget.value })}
-        />
-        <TextInput
-          label={t("Longitude")}
-          value={(data.long as string | undefined) ?? ""}
-          onChange={(e) => onChange({ long: e.currentTarget.value })}
+        <CoordinateFields
+          lat={(data.lat as string | undefined) ?? ""}
+          long={(data.long as string | undefined) ?? ""}
+          onChange={onChange}
         />
         <Switch
           label={t("Private")}

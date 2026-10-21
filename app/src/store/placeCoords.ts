@@ -157,3 +157,26 @@ function fromSuffixed(s: string, kind: "lat" | "long"): number | null {
   const v = asFloat(head);
   return v == null ? null : negative ? -v : v;
 }
+
+/** A "latitude, longitude" pair as copied from Google Maps or OpenStreetMap
+ * ("42.6986, 2.8956"), split the way Gramps' place editor splits its paste
+ * box (EditPlace.set_latlongitude): on ", " -- decimal commas within each
+ * half then become points -- or else on a lone ",". Unlike Gramps, which
+ * fills in whatever the split gives, null unless both halves parse and are
+ * in range, and a lone "," never splits two plain integers: "42,5" is far
+ * likelier one value with a decimal comma than latitude 42, longitude 5.
+ * A null is left to paste normally. */
+export function splitCoordinatePair(text: string, lang = "en"): { lat: string; long: string } | null {
+  let parts = text.split(", ");
+  if (parts.length === 2) parts = parts.map((p) => p.trim().replace(/,/g, "."));
+  else {
+    parts = text.split(",").map((p) => p.trim());
+    if (parts.length !== 2 || parts.every((p) => /^[+-]?\d+$/.test(p))) return null;
+  }
+  const [lat, long] = parts;
+  const latValue = parseCoordinate(lat, "lat", lang);
+  const longValue = parseCoordinate(long, "long", lang);
+  if (latValue == null || longValue == null) return null;
+  if (Math.abs(latValue) > 90 || Math.abs(longValue) > 180) return null;
+  return { lat, long };
+}
