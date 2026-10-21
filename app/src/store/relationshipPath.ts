@@ -48,6 +48,10 @@ export interface RelationshipPathDeps {
   /** Every person named that exists; missing handles are just left out. */
   fetchPeople(handles: string[]): Promise<PathPerson[]>;
   fetchRelationships(handle1: string, handle2: string): Promise<ServerRelationship[]>;
+  /** A person's gender and everyone they have a family with as a parent --
+   * for in-law paths; without it, only blood relatives and spouses are
+   * found. */
+  fetchSpouses?(handle: string): Promise<{ gender: number; spouses: string[] }>;
 }
 
 export interface PathNode {
@@ -70,6 +74,14 @@ export interface RelationshipPath {
    * path -- they aren't one of them, but a chart draws them beside
    * common_ancestors[0]. Null when there's a single common ancestor. */
   partner: PathNode | null;
+  /** For an in-law path, the marriage it goes through: `handle` is the
+   * first person's spouse ("wife", then her father) or the last person's
+   * spouse ("brother", then his wife), and `married_to` the end of the
+   * path married to them. Everyone after `handle` in `people`, and
+   * `partner` when it's on that side, is labelled relative to `handle`,
+   * not to the first person -- so "father" there reads "wife's father".
+   * Null for a blood relative or a spouse. */
+  via: { handle: string; married_to: string } | null;
 }
 
 interface AncestorMap {
@@ -297,12 +309,58 @@ function pickLabel(entries: ServerRelationship[], via: string | null): string {
 /** Every path between two people, nearest first, each person labelled with
  * their relationship to `handle1` in Gramps' own words. `maxPaths: 1` is
  * much cheaper on a deep tree: the walk stops as soon as the nearest
- * common ancestor is certain. */
+ * common ancestor is certain.
+ *
+ * Only when there's no blood relationship and they aren't spouses (the
+ * order Gramps itself goes in), in-law paths: through either person's
+ * spouse, one marriage at most -- see RelationshipPath.via. Gramps'
+ * calculator has no in-law answers of its own, so each label is still its
+ * wording, just relative to that spouse. */
 export async function getRelationshipPaths(
   handle1: string,
   handle2: string,
   deps: RelationshipPathDeps,
   options: { depth?: number; maxPaths?: number } = {},
+): Promise<RelationshipPath[]> {
+  const direct = await bloodPaths(handle1, handle2, deps, options);
+  if (direct.length > 0 || !deps.fetchSpouses || handle1 === handle2) return direct;
+
+  const [first, second] = await Promise.all([deps.fetchSpouses(handle1), deps.fetchSpouses(handle2)]);
+  const spouseLabel = async (h1: string, h2: string) => pickLabel(await deps.fetchRelationships(h1, h2), null);
+  const found: RelationshipPath[] = [];
+  // handle1's spouse is related to handle2: [handle1, spouse, ...].
+  for (const spouse of first.spouses) {
+    for (const sub of await bloodPaths(spouse, handle2, deps, options)) {
+      found.push({
+        ...sub,
+        people: [
+          { handle: handle1, relationship_string: "", gender: first.gender },
+          { ...sub.people[0], relationship_string: await spouseLabel(handle1, spouse) },
+          ...sub.people.slice(1),
+        ],
+        via: { handle: spouse, married_to: handle1 },
+      });
+    }
+  }
+  // handle2's spouse is related to handle1: [handle1, ..., spouse, handle2].
+  for (const spouse of second.spouses) {
+    for (const sub of await bloodPaths(handle1, spouse, deps, options)) {
+      found.push({
+        ...sub,
+        people: [...sub.people, { handle: handle2, relationship_string: await spouseLabel(spouse, handle2), gender: second.gender }],
+        via: { handle: spouse, married_to: handle2 },
+      });
+    }
+  }
+  found.sort((x, y) => x.people.length - y.people.length);
+  return options.maxPaths !== undefined ? found.slice(0, options.maxPaths) : found;
+}
+
+async function bloodPaths(
+  handle1: string,
+  handle2: string,
+  deps: RelationshipPathDeps,
+  options: { depth?: number; maxPaths?: number },
 ): Promise<RelationshipPath[]> {
   const chains = await findRelationshipChains(handle1, handle2, deps, options);
   const labelled = new Map<string, Promise<ServerRelationship[]>>();
@@ -321,6 +379,7 @@ export async function getRelationshipPaths(
       // covers the couple's other spouse too.
       const partnerHandle = chain.commonAncestors[1];
       return {
+        via: null,
         common_ancestors: chain.commonAncestors,
         partner: partnerHandle
           ? {

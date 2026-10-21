@@ -11,7 +11,9 @@
 # db.get_relationship_paths() finds the people in between, each labelled
 # with their relationship to the Home person, and relationship_chart()
 # draws one path the way the app draws its other charts. A path is plain
-# data: change a label, or build your own, before charting it.
+# data: change a label, or build your own, before charting it. In-laws
+# ("wife's father") come from the path search alone -- Gramps' own
+# calculator doesn't give them.
 
 from html import escape
 
@@ -43,16 +45,25 @@ else:
         # ancestor at all.
         relationship = db.get_relationship(home_person, person)
 
+        # The people in between. An older gramps-connect installs Store
+        # updates but has no chart yet: it gets the sentence alone, not an
+        # error. max_paths=1: only the nearest path is drawn, and asking
+        # for just that one lets the search stop as soon as it's certain.
+        paths = []
+        if "relationship_chart" in globals():
+            paths = db.get_relationship_paths(home_person, person, max_paths=1)
+
+        # Gramps itself has no in-law answers ("" above), but the path
+        # search does: through a marriage, labelled relative to the spouse
+        # -- so the sentence joins the two, "wife's father".
+        if not relationship and paths and paths[0].get("via"):
+            people = paths[0]["people"]
+            via = next(p for p in people if p["handle"] == paths[0]["via"]["handle"])
+            relationship = f"{via['relationship_string']}'s {people[-1]['relationship_string']}"
+
         if relationship:
             html(f"{escape(name_of(person))} is {escape(name_of(home_person))}'s <b>{escape(relationship)}</b>.")
-            # An older gramps-connect installs Store updates but has no
-            # chart yet: it gets the sentence alone, not an error.
-            if "relationship_chart" in globals():
-                # max_paths=1: only the nearest path is drawn, and asking
-                # for just that one lets the search stop as soon as it's
-                # certain.
-                paths = db.get_relationship_paths(home_person, person, max_paths=1)
-                if paths:
-                    relationship_chart(paths[0])
+            if paths:
+                relationship_chart(paths[0])
         else:
             html(f"No relationship found between {escape(name_of(person))} and {escape(name_of(home_person))}.")

@@ -401,6 +401,19 @@ const bridge = {
           if (!res.ok) throw await bridgeError("get_relationship_paths", res);
           return (await res.json()) as ServerRelationship[];
         },
+        async fetchSpouses(handle) {
+          const url = `${API_BASE}/api/people/${encodeURIComponent(handle)}?extend=family_list&keys=gender,extended`;
+          const res = await authFetch("get_relationship_paths", url);
+          if (!res.ok) throw await bridgeError("get_relationship_paths", res);
+          const person = (await res.json()) as {
+            gender: number;
+            extended?: { families?: { father_handle?: string | null; mother_handle?: string | null }[] };
+          };
+          const spouses = (person.extended?.families ?? [])
+            .map((f) => (f.father_handle === handle ? f.mother_handle : f.father_handle))
+            .filter((h): h is string => !!h);
+          return { gender: person.gender, spouses };
+        },
       },
       { depth, maxPaths: maxPaths > 0 ? maxPaths : undefined },
     );
@@ -882,6 +895,15 @@ class Db:
         for a spouse path ([person1, person2]); "partner" is that spouse as
         a "people"-style entry, None without one. Empty list when
         unrelated within depth. relationship_chart(path) draws one.
+
+        Only when there's no blood relationship and they aren't spouses,
+        in-law paths, through one marriage: each has "via": {"handle": h,
+        "married_to": m}, None otherwise. h is person1's spouse (then
+        her relatives) or person2's spouse (whose relative person1 is),
+        and m the end of the path married to h. Everyone after h in
+        "people" is labelled relative to h, not person1: Lewis, then
+        Luella "wife", then Henry "father" -- her father, so Lewis's
+        "wife's father". Gramps' own calculator has no in-law answers.
 
         Same arguments as get_relationships(), plus max_paths: pass 1 when
         only the nearest path will be shown -- the ancestor walk then stops

@@ -80,7 +80,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
               <SymbolRow
                 symbol="db.get_relationship_paths(person1, person2, max_paths=None)"
                 meaning={t(
-                  "The people connecting the two, nearest path first -- a list of {'people': [{'handle': ..., 'relationship_string': ...}, ...], 'common_ancestors': [handle, ...]}. 'people' runs from person1 up to the common ancestor and down to person2, each labelled with their relationship to person1. Pass max_paths=1 when you only show the nearest: it's much quicker on a deep tree."
+                  "The people connecting the two, nearest path first -- a list of {'people': [{'handle': ..., 'relationship_string': ...}, ...], 'common_ancestors': [handle, ...]}. 'people' runs from person1 up to the common ancestor and down to person2, each labelled with their relationship to person1. Pass max_paths=1 when you only show the nearest: it's much quicker on a deep tree. With no blood relationship, in-laws too, through one marriage: those paths have a 'via' entry, and the people after it are labelled relative to that spouse (her 'father' -- your 'wife's father')."
                 )}
               />
             </Table.Tbody>

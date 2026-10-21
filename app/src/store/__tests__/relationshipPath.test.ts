@@ -45,6 +45,7 @@ function buildPeople(): Map<string, PathPerson> {
   family("f-h", "H", "HW", [["K"]]);
   family("f-c", "C", "CW", [["X", "Adopted"]]);
   family("f-k", "K", "X", []);
+  family("f-hw", "HWF", "HWM", [["HW"]]);
   return people;
 }
 
@@ -59,6 +60,14 @@ function fakeDeps(people: Map<string, PathPerson>) {
     fetchRelationships: async (h1: string, h2: string) => [
       { relationship_string: `rel(${h1},${h2})`, common_ancestors: [] as string[] },
     ],
+    // Spouses: whoever shares one of this person's families as a parent.
+    fetchSpouses: async (handle: string) => {
+      const mine = new Set(people.get(handle)?.family_list ?? []);
+      const spouses = [...people.values()]
+        .filter((p) => p.handle !== handle && (p.family_list ?? []).some((f) => mine.has(f)))
+        .map((p) => p.handle);
+      return { gender: people.get(handle)?.gender ?? 2, spouses };
+    },
   };
 }
 
@@ -167,5 +176,40 @@ describe("getRelationshipPaths", () => {
     // The couple's other spouse, labelled through themselves.
     expect(blood.common_ancestors).toEqual(["GM", "GF"]);
     expect(blood.partner).toEqual({ handle: "GF", relationship_string: "rel-GF", gender: 1 });
+  });
+});
+
+describe("in-law paths", () => {
+  it("go through the first person's spouse: wife, then her father", async () => {
+    const [path, ...rest] = await getRelationshipPaths("H", "HWF", fakeDeps(buildPeople()));
+    expect(rest).toEqual([]);
+    expect(path.people.map((p) => [p.handle, p.relationship_string])).toEqual([
+      ["H", ""],
+      ["HW", "rel(H,HW)"],
+      // Relative to HW, not H: the chart reads it as "wife's father".
+      ["HWF", "rel(HW,HWF)"],
+    ]);
+    expect(path.via).toEqual({ handle: "HW", married_to: "H" });
+    expect(path.common_ancestors).toEqual(["HWF"]);
+  });
+
+  it("go through the last person's spouse: a cousin, then his wife", async () => {
+    const [path] = await getRelationshipPaths("H", "CW", fakeDeps(buildPeople()));
+    expect(path.people.map((p) => p.handle)).toEqual(["H", "A", "GM", "B", "C", "CW"]);
+    expect(path.people[path.people.length - 1].relationship_string).toBe("rel(C,CW)");
+    expect(path.via).toEqual({ handle: "C", married_to: "CW" });
+  });
+
+  it("aren't looked for when there's a blood relationship or a marriage", async () => {
+    const deps = fakeDeps(buildPeople());
+    let asked = 0;
+    const counting = { ...deps, fetchSpouses: async (h: string) => (asked++, deps.fetchSpouses(h)) };
+    expect((await getRelationshipPaths("H", "X", counting))[0].via).toBeNull();
+    expect((await getRelationshipPaths("K", "X", counting))[0].via).toBeNull();
+    expect(asked).toBe(0);
+  });
+
+  it("still find nothing for people with no connection at all", async () => {
+    expect(await getRelationshipPaths("AF", "CW", fakeDeps(buildPeople()))).toEqual([]);
   });
 });
