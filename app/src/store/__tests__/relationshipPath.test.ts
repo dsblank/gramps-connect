@@ -33,7 +33,9 @@ function buildPeople(): Map<string, PathPerson> {
       child_ref_list: children.map(([ref, rel = "Birth"]) => ({ ref, frel: rel, mrel: "Birth" })),
     };
     person(father).family_list!.push(handle);
+    person(father).gender = 1;
     person(mother).family_list!.push(handle);
+    person(mother).gender = 0;
     for (const [ref] of children) person(ref).extended = { primary_parent_family: fam };
   };
   family("f-g", "GF", "GM", [["A"], ["B"]]);
@@ -149,9 +151,10 @@ describe("getRelationshipPaths", () => {
     };
     const [spouse, blood] = await getRelationshipPaths("K", "X", deps);
     expect(spouse.people).toEqual([
-      { handle: "K", relationship_string: "" },
-      { handle: "X", relationship_string: "wife" },
+      { handle: "K", relationship_string: "", gender: 1 },
+      { handle: "X", relationship_string: "wife", gender: 0 },
     ]);
+    expect(spouse.partner).toBeNull();
     expect(blood.people.map((p) => p.relationship_string)).toEqual([
       "",
       "rel-H",
@@ -161,5 +164,8 @@ describe("getRelationshipPaths", () => {
       "rel-C",
       "second cousin",
     ]);
+    // The couple's other spouse, labelled through themselves.
+    expect(blood.common_ancestors).toEqual(["GM", "GF"]);
+    expect(blood.partner).toEqual({ handle: "GF", relationship_string: "rel-GF", gender: 1 });
   });
 });

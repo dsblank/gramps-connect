@@ -383,7 +383,7 @@ const bridge = {
           for (let i = 0; i < handles.length; i += 100) chunks.push(handles.slice(i, i + 100));
           const pages = await Promise.all(
             chunks.map(async (chunk) => {
-              const query = `handles=${chunk.map(encodeURIComponent).join(",")}&extend=primary_parent_family&keys=handle,family_list,extended`;
+              const query = `handles=${chunk.map(encodeURIComponent).join(",")}&extend=primary_parent_family&keys=handle,gender,family_list,extended`;
               const res = await authFetch("get_relationship_paths", `${API_BASE}/api/people/?${query}`);
               if (!res.ok) throw await bridgeError("get_relationship_paths", res);
               return (await res.json()) as PathPerson[];
@@ -866,14 +866,16 @@ class Db:
     async def get_relationship_paths(self, person1, person2, depth=15, max_paths=None):
         """The people connecting two people, not just the wording: a list
         of paths, nearest first, each {"people": [{"handle": ...,
-        "relationship_string": ...}, ...], "common_ancestors": [handle,
-        ...]}. "people" runs from person1 to person2 inclusive, up to
+        "relationship_string": ..., "gender": ...}, ...],
+        "common_ancestors": [handle, ...], "partner": {...} or None}.
+        "people" runs from person1 to person2 inclusive, up to
         common_ancestors[0] and back down; each relationship_string is that
         person's relationship *to person1*, in Gramps' own words ("" for
         person1). common_ancestors is the ancestor the path goes through,
         plus their spouse when the two are an ancestor couple, and empty
-        for a spouse path ([person1, person2]). Empty list when unrelated
-        within depth.
+        for a spouse path ([person1, person2]); "partner" is that spouse as
+        a "people"-style entry, None without one. Empty list when
+        unrelated within depth. relationship_chart(path) draws one.
 
         Same arguments as get_relationships(), plus max_paths: pass 1 when
         only the nearest path will be shown -- the ancestor walk then stops
@@ -1235,6 +1237,33 @@ def html(markup):
     _flush_print()
     _flush_table()
     _gramplet_sink_stack[-1].append({"type": "html", "markup": str(markup)})
+
+def relationship_chart(path, start_label=None):
+    """Draws one path from db.get_relationship_paths() as the app's own
+    relationship chart: the common ancestor (or ancestor couple) on top,
+    path["people"][0]'s line down the left, the last person's down the
+    right, one row per generation. Each card shows that person's name and
+    years (from the app, in the user's display settings) and their
+    relationship_string; start_label names the first person, who has none
+    ("Home person", in the user's language, when left out).
+
+    The path is plain data, so it can be changed first: relabel someone
+    (person["relationship_string"] = "..."), or build one by hand in the
+    same shape. Clicking a card offers the same choices as a person in a
+    row() table."""
+    import json as _json
+    if not isinstance(path, dict) or not isinstance(path.get("people"), list) or not path["people"]:
+        raise TypeError("relationship_chart() takes one path from db.get_relationship_paths()")
+    _flush_print()
+    _flush_table()
+    # Round-tripped through JSON so a DataDict or other dict subclass in
+    # it arrives as plain data, and a value JSON can't carry fails here
+    # with a Python error rather than later in the worker.
+    _gramplet_sink_stack[-1].append({
+        "type": "relationship-chart",
+        "path": _json.loads(_json.dumps(path)),
+        "startLabel": None if start_label is None else str(start_label),
+    })
 
 def _matplotlib_figure_from(obj):
     # Never imports matplotlib itself -- only recognizes it if the

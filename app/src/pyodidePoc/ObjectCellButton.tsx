@@ -13,6 +13,7 @@
 // built-in outside-click/focus handling is a better fit for "click a
 // target, get a short list of actions" than reimplementing that by hand.
 import { Menu, Text } from "@mantine/core";
+import type { ReactElement } from "react";
 import { formatHash, isSubjectKey, type VisualKey } from "../hash";
 import { t } from "../i18n/i18n";
 import type { ObjectCell } from "./types";
@@ -27,7 +28,41 @@ const VISUAL_APPLICABLE: Record<string, VisualKey[]> = {
 };
 
 export function ObjectCellButton({ cell }: { cell: ObjectCell }) {
-  const visuals = isSubjectKey(cell.objectType) ? VISUAL_APPLICABLE[cell.objectType] ?? [] : [];
+  return (
+    <ObjectMenu objectType={cell.objectType} handle={cell.handle} label={cell.text}>
+      <Text
+        component="button"
+        size="sm"
+        style={{
+          cursor: "pointer",
+          background: "none",
+          border: "none",
+          padding: 0,
+          textAlign: "left",
+          color: "var(--mantine-color-blue-6)",
+        }}
+      >
+        {cell.text}
+      </Text>
+    </ObjectMenu>
+  );
+}
+
+/** The same menu around any clickable target -- RelationshipChart.tsx's
+ * person cards use it, so a person there offers what one in a table does.
+ * `children` must accept a ref (Mantine's Menu.Target requirement). */
+export function ObjectMenu({
+  objectType,
+  handle,
+  label,
+  children,
+}: {
+  objectType: string;
+  handle: string;
+  label: string;
+  children: ReactElement;
+}) {
+  const visuals = isSubjectKey(objectType) ? VISUAL_APPLICABLE[objectType] ?? [] : [];
 
   // Called per-render (not hoisted to module scope) so a language switch
   // -- i18n.ts's t() reads current state, not a snapshot -- is reflected
@@ -59,32 +94,17 @@ export function ObjectCellButton({ cell }: { cell: ObjectCell }) {
 
   return (
     <Menu position="bottom-start" withArrow shadow="md">
-      <Menu.Target>
-        <Text
-          component="button"
-          size="sm"
-          style={{
-            cursor: "pointer",
-            background: "none",
-            border: "none",
-            padding: 0,
-            textAlign: "left",
-            color: "var(--mantine-color-blue-6)",
-          }}
-        >
-          {cell.text}
-        </Text>
-      </Menu.Target>
+      <Menu.Target>{children}</Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>{cell.text}</Menu.Label>
-        <Menu.Item component="a" href={formatHash({ viewKey: cell.objectType, handle: cell.handle })}>
-          {openLabels[cell.objectType] ?? t("Open")}
+        <Menu.Label>{label}</Menu.Label>
+        <Menu.Item component="a" href={formatHash({ viewKey: objectType, handle })}>
+          {openLabels[objectType] ?? t("Open")}
         </Menu.Item>
         {visuals.map((visual) => (
           <Menu.Item
             key={visual}
             component="a"
-            href={formatHash({ viewKey: visual, subject: { type: cell.objectType, handle: cell.handle } })}
+            href={formatHash({ viewKey: visual, subject: { type: objectType, handle } })}
           >
             {visualItemLabels[visual]}
           </Menu.Item>

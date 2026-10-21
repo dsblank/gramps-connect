@@ -191,6 +191,12 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                   "Shows raw HTML/SVG instead of a table -- a hand-built SVG string, or a chart library's own render() output. Reaches the page exactly as given, scripts and event handlers included (e.g. pygal's own hover tooltips) -- Gramplet code runs with the same trust as your own account."
                 )}
               />
+              <SymbolRow
+                symbol="relationship_chart(path, start_label=None)"
+                meaning={t(
+                  "Draws one path from db.get_relationship_paths() as a chart: the common ancestor on top, one line of people down each side, one row per generation. Names and dates come from the app; each card's label is that person's relationship_string, so change those first to relabel anyone. start_label names the first person (\"Home person\" if left out)."
+                )}
+              />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">

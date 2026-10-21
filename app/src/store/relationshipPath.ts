@@ -33,6 +33,7 @@ export interface PathFamily {
  * main parent family Gramps' own calculator follows. */
 export interface PathPerson {
   handle: string;
+  gender?: number;
   family_list?: string[];
   extended?: { primary_parent_family?: PathFamily | null };
 }
@@ -54,6 +55,8 @@ export interface PathNode {
   /** This person's relationship to the path's first person ("" for that
    * person themselves). */
   relationship_string: string;
+  /** Gramps' Person.gender: 0 female, 1 male, 2 unknown, 3 other. */
+  gender: number;
 }
 
 export interface RelationshipPath {
@@ -63,6 +66,10 @@ export interface RelationshipPath {
   /** The ancestor the path goes through, then their spouse when both are
    * common ancestors through the same family. Empty for spouses. */
   common_ancestors: string[];
+  /** That spouse (common_ancestors[1]), labelled like the people on the
+   * path -- they aren't one of them, but a chart draws them beside
+   * common_ancestors[0]. Null when there's a single common ancestor. */
+  partner: PathNode | null;
 }
 
 interface AncestorMap {
@@ -188,6 +195,8 @@ function chainTo(map: AncestorMap, anc: string): string[] {
 
 interface FoundPath {
   handles: string[];
+  /** Gender of every person in `handles` and `commonAncestors`. */
+  genders: Map<string, number>;
   commonAncestors: string[];
   /** Index in `handles` of commonAncestors[0]. */
   top: number;
@@ -202,7 +211,7 @@ export async function findRelationshipChains(
   deps: Pick<RelationshipPathDeps, "fetchPeople">,
   { depth = 15, maxPaths }: { depth?: number; maxPaths?: number } = {},
 ): Promise<FoundPath[]> {
-  if (handle1 === handle2) return [{ handles: [handle1], commonAncestors: [], top: 0 }];
+  if (handle1 === handle2) return [{ handles: [handle1], genders: new Map(), commonAncestors: [], top: 0 }];
   const people = new Map<string, PathPerson>();
   const load = async (handles: string[]) => {
     const missing = [...new Set(handles)].filter((h) => !people.has(h));
@@ -215,10 +224,12 @@ export async function findRelationshipChains(
   if (!p1 || !p2) return [];
 
   const found: FoundPath[] = [];
+  // Everyone a path can name was loaded by the walk itself.
+  const gendersOf = (handles: string[]) => new Map(handles.map((h) => [h, people.get(h)?.gender ?? 2]));
   // Gramps' own calculator reports a spouse before any blood relation.
   const shared = new Set(p1.family_list ?? []);
   if ((p2.family_list ?? []).some((f) => shared.has(f))) {
-    found.push({ handles: [handle1, handle2], commonAncestors: [], top: 0 });
+    found.push({ handles: [handle1, handle2], genders: gendersOf([handle1, handle2]), commonAncestors: [], top: 0 });
     if (maxPaths === 1) return found;
   }
 
@@ -259,9 +270,11 @@ export async function findRelationshipChains(
     if (partner) covered.add(partner);
     const up = chainTo(a, anc); // [handle1, ..., anc]
     const down = chainTo(b, anc).reverse().slice(1); // [..., handle2], below anc
+    const commonAncestors = partner ? [anc, partner] : [anc];
     found.push({
       handles: [...up, ...down],
-      commonAncestors: partner ? [anc, partner] : [anc],
+      genders: gendersOf([...up, ...down, ...commonAncestors]),
+      commonAncestors,
       top: up.length - 1,
     });
   }
@@ -302,15 +315,28 @@ export async function getRelationshipPaths(
     return p;
   };
   return Promise.all(
-    chains.map(async (chain) => ({
-      common_ancestors: chain.commonAncestors,
-      people: await Promise.all(
-        chain.handles.map(async (h, i) => {
-          if (i === 0) return { handle: h, relationship_string: "" };
-          const via = chain.commonAncestors.length === 0 ? null : i <= chain.top ? h : chain.commonAncestors[0];
-          return { handle: h, relationship_string: pickLabel(await entriesFor(h), via) };
-        }),
-      ),
-    })),
+    chains.map(async (chain) => {
+      const gender = (h: string) => chain.genders.get(h) ?? 2;
+      // An ancestor's own relationship goes through themselves -- which
+      // covers the couple's other spouse too.
+      const partnerHandle = chain.commonAncestors[1];
+      return {
+        common_ancestors: chain.commonAncestors,
+        partner: partnerHandle
+          ? {
+              handle: partnerHandle,
+              relationship_string: pickLabel(await entriesFor(partnerHandle), partnerHandle),
+              gender: gender(partnerHandle),
+            }
+          : null,
+        people: await Promise.all(
+          chain.handles.map(async (h, i) => {
+            if (i === 0) return { handle: h, relationship_string: "", gender: gender(h) };
+            const via = chain.commonAncestors.length === 0 ? null : i <= chain.top ? h : chain.commonAncestors[0];
+            return { handle: h, relationship_string: pickLabel(await entriesFor(h), via), gender: gender(h) };
+          }),
+        ),
+      };
+    }),
   );
 }

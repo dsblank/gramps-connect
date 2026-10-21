@@ -15,7 +15,7 @@
 // resolve CSS custom properties the same way gramps-web's own
 // `var(--grampsjs-body-font-color-70)` usage does, so light/dark just works
 // with no re-render needed on theme toggle. The gender accent is the
-// exception: it's a *validated* categorical pair (see GENDER_FILL below),
+// exception: it's a *validated* categorical pair (see genderColors.ts's GENDER_FILL),
 // not a Mantine token, so it's computed per mode in JS the way
 // eventCategories.ts's own dotStyle()/FILL are -- that needs a `dark` flag
 // threaded in from the caller and a re-render on toggle.
@@ -34,6 +34,7 @@ import { zoom, zoomIdentity, type ZoomTransform } from "d3-zoom";
 import { personThumbnailUrl, type TreeNode } from "../store/treeData";
 import { retryApiImageOnError } from "../store/apiImage";
 import { lifeEventDate } from "../store/lifeEventDates";
+import { GENDER_LABEL, genderAccent } from "./genderColors";
 
 const BOX_WIDTH = 190;
 const BOX_HEIGHT = 90;
@@ -59,30 +60,6 @@ const IMG_CORNER = 6;
  * (IMG_SIZE) the way gramps-web's own `getImageUrl(person, 100)` is, so it
  * stays crisp on a high-DPI screen or once zoomed in. */
 const IMG_FETCH_SIZE = 100;
-
-/** Slots 1 (blue) and 5 (magenta) of the validated categorical palette
- * (dataviz skill's references/palette.md), not slots 1+2 in fixed order --
- * blue/pink for male/female is a domain convention as strong as gramps-web's
- * own genderColor (and this screenshot's own reference), and the pair
- * passes every check `node scripts/validate_palette.js "#2a78d6,#e87ba4"
- * --mode light --pairs all` (and the dark equivalent) other than light
- * mode's contrast floor (magenta 2.62:1, WARN-band) -- relief for that is
- * the gender word folded into each box's <title> tooltip below, since nothing
- * here depends on the accent bar alone to say who's who. Unknown/other
- * (Gramps gender 2/3) get no accent at all, the same call
- * eventCategories.ts makes for its own "Other" category: a chromatic-enough
- * grey collides under CVD sim, and a bar with no identity to encode
- * shouldn't invent a third color to hold that place. */
-const GENDER_FILL: Record<0 | 1, { light: string; dark: string }> = {
-  0: { light: "#e87ba4", dark: "#d55181" },
-  1: { light: "#2a78d6", dark: "#3987e5" },
-};
-const GENDER_LABEL: Record<number, string> = { 0: "female", 1: "male", 2: "unknown gender", 3: "other gender" };
-
-function genderAccent(gender: number | undefined, dark: boolean): string | null {
-  if (gender !== 0 && gender !== 1) return null;
-  return GENDER_FILL[gender][dark ? "dark" : "light"];
-}
 
 /** Depth of the built tree, over *every* child (not just the first two the
  * way gramps-web's own countDepthOfTree does -- harmless for the ancestor

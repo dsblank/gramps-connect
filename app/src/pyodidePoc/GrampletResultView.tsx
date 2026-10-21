@@ -12,6 +12,7 @@ import { Alert, Code, Table, Text } from "@mantine/core";
 import { t } from "../i18n/i18n";
 import { ChangeSummary } from "./ChangeSummary";
 import { ObjectCellButton } from "./ObjectCellButton";
+import { RelationshipChart } from "./RelationshipChart";
 import "./stWidgets.css";
 import type { GrampletBlock, GrampletOutputResponse, TableCell } from "./types";
 
@@ -363,6 +364,9 @@ function BlockOutput({
   interactive: boolean;
   onWidgetEvent?: (key: string, value: unknown) => void;
 }) {
+  if (block.type === "relationship-chart") {
+    return <RelationshipChart path={block.path} startLabel={block.startLabel} interactive={interactive} />;
+  }
   if (block.type === "html") {
     return <HtmlOutput markup={block.markup} interactive={interactive} onWidgetEvent={onWidgetEvent} />;
   }

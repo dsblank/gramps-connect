@@ -55,7 +55,7 @@ const CORNER_RADIUS = 2;
  * JS (its `GEN_COLORS`/`DEATH_COLORS` constants), not this app's usual
  * dataviz-skill-validated palette -- this feature's whole point is to steal
  * the reference site's own look, so these are a deliberate exception to
- * that validator the same way treeChart.ts's own GENDER_FILL already is
+ * that validator the same way genderColors.ts's GENDER_FILL already is
  * (a hand-picked domain pair, not a generated categorical slot). Each
  * GEN_COLORS entry is [fill, stroke] -- generation 1 is root/self, 1-indexed
  * to match the source; depths past 12 wrap rather than resetting to slot 1
