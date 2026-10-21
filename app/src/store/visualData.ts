@@ -23,6 +23,7 @@ import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
 import { loadDisplaySettings } from "./displaySettings";
 import { GEOJSON_MIME } from "./mapFileMime";
 import { parseCoordinate } from "./placeCoords";
+import { getI18nSnapshot } from "../i18n/i18n";
 
 /** A cached Place that has usable coordinates. */
 export interface MapPlace {
@@ -353,15 +354,18 @@ export function readVisualData(): VisualData {
 }
 
 /** Place.lat/long are free-text columns in Gramps, so an unset one is ""
- * rather than null, DMS text like `42° 41′ 55″ N` is as valid as decimal
- * (see placeCoords.ts), and 0/0 is the conventional "not really located"
- * value gramps-web also discards (see its _hasCoords). Out-of-range
- * values are dropped too: maplibre would otherwise wrap or clamp them
- * into a marker at a plausible-looking but wrong spot. */
-export function parseCoords(latText: string | null, longText: string | null): [number, number] | null {
+ * rather than null, DMS text like `42° 41′ 55″ N` (or, in Russian,
+ * `42° 41′ 55″ С`) is as valid as decimal (see placeCoords.ts), and 0/0
+ * is the conventional "not really located" value gramps-web also discards
+ * (see its _hasCoords). Out-of-range values are dropped too: maplibre
+ * would otherwise wrap or clamp them into a marker at a plausible-looking
+ * but wrong spot. */
+export function parseCoords(
+  latText: string | null, longText: string | null, lang = getI18nSnapshot().lang,
+): [number, number] | null {
   if (!latText || !longText) return null;
-  const lat = parseCoordinate(latText, "lat");
-  const long = parseCoordinate(longText, "long");
+  const lat = parseCoordinate(latText, "lat", lang);
+  const long = parseCoordinate(longText, "long", lang);
   if (lat == null || long == null) return null;
   if (lat === 0 && long === 0) return null;
   if (Math.abs(lat) > 90 || Math.abs(long) > 180) return null;

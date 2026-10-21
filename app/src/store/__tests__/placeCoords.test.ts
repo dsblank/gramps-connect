@@ -1,65 +1,95 @@
 import { describe, expect, it } from "vitest";
-import { parseCoordinate } from "../placeCoords";
+import { coordinateLetters, parseCoordinate } from "../placeCoords";
+import { COORDINATE_LETTERS } from "../coordinateLetters";
 import { parseCoords } from "../visualData";
+import fixture from "./placeCoords.fixture.json";
 
-// Expected values come from Gramps desktop's own
-// conv_lat_lon(lat, long, "D.D8") (gramps/gen/utils/place.py).
-const MATCHES_GRAMPS: [string, "lat" | "long", number][] = [
-  ["42° 41′ 55″ N", "lat", 42.69861111],
-  ["2° 53′ 44″ E", "long", 2.89555556],
-  ["42°41′55″N", "lat", 42.69861111],
-  ["42.6986", "lat", 42.6986],
-  ["-33.8688", "lat", -33.8688],
-  ["33°52'7.68\"S", "lat", -33.8688],
-  ["151°12'33.48\"E", "long", 151.2093],
-  ["N50º52'21.92\"", "lat", 50.87275556],
-  ["E14º52'21.92\"", "long", 14.87275556],
-  ["N50º52.3456'", "lat", 50.87242667],
-  ["W14º52.9876'", "long", -14.88312667],
-  ["124°52'21.92''W", "long", -124.87275556],
-  ["-50:52:21.92", "lat", -50.87275556],
-  ["+50:52", "lat", 50.86666667],
-  ["-0:30", "long", -0.5],
-  ["12.5N", "lat", 12.5],
-  ["3.25W", "long", -3.25],
-  ["S12.5", "lat", -12.5],
-  ["-12.5N", "lat", -12.5],
-  ["1e1", "lat", 10],
-  ["50°N", "lat", 50],
-  ["2°5'W", "long", -2.08333333],
-];
+// Gramps desktop's own conv_lat_lon(lat, long, "D.D8") over every
+// spelling x direction letter x language, written by
+// scripts/gen-coordinate-letters.py -- rerun it after a Gramps
+// translation update to refresh both this and coordinateLetters.ts.
+const CASES = fixture as [string, "lat" | "long", string, number | null][];
+
+describe("parseCoordinate matches Gramps", () => {
+  const byLang = new Map<string, typeof CASES>();
+  for (const c of CASES) {
+    if (!byLang.has(c[0])) byLang.set(c[0], []);
+    byLang.get(c[0])!.push(c);
+  }
+
+  it("covers every language with letters of its own", () => {
+    for (const lang of Object.keys(COORDINATE_LETTERS)) expect(byLang.has(lang)).toBe(true);
+  });
+
+  // One test per language rather than per case: thousands of tiny tests
+  // would bury a real failure, and the message names the input anyway.
+  it.each([...byLang.keys()])("in %s", (lang) => {
+    const wrong = byLang.get(lang)!
+      .map(([, kind, text, expected]) => ({ kind, text, expected, got: parseCoordinate(text, kind, lang) }))
+      .filter(({ expected, got }) =>
+        expected == null || got == null ? expected !== got : Math.abs(expected - got) > 1e-7);
+    expect(wrong).toEqual([]);
+  });
+});
 
 describe("parseCoordinate", () => {
-  it.each(MATCHES_GRAMPS)("parses %s (%s) as Gramps does", (text, kind, expected) => {
-    expect(parseCoordinate(text, kind)).toBeCloseTo(expected, 7);
+  it("defaults to English letters", () => {
+    expect(parseCoordinate("2°53'44\"W", "long")).toBeCloseTo(-2.89555556, 7);
+    expect(parseCoordinate("2°53'44\"O", "long")).toBeNull();
   });
 
-  it.each([
-    ["-12.5S", "lat"],
-    ["50°60'0\"N", "lat"],
-    ["50°52.5'30\"N", "lat"],
-    ["abc", "lat"],
-    ["42° 41′ 55″ E", "lat"],
-    ["2° 53′ 44″ N", "long"],
-  ] as [string, "lat" | "long"][])("rejects %s (%s) as Gramps does", (text, kind) => {
-    expect(parseCoordinate(text, kind)).toBeNull();
+  it("reads O as west in French and east in German", () => {
+    expect(parseCoordinate("2°53'44\"O", "long", "fr")).toBeCloseTo(-2.89555556, 7);
+    expect(parseCoordinate("2°53'44\"O", "long", "de")).toBeCloseTo(2.89555556, 7);
   });
 
-  it("takes O (ouest/oeste/ovest) as west on a longitude", () => {
-    expect(parseCoordinate("2°53'44\"O", "long")).toBeCloseTo(-2.89555556, 7);
+  it("keeps English letters working in any language", () => {
+    expect(parseCoordinate("2°53'44\"W", "long", "de")).toBeCloseTo(-2.89555556, 7);
+    expect(parseCoordinate("42°41'55\"S", "lat", "ru")).toBeCloseTo(-42.69861111, 7);
+  });
+
+  it("parses multi-character letters (Ukrainian, Chinese)", () => {
+    expect(parseCoordinate("42°41'55\"Пд", "lat", "uk")).toBeCloseTo(-42.69861111, 7);
+    expect(parseCoordinate("西经 2.8956", "long", "zh_CN")).toBeCloseTo(-2.8956, 7);
+  });
+
+  it("doesn't break Tamil latitudes on its empty south letter", () => {
+    // Gramps' str.replace("", "S") would make this "S4S2S.S6S9S8S6S".
+    expect(parseCoordinate("42.6986", "lat", "ta")).toBeCloseTo(42.6986, 7);
+  });
+});
+
+describe("coordinateLetters", () => {
+  it("falls back from a region to its base language", () => {
+    expect(coordinateLetters("fr_CA")).toEqual(COORDINATE_LETTERS.fr);
+  });
+
+  it("falls back to English for a language without letters", () => {
+    expect(coordinateLetters("nb")).toEqual({ N: "N", S: "S", E: "E", W: "W" });
+  });
+
+  it("drops a table that reuses an English letter for another direction", () => {
+    // Czech "S" (sever) is north, so Gramps keeps English for Czech.
+    expect(COORDINATE_LETTERS.cs.N).toBe("S");
+    expect(coordinateLetters("cs")).toEqual({ N: "N", S: "S", E: "E", W: "W" });
   });
 });
 
 describe("parseCoords", () => {
   it("places DMS text where Gramps does, not at its whole degrees", () => {
-    const [lat, long] = parseCoords("42° 41′ 55″ N", "2° 53′ 44″ E")!;
+    const [lat, long] = parseCoords("42° 41′ 55″ N", "2° 53′ 44″ E", "en")!;
     expect(lat).toBeCloseTo(42.69861111, 7);
     expect(long).toBeCloseTo(2.89555556, 7);
   });
 
   it("keeps a southern/western DMS sign", () => {
-    const [lat, long] = parseCoords("33°52'7.68\"S", "70°40'0\"W")!;
+    const [lat, long] = parseCoords("33°52'7.68\"S", "70°40'0\"W", "en")!;
     expect(lat).toBeLessThan(0);
+    expect(long).toBeLessThan(0);
+  });
+
+  it("uses the given interface language's letters", () => {
+    const [, long] = parseCoords("42°41'55\"N", "2°53'44\"O", "fr")!;
     expect(long).toBeLessThan(0);
   });
 });

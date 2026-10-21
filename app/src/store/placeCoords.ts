@@ -1,3 +1,5 @@
+import { COORDINATE_LETTERS } from "./coordinateLetters";
+
 /** Parses one Place.lat or Place.long string the way Gramps desktop's own
  * conv_lat_lon (gramps/gen/utils/place.py) does, so a place typed there as
  * `42° 41′ 55″ N` lands where Gramps puts it rather than at a plain
@@ -10,16 +12,43 @@
  *                    for seconds, decimal minutes allowed without seconds
  *   42.6986N         decimal with a trailing (or leading) direction
  *
- * Gramps also accepts its UI language's own direction letters; only
- * "O" (ouest/oeste/ovest) is taken here beyond N/S/E/W, since the locale
- * that typed the value isn't known and it's the one that can't be confused
- * with another direction. Returns null for anything unparseable. */
-export function parseCoordinate(text: string, kind: "lat" | "long"): number | null {
-  let value = text.trim();
-  if (kind === "long") value = value.replace(/O/g, "W");
+ * Like Gramps, a value with no English direction letter may use `lang`'s
+ * own instead (coordinateLetters.ts): "O" is west in French but east in
+ * German, so the letters only mean anything in one language at a time.
+ * Unlike Gramps, a space after a leading S or W (`S 42.6986`) is fine, as
+ * it already is there after N or E. Returns null for anything unparseable. */
+export function parseCoordinate(text: string, kind: "lat" | "long", lang = "en"): number | null {
+  let value = localToEnglish(text, kind, lang).trim();
   // A leading direction letter (N50°52'...) moves to the end.
   if (value.length > 1 && /^\p{L}/u.test(value)) value = value.slice(1) + value[0];
   return asFloat(value) ?? fromColon(value) ?? fromClassic(value, kind) ?? fromSuffixed(value, kind);
+}
+
+const ENGLISH = { N: "N", S: "S", E: "E", W: "W" };
+
+/** `lang`'s letter table, falling back from "de_AT" to "de" and finally
+ * to English. As in Gramps, a table that reuses an English letter for a
+ * different direction (Czech "S" for north) is dropped as ambiguous. */
+export function coordinateLetters(lang: string): typeof ENGLISH {
+  const table = COORDINATE_LETTERS[lang] ?? COORDINATE_LETTERS[lang.split("_")[0]];
+  if (!table) return ENGLISH;
+  if (table.S === "N" || table.N === "S" || table.W === "E" || table.E === "W") return ENGLISH;
+  return table;
+}
+
+function localToEnglish(text: string, kind: "lat" | "long", lang: string): string {
+  const letters = coordinateLetters(lang);
+  // North then south, west then east -- Gramps' own order, which matters
+  // when one language's letter is part of another's.
+  const order: ("N" | "S" | "E" | "W")[] = kind === "lat" ? ["N", "S"] : ["W", "E"];
+  if (order.some((d) => text.includes(d))) return text;
+  let value = text;
+  for (const d of order) {
+    // Skipping an empty letter (Tamil's south) fixes a Gramps bug: its
+    // str.replace("", "S") puts an "S" between every character.
+    if (letters[d]) value = value.split(letters[d]).join(d);
+  }
+  return value;
 }
 
 const FLOAT = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
