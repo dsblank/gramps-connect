@@ -20,6 +20,9 @@ jobs:
     steps:
       - name: Check out gramps-connect
         uses: actions/checkout@v7
+        with:
+          # packages/story is a submodule (gramps-connect-stories).
+          submodules: true
 
       # Before npm ci: needs only git. Catches what this Linux runner
       # otherwise can't -- paths that collide on macOS/Windows and break
@@ -45,6 +48,12 @@ jobs:
       - name: Test packages/gramps-date
         working-directory: packages/gramps-date
         run: npm run test
+
+      - name: Test packages/story
+        run: npm run test -w packages/story
+
+      - name: Typecheck packages/story
+        run: npm run typecheck -w packages/story
 
       - name: Build app/
         run: npm run build -w app

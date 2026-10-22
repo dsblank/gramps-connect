@@ -1,0 +1,3 @@
+[submodule "packages/story"]
+	path = packages/story
+	url = https://github.com/dsblank/gramps-connect-stories.git

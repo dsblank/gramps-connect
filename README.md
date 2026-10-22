@@ -327,9 +327,16 @@ Two mechanisms make `app/` possible:
   `app/` (and anything else that needs to render/build a Gramps `Date`
   struct without a slow per-object round trip through Gramps' own Python
   date displayer). See its own README for scope and provenance.
+- **`packages/story/`** — a git submodule of
+  [gramps-connect-stories](https://github.com/dsblank/gramps-connect-stories):
+  the portable `.story.zip` format for stories (spec, JSON Schema,
+  examples) and the `@gramps-connect/story` package that reads, writes
+  and validates it. Changes to it are committed in that repo, then picked
+  up here by committing the updated submodule pointer.
 
-A root-level npm workspace (`packages/*`, `app`) ties `app/` and
-`packages/gramps-date` together as real workspace dependencies. The
+A root-level npm workspace (`packages/*`, `app`) ties `app/`,
+`packages/gramps-date` and `packages/story` together as real workspace
+dependencies. The
 fast `/query/` endpoints `app/` depends on live in `gramps-web-api`
 itself (a separate repo, extended in place, backward compatible) via
 [gramps-object-query-language](https://github.com/dsblank/gramps-object-query-language),
@@ -338,7 +345,9 @@ not in this repo.
 ### Getting started
 
 ```sh
-npm install                 # installs the workspace (app/ + packages/gramps-date)
+git clone --recurse-submodules https://github.com/dsblank/gramps-connect.git
+# (in an existing clone: git submodule update --init)
+npm install                 # installs the workspace (app/ + packages/*)
 cp app/.env.example app/.env.local   # points at a running gramps-web-api instance
 npm run dev -w app          # starts the Vite dev server
 ```
@@ -470,6 +479,7 @@ deployment-specific gotchas.
 npm run test -w app         # Vitest: pure store/sync logic, not full-app rendering
 npm run typecheck -w app    # tsc --noEmit
 npm run test -w packages/gramps-date
+npm run test -w packages/story
 ```
 
 ### Translations
