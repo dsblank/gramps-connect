@@ -6,7 +6,9 @@ repo has the 1.0 spec, JSON Schema, examples and the package core
 (`readStoryZip`, `writeStoryZip`, `validate`, `upgradeStory`,
 `optimizeImage`, `mediaBlob`), and is the `packages/story` submodule here,
 with CI checking it out and testing it. **Phase 2 done** the same day:
-Download on a story, with the privacy dialog (see Phase 2's notes). Decisions are under [Settled decisions](#settled-decisions);
+Download on a story, with the privacy dialog (see Phase 2's notes).
+**Phase 3 done** the same day too: Present runs on the package's
+`StoryPlayer` (see Phase 3's notes). Phase 4 is next. Decisions are under [Settled decisions](#settled-decisions);
 what's still open is under [Open questions](#open-questions).
 
 ## Goal
@@ -33,6 +35,9 @@ The aim is to separate the **story** from the **database and the code**:
    presentation for free.
 
 ## Settled decisions
+
+- **`format` identifier: `gramps-connect-story`** (settled 2026-10-22),
+  matching the repo and package names. Permanent now that Download ships.
 
 - **One zip file, always.** `story.json` plus a `media/` folder, in a
   single `.story.zip`. No bare-JSON variant: one packaging means one
@@ -494,6 +499,37 @@ Done 2026-10-22. Notes from building it:
 
 ### Phase 3: Shared player, dogfooded in the app
 
+Done 2026-10-22. Notes from building it:
+
+- `@gramps-connect/story/player` exports `StoryPlayer` plus its pure
+  parts (text markup, EDTF year ranges and timeline positions, geometry
+  bounds, timeline layout, basemap styles), each tested in Node; the
+  component itself is tested in headless Chrome against every example
+  story, read through `writeStoryZip` → `readStoryZip` → blob URLs
+  (`scripts/test-player.mjs`).
+- In the app: hydration now resolves each slide's map files (shapes and
+  overlays) and its EDTF date; `store/storyDoc.ts` converts a hydrated
+  story to a story document, used both by Present (`presentationDoc`,
+  unfiltered, media srcs `photo/<handle>`/`overlay/<handle>` that
+  `StoryView.tsx` resolves to authed blob URLs) and by Download
+  (`slideToDoc`, after filtering). `StoryView.tsx` is now just the host.
+- The app's map view imports the basemap code (styles, crossfade, OHM
+  year filter) back from the package, so there's one copy.
+- **A host must call `maplibregl.setWorkerUrl()`** where its bundler
+  serves maplibre's worker (`maplibre-gl-worker.mjs` + `-shared.mjs`,
+  side by side) or the map draws nothing; found when the old
+  `StoryMapBackground` (which did this at import) was deleted. The
+  Phase 4 site has to serve those two files too.
+- Behavior changes: line breaks and blank-line paragraphs in slide text
+  now show (the spec always said so; the old renderer collapsed them).
+  A story is hydrated when Present opens rather than whenever its panel
+  is shown, so there's a brief spinner. Overlay era gating uses EDTF, so
+  a place-name date in a non-Gregorian calendar no longer hides an
+  overlay (no EDTF, so always shown).
+- Deferred: the player's translation table (it has English defaults and
+  a `strings` prop the app fills with `t()`; Phase 4's site needs the
+  table), and showing more than one photo per slide (it shows the first).
+
 - Move and generalize the presentation components into
   `@gramps-connect/story/player`; `StoryView.tsx` becomes
   hydrate → convert → `<StoryPlayer>`.
@@ -534,11 +570,7 @@ Done 2026-10-22. Notes from building it:
 
 ## Open questions
 
-1. **`format` identifier.** Built as `gramps-connect-story`, matching
-   the repo and package names. A more neutral one (e.g. `family-story`)
-   might read better to other programs. Still cheap to change until
-   Phase 2 ships Download; permanent once files exist.
-2. **Living people, finer control.** One switch for now. The server's
+1. **Living people, finer control.** One switch for now. The server's
    exporters also offer "replace names with Living" and a years-after-
    death setting (`ExportDialog.tsx`); worth adding only if someone
    asks.

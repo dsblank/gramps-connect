@@ -132,7 +132,7 @@ function fetchKmlFeatures(handle: string): Promise<Feature[]> {
  * position-guessing below want them treated as one shape. Excludes
  * GroundOverlay placemarks (see fetchAllKmlImageOverlays) -- those aren't a
  * drawable Point/LineString/Polygon shape, and left in here would leak a
- * bogus extra polygon into MapCanvas/StoryMapBackground's ordinary
+ * bogus extra polygon into MapCanvas's (and the story player's) ordinary
  * fill/line layers on top of the actual image. */
 export async function fetchAllKmlFeatures(handles: string[]): Promise<Feature[]> {
   if (handles.length === 0) return [];
@@ -156,8 +156,7 @@ export interface KmlImageOverlay {
   imageHandle: string;
   corners: OverlayCorners;
   /** The KML media object this overlay was parsed out of -- lets a caller
-   * that fetched several places' KML at once (MapCanvas.tsx,
-   * StoryMapBackground.tsx) trace an overlay back to the Place it's
+   * that fetched several places' KML at once (MapCanvas.tsx) trace an overlay back to the Place it's
    * attached to, whose own name.date gates this overlay's date
    * visibility (see kmlMediaToPlace-style lookups built by those
    * callers). */
@@ -524,7 +523,7 @@ export async function fetchAllKmlLines(handles: string[]): Promise<KmlLine[]> {
 /** Drops a handle's cached parse -- called after MapItemEditorDialog.tsx
  * PUTs new content over an existing KML media object's file (same handle,
  * new bytes; see jobsApi.ts's updateMediaFile). Without this, MapCanvas's
- * overlay and StoryMapBackground would keep serving the pre-edit shapes for
+ * overlay and story hydration would keep serving the pre-edit shapes for
  * the rest of the session, since featureCache is keyed on the handle alone
  * and a KML file was previously assumed static once uploaded. */
 export function invalidateKmlFeatures(handle: string): void {

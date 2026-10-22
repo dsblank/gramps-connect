@@ -43,8 +43,8 @@ export interface MapPlace {
    * Empty for the common case of a place with no such attachment. */
   kmlMedia: string[];
   /** This place's own name.date -- what gates the visibility of any image
-   * overlay attached here in historical map mode (MapCanvas.tsx/
-   * StoryMapBackground.tsx compare it against the current ohmYear).
+   * overlay attached here in historical map mode (MapCanvas.tsx, and the
+   * story player via storyDoc.ts, compare it against the current year).
    * Undefined for the common case of an undated name, meaning any attached
    * overlay is always visible regardless of map mode. */
   nameDate?: GrampsDate;
@@ -98,6 +98,10 @@ export interface EventRecord {
    * display string back apart in storyText.ts. Empty when there's no date
    * at all, same as `dateText`. */
   datePreposition: "" | "on" | "in";
+  /** The structured date itself, for anything that needs more than the
+   * display text (a downloaded story's EDTF dates -- storyHydration.ts).
+   * Optional only so hand-built test records needn't supply it. */
+  date?: GrampsDate | null;
 }
 
 /** An EventRecord datable enough to plot -- the timeline's x axis needs a
@@ -280,6 +284,7 @@ export function readVisualData(): VisualData {
       dateText: formatStoredDate(dateJson),
       year,
       datePreposition: datePrepositionFor(date),
+      date,
     };
     eventsByHandle.set(handle, record);
     if (year !== null) events.push(record as TimelineEvent);

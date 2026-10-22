@@ -26,7 +26,6 @@ function slide(title: string, extra: Omit<Partial<ExportSlide>, "hydrated"> & { 
     hydrated: { title, text: `${title}.`, ...hydrated },
     event: { grampsId: `E-${title}`, private: false, placePrivate: false },
     people: ["josef"],
-    mapFiles: [],
     ...rest,
   };
 }
@@ -41,18 +40,19 @@ function source(): StoryExportSource {
     notePrivate: false,
     subjects: ["josef"],
     slides: [
-      { hydrated: { title: "The Story of Josef Meyer", text: "4 moments.", mediaRef: "portrait", mediaMime: "image/jpeg" }, people: [], mapFiles: [] },
+      { hydrated: { title: "The Story of Josef Meyer", text: "4 moments.", mediaRef: "portrait", mediaMime: "image/jpeg" }, people: [] },
       slide("Birth", {
         hydrated: {
-          date: "about 1850", year: 1850.4, placeTitle: "Zürich", lat: 47.37, long: 8.54,
+          date: "about 1850", edtf: "1850~", year: 1850.4, placeTitle: "Zürich", lat: 47.37, long: 8.54,
           kmlMedia: ["mapfile"], mediaRef: "portrait", mediaMime: "image/jpeg",
+          mapFiles: [{
+            handle: "mapfile",
+            features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [8.54, 47.37] } }],
+            overlays: [{ imageHandle: "oldmap", corners: [[8.5, 47.39], [8.58, 47.39], [8.58, 47.36], [8.5, 47.36]], opacity: 0.7, order: 0 }],
+          }],
           nameDate: { modifier: Modifier.SPAN, quality: Quality.NONE, calendar: Calendar.GREGORIAN, dateval: [0, 0, 1840, false, 0, 0, 1860, false], text: "", newyear: 0 },
         },
-        event: {
-          grampsId: "E0001", private: false, placePrivate: false,
-          date: { modifier: Modifier.ABOUT, quality: Quality.NONE, calendar: Calendar.GREGORIAN, dateval: [0, 0, 1850, false], text: "", newyear: 0 },
-        },
-        mapFiles: ["mapfile"],
+        event: { grampsId: "E0001", private: false, placePrivate: false },
       }),
       slide("Christening", { event: { grampsId: "E0002", private: true, placePrivate: false } }),
       slide("Marriage", { people: ["josef", "anna"], hydrated: { mediaRef: "couple", mediaMime: "image/jpeg" } }),
@@ -68,12 +68,7 @@ function source(): StoryExportSource {
       ["ship", { handle: "ship", grampsId: "O3", mime: "image/jpeg", private: true, desc: "", personHandles: [] }],
       ["oldmap", { handle: "oldmap", grampsId: "O4", mime: "image/png", private: false, desc: "", personHandles: [] }],
     ]),
-    mapFiles: new Map([["mapfile", {
-      handle: "mapfile",
-      private: false,
-      features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [8.54, 47.37] } }],
-      overlays: [{ imageHandle: "oldmap", corners: [[8.5, 47.39], [8.58, 47.39], [8.58, 47.36], [8.5, 47.36]], opacity: 0.7, order: 0 }],
-    }]]),
+    mapFiles: new Map([["mapfile", { handle: "mapfile", private: false }]]),
   };
 }
 
@@ -132,6 +127,16 @@ describe("planStoryExport", () => {
       date: { text: expect.any(String), edtf: "1840/1860" },
     }]);
     expect(plan.media.find((m) => m.key === "m2")).toEqual({ key: "m2", handle: "oldmap", purpose: "overlay" });
+  });
+
+  it("leaves out a private map file's shapes and overlays", () => {
+    const s = source();
+    s.mapFiles.get("mapfile")!.private = true;
+    const birth = planStoryExport(s, STRICT, META).doc.slides[1];
+    expect(birth.place?.geometry).toBeUndefined();
+    expect(birth.place?.overlays).toBeUndefined();
+    expect(birth.place?.name).toBe("Zürich");
+    expect(planStoryExport(s, OPEN, META).doc.slides[1].place?.overlays).toHaveLength(1);
   });
 
   it("stores a photo used on several slides once, with its description as alt text", () => {

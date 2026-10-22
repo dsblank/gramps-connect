@@ -5,15 +5,12 @@ vi.mock("../storyHydration", () => ({
   hydrateStory: vi.fn(async (spec: { title: string; points: unknown[] }) => ({
     title: spec.title,
     slides: spec.points.map((_, i) => (i === 2
-      ? { title: "Marriage", text: "", kmlMedia: ["mapfile"] }
+      ? {
+        title: "Marriage", text: "", kmlMedia: ["mapfile"],
+        mapFiles: [{ handle: "mapfile", features: [], overlays: [{ imageHandle: "oldmap", corners: [[0, 1], [1, 1], [1, 0], [0, 0]], opacity: 0.5, order: 3 }] }],
+      }
       : { title: `Slide ${i}`, text: "", mediaRef: i === 0 ? "portrait" : undefined, mediaMime: i === 0 ? "image/jpeg" : undefined })),
   })),
-}));
-vi.mock("../kmlMedia", () => ({
-  fetchAllKmlFeatures: vi.fn(async () => [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [0, 0] } }]),
-  fetchAllKmlImageOverlays: vi.fn(async () => [{
-    imageHandle: "oldmap", corners: [[0, 1], [1, 1], [1, 0], [0, 0]], opacity: 0.5, order: 3, kmlHandle: "mapfile", indexInFile: 0,
-  }]),
 }));
 
 import { gatherStoryExport } from "../storyExport";
@@ -80,7 +77,7 @@ describe("gatherStoryExport", () => {
     expect(source.noteGrampsId).toBe("N7");
     // Subject roles only -- not the priest; both spouses for a family event.
     expect(source.slides.map((s) => s.people)).toEqual([[], ["josef"], ["josef", "anna"], []]);
-    expect(source.slides[1].event).toEqual({ grampsId: "E1", private: false, date: { modifier: 0 }, placePrivate: true });
+    expect(source.slides[1].event).toEqual({ grampsId: "E1", private: false, placePrivate: true });
     expect(source.slides[2].event).toMatchObject({ grampsId: "E2", private: true, placePrivate: false });
     // A deleted event is simply absent.
     expect(source.slides[3].event).toBeUndefined();
@@ -91,7 +88,7 @@ describe("gatherStoryExport", () => {
 
     expect(source.media.get("portrait")).toMatchObject({ private: false, desc: "Portrait", personHandles: ["josef"] });
     expect(source.media.get("oldmap")).toMatchObject({ mime: "image/png", personHandles: [] });
-    expect(source.mapFiles.get("mapfile")).toMatchObject({ private: true, overlays: [{ imageHandle: "oldmap", opacity: 0.5, order: 3 }] });
+    expect(source.mapFiles.get("mapfile")).toEqual({ handle: "mapfile", private: true });
   });
 
   it("asks only for what backlinks didn't already send, once each", async () => {

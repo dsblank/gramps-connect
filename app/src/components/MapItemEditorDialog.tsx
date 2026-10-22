@@ -1451,7 +1451,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     // and edges while selected. Select mode stores those as ordinary Point
     // features in the same snapshot (tagged `selectionPoint`/`midPoint`),
     // so saving mid-selection without this filter wrote them into the file
-    // as if they were real map-item points, and MapCanvas/StoryMapBackground
+    // as if they were real map-item points, and MapCanvas/the story player
     // (which render every unnamed Point as a small circle) then reproduced
     // the edit-mode handle look in read-only views. Found live.
     const savedParts: SavedPart[] = draw.getSnapshot()

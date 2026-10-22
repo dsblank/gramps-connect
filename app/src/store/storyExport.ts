@@ -12,7 +12,9 @@
 //     Gramps' own exports use).
 //  2. planStoryExport() -- pure and synchronous: applies the switches and
 //     produces the story.json (minus media files) plus a summary of what
-//     was left out, or a reason the story can't be downloaded at all.
+//     was left out, or a reason the story can't be downloaded at all. The
+//     slides themselves are built by storyDoc.ts, the same conversion
+//     Present uses.
 //  3. buildStoryZip() -- async: fetches and optimizes each image
 //     (@gramps-connect/story's optimizeImage), fills in the media table,
 //     and writes the zip, which validates it on the way.
@@ -23,17 +25,13 @@
 // place; a photo that's private or shows a living person drops just the
 // photo. Free text someone typed into a slide can't be checked and isn't
 // changed -- the dialog says so.
-import type { Feature } from "geojson";
-import type { GrampsDate } from "@gramps-connect/gramps-date";
-import type { OptimizedImage, Place, Slide, StoryDoc } from "@gramps-connect/story";
+import type { OptimizedImage, Slide, StoryDoc } from "@gramps-connect/story";
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { apiFetch } from "./apiFetch";
-import { toEdtf } from "./edtf";
-import { fetchAllKmlFeatures, fetchAllKmlImageOverlays, type OverlayCorners } from "./kmlMedia";
 import type { ObjectDetail } from "./objectDetail";
-import { formatDisplayDate } from "./placeIndex";
 import { personDisplayName, type RawPerson, type StorySpec } from "./storyBuilder";
+import { mediaKeys, slidePhoto, slideToDoc } from "./storyDoc";
 import { hydrateStory, type HydratedSlide } from "./storyHydration";
 import { isSubjectRole } from "./storyText";
 
@@ -57,25 +55,22 @@ export interface ExportMedia {
   personHandles: string[];
 }
 
+/** A map file's privacy; its shapes and overlays are on the hydrated
+ * slide (HydratedSlide.mapFiles). */
 export interface ExportMapFile {
   handle: string;
   private: boolean;
-  /** Its drawable shapes (no image overlays), as fetchAllKmlFeatures gives them. */
-  features: Feature[];
-  overlays: { imageHandle: string; corners: OverlayCorners; opacity: number; order: number }[];
 }
 
 export interface ExportSlide {
   hydrated: HydratedSlide;
   /** Undefined for a slide with no event (the opening card, or one added
    * by hand), and for an event that no longer exists. */
-  event?: { grampsId: string; private: boolean; date?: GrampsDate; placePrivate: boolean };
+  event?: { grampsId: string; private: boolean; placePrivate: boolean };
   /** Handles of the people the slide's event is about: its Primary (or
    * other subject-role) participants, and both spouses of a family it
    * belongs to. Witnesses and the like aren't who a slide is about. */
   people: string[];
-  /** Handles of the place's map files (the hydrated slide's kmlMedia). */
-  mapFiles: string[];
 }
 
 export interface StoryExportSource {
@@ -156,7 +151,7 @@ export async function gatherStoryExport(noteDetail: ObjectDetail, spec: StorySpe
   for (const f of backlinks.family ?? []) for (const h of spouseHandles(f)) subjects.add(h);
 
   const slides: ExportSlide[] = await Promise.all(spec.points.map(async (point, i) => {
-    const slide: ExportSlide = { hydrated: hydrated.slides[i], people: [], mapFiles: hydrated.slides[i].kmlMedia ?? [] };
+    const slide: ExportSlide = { hydrated: hydrated.slides[i], people: [] };
     if (!point.eventRef) return slide;
     const event = await fetchEvent(point.eventRef);
     if (!event) return slide;
@@ -172,33 +167,28 @@ export async function gatherStoryExport(noteDetail: ObjectDetail, spec: StorySpe
     slide.event = {
       grampsId: event.gramps_id ?? "",
       private: Boolean(event.private),
-      date: event.date ?? undefined,
       placePrivate: Boolean(place?.private),
     };
     slide.people = [...people];
     return slide;
   }));
 
-  // Map files: their own privacy, shapes and image overlays, each file
-  // fetched on its own so a private one can be left out by itself.
+  // Map files: each one's own privacy, so a private one can be left out
+  // by itself. (Their shapes and overlays came with hydration.)
+  const hydratedMapFiles = hydrated.slides.flatMap((h) => h.mapFiles ?? []);
   const mapFiles = new Map<string, ExportMapFile>();
-  await Promise.all([...new Set(slides.flatMap((s) => s.mapFiles))].map(async (handle) => {
-    const [info, features, overlays] = await Promise.all([
-      fetchMedia(handle), fetchAllKmlFeatures([handle]), fetchAllKmlImageOverlays([handle]),
-    ]);
-    if (!info) return;
-    mapFiles.set(handle, {
-      handle,
-      private: Boolean(info.private),
-      features,
-      overlays: overlays.map((o) => ({ imageHandle: o.imageHandle, corners: o.corners, opacity: o.opacity, order: o.order })),
-    });
+  await Promise.all([...new Set(hydratedMapFiles.map((f) => f.handle))].map(async (handle) => {
+    const info = await fetchMedia(handle);
+    if (info) mapFiles.set(handle, { handle, private: Boolean(info.private) });
   }));
 
   // Every image the story could show: slide photos and overlay images.
   const imageHandles = new Set<string>();
-  for (const s of slides) if (s.hydrated.mediaRef && s.hydrated.mediaMime?.startsWith("image/")) imageHandles.add(s.hydrated.mediaRef);
-  for (const f of mapFiles.values()) for (const o of f.overlays) imageHandles.add(o.imageHandle);
+  for (const s of slides) {
+    const photo = slidePhoto(s.hydrated);
+    if (photo) imageHandles.add(photo);
+  }
+  for (const f of hydratedMapFiles) for (const o of f.overlays) imageHandles.add(o.imageHandle);
   const media = new Map<string, ExportMedia>();
   await Promise.all([...imageHandles].map(async (handle) => {
     const m = await fetchMedia(handle);
@@ -324,19 +314,7 @@ export function planStoryExport(source: StoryExportSource, options: ExportOption
       : "This story is about someone marked private. Turn on \"Include data marked private\" to download it.";
   }
 
-  const mediaKeys = new Map<string, PlannedMedia>();
-  const keyFor = (handle: string, purpose: PlannedMedia["purpose"]): string => {
-    let planned = mediaKeys.get(handle);
-    if (!planned) {
-      const desc = source.media.get(handle)?.desc;
-      planned = { key: `m${mediaKeys.size + 1}`, handle, purpose, ...(desc ? { alt: desc } : {}) };
-      mediaKeys.set(handle, planned);
-    } else if (purpose === "overlay") {
-      // Used both ways: size it for the map, the larger of the two.
-      planned.purpose = "overlay";
-    }
-    return planned.key;
-  };
+  const keys = mediaKeys();
 
   const slides: Slide[] = [];
   const idExtension: Record<string, { event: string }> = {};
@@ -355,72 +333,35 @@ export function planStoryExport(source: StoryExportSource, options: ExportOption
     }
     const h = s.hydrated;
     const id = `s${slides.length}`;
-    const slide: Slide = { id };
-    if (h.title) slide.title = h.title;
-    if (h.text) slide.text = h.text;
-    if (h.date) {
-      const edtf = toEdtf(s.event?.date);
-      slide.date = {
-        text: h.date,
-        ...(edtf ? { edtf } : {}),
-        ...(h.year != null ? { sortYear: Math.floor(h.year) } : {}),
-      };
-    }
-
-    const hasPlace = h.placeTitle || (h.lat != null && h.long != null) || s.mapFiles.length > 0;
-    if (hasPlace && !options.includePrivate && s.event?.placePrivate) {
-      placesLeftOut += 1;
-    } else if (hasPlace) {
-      const place: Place = {};
-      if (h.placeTitle) place.name = h.placeTitle;
-      if (h.lat != null && h.long != null) {
-        place.lat = h.lat;
-        place.lon = h.long;
-      }
-      const files = s.mapFiles
-        .map((handle) => source.mapFiles.get(handle))
-        .filter((f): f is ExportMapFile => Boolean(f) && (options.includePrivate || !f!.private));
-      const features = files.flatMap((f) => f.features);
-      if (features.length > 0) place.geometry = { type: "FeatureCollection", features } as unknown as Place["geometry"];
-      const overlays: NonNullable<Place["overlays"]> = [];
-      const overlayDateText = formatDisplayDate(h.nameDate);
-      const overlayEdtf = toEdtf(h.nameDate);
-      for (const file of files) {
-        for (const o of file.overlays) {
-          if (mediaHidden(o.imageHandle)) {
-            overlaysLeftOut += 1;
-            continue;
-          }
-          overlays.push({
-            media: keyFor(o.imageHandle, "overlay"),
-            corners: o.corners,
-            opacity: o.opacity,
-            order: o.order,
-            ...(overlayDateText ? { date: { text: overlayDateText, ...(overlayEdtf ? { edtf: overlayEdtf } : {}) } } : {}),
-          });
-        }
-      }
-      if (overlays.length > 0) place.overlays = overlays;
-      if (Object.keys(place).length > 0) slide.place = place;
-    }
-
-    // The photo Present shows: the point's own, else the opening card's
-    // (storyHydration.ts's fallback) -- written out explicitly here, since
-    // the format has no fallback rule of its own.
-    const photo = h.mediaRef && h.mediaMime?.startsWith("image/") ? h.mediaRef : undefined;
-    if (photo) {
-      photosSeen.add(photo);
-      if (mediaHidden(photo)) photosHidden.add(photo);
-      else slide.media = [{ ref: keyFor(photo, "photo") }];
-    }
-
+    const photo = slidePhoto(h);
+    if (photo) photosSeen.add(photo);
+    const photoHidden = photo !== undefined && mediaHidden(photo);
+    if (photoHidden) photosHidden.add(photo!);
+    const dropPlace = !options.includePrivate && Boolean(s.event?.placePrivate);
     const names = people.map((p) => source.people.get(p)?.name).filter((n): n is string => Boolean(n));
-    if (names.length > 0) slide.people = names.map((name) => ({ name }));
+    const built = slideToDoc({
+      id,
+      hydrated: h,
+      mapFiles: (h.mapFiles ?? []).filter((f) => {
+        const info = source.mapFiles.get(f.handle);
+        return Boolean(info) && (options.includePrivate || !info!.private);
+      }),
+      dropPlace,
+      overlayAllowed: (imageHandle) => !mediaHidden(imageHandle),
+      photo: photoHidden ? undefined : photo,
+      people: names,
+    }, keys.keyFor);
+    if (dropPlace && built.hadPlace) placesLeftOut += 1;
+    overlaysLeftOut += built.overlaysLeftOut;
+    const slide = built.slide;
     if (s.event?.grampsId) idExtension[id] = { event: s.event.grampsId };
     slides.push(slide);
   });
 
-  const media = [...mediaKeys.values()];
+  const media: PlannedMedia[] = keys.entries().map((entry) => {
+    const desc = source.media.get(entry.handle)?.desc;
+    return { ...entry, ...(desc ? { alt: desc } : {}) };
+  });
   const doc: Omit<StoryDoc, "media"> = {
     format: "gramps-connect-story",
     version: "1.0",

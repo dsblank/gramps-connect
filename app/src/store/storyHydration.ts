@@ -6,10 +6,21 @@
 // record shows up the next time the story is opened, without regenerating
 // the note. A point's `text` is the exception: it's part of the stored
 // spec, so it's used as-is.
+import type { Feature } from "geojson";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
+import { toEdtf } from "./edtf";
+import type { OverlayCorners } from "./kmlMedia";
 import { fetchMediaMime, type StoryPoint, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
+
+/** One of a place's map files (mapOverlays.ts), already fetched and
+ * parsed: its drawable shapes and its image overlays. */
+export interface HydratedMapFile {
+  handle: string;
+  features: Feature[];
+  overlays: { imageHandle: string; corners: OverlayCorners; opacity: number; order: number }[];
+}
 
 export interface HydratedSlide {
   title: string;
@@ -18,17 +29,21 @@ export interface HydratedSlide {
   lat?: number;
   long?: number;
   /** Handles of the place's attached KML media (see MapPlace.kmlMedia) --
-   * what lets StoryMapBackground overlay the same shape MapCanvas draws for
-   * this place on the tree-wide map. Undefined rather than empty when there
+   * resolved into `mapFiles` below, so the story player draws the same
+   * shapes MapCanvas draws for this place on the tree-wide map. Undefined rather than empty when there
    * is no place at all, matching lat/long's own optionality. */
   kmlMedia?: string[];
   /** The place's own name.date -- what gates an image overlay attached to
-   * it (StoryMapBackground.tsx's own version of MapCanvas.tsx's date
-   * gating). Undefined whenever kmlMedia is, or when the place has no
+   * it (storyDoc.ts carries it to the player as each overlay's date). Undefined whenever kmlMedia is, or when the place has no
    * dated name. */
   nameDate?: GrampsDate;
   date?: string;
+  /** The event's date as EDTF, when it maps faithfully (edtf.ts). */
+  edtf?: string;
   year?: number;
+  /** The place's map files, resolved -- one entry per kmlMedia handle
+   * that could be fetched. */
+  mapFiles?: HydratedMapFile[];
   mediaRef?: string;
   mediaMime?: string;
 }
@@ -84,6 +99,7 @@ function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<
     kmlMedia: place?.kmlMedia ?? pending?.kmlMedia,
     nameDate: place?.nameDate ?? pending?.nameDate,
     date: record?.dateText || undefined,
+    edtf: toEdtf(record?.date),
     year: record?.year ?? undefined,
     mediaRef: point.mediaRef ?? introMediaRef,
     pendingPlaceHandle: pending?.handle,
@@ -117,6 +133,30 @@ export async function hydrateStory(spec: StorySpec): Promise<HydratedStory> {
       if (!slide.pendingPlaceHandle) continue;
       const position = positions.get(slide.pendingPlaceHandle);
       if (position) [slide.lat, slide.long] = position;
+    }
+  }
+
+  // Every map file's shapes and image overlays, up front, so whatever
+  // presents or exports the story has them without fetching per slide.
+  // Same dynamic import as above: a story with no map files never loads
+  // the KML/GPX parser.
+  const mapFileHandles = [...new Set(draftSlides.flatMap((s) => s.kmlMedia ?? []))];
+  const mapFiles = new Map<string, HydratedMapFile>();
+  if (mapFileHandles.length > 0) {
+    const { fetchAllKmlFeatures, fetchAllKmlImageOverlays } = await import("./kmlMedia");
+    await Promise.all(mapFileHandles.map(async (handle) => {
+      const [features, overlays] = await Promise.all([
+        fetchAllKmlFeatures([handle]), fetchAllKmlImageOverlays([handle]),
+      ]);
+      mapFiles.set(handle, {
+        handle,
+        features,
+        overlays: overlays.map((o) => ({ imageHandle: o.imageHandle, corners: o.corners, opacity: o.opacity, order: o.order })),
+      });
+    }));
+    for (const slide of draftSlides) {
+      if (!slide.kmlMedia?.length) continue;
+      slide.mapFiles = slide.kmlMedia.map((h) => mapFiles.get(h)).filter((f): f is HydratedMapFile => Boolean(f));
     }
   }
 
