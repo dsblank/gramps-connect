@@ -12,7 +12,10 @@ Download on a story, with the privacy dialog (see Phase 2's notes).
 the Gramps Connect Story Viewer is live at
 https://dsblank.github.io/gramps-connect-stories/, with the
 `<gramps-connect-story>` embed and the npm packaging ready; the first npm
-publish is waiting on the `@gramps-connect` scope (see Phase 4's notes). Decisions are under [Settled decisions](#settled-decisions);
+publish is waiting on the `@gramps-connect` scope (see Phase 4's notes).
+**Phase 5 built** too: the Python writer, and the Gramps 6.0 **Export
+Story** addon on branch `story-export-gramps60` of the addons-source fork,
+not yet a pull request. Decisions are under [Settled decisions](#settled-decisions);
 what's still open is under [Open questions](#open-questions).
 
 ## Goal
@@ -583,6 +586,32 @@ Built 2026-10-22. Notes:
   viewer site, embed it on a blog), with a link to the viewer site.
 
 ### Phase 5: Second producers (proves the format is independent)
+
+Built 2026-10-22, kept simple. Notes:
+
+- **Python writer**: `python/gramps_connect_story.py` in
+  gramps-connect-stories, one file, standard library only, Pillow
+  optional (1600px WebP, metadata stripped). **GPL-2.0-or-later**, not
+  AGPL like the rest of that repo, so the GPL addon can ship it.
+  `test:python` has it write stories that the TypeScript reader must
+  accept with no warnings.
+- **Addon** `StoryExport` (addons-source, `maintenance/gramps60`):
+  Tools > Utilities > Export Story, for the active person. Their own
+  events (Primary role) and their families' events, by date, undated last;
+  opening slide with their portrait, which is also each slide's fallback
+  photo. Save dialog with "Include data marked private" and "Include
+  living people" (both off), applied with Gramps' own PrivateProxyDb /
+  LivingProxyDb plus a living-in-photo check. Note Gramps' LivingProxyDb
+  clears all events of a family with a living parent, so a marriage to a
+  living spouse is dropped -- the same outcome as Gramps Connect's
+  download. `storyexport_builder.py` has no GUI imports; tested on a temp
+  database.
+- **End to end**: on Gramps' example tree, loaded through Gramps' own
+  plugin manager, every person exported both ways (3,073 stories, 9,951
+  slides) and every file validated by the TypeScript reader with no
+  warnings.
+- Not done (kept simple): no map shapes/overlays or record IDs from the
+  addon, no CLI mode, and the Gramplet `story()` helper.
 
 - A **Python reference writer** (`gramps_connect_story.py`, standard
   library only, using Pillow when available for image optimization) in
