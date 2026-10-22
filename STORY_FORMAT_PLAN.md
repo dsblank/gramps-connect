@@ -5,8 +5,8 @@ Status (2026-10-22): **Phase 1 done.** The
 repo has the 1.0 spec, JSON Schema, examples and the package core
 (`readStoryZip`, `writeStoryZip`, `validate`, `upgradeStory`,
 `optimizeImage`, `mediaBlob`), and is the `packages/story` submodule here,
-with CI checking it out and testing it. Nothing in the app uses it yet;
-that's Phase 2. Decisions are under [Settled decisions](#settled-decisions);
+with CI checking it out and testing it. **Phase 2 done** the same day:
+Download on a story, with the privacy dialog (see Phase 2's notes). Decisions are under [Settled decisions](#settled-decisions);
 what's still open is under [Open questions](#open-questions).
 
 ## Goal
@@ -455,6 +455,34 @@ Done 2026-10-22. Notes from building it:
   workflows and Dockerfiles for submodule checkout.
 
 ### Phase 2: Download in gramps-connect
+
+Done 2026-10-22. Notes from building it:
+
+- `store/storyExport.ts` works in three steps: `gatherStoryExport`
+  (async, once per dialog open: hydration plus the privacy facts no local
+  cache holds), `planStoryExport` (pure, re-run on every switch change, so
+  the summary is live), and `buildStoryZip` (fetch, optimize, zip). Each
+  step has its own tests.
+- The overlay shapes and images are resolved in the gather step
+  (`kmlMedia.ts`, per map file so a private file can be left out by
+  itself), not moved into `storyHydration.ts`. Moving them into hydration
+  is now part of Phase 3, when the player needs them.
+- "Who a slide is about" = the event's subject-role participants
+  (`isSubjectRole`: Primary, Family) plus both spouses of a family
+  event; witnesses and clergy don't count. A photo is left out when it
+  shows (is linked from) anyone living. The opening card is about the
+  story's own subjects (the Note's backlinks); if they're hidden, the
+  download is blocked rather than the card dropped.
+- Living status comes from `/api/living/<handle>` (Gramps'
+  `probably_alive`, as the server's exports use); a failed lookup counts
+  as living. Any other failed privacy lookup fails the whole gather
+  rather than guessing.
+- Photos come from the thumbnail endpoint at 2048px (AVIF from the
+  server, which `optimizeImage` decodes fine; checked in Chrome), overlays
+  from `/file` to keep transparency.
+- Slide ids are renumbered after filtering, so a gap can't reveal that
+  something was left out. Dates get EDTF only when Gregorian with a real
+  year (`store/edtf.ts`).
 
 - `app/src/store/storyExport.ts`: `HydratedStory → StoryDoc` (including
   the explicit per-slide photo fallback), the privacy filtering, and

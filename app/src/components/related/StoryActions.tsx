@@ -3,6 +3,7 @@ import { Alert, Button } from "@mantine/core";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { StorySpec } from "../../store/storyBuilder";
 import { StoryView } from "../StoryView";
+import { StoryDownloadDialog } from "./StoryDownloadDialog";
 import { t } from "../../i18n/i18n";
 
 /** Parses a story note's text.string back into the StorySpec StoryView
@@ -27,10 +28,11 @@ function parseSpec(detail: ObjectDetail): StorySpec | null {
  * "Present" trigger for the fullscreen StoryView, since Edit (the JSON
  * dialog) and Delete are already generic across every editable type once
  * "story" is a DraftType (see draftStack.ts) -- this component only needs
- * to own what's story-specific: parsing the spec back out and holding the
- * presentation's open/closed state. */
+ * to own what's story-specific: parsing the spec back out, and the
+ * presentation's and the download dialog's open/closed state. */
 export function StoryActions({ detail }: { detail: ObjectDetail }) {
   const [opened, setOpened] = useState(false);
+  const [downloadOpened, setDownloadOpened] = useState(false);
   const spec = parseSpec(detail);
 
   return (
@@ -38,12 +40,18 @@ export function StoryActions({ detail }: { detail: ObjectDetail }) {
       <Button size="xs" onClick={() => setOpened(true)} disabled={!spec}>
         {t("Present")}
       </Button>
+      <Button size="xs" variant="default" onClick={() => setDownloadOpened(true)} disabled={!spec}>
+        {t("Download")}
+      </Button>
       {!spec && (
         <Alert color="red" py={4}>
           {t("This story's JSON couldn't be parsed -- edit it to fix before presenting.")}
         </Alert>
       )}
       <StoryView spec={spec} opened={opened} onClose={() => setOpened(false)} />
+      {spec && (
+        <StoryDownloadDialog opened={downloadOpened} onClose={() => setDownloadOpened(false)} detail={detail} spec={spec} />
+      )}
     </>
   );
 }

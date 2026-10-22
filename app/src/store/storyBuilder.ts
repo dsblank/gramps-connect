@@ -66,7 +66,7 @@ interface MediaRefLike {
 /** The handful of fields this module reads off a raw Person -- whether it
  * arrived as a Family's own extended.father/mother or as one of its
  * zipped extended.children. */
-interface RawPerson {
+export interface RawPerson {
   handle?: string;
   primary_name?: { first_name?: string; surname_list?: { surname?: string }[] };
   event_ref_list?: RawRef[];
@@ -78,7 +78,7 @@ interface RawPerson {
  * storyApi.ts's note on the same convention). Only the raw shape is
  * handled: every Person this module sees arrives via `extended.*`, never
  * as a display-ready profile. */
-function personDisplayName(person: RawPerson | undefined): string {
+export function personDisplayName(person: RawPerson | undefined): string {
   const given = person?.primary_name?.first_name ?? "";
   const surname = person?.primary_name?.surname_list?.[0]?.surname ?? "";
   return [given, surname].filter(Boolean).join(" ");
