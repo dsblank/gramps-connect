@@ -8,7 +8,11 @@ repo has the 1.0 spec, JSON Schema, examples and the package core
 with CI checking it out and testing it. **Phase 2 done** the same day:
 Download on a story, with the privacy dialog (see Phase 2's notes).
 **Phase 3 done** the same day too: Present runs on the package's
-`StoryPlayer` (see Phase 3's notes). Phase 4 is next. Decisions are under [Settled decisions](#settled-decisions);
+`StoryPlayer` (see Phase 3's notes). **Phase 4 built** the same day:
+the Gramps Connect Story Viewer is live at
+https://dsblank.github.io/gramps-connect-stories/, with the
+`<gramps-connect-story>` embed and the npm packaging ready; the first npm
+publish is waiting on the `@gramps-connect` scope (see Phase 4's notes). Decisions are under [Settled decisions](#settled-decisions);
 what's still open is under [Open questions](#open-questions).
 
 ## Goal
@@ -538,6 +542,38 @@ Done 2026-10-22. Notes from building it:
   not just the converted JSON.
 
 ### Phase 4: Standalone site, embed, npm
+
+Built 2026-10-22. Notes:
+
+- **Site** (`site/`, deployed by `pages.yml` on every push to main, not
+  per release as first planned: the viewer should always have the latest
+  fixes, while embeds pin a version). Pick/drop a file, `?src=`, `#s3`
+  slide links (none for the opening slide), F for full screen, examples
+  zipped at build time, and the schema served at its `$id` URL.
+- **Embed** (`src/embed/` → `dist/embed.js`, everything bundled, no
+  source map): a shadow root with maplibre's CSS inside it;
+  `keyboard: "focus"` so several stories can share a page; maplibre's
+  worker loads from beside the script, and from another origin (a CDN)
+  through a `blob:` URL that imports it, since a page can't start a
+  worker from another origin's URL directly. A page whose CSP sets
+  `worker-src` has to allow `blob:`.
+- **npm**: `dist/` built by esbuild with dependencies left as imports
+  (including maplibre's stylesheet); declarations by tsc. Exports put a
+  `source` condition (→ `src/`) before `types`, and Gramps Connect's Vite
+  and tsconfig enable it, so the app never needs `dist/`. 577 KiB packed.
+  `test:pack` installs the tarball into an empty project and bundles and
+  typechecks every entry point there. TypeScript 6+ consumers of
+  maplibre need `"types": ["geojson"]` (maplibre's declarations, not
+  ours).
+- **Player additions**: en/de/es/fr/nl strings by story then browser
+  language, `onSlideChange`, swipe on the slide panel.
+- **Still to do by hand**: claim the `@gramps-connect` org on npmjs.com,
+  publish 0.1.0 once (manually, or via an `NPM_TOKEN` secret and a
+  `v0.1.0` tag), then set up trusted publishing for `release.yml`. Until
+  then the embed snippet's jsDelivr URL doesn't resolve.
+- Found on the way: Phase 3's move had dropped maplibre's stylesheet from
+  Present (pin unpositioned unless the Map view had been opened first);
+  fixed in the player, and the browser test now checks it.
 
 - GitHub Pages viewer and `<gramps-connect-story>` web component.
 - Claim the `@gramps-connect` npm scope, add the build (`dist/`,

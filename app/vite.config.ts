@@ -11,6 +11,11 @@ const { version } = createRequire(import.meta.url)("./package.json");
 
 export default defineConfig({
   plugins: [react()],
+  // Workspace packages (packages/story) export their TypeScript source under
+  // a "source" condition and a built dist/ otherwise; this app compiles
+  // the source, so it never needs a dist/ build. (Additive in Vite 5: the
+  // default conditions still apply.)
+  resolve: { conditions: ["source"] },
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
