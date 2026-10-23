@@ -11,8 +11,8 @@ Download on a story, with the privacy dialog (see Phase 2's notes).
 `StoryPlayer` (see Phase 3's notes). **Phase 4 built** the same day:
 the Gramps Connect Story Viewer is live at
 https://dsblank.github.io/gramps-connect-stories/, with the
-`<gramps-connect-story>` embed and the npm packaging ready; the first npm
-publish is waiting on the `@gramps-connect` scope (see Phase 4's notes).
+`<gramps-connect-story>` embed, and `@gramps-connect/story` 0.1.0 is on
+npm (published 2026-10-22; see Phase 4's notes).
 **Phase 5 built** too: the Python writer, and the Gramps 6.0 **Export
 Story** addon on branch `story-export-gramps60` of the addons-source fork,
 not yet a pull request. Decisions are under [Settled decisions](#settled-decisions);
@@ -570,10 +570,14 @@ Built 2026-10-22. Notes:
   ours).
 - **Player additions**: en/de/es/fr/nl strings by story then browser
   language, `onSlideChange`, swipe on the slide panel.
-- **Still to do by hand**: claim the `@gramps-connect` org on npmjs.com,
-  publish 0.1.0 once (manually, or via an `NPM_TOKEN` secret and a
-  `v0.1.0` tag), then set up trusted publishing for `release.yml`. Until
-  then the embed snippet's jsDelivr URL doesn't resolve.
+- **Published**: the `@gramps-connect` org is claimed and 0.1.0 was
+  published by hand (2026-10-22; the account's 2FA is a passkey, so npm
+  commands that need it only work from the user's own terminal). Trusted
+  publishing for `release.yml` is set up, so later versions publish from a
+  `v*` tag with provenance and no token; the workflow skips a version
+  that's already on npm. The `v0.1.0` tag's run failed at `test:pack`
+  (npm 12 changed `npm pack --json` to an object; fixed after the tag),
+  so the first real run of `release.yml` is the next release.
 - Found on the way: Phase 3's move had dropped maplibre's stylesheet from
   Present (pin unpositioned unless the Map view had been opened first);
   fixed in the player, and the browser test now checks it.
