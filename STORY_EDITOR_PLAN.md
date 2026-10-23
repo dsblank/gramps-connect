@@ -167,7 +167,16 @@ screen, starting at this slide).
 - Reusing a place: the place field offers the story's other places, so
   every slide in Zürich points at the same coordinates and overlays.
 
-### Phase 5: shapes and historical maps
+### Phase 5: shapes and historical maps (built 2026-10-23)
+
+As built: **Edit map** under the place opens `PlaceMapDialog`, full
+screen, on a copy (Cancel drops it, Done is one undo step). The overlay's
+years are a compact field in the map editor's side panel (MapEditor's
+`renderOverlayOptions`); the format has no overlay name, so that field is
+hidden (`overlayNames={false}`). Imported files go through `addFeatures`
+(map-edit's `addToSession`), after what's there. The player now fills an
+area at its own `opacity`, as the app's Map view does.
+
 
 - The slide's place gets **Edit map**, opening the shared `MapEditor` on
   `place.geometry` and `place.overlays`.
