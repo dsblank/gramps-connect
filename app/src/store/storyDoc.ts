@@ -5,7 +5,7 @@
 // first and then builds its slides here; presentationDoc() below builds
 // every slide, unfiltered, for Present itself.
 import type { MediaItem, Place, Slide, StoryDoc } from "@gramps-connect/story";
-import { toEdtf } from "./edtf";
+import { toEdtf } from "@gramps-connect/gramps-date";
 import { formatDisplayDate } from "./placeIndex";
 import type { HydratedMapFile, HydratedSlide, HydratedStory } from "./storyHydration";
 

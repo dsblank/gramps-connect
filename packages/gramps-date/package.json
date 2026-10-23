@@ -1,18 +1,55 @@
 {
   "name": "@gramps-connect/gramps-date",
   "version": "0.1.0",
-  "private": true,
-  "description": "TypeScript port of Gramps' Date model, calendar conversion, and locale-aware date display -- for clients (like app/) that receive raw Gramps Date structs from gramps-web-api and need to render/build them without a slow per-object round trip through Gramps' own Python date displayer.",
+  "description": "Gramps' Date in TypeScript: parse and display dates the way Gramps does, in all 43 of its languages, with calendar conversion and Extended Date/Time Format (EDTF) output.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsblank/gramps-connect.git",
+    "directory": "packages/gramps-date"
+  },
+  "homepage": "https://github.com/dsblank/gramps-connect/tree/main/packages/gramps-date#readme",
+  "bugs": "https://github.com/dsblank/gramps-connect/issues",
+  "keywords": [
+    "genealogy",
+    "gramps",
+    "date",
+    "calendar",
+    "edtf",
+    "i18n"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/__tests__",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "test": "tsx --test src/__tests__/*.test.ts"
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:pack": "node scripts/test-pack.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
     "tsx": "^4.23.5",
-    "@types/node": "^26.1.2"
+    "@types/node": "^26.1.2",
+    "esbuild": "^0.28.1"
   }
 }

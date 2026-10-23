@@ -1,0 +1,67 @@
+name: Release gramps-date to npm
+
+# Publishes packages/gramps-date (@gramps-connect/gramps-date) when a
+# gramps-date version tag is pushed:
+#   1. bump "version" in packages/gramps-date/package.json, commit, push
+#   2. git tag gramps-date-v0.2.0 && git push origin gramps-date-v0.2.0
+# The tag has to match package.json's version.
+#
+# Authenticates with npm trusted publishing (OIDC: no token stored here)
+# once it's set up for this repo and workflow on npmjs.com. --provenance
+# links the published package to this commit and workflow on its npm page.
+on:
+  push:
+    tags: ["gramps-date-v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/gramps-date
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs a newer npm than Node 22 ships with.
+      - run: npm install -g npm@latest
+
+      # The whole workspace (from the repo root), without the app's or the
+      # story package's own install scripts.
+      - run: npm ci --ignore-scripts
+        working-directory: .
+
+      - name: Tag matches package.json
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "gramps-date-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME doesn't match package.json version $version" >&2
+            exit 1
+          fi
+
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run test:pack
+
+      # A version published by hand (e.g. the first, before trusted
+      # publishing could be set up) is tagged without publishing again.
+      - name: Already on npm?
+        id: published
+        run: |
+          if npm view "$(node -p 'require("./package.json").name')@${GITHUB_REF_NAME#gramps-date-v}" version >/dev/null 2>&1; then
+            echo "Already published; skipping." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        if: steps.published.outputs.skip != 'true'
+        run: npm publish --provenance --access public

@@ -1,14 +1,12 @@
 // A Gramps Date as Extended Date/Time Format (ISO 8601-2) -- the
 // machine-readable form a downloaded story carries next to each date's
-// display text (spec/1.0 section 3.2 in gramps-connect-stories). Only what
+// display text (spec/1.0 section 3.2 in gramps-connect-stories), and what
+// a story editor fills in from date text a person types. Only what
 // maps faithfully: a Gregorian date with a real year. Anything else (other
 // calendars, dual-dated years, a non-default new-year start, text-only
 // dates, an unknown year) gets no EDTF at all, which the format allows,
 // rather than a plausible-looking wrong one.
-import {
-  Calendar, getStartDate, getStopDate, Modifier, Quality,
-  type DatePart, type GrampsDate,
-} from "@gramps-connect/gramps-date";
+import { Calendar, getStartDate, getStopDate, Modifier, Quality, type DatePart, type GrampsDate } from "./types";
 
 function pad(n: number, width: number): string {
   return String(n).padStart(width, "0");

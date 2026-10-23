@@ -7,9 +7,8 @@
 // the note. A point's `text` is the exception: it's part of the stored
 // spec, so it's used as-is.
 import type { Feature } from "geojson";
-import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
-import { toEdtf } from "./edtf";
 import type { OverlayCorners } from "./kmlMedia";
 import { fetchMediaMime, type StoryPoint, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";

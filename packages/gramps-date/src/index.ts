@@ -4,4 +4,5 @@ export * from "./locale"; // registers the "en" locale as a side effect of its o
 export * from "./display";
 export * from "./entry";
 export * from "./parse";
+export * from "./edtf";
 export { en } from "./locales/en";

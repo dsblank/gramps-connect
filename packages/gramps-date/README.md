@@ -1,15 +1,32 @@
 # @gramps-connect/gramps-date
 
-A TypeScript port of Gramps' `Date` model, calendar conversion, and
-locale-aware date display -- for clients that receive a raw Gramps `Date`
-struct from `gramps-web-api` (e.g. a `{"json_path": [..., "date"]}` select
-entry against the fast `/query/` endpoints) and need to render or build one
-without a per-object round trip through Gramps' own Python date displayer,
-which would defeat the point of using the fast endpoints in the first
-place. `gramps-web` (the other Gramps frontend) sidesteps this entirely by
-always fetching a pre-formatted date string from a slower, per-object
-"profile" endpoint; this package exists because `gramps-connect`
-deliberately doesn't use that endpoint for bulk data.
+Gramps' `Date` in TypeScript: parse and display dates exactly the way
+Gramps does, in all 43 of its languages, convert between its ten
+calendars, and turn a date into Extended Date/Time Format (EDTF). No
+dependencies; runs in browsers and Node.
+
+```sh
+npm install @gramps-connect/gramps-date
+```
+
+```ts
+import { formatDate, loadLocale, parseDate, toEdtf } from "@gramps-connect/gramps-date";
+
+const date = parseDate("abt 3 May 1850");  // a GrampsDate struct
+formatDate(date);                          // "about 3 May 1850"
+toEdtf(date);                              // "1850-05-03~"
+
+await loadLocale("de");                    // other languages load on demand
+toEdtf(parseDate("um 1850", { locale: "de" }));  // "1850~"
+```
+
+It was written for [Gramps Connect](https://github.com/dsblank/gramps-connect),
+which receives raw Gramps `Date` structs from `gramps-web-api` (e.g. a
+`{"json_path": [..., "date"]}` select entry against the fast `/query/`
+endpoints) and needs to render or build them without a per-object round
+trip through Gramps' own Python date displayer. The
+[story editor](https://github.com/dsblank/gramps-connect-stories) uses it
+to read the dates people type.
 
 ## What's here
 
@@ -32,6 +49,9 @@ deliberately doesn't use that endpoint for bulk data.
 - **`parse.ts`** -- `parseDate(text, options)`: Gramps' `DateParser`, so
   what a user types ("before 1960", "abt Mar 1854 (Julian)") becomes a
   structured date, and every displayed date reads back.
+- **`edtf.ts`** -- `toEdtf(date)`: the date in Extended Date/Time Format
+  (ISO 8601-2), for a Gregorian date with a real year; nothing, rather
+  than something plausible but wrong, for anything else.
 - **`entry.ts`** -- `makeDate(input)` builds a `GrampsDate` from
   structured components; `validateDate(date)` checks it.
 - **`locale.ts`**, **`locales/`** -- the `DateLocale` interface and the
@@ -90,3 +110,9 @@ mutual-compatibility provisions permit combining GPL-2.0-or-later code
 into a larger AGPL-3.0-or-later work, the same way `gramps-web` itself
 already does for its own `gcalendar.js` port (one repo-wide AGPL-3.0
 LICENSE, despite incorporating GPL-2.0-or-later-derived logic).
+
+## Releasing
+
+Tag `gramps-date-v<version>` (matching `package.json`) and push it;
+`.github/workflows/release-gramps-date.yml` tests and publishes it with
+provenance.
