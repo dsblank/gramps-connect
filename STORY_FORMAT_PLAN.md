@@ -634,9 +634,10 @@ Built 2026-10-22, kept simple. Notes:
   ViewerBrand (the Gramps Connect icon linking to the viewer) on the
   viewer site and in the embed when asked with `brand`.
 - Not done (kept simple): no record IDs from the addon, no CLI mode, and
-  the Gramplet `story()` helper. Known player bug: opening at a slide
-  (`#s3`, the embed's `slide`) leaves the map at its starting view until
-  the slide changes.
+  the Gramplet `story()` helper.
+- Fixed after 0.1.1: opening at a slide (`#s3`, the embed's `slide`) left
+  the map at the story's first place until the slide changed; the map now
+  starts at the opening slide's place.
 
 - A **Python reference writer** (`gramps_connect_story.py`, standard
   library only, using Pillow when available for image optimization) in
