@@ -113,11 +113,12 @@ screen, starting at this slide).
   with your check of the overlay editor after each, the same way the
   stacked-dialogs work went.
 
-### Phase 2: the editor, text first
+### Phase 2: the editor, text first (built 2026-10-23)
 
 - Viewer site: an **Edit** button on an open story, and **New story** on
-  the landing page. Editing state lives at `#edit` so a reload doesn't
-  drop you back to the player.
+  the landing page. The editor is its own page, `edit.html` (its own
+  bundle, so the viewer doesn't load Mantine); the viewer hands it the
+  story through the draft, which is also what survives a reload.
 - Story settings: title, language, opening text, cover photo, map on or
   off.
 - Slide form: title; text (the shared text field); date as the label
@@ -194,9 +195,12 @@ screen, starting at this slide).
 
 1. **Mantine** for the shared `/editor` components, as an optional peer
    dependency of that entry only. The player stays without a UI library.
-2. **Bundle `@gramps-connect/gramps-date`** into the editor's build to turn
-   date text ("about 1850") into EDTF, with the result shown and
-   correctable. It stays private; nothing new is published.
+2. **`@gramps-connect/gramps-date` turns date text into EDTF**, in the
+   story's language, with the result shown and correctable. Bundling the
+   private package wasn't possible (the stories repo builds on its own), so
+   it was published to npm instead (0.1.0, 2026-10-23, released from
+   gramps-connect by `gramps-date-v*` tags), and `toEdtf` moved into it from
+   the app. The editor takes `parseDateText` to use another parser.
 3. **Saving in place** only where File System Access exists (Chrome,
    Edge); elsewhere Save downloads `<title>.story.zip`.
 4. **Order: Phases 2, 3, 4 first**, so the editor is usable sooner; then
