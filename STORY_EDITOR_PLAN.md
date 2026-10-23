@@ -147,14 +147,16 @@ screen, starting at this slide).
 - A photo the story already has (same bytes) is reused, not stored twice;
   photos no slide uses are left out on save.
 
-### Phase 4: places
+### Phase 4: places (built 2026-10-23, released in 0.4.0)
 
 - A place is a name plus a point: click the map to set it, drag the pin to
   move it, or type coordinates.
 - Search by name, opt-in: the one thing in the editor that sends anything
-  out. Reuse the app's Wikidata place lookup (no API key, CORS allowed)
-  rather than adding another service, moving its search part into the
-  package if it's pure enough.
+  out. Wikidata, as in the app's place lookup (no API key, CORS allowed).
+  The package has its own two calls (`editor/placeSearch.ts`: search, then
+  the item's P625), since the app's lookup also walks the "located in"
+  chain to build a hierarchy, which a story place doesn't need. A host
+  passes `placeSearch` to use another service, or null to leave it out.
 - Reusing a place: the place field offers the story's other places, so
   every slide in Zürich points at the same coordinates and overlays.
 
