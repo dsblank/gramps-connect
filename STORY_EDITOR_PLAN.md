@@ -107,7 +107,7 @@ screen, starting at this slide).
 - The app imports these from the package. App tests and typecheck
   unchanged; you check maps and the overlay editor still behave the same.
 
-### Phase 1: split the map editor out of MapItemEditorDialog (no visible change)
+### Phase 1: split the map editor out of MapItemEditorDialog (built 2026-10-23, no visible change)
 
 - `MapEditor` in the package: the terra-draw canvas, drawing toolbar,
   name/color/opacity panel, and the image overlay handles (move, resize,
