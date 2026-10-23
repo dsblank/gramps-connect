@@ -4,14 +4,18 @@
 // a rough position for a place that has a map file attached but no
 // lat/long of its own, see PendingKmlPlace). Both callers go through the
 // same per-media-handle cache below, so a file fetched for one purpose is
-// free the next time the other asks for it. Named for KML, the only format
-// this app writes; every format is read into the same GeoJSON features.
-import type { Feature, GeoJsonObject, Geometry, Position } from "geojson";
-import { gpx, kml } from "@tmcw/togeojson";
+// free the next time the other asks for it. Named for KML, the first
+// format this app wrote; every format is read into the same GeoJSON
+// features. Parsing, writing and overlay geometry are the story package's
+// (@gramps-connect/story/map-edit), shared with the Story Editor; this
+// file is the part that fetches from gramps-web-api.
+import type { Feature } from "geojson";
+import {
+  cornersFromBox, isKmlLine, lineCoordsOf, MEDIA_HANDLE_PREFIX, overlaySourceOfText, parseMapFile, polygonRingsOf, type OverlayCorners,
+} from "@gramps-connect/story/map-edit";
 import { getToken } from "../auth/auth";
 import { API_BASE } from "../config";
 import { apiFetch } from "./apiFetch";
-import { IMAGE_OVERLAY_PROPERTY, SOURCE_PROPERTY } from "./mapFileWrite";
 
 /** Media handle -> its parsed features, module-level so MapCanvas's overlay
  * and useVisualData's position guess never both fetch the same file, and
@@ -20,79 +24,9 @@ import { IMAGE_OVERLAY_PROPERTY, SOURCE_PROPERTY } from "./mapFileWrite";
  * MapItemEditorDialog.tsx's edit flow started replacing one in place --
  * see invalidateKmlFeatures below. */
 const featureCache = new Map<string, Promise<Feature[]>>();
-/** Media handle -> the Media an overlay was made from (mapFileWrite.ts's
+/** Media handle -> the Media an overlay was made from (map-edit's
  * SOURCE_PROPERTY), filled in by the same fetch. */
 const sourceByHandle = new Map<string, string>();
-
-/** A GeoJSON or GPX file's own colours, in the simplestyle convention
- * (`stroke`/`fill`/`fill-opacity`/`marker-color`, which both GeoJSON tools
- * and @tmcw/togeojson's gpx() use), copied onto the `color`/`opacity`
- * properties every map layer actually reads (see MapCanvas.tsx's
- * KML_FILL_LAYER). Fills only what's missing, so an explicit `color` wins.
- * Not applied to KML: this app's own KML carries `color` already, and
- * leaving foreign KML alone keeps every existing overlay looking the same. */
-function applySimplestyle(feature: Feature): Feature {
-  const props = feature.properties ?? {};
-  const isRegion = feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon";
-  const color = props.color ?? (isRegion ? props.fill ?? props.stroke : props.stroke ?? props["marker-color"]);
-  const opacity = props.opacity ?? (isRegion ? props["fill-opacity"] : undefined);
-  if (color === props.color && opacity === props.opacity) return feature;
-  return { ...feature, properties: { ...props, color, opacity } };
-}
-
-/** A GeoJSON file's features: a FeatureCollection, a single Feature or a
- * bare Geometry are all valid GeoJSON documents. */
-function geoJsonFeatures(doc: GeoJsonObject): Feature<Geometry | null>[] {
-  if (doc.type === "FeatureCollection") return (doc as { features?: Feature<Geometry | null>[] }).features ?? [];
-  if (doc.type === "Feature") return [doc as Feature<Geometry | null>];
-  return [{ type: "Feature", geometry: doc as Geometry, properties: {} }];
-}
-
-/** This app's GeoJSON image overlay (see mapFileWrite.ts), turned into
- * the same feature @tmcw/togeojson makes of a KML <gx:LatLonQuad>
- * GroundOverlay -- so fetchAllKmlImageOverlays and everything that skips
- * overlays read both formats the same way. */
-function asGroundOverlay(feature: Feature): Feature {
-  const props = feature.properties ?? {};
-  if (props[IMAGE_OVERLAY_PROPERTY] !== true || typeof props.image !== "string") return feature;
-  const { [IMAGE_OVERLAY_PROPERTY]: _marker, image, ...rest } = props;
-  return {
-    ...feature,
-    properties: { ...rest, "@geometry-type": "groundoverlay", icon: `${MEDIA_HANDLE_PREFIX}${image}` },
-  };
-}
-
-/** A map file's text, as GeoJSON features. The format is read off the
- * content (GeoJSON is JSON; GPX and KML differ by root element) rather
- * than the media object's stored mime, which a file attached by another
- * client may not have set to anything this app recognizes. Throws on
- * unparseable text; features with no geometry are dropped -- a KML
- * Placemark without Point/LineString/Polygon (see @tmcw/togeojson's
- * KMLOptions.skipNullGeometry), or a GeoJSON Feature with `geometry: null`,
- * is of no use to a caller here, so dropped rather than threaded through
- * as `Feature<Geometry | null>` everywhere downstream. */
-export function parseMapFile(text: string): Feature[] {
-  const hasGeometry = (f: Feature<Geometry | null>): f is Feature => f.geometry != null;
-  if (text.trimStart().startsWith("{")) {
-    return geoJsonFeatures(JSON.parse(text) as GeoJsonObject).filter(hasGeometry).map(asGroundOverlay).map(applySimplestyle);
-  }
-  const dom = new DOMParser().parseFromString(text, "text/xml");
-  if (dom.documentElement.localName === "gpx") {
-    return gpx(dom).features.filter(hasGeometry).map(applySimplestyle);
-  }
-  return kml(dom).features.filter(hasGeometry);
-}
-
-/** An overlay file's SOURCE_PROPERTY, if it's GeoJSON that has one. */
-function overlaySourceOfText(text: string): string | undefined {
-  if (!text.trimStart().startsWith("{")) return undefined;
-  try {
-    const source = (JSON.parse(text) as Record<string, unknown>)[SOURCE_PROPERTY];
-    return typeof source === "string" ? source : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /** The Media an overlay was made from, so re-saving it keeps the link. */
 export async function fetchOverlaySource(handle: string): Promise<string | undefined> {
@@ -140,11 +74,7 @@ export async function fetchAllKmlFeatures(handles: string[]): Promise<Feature[]>
   return collections.flat().filter((f) => f.properties?.["@geometry-type"] !== "groundoverlay");
 }
 
-/** An overlay's 4 world corners, maplibre's own ImageSource `coordinates`
- * order (top-left, top-right, bottom-right, bottom-left) and type. */
-export type OverlayCorners = [[number, number], [number, number], [number, number], [number, number]];
-
-/** An image overlay drawn in MapItemEditorDialog.tsx (mapFileWrite.ts's
+/** An image overlay drawn in MapItemEditorDialog.tsx (map-edit's
  * ImageOverlay, round-tripped) -- always 4 explicit world corners.
  * MapItemEditorDialog.tsx's move/resize/rotate/corner-drag handles all
  * transform these same 4 points directly (translate, uniform scale-from-
@@ -206,121 +136,6 @@ export interface KmlRegion {
    * that. */
   ring: [number, number][];
 }
-
-const DEG_TO_RAD = Math.PI / 180;
-const RAD_TO_DEG = 180 / Math.PI;
-
-/** [lng,lat] -> normalized Web Mercator x/y (x east-positive, y
- * *south*-positive) -- the exact projection maplibre's own map.project()
- * uses internally, reimplemented here as plain math (no maplibre-gl
- * import) so this module stays free of that ~900KB dependency (see
- * MapItemEditorDialog.tsx's own doc comment on why maplibre-gl is always
- * behind a lazy import elsewhere in this app). Unlike raw [lng,lat],
- * Mercator x/y is locally isotropic -- equal scale in both directions at
- * any given point, which is the whole point of the projection -- making it
- * the correct space to rotate a box in; see rotatePoint. */
-function mercatorFromLngLat([lng, lat]: [number, number]): [number, number] {
-  const x = (180 + lng) / 360;
-  const y = (180 - RAD_TO_DEG * Math.log(Math.tan(Math.PI / 4 + (lat * DEG_TO_RAD) / 2))) / 360;
-  return [x, y];
-}
-
-/** mercatorFromLngLat's inverse. */
-function lngLatFromMercator([x, y]: [number, number]): [number, number] {
-  const lng = x * 360 - 180;
-  const lat = 90 - 2 * Math.atan(Math.exp((y * 360 - 180) * DEG_TO_RAD)) * RAD_TO_DEG;
-  return [lng, lat];
-}
-
-/** Rotates one point by `rotationDeg` around `center` (positive =
- * counterclockwise, matching KML's own <LatLonBox><rotation> convention)
- * -- done in Mercator-projected space (see mercatorFromLngLat), not raw
- * [lng,lat], so a rectangle stays a rectangle (right angles preserved)
- * after rotating, regardless of latitude. A naive rotation directly on
- * [lng,lat] -- this function's original implementation -- shears instead,
- * since a degree of longitude and a degree of latitude aren't the same
- * ground (or screen) distance away from the equator (found live: a square
- * image's corners visibly stopped being 90 degrees once rotated away from
- * 0). This app's own image overlays are never meant to be opened in an
- * external viewer (their picture is an app-internal Media reference), so diverging here
- * from what Google Earth's own <LatLonBox><rotation> would render is an
- * acceptable trade for this app always rendering its own files correctly.
- * Pass a negative `rotationDeg` to go the other way (world -> local). */
-export function rotatePoint(point: [number, number], center: [number, number], rotationDeg: number): [number, number] {
-  const angle = rotationDeg * DEG_TO_RAD;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  const [px, py] = mercatorFromLngLat(point);
-  const [cx, cy] = mercatorFromLngLat(center);
-  // Mercator y increases southward -- negated here so this rotation is
-  // expressed in a conventional north-up, east-right plane (dx
-  // east-positive, dy north-positive), keeping "positive rotationDeg =
-  // counterclockwise" the same sense every caller already expects.
-  const dx = px - cx;
-  const dy = -(py - cy);
-  const rx = dx * cos - dy * sin;
-  const ry = dx * sin + dy * cos;
-  return lngLatFromMercator([cx + rx, cy - ry]);
-}
-
-/** Scales the distance from `center` to `point` by `scale`, in the same
- * Mercator-projected space rotatePoint rotates in -- so scaling a
- * rectangle (or an already-warped quad) uniformly from its own center
- * preserves its exact shape/aspect ratio regardless of latitude, the same
- * way rotatePoint preserves angles. MapItemEditorDialog.tsx's resize
- * handle applies this to all 4 corners at once (see mountOverlay). */
-export function scalePoint(point: [number, number], center: [number, number], scale: number): [number, number] {
-  const [px, py] = mercatorFromLngLat(point);
-  const [cx, cy] = mercatorFromLngLat(center);
-  return lngLatFromMercator([cx + (px - cx) * scale, cy + (py - cy) * scale]);
-}
-
-/** The distance between `a` and `b` in the same Mercator-projected space
- * scalePoint scales in -- not a real-world distance (Mercator distorts
- * those away from the equator), just a consistent unit for computing a
- * resize handle's before/after scale ratio, which only ever needs to be
- * internally consistent with scalePoint's own projection, not physically
- * meaningful on its own. */
-export function mercatorDistance(a: [number, number], b: [number, number]): number {
-  const [ax, ay] = mercatorFromLngLat(a);
-  const [bx, by] = mercatorFromLngLat(b);
-  return Math.hypot(bx - ax, by - ay);
-}
-
-/** The angle (degrees, positive = counterclockwise, 0 = due east) from
- * `from` to `to` -- measured in the same Mercator-projected, north-up
- * plane rotatePoint itself rotates in, so a caller tracking "how far has
- * the user dragged this handle around the center" gets an angle that
- * matches how rotatePoint will then actually render it (unlike a plain
- * atan2 on raw [lng,lat], which suffers the same latitude-dependent skew
- * rotatePoint's own doc comment describes). */
-export function mercatorBearing(from: [number, number], to: [number, number]): number {
-  const [fx, fy] = mercatorFromLngLat(from);
-  const [tx, ty] = mercatorFromLngLat(to);
-  return Math.atan2(-(ty - fy), tx - fx) * RAD_TO_DEG;
-}
-
-/** An axis-aligned box plus a rotation about its own center's 4 world
- * corners -- KML's own <LatLonBox><rotation> model. Only ever needed to
- * interpret an *old* overlay saved before this app always wrote explicit
- * corners (see fetchAllKmlImageOverlays); MapItemEditorDialog.tsx itself
- * only ever deals with corners directly, never this box shape, so this
- * isn't exported. */
-function cornersFromBox(
-  box: { north: number; south: number; east: number; west: number; rotation: number },
-): OverlayCorners {
-  const center: [number, number] = [(box.west + box.east) / 2, (box.north + box.south) / 2];
-  const corners: [number, number][] = [
-    [box.west, box.north], [box.east, box.north], [box.east, box.south], [box.west, box.south],
-  ];
-  return corners.map((p) => rotatePoint(p, center, box.rotation)) as OverlayCorners;
-}
-
-/** An image overlay's picture, as a Media handle behind this marker (not a
- * real URL: an app-internal reference, since a resolvable link would need
- * an expiring auth token baked in) -- in a KML GroundOverlay's href, and
- * what asGroundOverlay makes of a GeoJSON one's `image`. */
-const MEDIA_HANDLE_PREFIX = "media-handle:";
 
 /** Every GroundOverlay across a place's KML attachment(s) -- the same
  * shared per-handle cache as fetchAllKmlFeatures, so fetching both for the
@@ -387,41 +202,6 @@ export async function fetchAllKmlImageOverlays(handles: string[]): Promise<KmlIm
   return overlays;
 }
 
-/** Every Polygon ring inside `feature` -- itself (a plain Polygon), or each
- * Polygon sub-geometry of a GeometryCollection. A country-level Wikidata/
- * Commons outline (e.g. the United States) is often a disjoint shape --
- * islands/territories a single Polygon ring can't express -- unlike a
- * state's simpler single-ring Polygon. A KML file stores one as a
- * <MultiGeometry> of several <Polygon>s, and @tmcw/togeojson reads *any* multi-child
- * Placemark geometry back as a GeometryCollection (never reconstituting
- * MultiPolygon) -- so that's the shape that actually reaches here, not
- * "MultiPolygon" itself (confirmed live, 2026-09-09, round-tripping a
- * synthetic MultiPolygon through both libraries). A non-Polygon sub-geometry
- * (there shouldn't be one -- this app never writes anything else into a
- * region's own Placemark) is simply skipped rather than failing the whole
- * feature. `[]` for anything else (a Point, a bare LineString route, ...),
- * meaning "not a region" to every caller below. */
-function polygonRingsOf(feature: Feature): Position[][] {
-  if (feature.geometry?.type === "Polygon") return [feature.geometry.coordinates[0]];
-  if (feature.geometry?.type === "GeometryCollection") {
-    return feature.geometry.geometries.filter((g) => g.type === "Polygon").map((g) => g.coordinates[0]);
-  }
-  return [];
-}
-
-/** True for a feature fetchAllKmlRegions/MapCanvas.tsx's own shapes effect
- * both treat as one drawable/controllable region -- see polygonRingsOf.
- * Exported so MapCanvas.tsx's key/hidden/opacity stamping can use the exact
- * same test fetchAllKmlRegions does: the two must never drift, or a row's
- * key stops matching the feature it's meant to control -- found live as a
- * place whose outline drew on the map (MapLibre's GeoJSON source splits a
- * GeometryCollection into one sub-feature per geometry before rendering,
- * each individually typed "Polygon") but never showed up in
- * OverlayLayersPanel.tsx's list. */
-export function isKmlRegion(feature: Feature): boolean {
-  return polygonRingsOf(feature).length > 0;
-}
-
 /** Every drawn region (Polygon/Rectangle shape) across a place's KML
  * attachment(s) -- the counterpart to fetchAllKmlImageOverlays for
  * OverlayLayersPanel.tsx's own list, which shows both kinds of overlay
@@ -438,7 +218,7 @@ export async function fetchAllKmlRegions(handles: string[]): Promise<KmlRegion[]
     // Every feature in this file (region or not) counts toward the index --
     // matches fetchAllKmlFeatures' own per-handle array position (it only
     // *filters out* the groundoverlay ones, which never precede a region in
-    // write order -- see mapFileWrite.ts's mapItemToGeoJson on why image
+    // write order -- see map-edit's mapItemToGeoJson on why image
     // overlays always come after every shape -- so the position
     // survives that filter unchanged), what this region's own rowKey needs.
     let indexInFile = 0;
@@ -476,28 +256,6 @@ export interface KmlLine {
   coords: [number, number][];
 }
 
-/** Every vertex of `feature` if it's a line: a LineString, a MultiLineString
- * (a GPX track with several segments) or a GeometryCollection of only
- * LineStrings (how @tmcw/togeojson reads a KML MultiGeometry -- see
- * polygonRingsOf). `[]` for anything else, meaning "not a line". */
-function lineCoordsOf(feature: Feature): Position[] {
-  const geometry = feature.geometry;
-  if (geometry?.type === "LineString") return geometry.coordinates;
-  if (geometry?.type === "MultiLineString") return geometry.coordinates.flat();
-  if (geometry?.type === "GeometryCollection" && geometry.geometries.length > 0
-    && geometry.geometries.every((g) => g.type === "LineString")) {
-    return geometry.geometries.flatMap((g) => (g.type === "LineString" ? g.coordinates : []));
-  }
-  return [];
-}
-
-/** True for a feature fetchAllKmlLines lists and MapCanvas.tsx's shapes
- * effect lets the panel hide/dim -- shared for the same reason as
- * isKmlRegion: the two must never drift apart. A region is never a line. */
-export function isKmlLine(feature: Feature): boolean {
-  return !isKmlRegion(feature) && lineCoordsOf(feature).length > 0;
-}
-
 /** Every line across a place's map file(s) -- fetchAllKmlRegions' twin,
  * counting indexInFile the same way. */
 export async function fetchAllKmlLines(handles: string[]): Promise<KmlLine[]> {
@@ -529,96 +287,4 @@ export async function fetchAllKmlLines(handles: string[]): Promise<KmlLine[]> {
 export function invalidateKmlFeatures(handle: string): void {
   featureCache.delete(handle);
   sourceByHandle.delete(handle);
-}
-
-function visitCoordinates(coords: unknown, bounds: [number, number, number, number]): void {
-  if (typeof (coords as Position)[0] === "number") {
-    const [lng, lat] = coords as Position;
-    if (lng < bounds[0]) bounds[0] = lng;
-    if (lat < bounds[1]) bounds[1] = lat;
-    if (lng > bounds[2]) bounds[2] = lng;
-    if (lat > bounds[3]) bounds[3] = lat;
-    return;
-  }
-  for (const c of coords as unknown[]) visitCoordinates(c, bounds);
-}
-
-/** Every coordinate's bounding box across a set of KML features, as
- * [west, south, east, north] -- maplibre's own LngLatBoundsLike corner
- * order, so a caller can hand this straight to fitBounds/cameraForBounds to
- * frame a field boundary or a route at whatever zoom actually fits it,
- * rather than guessing one. Null when the features carry no coordinates at
- * all (an empty file, or every fetch above failed). */
-export function kmlBounds(features: Feature[]): [west: number, south: number, east: number, north: number] | null {
-  const bounds: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const feature of features) {
-    const geometry = feature.geometry;
-    if (!geometry) continue;
-    if (geometry.type === "GeometryCollection") {
-      for (const g of geometry.geometries) if ("coordinates" in g) visitCoordinates(g.coordinates, bounds);
-      continue;
-    }
-    visitCoordinates(geometry.coordinates, bounds);
-  }
-  return Number.isFinite(bounds[0]) ? bounds : null;
-}
-
-/** The center of kmlBounds -- a plain bbox center rather than an
- * area-weighted centroid, which is all a "roughly where does this file sit"
- * marker position needs. */
-export function kmlCenter(features: Feature[]): [lat: number, long: number] | null {
-  const bounds = kmlBounds(features);
-  if (!bounds) return null;
-  return [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2];
-}
-
-/** Same bbox as kmlBounds, but over a set of image overlays' corners instead
- * of vector features -- overlays (GroundOverlay/region placemarks) carry no
- * Point/LineString/Polygon geometry for kmlBounds to find anything in, since
- * fetchAllKmlFeatures excludes them entirely. Lets a caller fit the camera to
- * an overlay-only KML attachment the same way it would a vector one. */
-export function kmlOverlayBounds(
-  overlays: KmlImageOverlay[],
-): [west: number, south: number, east: number, north: number] | null {
-  if (overlays.length === 0) return null;
-  const bounds: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const overlay of overlays) {
-    for (const [lng, lat] of overlay.corners) {
-      if (lng < bounds[0]) bounds[0] = lng;
-      if (lat < bounds[1]) bounds[1] = lat;
-      if (lng > bounds[2]) bounds[2] = lng;
-      if (lat > bounds[3]) bounds[3] = lat;
-    }
-  }
-  return bounds;
-}
-
-/** Combines two nullable bboxes (as returned by kmlBounds/kmlOverlayBounds)
- * into the box that encloses both -- a place's KML attachment(s) can carry
- * vector shapes and image overlays side by side, and framing the camera to
- * just one kind would clip whichever the caller didn't ask for. Either side
- * missing (no shapes, or no overlays) just passes the other through; both
- * missing is null, same as either input alone would be. */
-export function unionBounds(
-  a: [west: number, south: number, east: number, north: number] | null,
-  b: [west: number, south: number, east: number, north: number] | null,
-): [west: number, south: number, east: number, north: number] | null {
-  if (!a) return b;
-  if (!b) return a;
-  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
-}
-
-/** Same bbox-center guess as kmlCenter, but over a set of image overlays'
- * corners instead of vector features -- useVisualData.ts's fallback for a
- * PendingKmlPlace whose only KML attachment is a GroundOverlay (an
- * overlay-only file: no Point/LineString/Polygon placemark for kmlCenter to
- * find anything in, since fetchAllKmlFeatures excludes GroundOverlay
- * placemarks entirely). Without this, a place with only an image overlay
- * attached and no lat/long of its own never gets a derived position and so
- * never renders on the map until someone sets its coordinates by hand
- * (found live). */
-export function kmlOverlayCenter(overlays: KmlImageOverlay[]): [lat: number, long: number] | null {
-  const bounds = kmlOverlayBounds(overlays);
-  if (!bounds) return null;
-  return [(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2];
 }

@@ -1,6 +1,6 @@
 // What a map overlay is, and making one. An overlay is always its own
 // GeoJSON Media object tagged OVERLAY_TAG_NAME, written only by this app
-// (mapFileWrite.ts) -- a map file someone uploads (KML, GPX, or GeoJSON
+// (map-edit's mapItemToGeoJson) -- a map file someone uploads (KML, GPX, or GeoJSON
 // from a mapping site) is never edited or converted itself: an overlay is
 // made *from* it as a new file, and the original is attached to the same
 // place(s) alongside it, so it stays the record of what was actually
@@ -12,7 +12,7 @@ import { fetchPage } from "./api";
 import { getOrCreateTagHandle, tagAndDescribeMedia, uploadMedia, uploadMediaFileDetailed } from "./jobsApi";
 import { fetchAllKmlFeatures, fetchAllKmlImageOverlays } from "./kmlMedia";
 import { GEOJSON_MIME } from "./mapFileMime";
-import { mapItemToGeoJson, type ImageOverlay } from "./mapFileWrite";
+import { mapItemToGeoJson, type ImageOverlay } from "@gramps-connect/story/map-edit";
 import { fetchObjectExtended, getBacklinks } from "./objectDetail";
 import { attachRefListEntry } from "./refListApi";
 import { getViewStore } from "./registry";

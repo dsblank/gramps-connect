@@ -21,11 +21,12 @@ import { getToken } from "../auth/auth";
 import { fetchAuthedBlobUrl } from "../store/authedFetch";
 import { formatHash } from "../hash";
 import {
-  fetchAllKmlFeatures, fetchAllKmlImageOverlays, fetchOverlaySource, invalidateKmlFeatures, mercatorBearing, mercatorDistance, rotatePoint,
-  scalePoint, type OverlayCorners,
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, fetchOverlaySource, invalidateKmlFeatures,
 } from "../store/kmlMedia";
-import { mapItemToGeoJson, type ImageOverlay } from "../store/mapFileWrite";
-import { assembleForSaving, lockPart, prepareForEditing, type EditableGeometry, type EditSession, type SavedPart } from "../store/mapEditModel";
+import {
+  assembleForSaving, lockPart, mapItemToGeoJson, mercatorBearing, mercatorDistance, prepareForEditing, rotatePoint, scalePoint,
+  type EditableGeometry, type EditSession, type ImageOverlay, type OverlayCorners, type SavedPart,
+} from "@gramps-connect/story/map-edit";
 import { createOverlay } from "../store/mapOverlays";
 import { updateMediaFile, setMediaDesc } from "../store/jobsApi";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
@@ -189,7 +190,7 @@ const TERRA_DRAW_LAYERS = ["td-polygon", "td-polygon-outline", "td-linestring", 
  * top of terra-draw's own -- purely visual, never saved from directly
  * (handleSave reads terra-draw's own snapshot, this is a mirror of it). */
 /** Shapes loaded from the file that terra-draw can't edit (see
- * mapEditModel.ts's lockPart) -- drawn dashed underneath, so they're still
+ * the map-edit model's lockPart) -- drawn dashed underneath, so they're still
  * visible, and saved back exactly as they were. */
 const LOCKED_SOURCE = "locked-shapes";
 const LOCKED_FILL_LAYER = "locked-shapes-fill";
@@ -442,7 +443,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // Whether the canvas currently holds anything worth saving -- Save stays
   // disabled at zero, same as every create dialog's own empty-state guard.
   const [hasFeatures, setHasFeatures] = useState(false);
-  // What was set aside when loading an existing file (mapEditModel.ts) --
+  // What was set aside when loading an existing file (@gramps-connect/story/map-edit's model) --
   // the properties, multi-part groups and track times terra-draw doesn't
   // keep, put back by handleSave. Null for a new item.
   const sessionRef = useRef<EditSession | null>(null);
@@ -1366,7 +1367,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
     fetchAllKmlFeatures([target.handle]).then((features) => {
       if (cancelled || features.length === 0) return;
       // Split into single, 2D parts with everything terra-draw won't keep
-      // set aside (mapEditModel.ts), so a multi-part shape, a GPS track or
+      // set aside (@gramps-connect/story/map-edit's model), so a multi-part shape, a GPS track or
       // a property this editor doesn't know survives the save.
       const session = prepareForEditing(features);
       sessionRef.current = session;
@@ -1510,7 +1511,7 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       } else {
         handle = target.handle;
         // Re-read, not kept from the load: the file it was made from, if
-        // any (mapFileWrite.ts's SOURCE_PROPERTY), so the link survives.
+        // any (map-edit's SOURCE_PROPERTY), so the link survives.
         const source = await fetchOverlaySource(handle);
         const blob = new Blob([mapItemToGeoJson(features, imageOverlays, source)], { type: GEOJSON_MIME });
         await updateMediaFile(token, handle, blob, GEOJSON_MIME);

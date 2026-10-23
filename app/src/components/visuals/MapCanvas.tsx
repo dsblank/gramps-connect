@@ -6,9 +6,8 @@ import type { Feature, FeatureCollection, Point as GeoJsonPoint } from "geojson"
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { Alert, Box, useComputedColorScheme } from "@mantine/core";
 import type { MapPlace } from "../../store/visualData";
-import {
-  fetchAllKmlFeatures, fetchAllKmlImageOverlays, isKmlLine, isKmlRegion, kmlBounds, kmlOverlayBounds, unionBounds,
-} from "../../store/kmlMedia";
+import { fetchAllKmlFeatures, fetchAllKmlImageOverlays } from "../../store/kmlMedia";
+import { isKmlLine, isKmlRegion, kmlBounds, kmlOverlayBounds, unionBounds } from "@gramps-connect/story/map-edit";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { readVisualColors } from "./cssVar";

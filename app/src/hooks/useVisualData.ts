@@ -94,7 +94,7 @@ export function useVisualData(enabled: boolean): VisualDataState {
   // ever adds markers, never removes one a synchronous read already found,
   // so this can safely lag a render or two behind without the map flashing.
   //
-  // Dynamically imported: kmlMedia.ts pulls in @tmcw/togeojson, and this
+  // Dynamically imported: map-edit pulls in @tmcw/togeojson, and this
   // hook (unlike MapCanvas.tsx, which lazy-loads maplibre-gl itself) is used
   // from MapView/TimelineView, which are part of the main bundle -- a tree
   // with no coordinate-less KML attachment (the common case) should never
@@ -104,7 +104,9 @@ export function useVisualData(enabled: boolean): VisualDataState {
     const pending = data.pendingKmlPlaces.filter((place) => !kmlPositionCache.has(place.handle));
     if (pending.length === 0) return;
     let cancelled = false;
-    import("../store/kmlMedia").then(({ fetchAllKmlFeatures, fetchAllKmlImageOverlays, kmlCenter, kmlOverlayCenter }) => Promise.all(
+    Promise.all([import("../store/kmlMedia"), import("@gramps-connect/story/map-edit")]).then((
+      [{ fetchAllKmlFeatures, fetchAllKmlImageOverlays }, { kmlCenter, kmlOverlayCenter }],
+    ) => Promise.all(
       pending.map(async (place) => {
         const features = await fetchAllKmlFeatures(place.kmlMedia);
         // Falls back to the image overlays' own corners when the file has

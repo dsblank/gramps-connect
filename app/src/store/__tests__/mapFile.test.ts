@@ -7,11 +7,10 @@ vi.mock("../../auth/auth", () => ({ getToken: vi.fn().mockResolvedValue("tok") }
 vi.mock("../apiFetch", () => ({ apiFetch: vi.fn() }));
 
 import { apiFetch } from "../apiFetch";
+import { isKmlLine, isKmlRegion, mapItemToGeoJson, parseMapFile } from "@gramps-connect/story/map-edit";
 import {
-  fetchAllKmlFeatures, fetchAllKmlImageOverlays, fetchAllKmlLines, fetchAllKmlRegions, fetchOverlaySource, isKmlLine,
-  isKmlRegion, parseMapFile,
+  fetchAllKmlFeatures, fetchAllKmlImageOverlays, fetchAllKmlLines, fetchAllKmlRegions, fetchOverlaySource,
 } from "../kmlMedia";
-import { mapItemToGeoJson } from "../mapFileWrite";
 import {
   GEOJSON_MIME, GPX_MIME, KML_MIME, isMapFileMime, mapFileMimeForName,
 } from "../mapFileMime";
@@ -34,34 +33,9 @@ describe("mapFileMime", () => {
   });
 });
 
+// The GeoJSON cases are the story package's own tests (no DOMParser
+// there); GPX and KML need jsdom's.
 describe("parseMapFile", () => {
-  it("reads a GeoJSON FeatureCollection, taking simplestyle colours", () => {
-    const features = parseMapFile(JSON.stringify({
-      type: "FeatureCollection",
-      features: [
-        { type: "Feature", properties: { stroke: "#ff0000" }, geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
-        {
-          type: "Feature",
-          properties: { fill: "#00ff00", stroke: "#000000", "fill-opacity": 0.5 },
-          geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
-        },
-        { type: "Feature", properties: { color: "#123456", stroke: "#ff0000" }, geometry: { type: "Point", coordinates: [0, 0] } },
-        { type: "Feature", properties: { name: "no shape" }, geometry: null },
-      ],
-    }));
-    expect(features).toHaveLength(3);
-    expect(features[0].properties).toMatchObject({ color: "#ff0000" });
-    expect(features[1].properties).toMatchObject({ color: "#00ff00", opacity: 0.5 });
-    // An explicit `color` wins over simplestyle.
-    expect(features[2].properties).toMatchObject({ color: "#123456" });
-  });
-
-  it("accepts a single Feature or a bare Geometry", () => {
-    const point = { type: "Point", coordinates: [3, 4] };
-    expect(parseMapFile(JSON.stringify({ type: "Feature", properties: null, geometry: point }))[0].geometry).toEqual(point);
-    expect(parseMapFile(`  ${JSON.stringify(point)}`)[0].geometry).toEqual(point);
-  });
-
   it("reads a GPX track and its waypoints", () => {
     const features = parseMapFile(`<?xml version="1.0"?>
       <gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
@@ -88,10 +62,6 @@ describe("parseMapFile", () => {
     expect(features).toHaveLength(1);
     expect(features[0].properties?.name).toBe("Road");
     expect(features[0].properties?.color).toBeUndefined();
-  });
-
-  it("throws on unparseable GeoJSON, which fetchKmlFeatures turns into no features", () => {
-    expect(() => parseMapFile("{not json")).toThrow();
   });
 });
 

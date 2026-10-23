@@ -9,7 +9,7 @@
 import type { Feature } from "geojson";
 import { toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
-import type { OverlayCorners } from "./kmlMedia";
+import type { OverlayCorners } from "@gramps-connect/story/map-edit";
 import { fetchMediaMime, type StoryPoint, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
 
@@ -115,14 +115,14 @@ export async function hydrateStory(spec: StorySpec): Promise<HydratedStory> {
   // same lookup useVisualData.ts's hook does for the tree-wide map, just as
   // a plain awaited call here since a story is hydrated once per open
   // rather than kept live against a changing cache. Dynamically imported:
-  // kmlMedia.ts pulls in @tmcw/togeojson, and storyHydration.ts is reached
+  // both pull in @tmcw/togeojson, and storyHydration.ts is reached
   // from the main bundle (StoryView.tsx imports it directly) -- a story
   // with no such place should never pay for that parser.
   const pendingHandles = [...new Set(
     draftSlides.map((s) => s.pendingPlaceHandle).filter((h): h is string => Boolean(h)),
   )];
   if (pendingHandles.length > 0) {
-    const { fetchAllKmlFeatures, kmlCenter } = await import("./kmlMedia");
+    const [{ fetchAllKmlFeatures }, { kmlCenter }] = await Promise.all([import("./kmlMedia"), import("@gramps-connect/story/map-edit")]);
     const positions = new Map<string, [number, number] | null>();
     await Promise.all(pendingHandles.map(async (handle) => {
       const pending = visualData.pendingKmlPlaces.find((p) => p.handle === handle)!;

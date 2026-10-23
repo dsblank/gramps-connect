@@ -90,13 +90,20 @@ screen, starting at this slide).
 
 ## Phases
 
-### Phase 0: move the map-editing core into the package (no visible change)
+### Phase 0: move the map-editing core into the package (built 2026-10-23, no visible change)
 
-- Move `mapEditModel.ts` and its tests, the pure parts of `kmlMedia.ts`
+- Moved `mapEditModel.ts` and its tests, the pure parts of `kmlMedia.ts`
   (`parseMapFile`, geometry helpers, bounds) and `mapFileWrite.ts` into the
   package. `kmlMedia.ts` keeps only its API fetches.
-- `@tmcw/togeojson` becomes a package dependency; terra-draw and its
-  maplibre adapter become optional peers of `/editor`.
+- They're their own entry, `@gramps-connect/story/map-edit` (plain
+  functions: no React, Mantine or map library), not part of `/editor`, so
+  the app's map code doesn't pull in the editor. Names are kept as they
+  were (`isKmlRegion`, `kmlBounds`, ...), so the move changes no behavior.
+- `@tmcw/togeojson` is a package dependency now, not the app's.
+  terra-draw and its maplibre adapter become optional peers of `/editor`
+  in Phase 1, with the component that uses them.
+- GeoJSON parsing and the geometry are tested in the package; GPX and KML
+  parsing stay tested in the app, which has jsdom's DOMParser.
 - The app imports these from the package. App tests and typecheck
   unchanged; you check maps and the overlay editor still behave the same.
 
