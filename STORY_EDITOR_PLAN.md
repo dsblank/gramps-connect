@@ -135,17 +135,17 @@ screen, starting at this slide).
   slide's text and date, reorder, save, read the saved zip back and
   validate it, and check unknown fields survived.
 
-### Phase 3: photos
+### Phase 3: photos (built 2026-10-23, released in 0.3.0)
 
 - Add, replace or remove a slide's photo by picking, dropping or pasting.
   `optimizeImage` (already in the package) sizes it to 1600px WebP and, by
   re-encoding, drops camera and GPS details. Safari can't encode WebP, and
   falls back to JPEG, as now.
 - Caption, credit and alt text.
-- More than one photo per slide is already allowed by the format, and the
-  editor would allow it, but the player shows only the first. Showing
-  several is a player change of its own (a small gallery), done alongside
-  or after.
+- More than one photo per slide: the editor allows it (with ↑/↓ to order
+  them), and the player shows the first with thumbnails to switch.
+- A photo the story already has (same bytes) is reused, not stored twice;
+  photos no slide uses are left out on save.
 
 ### Phase 4: places
 
