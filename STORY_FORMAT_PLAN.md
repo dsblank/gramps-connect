@@ -11,9 +11,10 @@ Download on a story, with the privacy dialog (see Phase 2's notes).
 `StoryPlayer` (see Phase 3's notes). **Phase 4 built** the same day:
 the Gramps Connect Story Viewer is live at
 https://dsblank.github.io/gramps-connect-stories/, with the
-`<gramps-connect-story>` embed, and `@gramps-connect/story` 0.1.0 is on
-npm (published 2026-10-22; see Phase 4's notes).
-**Phase 5 built** too: the Python writer, and the Gramps 6.0 **Export
+`<gramps-connect-story>` embed, and `@gramps-connect/story` is on npm
+(0.1.0 published 2026-10-22, 0.1.1 by the release workflow 2026-10-23;
+see Phase 4's notes).
+**Phase 5 built** too: the Python writer, and the Gramps 6.0 **Generate
 Story** addon on branch `story-export-gramps60` of the addons-source fork,
 not yet a pull request. Decisions are under [Settled decisions](#settled-decisions);
 what's still open is under [Open questions](#open-questions).
@@ -600,22 +601,42 @@ Built 2026-10-22, kept simple. Notes:
   `test:python` has it write stories that the TypeScript reader must
   accept with no warnings.
 - **Addon** `StoryExport` (addons-source, `maintenance/gramps60`):
-  Tools > Utilities > Export Story, for the active person. Their own
-  events (Primary role) and their families' events, by date, undated last;
-  opening slide with their portrait, which is also each slide's fallback
-  photo. Save dialog with "Include data marked private" and "Include
-  living people" (both off), applied with Gramps' own PrivateProxyDb /
-  LivingProxyDb plus a living-in-photo check. Note Gramps' LivingProxyDb
+  Tools > Utilities > **Generate Story** (renamed from Export Story on
+  2026-10-23: it makes a story rather than exporting one that exists).
+  Same choices as Gramps Connect's "Add a story": the active person
+  (optionally "Include families": each family they're a parent or child
+  in, its events and its members' births and deaths), or one of their
+  families (the couple's events plus the chosen members' births,
+  stillbirths and deaths). Slide titles and opening sentences follow
+  storyText.ts, translatable; photo order is event, then the person's
+  portrait, then the place's. Options dialog first (subject, its options,
+  "Include data marked private" / "Include living people", both off,
+  applied with Gramps' own PrivateProxyDb / LivingProxyDb plus a
+  living-in-photo check), then the save dialog, then "Open in Browser":
+  a temporary page holding the story that loads the player from jsDelivr
+  (`@0.1`) with its `brand` attribute. Note Gramps' LivingProxyDb
   clears all events of a family with a living parent, so a marriage to a
   living spouse is dropped -- the same outcome as Gramps Connect's
   download. `storyexport_builder.py` has no GUI imports; tested on a temp
   database.
+- **Addon maps**: a slide's place carries its Gramps Connect "Map
+  overlay" files (shapes, and image overlays with corners, opacity, order,
+  dated by the place's name date; images up to 2048px), or failing those
+  its `.kml` files' points, lines and polygons (what Gramps' Geography
+  views draw) -- never both, since an overlay is usually made from a KML
+  still attached beside it.
 - **End to end**: on Gramps' example tree, loaded through Gramps' own
   plugin manager, every person exported both ways (3,073 stories, 9,951
   slides) and every file validated by the TypeScript reader with no
   warnings.
-- Not done (kept simple): no map shapes/overlays or record IDs from the
-  addon, no CLI mode, and the Gramplet `story()` helper.
+- **Viewer branding** (0.1.1, the first release published by
+  `release.yml` through trusted publishing): StoryPlayer's `brand` slot,
+  ViewerBrand (the Gramps Connect icon linking to the viewer) on the
+  viewer site and in the embed when asked with `brand`.
+- Not done (kept simple): no record IDs from the addon, no CLI mode, and
+  the Gramplet `story()` helper. Known player bug: opening at a slide
+  (`#s3`, the embed's `slide`) leaves the map at its starting view until
+  the slide changes.
 
 - A **Python reference writer** (`gramps_connect_story.py`, standard
   library only, using Pillow when available for image optimization) in
