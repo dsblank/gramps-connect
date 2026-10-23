@@ -167,7 +167,7 @@ screen, starting at this slide).
 - Reusing a place: the place field offers the story's other places, so
   every slide in Zürich points at the same coordinates and overlays.
 
-### Phase 5: shapes and historical maps (built 2026-10-23)
+### Phase 5: shapes and historical maps (built 2026-10-23, released in 0.5.0)
 
 As built: **Edit map** under the place opens `PlaceMapDialog`, full
 screen, on a copy (Cancel drops it, Done is one undo step). The overlay's
