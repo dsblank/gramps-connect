@@ -201,6 +201,15 @@ describe("planStoryExport", () => {
       created: META.created,
       generator: { name: "Gramps Connect", version: "1.2.3" },
     });
+    expect(plan.doc.presentation).toEqual({ basemap: "auto" });
+  });
+
+  it("uses the story's own language and map over the app's", () => {
+    const plan = planStoryExport({ ...source(), language: "fr-CA", basemap: "historical" }, OPEN, META);
+    expect(plan.doc.language).toBe("fr-CA");
+    expect(plan.doc.presentation).toEqual({ basemap: "historical" });
+    // Something that isn't a language tag falls back to the app's.
+    expect(planStoryExport({ ...source(), language: "French!" }, OPEN, META).doc.language).toBe("en");
   });
 });
 

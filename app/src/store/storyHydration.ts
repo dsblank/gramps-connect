@@ -10,7 +10,7 @@ import type { Feature } from "geojson";
 import { toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
 import type { OverlayCorners } from "@gramps-connect/story/map-edit";
-import { fetchMediaMime, pointPhotos, type StoryPoint, type StorySpec } from "./storyBuilder";
+import { fetchMediaMime, pointPhotos, type StoryBasemap, type StoryPoint, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
 
 /** One of a place's map files (mapOverlays.ts), already fetched and
@@ -50,6 +50,9 @@ export interface HydratedSlide {
 
 export interface HydratedStory {
   title: string;
+  /** The spec's own settings, as stored (see StorySpec). */
+  language?: string;
+  basemap?: StoryBasemap;
   slides: HydratedSlide[]; // index 0 is the opening card (the point with no eventRef)
 }
 
@@ -200,6 +203,8 @@ export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Pro
 
   return {
     title: spec.title,
+    ...(spec.language ? { language: spec.language } : {}),
+    ...(spec.basemap ? { basemap: spec.basemap } : {}),
     slides: draftSlides.map(({ pendingPlaceHandle: _pendingPlaceHandle, photoRefs, ...s }) => ({
       ...s,
       ...(photoRefs.length > 0 ? { photos: photoRefs.map((ref) => ({ ref, mime: mimeByRef.get(ref) })) } : {}),

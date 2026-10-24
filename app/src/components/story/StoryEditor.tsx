@@ -11,7 +11,7 @@
 // and then hands over (storyText.ts) -- everything else on a slide is
 // re-resolved from its event and photo at presentation time.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ActionIcon, Box, Button, Divider, Group, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Box, Button, Divider, Group, Select, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import {
   record, redo, SlideList, startHistory, StoryTextField, undo, type History,
@@ -19,7 +19,9 @@ import {
 import { getToken } from "../../auth/auth";
 import { fetchPage, type QueryItem } from "../../store/api";
 import { EVENT_VIEW, MEDIA_VIEW } from "../../store/views";
-import { pointPhotos, withPhotos, type StoryPoint, type StorySpec } from "../../store/storyBuilder";
+import {
+  pointPhotos, storyLanguageTag, withPhotos, type StoryBasemap, type StoryPoint, type StorySpec,
+} from "../../store/storyBuilder";
 import { RefSlot, pickerResultLabel } from "../RefPickerField";
 import { MediaThumbnail } from "../related/MediaThumbnail";
 import { StoryPreview, StoryView } from "../StoryView";
@@ -167,12 +169,40 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
     setInfo((prev) => ({ ...prev, [item.handle]: refInfo(type, item) }));
   }
 
+  /** `current` with a setting changed; empty removes it. */
+  function setSetting(key: "language" | "basemap", value: string | undefined) {
+    const next: StorySpec = { ...current };
+    if (value) Object.assign(next, { [key]: value });
+    else delete next[key];
+    change(next, `story:${key}`);
+  }
+
+  const languageText = current.language ?? "";
   const storyForm = (
     <Stack gap="md">
       <Text fw={600} size="lg">{t("Story")}</Text>
       <TextInput
         label={t("Title")} required value={current.title}
         onChange={(e) => change({ ...current, title: e.currentTarget.value }, "title")}
+      />
+      <TextInput
+        label={t("Language")} w={260} value={languageText}
+        description={t("The language the story is written in, e.g. en, de or fr-CA. Left empty, a download says the app's language.")}
+        error={languageText.trim() && !storyLanguageTag(languageText) ? t("Not a language code, so it's left out.") : undefined}
+        onChange={(e) => setSetting("language", e.currentTarget.value.trim() || undefined)}
+      />
+      <Select
+        label={t("Map")} w={320} allowDeselect={false}
+        description={t("How the map starts when the story plays. Readers can still change it.")}
+        data={[
+          { value: "auto", label: t("Viewer's choice") },
+          { value: "standard", label: t("Today's map") },
+          { value: "historical", label: t("Historical maps for each slide's year") },
+          { value: "none", label: t("No map") },
+        ]}
+        value={current.basemap ?? "auto"}
+        // "auto" is what unset means, so it's stored as unset.
+        onChange={(value) => value && setSetting("basemap", value === "auto" ? undefined : value as StoryBasemap)}
       />
     </Stack>
   );
@@ -238,7 +268,7 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         style={{ padding: 8, borderRadius: 6, background: index === STORY ? "var(--mantine-primary-color-light)" : undefined }}
       >
         <Text fw={600} size="sm">{t("Story")}</Text>
-        <Text size="xs" c="dimmed">{t("Title")}</Text>
+        <Text size="xs" c="dimmed">{t("Title, language and map")}</Text>
       </UnstyledButton>
       <Divider label={t("Slides")} labelPosition="left" />
       <SlideList

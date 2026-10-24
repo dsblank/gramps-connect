@@ -7,6 +7,7 @@
 import type { MediaItem, Place, Slide, StoryDoc } from "@gramps-connect/story";
 import { toEdtf } from "@gramps-connect/gramps-date";
 import { formatDisplayDate } from "./placeIndex";
+import { storyLanguageTag } from "./storyBuilder";
 import type { HydratedMapFile, HydratedSlide, HydratedStory } from "./storyHydration";
 
 export type MediaPurpose = "photo" | "overlay";
@@ -150,8 +151,8 @@ export function presentationDoc(hydrated: HydratedStory): StoryDoc {
     format: "gramps-connect-story",
     version: "1.0",
     title: hydrated.title,
-    // Present has always opened on the standard map.
-    presentation: { basemap: "standard" },
+    ...(storyLanguageTag(hydrated.language) ? { language: storyLanguageTag(hydrated.language) } : {}),
+    presentation: { basemap: hydrated.basemap ?? "auto" },
     slides,
     media,
   };

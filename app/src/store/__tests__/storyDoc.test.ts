@@ -28,7 +28,9 @@ describe("presentationDoc", () => {
   it("converts every slide, unfiltered, into a valid story document", () => {
     const doc = presentationDoc(hydrated);
     expect(doc.slides.map((s) => s.id)).toEqual(["s0", "s1", "s2"]);
-    expect(doc.presentation).toEqual({ basemap: "standard" });
+    // Unset is the viewer's choice, which starts on today's map.
+    expect(doc.presentation).toEqual({ basemap: "auto" });
+    expect(doc.language).toBeUndefined();
     // Valid as story.json, apart from there being no zip to hold the files.
     expect(validate(doc).errors).toEqual([]);
   });
@@ -64,5 +66,11 @@ describe("presentationDoc", () => {
     expect(doc.slides[0].media).toEqual([{ ref: "m1" }, { ref: "m2" }]);
     expect(doc.media.m1.src).toBe("photo/b");
     expect(doc.media.m2).toEqual({ src: "photo/a", mime: "image/jpeg" });
+  });
+
+  it("keeps the story's own language and map", () => {
+    const doc = presentationDoc({ ...hydrated, language: "de_AT", basemap: "none" });
+    expect(doc.language).toBe("de-AT");
+    expect(doc.presentation).toEqual({ basemap: "none" });
   });
 });

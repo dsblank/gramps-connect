@@ -215,6 +215,11 @@ area at its own `opacity`, as the app's Map view does.
   HydratedSlide.photos carries each with its mime; downloads check each
   photo's privacy by itself. Editor: StoryPhotosField (pick from the
   tree or upload, reorder, remove). Wiki: "Several photos on a slide".
+- Story settings built 2026-10-23 (app only): StorySpec `language` and
+  `basemap` (unset = "auto"), shown on the editor's Story row; Present,
+  the preview and downloads use them (a download's language falls back to
+  the app's). ObjectEditDialog keeps unknown spec fields when editing.
+  Wiki: "Story settings".
 - Anything learned in the file editor that the app's story editor lacks
   (Undo/Redo, the side-by-side preview) is offered for the app here, as its
   own change with its own wiki update.

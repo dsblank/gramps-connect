@@ -58,9 +58,24 @@ export function withPhotos(point: StoryPoint, photos: string[]): StoryPoint {
   };
 }
 
+/** How a story's map starts (the story format's `presentation.basemap`). */
+export type StoryBasemap = "auto" | "standard" | "historical" | "none";
+
 export interface StorySpec {
   title: string;
   points: StoryPoint[];
+  /** The language the story is written in, as a BCP 47 tag ("en",
+   * "fr-CA"). Unset, a download says the app's language. */
+  language?: string;
+  /** Unset is "auto" (the viewer's choice, starting on today's map). */
+  basemap?: StoryBasemap;
+}
+
+/** A language tag the story format accepts ("en", "fr-CA"; Gramps' own
+ * "fr_CA" is taken as that), or undefined. */
+export function storyLanguageTag(lang: string | undefined): string | undefined {
+  const tag = lang?.trim().replace(/_/g, "-");
+  return tag && /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/.test(tag) ? tag : undefined;
 }
 
 /** What StoryOptionsDialog.tsx collects before generating. Both fields are

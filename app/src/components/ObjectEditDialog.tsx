@@ -617,7 +617,8 @@ export function ObjectEditDialog({
         let spec: StorySpec;
         try {
           const parsed = JSON.parse(raw);
-          spec = { title: typeof parsed.title === "string" ? parsed.title : "", points: Array.isArray(parsed.points) ? parsed.points : [] };
+          // Everything else the spec has (language, map) is kept as is.
+          spec = { ...parsed, title: typeof parsed.title === "string" ? parsed.title : "", points: Array.isArray(parsed.points) ? parsed.points : [] };
         } catch {
           spec = { title: "", points: [] };
         }

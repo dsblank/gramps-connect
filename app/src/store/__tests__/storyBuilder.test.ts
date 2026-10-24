@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildFamilyStory, pointPhotos, withPhotos } from "../storyBuilder";
+import { buildFamilyStory, pointPhotos, storyLanguageTag, withPhotos } from "../storyBuilder";
 import { EMPTY_VISUAL_DATA, type EventRecord, type VisualData } from "../visualData";
 import type { ObjectDetail } from "../objectDetail";
 
@@ -149,5 +149,24 @@ describe("a point's photos", () => {
     expect(withPhotos(point, ["c"])).toEqual({ eventRef: "e", text: "t", mediaRef: "c" });
     expect(withPhotos(point, [])).toEqual({ eventRef: "e", text: "t" });
     expect(pointPhotos({ mediaRef: "only" })).toEqual(["only"]);
+  });
+});
+
+describe("storyLanguageTag", () => {
+  it("accepts a language code, in Gramps' own form too", () => {
+    expect(storyLanguageTag("en")).toBe("en");
+    expect(storyLanguageTag(" fr-CA ")).toBe("fr-CA");
+    expect(storyLanguageTag("de_AT")).toBe("de-AT");
+    expect(storyLanguageTag("zh-Hant-TW")).toBe("zh-Hant-TW");
+  });
+
+  it("leaves out what isn't one", () => {
+    expect(storyLanguageTag(undefined)).toBeUndefined();
+    expect(storyLanguageTag("")).toBeUndefined();
+    expect(storyLanguageTag("   ")).toBeUndefined();
+    expect(storyLanguageTag("e")).toBeUndefined();
+    expect(storyLanguageTag("German!")).toBeUndefined();
+    expect(storyLanguageTag("en-")).toBeUndefined();
+    expect(storyLanguageTag("en US")).toBeUndefined();
   });
 });

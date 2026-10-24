@@ -30,7 +30,7 @@ import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { apiFetch } from "./apiFetch";
 import type { ObjectDetail } from "./objectDetail";
-import { personDisplayName, type RawPerson, type StorySpec } from "./storyBuilder";
+import { personDisplayName, storyLanguageTag, type RawPerson, type StoryBasemap, type StorySpec } from "./storyBuilder";
 import { mediaKeys, slidePhotos, slideToDoc } from "./storyDoc";
 import { hydrateStory, type HydratedSlide } from "./storyHydration";
 import { isSubjectRole } from "./storyText";
@@ -75,6 +75,9 @@ export interface ExportSlide {
 
 export interface StoryExportSource {
   title: string;
+  /** The story's own settings (see StorySpec). */
+  language?: string;
+  basemap?: StoryBasemap;
   noteGrampsId: string;
   notePrivate: boolean;
   /** The people the story as a whole is about -- the person it's attached
@@ -223,6 +226,8 @@ export async function gatherStoryExport(noteDetail: ObjectDetail, spec: StorySpe
 
   return {
     title: spec.title,
+    ...(spec.language ? { language: spec.language } : {}),
+    ...(spec.basemap ? { basemap: spec.basemap } : {}),
     noteGrampsId: typeof noteDetail.gramps_id === "string" ? noteDetail.gramps_id : "",
     notePrivate: Boolean(noteDetail.private),
     subjects: [...subjects],
@@ -278,11 +283,6 @@ export interface StoryExportPlan {
 }
 
 /** "de_AT" (this app's language codes) -> "de-AT" (BCP 47). */
-function bcp47(lang: string | undefined): string | undefined {
-  const tag = lang?.replace(/_/g, "-");
-  return tag && /^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/.test(tag) ? tag : undefined;
-}
-
 /** Step 2. Pure: the same source and options always give the same plan. */
 export function planStoryExport(source: StoryExportSource, options: ExportOptions, meta: ExportMeta = {}): StoryExportPlan {
   const personHidden = (handle: string): boolean => {
@@ -363,14 +363,16 @@ export function planStoryExport(source: StoryExportSource, options: ExportOption
     const desc = source.media.get(entry.handle)?.desc;
     return { ...entry, ...(desc ? { alt: desc } : {}) };
   });
+  const language = storyLanguageTag(source.language) ?? storyLanguageTag(meta.language);
   const doc: Omit<StoryDoc, "media"> = {
     format: "gramps-connect-story",
     version: "1.0",
     title: source.title,
-    ...(bcp47(meta.language) ? { language: bcp47(meta.language) } : {}),
+    // The story's own language, else the app's.
+    ...(language ? { language } : {}),
     created: meta.created ?? new Date().toISOString(),
     generator: { name: "Gramps Connect", ...(meta.appVersion ? { version: meta.appVersion } : {}) },
-    presentation: { basemap: "auto" },
+    presentation: { basemap: source.basemap ?? "auto" },
     slides,
   };
   if (options.includeIds) {
