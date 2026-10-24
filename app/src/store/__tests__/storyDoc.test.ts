@@ -74,3 +74,17 @@ describe("presentationDoc", () => {
     expect(doc.presentation).toEqual({ basemap: "none" });
   });
 });
+
+describe("a slide's photos and place", () => {
+  it("carries each photo's caption and credit, and a tidied place name", () => {
+    const doc = presentationDoc({
+      title: "T",
+      slides: [{
+        title: "Birth", text: "", placeTitle: ", Florence, , Florence, Italy", lat: 43.77, long: 11.25,
+        photos: [{ ref: "p", mime: "image/jpeg", caption: "Marie de' Medici", credit: "Public domain · Wikimedia Commons" }],
+      }],
+    });
+    expect(doc.slides[0].place?.name).toBe("Florence, Italy");
+    expect(doc.slides[0].media).toEqual([{ ref: expect.any(String), caption: "Marie de' Medici", credit: "Public domain · Wikimedia Commons" }]);
+  });
+});

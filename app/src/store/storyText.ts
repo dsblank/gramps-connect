@@ -81,6 +81,110 @@ export interface Moment {
    * that isn't the subject's *own* (a Witness at someone else's baptism)
    * changes the sentence -- see SUBJECT_ROLES. */
   role?: string;
+  /** How the subjects are related to whoever the story is about, as a
+   * possessive phrase ("His father", "Their daughter", "Her parents") --
+   * set when the moment is a relative's rather than the story subject's
+   * own, so the sentence says who this is instead of naming a stranger. */
+  relation?: string;
+}
+
+/** A place title as it should read in a sentence or a slide heading: the
+ * levels of the tree's place hierarchy, minus empty ones (", Florence, ,
+ * Florence"), purely numeric ones (the postal and INSEE codes a GEDCOM
+ * import keeps as levels of their own) and a level that only repeats the
+ * one before it. */
+export function storyPlaceName(title: string): string {
+  const parts: string[] = [];
+  for (const raw of title.split(",")) {
+    const part = raw.trim();
+    if (!part || /^\d+$/.test(part)) continue;
+    if (parts.length > 0 && parts[parts.length - 1].toLowerCase() === part.toLowerCase()) continue;
+    parts.push(part);
+  }
+  return parts.join(", ");
+}
+
+/** Longer than this, an event description is cut to its first sentence:
+ * a description is a detail worth a line, and a pasted encyclopedia
+ * paragraph swamps the slide. */
+const DESCRIPTION_MAX = 200;
+
+/** An event's description as a slide can use it: without the footnote
+ * markers text copied from Wikipedia carries ("[124]", "[ a ]", "[citation
+ * needed]") or the space before punctuation its links leave, and cut to
+ * its first sentence when long. */
+export function storyDescription(description: string): string {
+  const text = description
+    .replace(/\s*\[\s*(?:\d+|[a-z]|citation needed|note \d+)\s*\]/gi, "")
+    .replace(/\s+/g, " ")
+    // "old age , prompting" -- the space a stripped link leaves behind.
+    .replace(/ ([,.;:!?])/g, "$1")
+    .trim();
+  if (text.length <= DESCRIPTION_MAX) return text;
+  // A sentence ends at . ! ? followed by a capital, so "3:10 p.m. local
+  // time" doesn't end one.
+  const first = text.split(/(?<=[.!?])\s+(?=[A-Z])/)[0];
+  return first.length <= DESCRIPTION_MAX * 2 ? first : `${first.slice(0, DESCRIPTION_MAX).trimEnd()}…`;
+}
+
+/** A photo's caption, from its Media description: as written, except that
+ * a description that's really a file name ("King_George_1923_LCCN2014715558_
+ * (cropped).jpg") loses its extension, underscores, catalogue numbers and
+ * "(cropped)"-style notes, and one that's nothing but a camera's or a
+ * program's file name ("IMG_2041", a hex checksum) gives no caption. */
+export function storyPhotoCaption(desc: string): string {
+  let text = desc.trim();
+  const fileName = /\.(jpe?g|png|gif|webp|tiff?|bmp|heic|svg)$/i.test(text) || (/_/.test(text) && !/\s/.test(text));
+  if (fileName) {
+    text = text
+      .replace(/\.(jpe?g|png|gif|webp|tiff?|bmp|heic|svg)$/i, "")
+      .replace(/_/g, " ")
+      .replace(/\((?:[^)]*\b(?:crop|cropped|edit|edited|retouched|ratio)\b[^)]*)\)/gi, "")
+      .replace(/\b[A-Z]{2,}\d{5,}\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  if (/^(img|dsc|dscn|dscf|pxl|p)[\s_-]?\d+$/i.test(text) || /^[0-9a-f]{16,}$/i.test(text)) return "";
+  return text;
+}
+
+/** A Media attribute as the API sends it: its type is a plain string, or a
+ * raw AttributeType struct whose `string` is a custom type's name. */
+export interface MediaAttribute {
+  type?: string | { string?: string };
+  value?: string;
+}
+
+const CREDIT_WHO = ["author", "photographer", "creator", "artist", "copyright"];
+const CREDIT_TERMS = ["license", "licence"];
+
+/** A photo's credit, from its Media attributes. Gramps has no field for
+ * this, so it's read from custom attributes by name: a "Credit" attribute
+ * is used as written; otherwise whoever made it (Author, Photographer,
+ * Creator, Artist, Copyright), its licence (License or Licence) and where
+ * it's from (Source), joined with " · ". */
+export function storyPhotoCredit(attributes: MediaAttribute[]): string {
+  const byName = new Map<string, string>();
+  for (const attr of attributes) {
+    const name = (typeof attr.type === "string" ? attr.type : attr.type?.string ?? "").trim().toLowerCase();
+    const value = attr.value?.trim();
+    if (name && value && !byName.has(name)) byName.set(name, value);
+  }
+  const credit = byName.get("credit");
+  if (credit) return credit;
+  const pick = (names: string[]) => names.map((n) => byName.get(n)).find(Boolean);
+  return [pick(CREDIT_WHO), pick(CREDIT_TERMS), byName.get("source")].filter(Boolean).join(" · ");
+}
+
+/** Whether an event is record-keeping rather than something that happened:
+ * a GEDCOM vendor tag imported as a custom event type ("_UPD", the last
+ * time a record was edited; "_SOSADABOVILLE", an ancestor number), or any
+ * other custom type with neither a date nor a place ("Reference Number").
+ * A story leaves these out. `standard` says whether `type` is one of
+ * Gramps' own event types (views.ts's isStandardEventType). */
+export function isBookkeepingEvent(type: string, standard: boolean, hasDate: boolean, hasPlace: boolean): boolean {
+  if (type.startsWith("_")) return true;
+  return !standard && !hasDate && !hasPlace;
 }
 
 /** Roles that mean "this event is the subject's own", so the sentence can
@@ -136,8 +240,11 @@ export function momentTitle(moment: Moment): string {
  * with no subject, no date and no place it still falls back to the event
  * type, which is the least a card can say about itself. */
 export function momentText(moment: Moment): string {
-  const { type, subjects, dateText, datePreposition, placeTitle, description } = moment;
+  const { type, subjects, dateText, datePreposition, description, relation } = moment;
+  const placeTitle = storyPlaceName(moment.placeTitle);
   const phrase = (subjects.length === 2 ? COUPLE_PHRASES[type] : PERSON_PHRASES[type]) ?? "";
+  // "His father, George V," -- the relative named, set off by commas.
+  const who = relation && subjects.length > 0 ? `${relation}, ${joinProse(subjects)},` : joinProse(subjects);
 
   // Verb form when the type is one we have a phrase for, noun form
   // otherwise ("Occupation of Anna Schmidt in 1880 in Berlin.") -- which is
@@ -145,7 +252,7 @@ export function momentText(moment: Moment): string {
   let sentence: string;
   if (!isSubjectRole(moment.role) && subjects.length > 0) {
     sentence = `${joinProse(subjects)} took part in this ${type} as ${moment.role}`;
-  } else if (phrase && subjects.length > 0) sentence = `${joinProse(subjects)} ${phrase}`;
+  } else if (phrase && subjects.length > 0) sentence = `${who} ${phrase}`;
   else if (subjects.length > 0) sentence = `${type} of ${joinProse(subjects)}`;
   else sentence = type || "";
 
@@ -157,7 +264,7 @@ export function momentText(moment: Moment): string {
   // replacing the first: a description is often a detail ("Second son") that
   // reads as a fragment on its own, and just as often GEDCOM-import noise
   // that merely repeats the event type, which is what the guard drops.
-  const extra = description.trim();
+  const extra = storyDescription(description);
   if (extra && extra.toLowerCase() !== type.toLowerCase() && !sentence.includes(extra)) {
     return `${sentence} ${ensureSentence(extra)}`.trim();
   }

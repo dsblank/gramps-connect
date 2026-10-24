@@ -10,7 +10,7 @@ import type { Feature } from "geojson";
 import { toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
 import type { OverlayCorners } from "@gramps-connect/story/map-edit";
-import { fetchMediaMime, pointPhotos, type StoryBasemap, type StoryPoint, type StorySpec } from "./storyBuilder";
+import { fetchMediaInfo, pointPhotos, type MediaInfo, type StoryBasemap, type StoryPoint, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
 
 /** One of a place's map files (mapOverlays.ts), already fetched and
@@ -44,8 +44,9 @@ export interface HydratedSlide {
    * that could be fetched. */
   mapFiles?: HydratedMapFile[];
   /** The slide's photos, in order, each with its media type (only an
-   * image is shown -- see storyDoc.ts's slidePhotos). */
-  photos?: { ref: string; mime?: string }[];
+   * image is shown -- see storyDoc.ts's slidePhotos) and the caption and
+   * credit its Media object gives it (storyBuilder.ts's MediaInfo). */
+  photos?: { ref: string; mime?: string; caption?: string; credit?: string }[];
 }
 
 export interface HydratedStory {
@@ -116,11 +117,11 @@ function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<
 export interface HydrationCache {
   positions: Map<string, Promise<[number, number] | null>>;
   mapFiles: Map<string, Promise<HydratedMapFile>>;
-  mimes: Map<string, Promise<string | undefined>>;
+  media: Map<string, Promise<MediaInfo>>;
 }
 
 export function hydrationCache(): HydrationCache {
-  return { positions: new Map(), mapFiles: new Map(), mimes: new Map() };
+  return { positions: new Map(), mapFiles: new Map(), media: new Map() };
 }
 
 /** `cache.<kind>.get(key)`, or `load()` stored there first; with no cache,
@@ -193,11 +194,11 @@ export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Pro
     }
   }
 
-  const mimeByRef = new Map<string, string | undefined>();
+  const infoByRef = new Map<string, MediaInfo>();
   const refs = [...new Set(draftSlides.flatMap((s) => s.photoRefs))];
   if (refs.length > 0) {
     await Promise.all(refs.map(async (ref) => {
-      mimeByRef.set(ref, await cached(cache?.mimes, ref, async () => fetchMediaMime(await getToken(), ref)));
+      infoByRef.set(ref, await cached(cache?.media, ref, async () => fetchMediaInfo(await getToken(), ref)));
     }));
   }
 
@@ -207,7 +208,7 @@ export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Pro
     ...(spec.basemap ? { basemap: spec.basemap } : {}),
     slides: draftSlides.map(({ pendingPlaceHandle: _pendingPlaceHandle, photoRefs, ...s }) => ({
       ...s,
-      ...(photoRefs.length > 0 ? { photos: photoRefs.map((ref) => ({ ref, mime: mimeByRef.get(ref) })) } : {}),
+      ...(photoRefs.length > 0 ? { photos: photoRefs.map((ref) => ({ ref, ...infoByRef.get(ref) })) } : {}),
     })),
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeMoment, momentText, momentTitle, type Moment } from "../storyText";
+import { describeMoment, isBookkeepingEvent, momentText, momentTitle, storyDescription, storyPhotoCaption, storyPhotoCredit, storyPlaceName, type Moment } from "../storyText";
 
 function moment(over: Partial<Moment> = {}): Moment {
   return {
@@ -91,5 +91,82 @@ describe("describeMoment", () => {
   it("returns both seeded fields", () => {
     expect(describeMoment(moment({ dateText: "1854", datePreposition: "in" })))
       .toEqual({ title: "Birth of Anna Schmidt", text: "Anna Schmidt was born in 1854." });
+  });
+});
+
+describe("relation", () => {
+  it("says who a relative is before naming them", () => {
+    expect(momentText(moment({ subjects: ["George V Windsor"], relation: "His father", dateText: "1865", datePreposition: "in" })))
+      .toBe("His father, George V Windsor, was born in 1865.");
+    expect(momentText(moment({ type: "Marriage", subjects: ["George V", "Mary of Teck"], relation: "His parents" })))
+      .toBe("His parents, George V and Mary of Teck, were married.");
+  });
+});
+
+describe("storyPlaceName", () => {
+  it("drops empty levels, codes, and a level that repeats the one before it", () => {
+    expect(storyPlaceName(", Florence, , Florence, Tuscany, Italy")).toBe("Florence, Tuscany, Italy");
+    expect(storyPlaceName("Château, Pau, 64445, Pyrénées-Atlantiques, FRANCE")).toBe("Château, Pau, Pyrénées-Atlantiques, FRANCE");
+    // A house number is part of its street, not a level of its own.
+    expect(storyPlaceName("17 Bruton St., London")).toBe("17 Bruton St., London");
+  });
+
+  it("is used in the sentence", () => {
+    expect(momentText(moment({ placeTitle: ", Florence, , Florence, Italy" }))).toBe("Anna Schmidt was born in Florence, Italy.");
+  });
+});
+
+describe("storyDescription", () => {
+  it("drops footnote markers copied from Wikipedia", () => {
+    expect(storyDescription("Died at Balmoral,[ 124 ] aged 96.[a][citation needed]")).toBe("Died at Balmoral, aged 96.");
+    expect(storyDescription("from old age , prompting Operation Unicorn .")).toBe("from old age, prompting Operation Unicorn.");
+  });
+
+  it("cuts a long description to its first sentence", () => {
+    const long = `On the afternoon of 8 September 2022, at 3:10 p.m. local time, she died at Balmoral Castle. ${"More detail. ".repeat(20)}`;
+    expect(storyDescription(long)).toBe("On the afternoon of 8 September 2022, at 3:10 p.m. local time, she died at Balmoral Castle.");
+  });
+});
+
+describe("storyPhotoCaption", () => {
+  it("keeps a written description as it is", () => {
+    expect(storyPhotoCaption("Queen Mary in 1911")).toBe("Queen Mary in 1911");
+  });
+
+  it("tidies one that's a file name", () => {
+    expect(storyPhotoCaption("King_George_1923_LCCN2014715558_(cropped).jpg")).toBe("King George 1923");
+    expect(storyPhotoCaption("York_Cottage")).toBe("York Cottage");
+  });
+
+  it("gives no caption for a camera's file name", () => {
+    expect(storyPhotoCaption("IMG_2041.JPG")).toBe("");
+    expect(storyPhotoCaption("DSC01234")).toBe("");
+  });
+});
+
+describe("storyPhotoCredit", () => {
+  it("uses a Credit attribute as written", () => {
+    expect(storyPhotoCredit([{ type: "Credit", value: "© Jane Smith" }, { type: "Author", value: "Someone else" }])).toBe("© Jane Smith");
+  });
+
+  it("otherwise joins who made it, its licence and its source", () => {
+    expect(storyPhotoCredit([
+      { type: "Source", value: "Wikimedia Commons" },
+      { type: { string: "Photographer" }, value: "John Fielding" },
+      { type: "License", value: "CC BY 2.0" },
+    ])).toBe("John Fielding · CC BY 2.0 · Wikimedia Commons");
+  });
+
+  it("is empty when the photo has none of these", () => {
+    expect(storyPhotoCredit([{ type: "Nickname", value: "x" }])).toBe("");
+  });
+});
+
+describe("isBookkeepingEvent", () => {
+  it("is a vendor tag, or a custom type with nothing to show", () => {
+    expect(isBookkeepingEvent("_UPD", false, true, false)).toBe(true);
+    expect(isBookkeepingEvent("Reference Number", false, false, false)).toBe(true);
+    expect(isBookkeepingEvent("Reference Number", false, true, false)).toBe(false);
+    expect(isBookkeepingEvent("Baptism", true, false, false)).toBe(false);
   });
 });

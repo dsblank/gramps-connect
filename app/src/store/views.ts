@@ -440,6 +440,16 @@ const EVENT_TYPE_LABELS: Record<number, string> = {
   44: "Will", 45: "Stillbirth",
 };
 
+const STANDARD_EVENT_TYPES = new Set(
+  Object.entries(EVENT_TYPE_LABELS).filter(([value]) => Number(value) > 0).map(([, label]) => label)
+);
+
+/** Whether a display type string (formatEventType's) is one of Gramps' own
+ * event types rather than a custom one -- "Unknown" and "Custom" aren't. */
+export function isStandardEventType(label: string): boolean {
+  return STANDARD_EVENT_TYPES.has(label);
+}
+
 /** An Event's type as text, from the stored raw EventType struct. A custom
  * type's own name (`string`) wins over the "Custom" placeholder its value 0
  * maps to; exported because TimelineView groups and colors events by

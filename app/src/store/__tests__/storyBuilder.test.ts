@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildFamilyStory, pointPhotos, storyLanguageTag, withPhotos } from "../storyBuilder";
+import { buildFamilyStory, buildPersonStory, personDisplayName, pointPhotos, storyLanguageTag, withPhotos } from "../storyBuilder";
 import { EMPTY_VISUAL_DATA, type EventRecord, type VisualData } from "../visualData";
 import type { ObjectDetail } from "../objectDetail";
 
@@ -29,6 +29,11 @@ const EVENTS: EventRecord[] = [
   event("c1-b", "Birth", 1880),
   event("c2-b", "Birth", 1882),
   event("c2-d", "Death", 1882),
+  // Record-keeping a GEDCOM import leaves behind as events.
+  event("upd", "_UPD", null),
+  event("refno", "Reference Number", null),
+  // An undated standard event is still a moment.
+  event("c1-bap", "Baptism", null),
 ];
 
 function visualData(): VisualData {
@@ -39,9 +44,10 @@ function visualData(): VisualData {
   };
 }
 
-function person(handle: string, given: string, surname: string, eventRefs: { ref: string; role?: string }[]) {
+function person(handle: string, given: string, surname: string, eventRefs: { ref: string; role?: string }[], gender?: number) {
   return {
     handle,
+    ...(gender !== undefined ? { gender } : {}),
     primary_name: { first_name: given, surname_list: [{ surname }] },
     event_ref_list: eventRefs.map((r) => ({ role: "Primary", ...r })),
     media_list: [],
@@ -55,8 +61,8 @@ function person(handle: string, given: string, surname: string, eventRefs: { ref
  * event refs carry role "Family". */
 function family(): ObjectDetail {
   const children = [
-    person("c1", "Josef", "Meyer", [{ ref: "c1-b" }]),
-    person("c2", "Marie", "Meyer", [{ ref: "c2-b" }, { ref: "c2-d" }]),
+    person("c1", "Josef", "Meyer", [{ ref: "c1-b" }], 1),
+    person("c2", "Marie", "Meyer", [{ ref: "c2-b" }, { ref: "c2-d" }], 0),
   ];
   return {
     handle: "fam1",
@@ -66,8 +72,8 @@ function family(): ObjectDetail {
     extended: {
       father: person("f", "Hans", "Meyer", [
         { ref: "f-b" }, { ref: "f-d" }, { ref: "f-w", role: "Witness" },
-      ]),
-      mother: person("m", "Anna", "Schmidt", [{ ref: "m-b" }]),
+      ], 1),
+      mother: person("m", "Anna", "Schmidt", [{ ref: "m-b" }], 0),
       children,
       events: [{ media_list: [] }, { media_list: [] }],
       media: [],
@@ -100,9 +106,9 @@ describe("buildFamilyStory", () => {
       "Birth of Hans Meyer | Hans Meyer was born in 1850.",
       "Birth of Anna Schmidt | Anna Schmidt was born in 1854.",
       "Marriage of Hans Meyer & Anna Schmidt | Hans Meyer and Anna Schmidt were married in 1878.",
-      "Birth of Josef Meyer | Josef Meyer was born in 1880.",
-      "Birth of Marie Meyer | Marie Meyer was born in 1882.",
-      "Death of Marie Meyer | Marie Meyer died in 1882.",
+      "Birth of Josef Meyer | Their son, Josef Meyer, was born in 1880.",
+      "Birth of Marie Meyer | Their daughter, Marie Meyer, was born in 1882.",
+      "Death of Marie Meyer | Their daughter, Marie Meyer, died in 1882.",
       "Death of Hans Meyer | Hans Meyer died in 1920.",
       "Divorce of Hans Meyer & Anna Schmidt | Hans Meyer and Anna Schmidt were divorced.",
     ]);
@@ -138,6 +144,98 @@ describe("buildFamilyStory", () => {
     detail.event_ref_list = [];
     (detail.extended as Record<string, unknown>).events = [];
     expect(await buildFamilyStory("t", detail, { ...EMPTY_VISUAL_DATA })).toBeNull();
+  });
+});
+
+/** Stands in for the API: the one family (for buildPersonStory's
+ * includeFamilyEvents) and the media in `images`, each an image; anything
+ * else 404s. */
+function stubApi(images: string[] = []) {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (url.includes("/api/families/fam1")) return { ok: true, json: async () => family() };
+    const media = images.find((h) => url.includes(`/api/media/${h}`));
+    if (media) return { ok: true, json: async () => ({ mime: "image/jpeg" }) };
+    return { ok: false, json: async () => ({}) };
+  }));
+}
+
+/** Josef, as a fetched Person: his own birth and baptism, two bookkeeping
+ * "events", and the family he was born into. */
+function josef(): ObjectDetail {
+  const refs = [{ ref: "c1-b" }, { ref: "c1-bap" }, { ref: "upd" }, { ref: "refno" }];
+  return {
+    handle: "c1",
+    gramps_id: "I0001",
+    gender: 1,
+    primary_name: { first_name: "Josef", suffix: "Jr", surname_list: [{ surname: "Meyer" }] },
+    event_ref_list: refs.map((r) => ({ role: "Primary", ...r })),
+    parent_family_list: ["fam1"],
+    family_list: [],
+    media_list: [],
+    extended: { events: refs.map(() => ({ media_list: [] })), media: [] } as unknown as Record<string, unknown[]>,
+  } as unknown as ObjectDetail;
+}
+
+describe("buildPersonStory", () => {
+  it("names the person as a sentence would, never by their list label", async () => {
+    stubApi();
+    const spec = (await buildPersonStory("t", josef(), "[I0001] Meyer, Josef", visualData()))!;
+    expect(spec.title).toBe("The Story of Josef Meyer Jr");
+    expect(spec.points[0].text).toBe("2 moments from the life of Josef Meyer Jr (born 1880).");
+  });
+
+  it("leaves out record-keeping events but keeps an undated real one", async () => {
+    stubApi();
+    const spec = (await buildPersonStory("t", josef(), "Josef", visualData()))!;
+    expect(spec.points.map((p) => p.eventRef)).toEqual([undefined, "c1-b", "c1-bap"]);
+  });
+
+  it("says how each relative is related", async () => {
+    stubApi();
+    const spec = (await buildPersonStory("t", josef(), "Josef", visualData(), { includeFamilyEvents: true }))!;
+    const texts = spec.points.slice(1).map((p) => p.text);
+    expect(texts).toEqual([
+      "His father, Hans Meyer, was born in 1850.",
+      "His mother, Anna Schmidt, was born in 1854.",
+      "His parents, Hans Meyer and Anna Schmidt, were married in 1878.",
+      "Josef Meyer Jr was born in 1880.",
+      "His sister, Marie Meyer, was born in 1882.",
+      "His sister, Marie Meyer, died in 1882.",
+      "His father, Hans Meyer, died in 1920.",
+      "Josef Meyer Jr was baptized.",
+      "His parents, Hans Meyer and Anna Schmidt, were divorced.",
+    ]);
+  });
+});
+
+describe("photos on a couple's event", () => {
+  it("shows both spouses' portraits", async () => {
+    stubApi(["pf", "pm"]);
+    const detail = family();
+    const extended = detail.extended as unknown as { father: { media_list: unknown[] }; mother: { media_list: unknown[] } };
+    extended.father.media_list = [{ ref: "pf" }];
+    extended.mother.media_list = [{ ref: "pm" }];
+    const spec = (await buildFamilyStory("t", detail, visualData()))!;
+    const marriage = spec.points.find((p) => p.eventRef === "m1")!;
+    expect(pointPhotos(marriage)).toEqual(["pf", "pm"]);
+    // A spouse's own birth still shows just that spouse.
+    expect(pointPhotos(spec.points.find((p) => p.eventRef === "m-b")!)).toEqual(["pm"]);
+  });
+});
+
+describe("personDisplayName", () => {
+  it("keeps a generational suffix but not a title stored as one", () => {
+    const name = (suffix: string) => personDisplayName({
+      primary_name: { first_name: "George VI", suffix, surname_list: [{ surname: "Windsor" }] },
+    });
+    expect(name("III")).toBe("George VI Windsor III");
+    expect(name("Jr.")).toBe("George VI Windsor Jr.");
+    expect(name("King of England")).toBe("George VI Windsor");
+  });
+
+  it("puts a surname's prefix in front of it", () => {
+    expect(personDisplayName({ primary_name: { first_name: "Vincent", surname_list: [{ prefix: "van", surname: "Gogh" }] } }))
+      .toBe("Vincent van Gogh");
   });
 });
 

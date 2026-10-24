@@ -11,7 +11,8 @@
 // obvious next two, and should need no more than a third rule.
 import { API_BASE } from "../config";
 import { zipRefs, type ObjectDetail, type RawRef } from "./objectDetail";
-import { describeMoment, isSubjectRole, joinNames } from "./storyText";
+import { describeMoment, isBookkeepingEvent, isSubjectRole, joinNames, storyPhotoCaption, storyPhotoCredit } from "./storyText";
+import { isStandardEventType } from "./views";
 import type { VisualData } from "./visualData";
 import { apiFetch } from "./apiFetch";
 
@@ -103,20 +104,60 @@ interface MediaRefLike {
  * zipped extended.children. */
 export interface RawPerson {
   handle?: string;
-  primary_name?: { first_name?: string; surname_list?: { surname?: string }[] };
+  /** Gramps' Person.gender: 0 female, 1 male, anything else unknown. */
+  gender?: number;
+  primary_name?: {
+    first_name?: string;
+    suffix?: string;
+    surname_list?: { surname?: string; prefix?: string }[];
+  };
   event_ref_list?: RawRef[];
   media_list?: MediaRefLike[];
 }
 
-/** Same given+surname reduction components/related/summary.ts does, kept
- * here because store/ modules don't import from components/ (see
- * storyApi.ts's note on the same convention). Only the raw shape is
- * handled: every Person this module sees arrives via `extended.*`, never
- * as a display-ready profile. */
+/** A suffix that belongs in a name read aloud ("Jr", "Sr", "III", "2nd"),
+ * as opposed to a title or office a GEDCOM import often puts in the suffix
+ * field instead ("King of England", "Lady"). */
+const GENERATIONAL_SUFFIX = /^(jr|sr|[ivx]+|\d+(st|nd|rd|th))\.?$/i;
+
+/** A person's name as a sentence uses it: given names, then the surname
+ * with its prefix ("van Gogh"), then a generational suffix -- never the
+ * Gramps ID or the surname-first order list rows use. Kept here rather
+ * than in components/related/summary.ts because store/ modules don't
+ * import from components/ (see storyApi.ts's note on the same convention).
+ * Only the raw shape is handled: every Person this module sees arrives as
+ * a fetched raw Person or via `extended.*`, never as a display-ready
+ * profile. */
 export function personDisplayName(person: RawPerson | undefined): string {
-  const given = person?.primary_name?.first_name ?? "";
-  const surname = person?.primary_name?.surname_list?.[0]?.surname ?? "";
-  return [given, surname].filter(Boolean).join(" ");
+  const name = person?.primary_name;
+  const given = name?.first_name?.trim() ?? "";
+  const first = name?.surname_list?.[0];
+  const surname = [first?.prefix?.trim(), first?.surname?.trim()].filter(Boolean).join(" ");
+  const suffix = name?.suffix?.trim() ?? "";
+  return [given, surname, GENERATIONAL_SUFFIX.test(suffix) ? suffix : ""].filter(Boolean).join(" ");
+}
+
+type Kin = "parent" | "sibling" | "spouse" | "child";
+
+const KIN_WORDS: Record<Kin, [female: string, male: string, other: string]> = {
+  parent: ["mother", "father", "parent"],
+  sibling: ["sister", "brother", "sibling"],
+  spouse: ["wife", "husband", "spouse"],
+  child: ["daughter", "son", "child"],
+};
+
+/** "His", "Her" or "Their", for the person a story is about. A family
+ * story is about a couple, which is always "Their". */
+function possessive(person: RawPerson | undefined): string {
+  return person?.gender === 1 ? "His" : person?.gender === 0 ? "Her" : "Their";
+}
+
+/** "His father", "Their daughter": how `relative` is related to the story
+ * subject whose possessive is `owner`. */
+function relationPhrase(owner: string, kin: Kin, relative: RawPerson): string {
+  const [female, male, other] = KIN_WORDS[kin];
+  const word = relative.gender === 0 ? female : relative.gender === 1 ? male : other;
+  return `${owner} ${word}`;
 }
 
 /** A raw Family, extend=all'd -- resolves father/mother/children one hop
@@ -152,19 +193,39 @@ function extractFamilyMembers(familyRaw: any): { spouses: RawPerson[]; children:
   return { spouses: [father, mother].filter(isPerson), children };
 }
 
-/** Exported for storyHydration.ts, which resolves a mediaRef's mime type
- * at presentation time rather than storing it in the spec. */
-export async function fetchMediaMime(token: string, handle: string): Promise<string | undefined> {
+/** What a slide shows about one of its photos, read from the Media object
+ * at presentation time rather than stored in the spec -- so its caption and
+ * credit stay the tree's own (see storyText.ts's storyPhotoCaption and
+ * storyPhotoCredit). */
+export interface MediaInfo {
+  mime?: string;
+  caption?: string;
+  credit?: string;
+}
+
+/** Exported for storyHydration.ts, which resolves each photo's MediaInfo
+ * when a story is shown or downloaded. */
+export async function fetchMediaInfo(token: string, handle: string): Promise<MediaInfo> {
   try {
     const res = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return undefined;
+    if (!res.ok) return {};
     const media = await res.json();
-    return typeof media.mime === "string" ? media.mime : undefined;
+    const caption = storyPhotoCaption(typeof media.desc === "string" ? media.desc : "");
+    const credit = storyPhotoCredit(Array.isArray(media.attribute_list) ? media.attribute_list : []);
+    return {
+      ...(typeof media.mime === "string" ? { mime: media.mime } : {}),
+      ...(caption ? { caption } : {}),
+      ...(credit ? { credit } : {}),
+    };
   } catch {
-    return undefined;
+    return {};
   }
+}
+
+async function fetchMediaMime(token: string, handle: string): Promise<string | undefined> {
+  return (await fetchMediaInfo(token, handle)).mime;
 }
 
 /** Per-build memo over the two lookups a point's photo needs -- one mime
@@ -219,48 +280,60 @@ function makeMediaResolver(token: string) {
     return undefined;
   }
 
-  /** A point's photo, in priority order: the event's own picture, then the
-   * face of whoever the moment is about, then the place it happened at.
-   * (A person story passes no portrait here -- its subject never changes,
-   * so their portrait is the opening card's photo and storyHydration.ts
+  /** A point's photos, in priority order: the event's own picture, then the
+   * faces of whoever the moment is about -- both spouses, for a couple's
+   * event -- then the place it happened at. (A person story passes no
+   * portrait for the subject's own events -- the subject never changes, so
+   * their portrait is the opening card's photo and storyHydration.ts
    * already falls every other point back to it.) Neither event.media_list
    * nor a place's own is resolved by extend=all -- that only reaches one
-   * hop past the fetched object -- so this is what one image per point
-   * actually costs. */
-  return async function resolvePointMedia(draft: Draft): Promise<string | undefined> {
+   * hop past the fetched object -- so this is what a point's photos
+   * actually cost. */
+  return async function resolvePointMedia(draft: Draft): Promise<string[]> {
     const own = await firstImage(draft.eventMediaList);
-    if (own) return own;
-    const portrait = await firstImage(draft.subjectMediaList);
-    if (portrait) return portrait;
-    if (!draft.placeHandle) return undefined;
-    return firstImage(await placeMediaList(draft.placeHandle));
+    if (own) return [own];
+    const portraits: string[] = [];
+    for (const list of draft.subjectMediaLists) {
+      const portrait = await firstImage(list);
+      if (portrait && !portraits.includes(portrait)) portraits.push(portrait);
+    }
+    if (portraits.length > 0) return portraits;
+    if (!draft.placeHandle) return [];
+    const placePhoto = await firstImage(await placeMediaList(draft.placeHandle));
+    return placePhoto ? [placePhoto] : [];
   };
 }
 
 /** A point under construction, plus the three things only the seeding rule
  * knows: where it sorts, where it happened, and which media lists its
- * photo may be drawn from. */
+ * photos may be drawn from. */
 interface Draft {
   point: StoryPoint;
   year: number | null;
   placeHandle: string | undefined;
   eventMediaList: MediaRefLike[];
-  subjectMediaList: MediaRefLike[];
+  /** One media list per person the moment is about, in order. */
+  subjectMediaLists: MediaRefLike[][];
 }
 
 /** Builds one draft from an event handle, seeding its title and text from
  * whatever the event cache knows (storyText.ts). Returns null for an event
- * that isn't cached yet -- there'd be nothing to describe it with. */
+ * that isn't cached yet -- there'd be nothing to describe it with -- and
+ * for a record-keeping one (isBookkeepingEvent), which isn't a moment. */
 function draftFromEvent(
   eventRef: string,
   role: string | undefined,
   subjects: string[],
   visualData: VisualData,
-  media: { event?: MediaRefLike[]; subject?: MediaRefLike[] },
+  media: { event?: MediaRefLike[]; subjects?: MediaRefLike[][] },
+  relation?: string,
 ): Draft | null {
   const record = visualData.eventsByHandle.get(eventRef);
   if (!record) return null;
   const placeHandle = visualData.placeOfEvent.get(eventRef);
+  if (isBookkeepingEvent(record.type, isStandardEventType(record.type), Boolean(record.dateText), Boolean(placeHandle || record.placeTitle))) {
+    return null;
+  }
   const { title, text } = describeMoment({
     type: record.type,
     subjects,
@@ -269,13 +342,14 @@ function draftFromEvent(
     placeTitle: record.placeTitle,
     description: record.description,
     role,
+    relation,
   });
   return {
     point: { eventRef, title, text },
     year: record.year,
     placeHandle,
     eventMediaList: media.event ?? [],
-    subjectMediaList: media.subject ?? [],
+    subjectMediaLists: media.subjects ?? [],
   };
 }
 
@@ -290,7 +364,7 @@ async function assemblePoints(token: string, drafts: Draft[]): Promise<StoryPoin
   const ordered = [...dated, ...undated];
   const resolveMedia = makeMediaResolver(token);
   await Promise.all(ordered.map(async (draft) => {
-    draft.point.mediaRef = await resolveMedia(draft);
+    draft.point = withPhotos(draft.point, await resolveMedia(draft));
   }));
   return ordered.map((d) => d.point);
 }
@@ -313,11 +387,17 @@ export async function buildPersonStory(
   visualData: VisualData,
   options?: StoryOptions,
 ): Promise<StorySpec | null> {
+  // The name as a sentence reads it (no Gramps ID, given name first); the
+  // caller's label only when the record has no name to build one from.
+  const subject = detail as RawPerson;
+  const name = personDisplayName(subject) || personName;
+  const owner = possessive(subject);
+
   const seen = new Set<string>();
   const rows = zipRefs<{ media_list?: MediaRefLike[] }>(detail.event_ref_list, detail.extended?.events);
   const drafts: Draft[] = [];
   for (const { ref, target } of rows) {
-    const draft = draftFromEvent(ref.ref, ref.role, [personName], visualData, {
+    const draft = draftFromEvent(ref.ref, ref.role, [name], visualData, {
       event: target?.media_list ?? [],
     });
     if (draft) {
@@ -333,14 +413,16 @@ export async function buildPersonStory(
   // once per family this person belongs to rather than once for the family
   // itself. This person's own vital events are already drafted above and
   // never redrawn here (`seen`, and the `!== detail.handle` filter below).
+  // Each relative's moment says how they're related ("His father, ..."),
+  // which is what the family the event came through tells us.
   if (options?.includeFamilyEvents) {
-    const familyHandles = [
-      ...((detail.family_list as string[] | undefined) ?? []),
-      ...((detail.parent_family_list as string[] | undefined) ?? []),
-    ];
+    const ownFamilies = (detail.family_list as string[] | undefined) ?? [];
+    const parentFamilies = (detail.parent_family_list as string[] | undefined) ?? [];
+    const familyHandles = [...ownFamilies, ...parentFamilies];
     const families = await Promise.all(familyHandles.map((h) => fetchFamilyDetail(token, h)));
-    for (const familyRaw of families) {
-      if (!familyRaw) continue;
+    families.forEach((familyRaw, i) => {
+      if (!familyRaw) return;
+      const asChild = i >= ownFamilies.length;
       const { spouses, children } = extractFamilyMembers(familyRaw);
       const spouseNames = spouses.map(personDisplayName).filter(Boolean);
       const familyEvents = zipRefs<{ media_list?: MediaRefLike[] }>(familyRaw.event_ref_list, familyRaw.extended?.events);
@@ -348,14 +430,20 @@ export async function buildPersonStory(
         if (seen.has(ref.ref)) continue;
         const draft = draftFromEvent(ref.ref, ref.role, spouseNames, visualData, {
           event: target?.media_list ?? [],
-        });
+          subjects: spouses.map((s) => s.media_list ?? []),
+        }, asChild && spouseNames.length > 1 ? `${owner} parents` : undefined);
         if (!draft) continue;
         seen.add(ref.ref);
         drafts.push(draft);
       }
+      const relationOf = (member: RawPerson): string => {
+        const isSpouse = spouses.includes(member);
+        const kin: Kin = asChild ? (isSpouse ? "parent" : "sibling") : (isSpouse ? "spouse" : "child");
+        return relationPhrase(owner, kin, member);
+      };
       const others = [...spouses, ...children].filter((p) => p.handle !== detail.handle);
-      drafts.push(...draftMemberMoments(others, visualData, seen));
-    }
+      drafts.push(...draftMemberMoments(others, visualData, seen, relationOf));
+    });
   }
 
   if (drafts.length === 0) return null;
@@ -368,14 +456,33 @@ export async function buildPersonStory(
   const portrait = zipRefs<{ mime?: string }>(detail.media_list, detail.extended?.media)
     .find((row) => row.target?.mime?.startsWith("image/"));
 
-  const title = `The Story of ${personName}`;
+  const title = `The Story of ${name}`;
+  const span = lifespan(rows.map(({ ref }) => ref), visualData);
   const introPoint: StoryPoint = {
     mediaRef: portrait?.ref.ref,
     title,
-    text: `${momentCount(points.length)} from ${personName}'s recorded life.`,
+    text: `${momentCount(points.length)} from the life of ${name}${span ? ` (${span})` : ""}.`,
   };
 
   return { title, points: [introPoint, ...points] };
+}
+
+/** "1895–1952", "born 1895", "died 1952", or "" -- from the person's own
+ * dated Birth and Death events. */
+function lifespan(refs: RawRef[], visualData: VisualData): string {
+  let born: number | null = null;
+  let died: number | null = null;
+  for (const ref of refs) {
+    if (!isSubjectRole(ref.role)) continue;
+    const record = visualData.eventsByHandle.get(ref.ref);
+    if (!record || record.year === null) continue;
+    if (record.type === "Birth" && born === null) born = Math.floor(record.year);
+    if (record.type === "Death" && died === null) died = Math.floor(record.year);
+  }
+  if (born !== null && died !== null) return `${born}–${died}`;
+  if (born !== null) return `born ${born}`;
+  if (died !== null) return `died ${died}`;
+  return "";
 }
 
 /** The events a spouse or a child contributes to their family's story.
@@ -396,18 +503,22 @@ function draftMemberMoments(
   members: RawPerson[],
   visualData: VisualData,
   seen: Set<string>,
+  /** How each member is related to the story's subject ("His father"),
+   * or undefined for one the sentence should simply name. */
+  relationOf?: (member: RawPerson) => string | undefined,
 ): Draft[] {
   const drafts: Draft[] = [];
   for (const member of members) {
     const name = personDisplayName(member);
+    const relation = relationOf?.(member);
     for (const ref of member.event_ref_list ?? []) {
       if (seen.has(ref.ref)) continue;
       if (!isSubjectRole(ref.role)) continue;
       const record = visualData.eventsByHandle.get(ref.ref);
       if (!record || !VITAL_TYPES.has(record.type)) continue;
       const draft = draftFromEvent(ref.ref, ref.role, name ? [name] : [], visualData, {
-        subject: member.media_list ?? [],
-      });
+        subjects: [member.media_list ?? []],
+      }, relation);
       if (!draft) continue;
       seen.add(ref.ref);
       drafts.push(draft);
@@ -458,8 +569,9 @@ export async function buildFamilyStory(
   for (const { ref, target } of familyEvents) {
     const draft = draftFromEvent(ref.ref, ref.role, spouseNames, visualData, {
       event: target?.media_list ?? [],
-      // No single portrait fits a couple's event, so its photo falls
-      // through to the place (the church, the town) instead.
+      // Both spouses' portraits, side by side; the place's photo (the
+      // church, the town) only when neither has one.
+      subjects: spouses.map((s) => s.media_list ?? []),
     });
     if (!draft) continue;
     seen.add(ref.ref);
@@ -469,7 +581,9 @@ export async function buildFamilyStory(
   const included = excluded && excluded.size > 0
     ? [...spouses, ...children].filter((p) => !excluded.has(p.handle!))
     : [...spouses, ...children];
-  drafts.push(...draftMemberMoments(included, visualData, seen));
+  // The couple are named as themselves; a child as "Their son, ...".
+  const relationOf = (member: RawPerson) => (spouses.includes(member) ? undefined : relationPhrase("Their", "child", member));
+  drafts.push(...draftMemberMoments(included, visualData, seen, relationOf));
 
   if (drafts.length === 0) return null;
   const points = await assemblePoints(token, drafts);

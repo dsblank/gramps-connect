@@ -33,7 +33,7 @@ import type { ObjectDetail } from "./objectDetail";
 import { personDisplayName, storyLanguageTag, type RawPerson, type StoryBasemap, type StorySpec } from "./storyBuilder";
 import { mediaKeys, slidePhotos, slideToDoc } from "./storyDoc";
 import { hydrateStory, type HydratedSlide } from "./storyHydration";
-import { isSubjectRole } from "./storyText";
+import { isSubjectRole, storyPhotoCaption } from "./storyText";
 
 // --- step 1: facts --------------------------------------------------------
 
@@ -360,8 +360,11 @@ export function planStoryExport(source: StoryExportSource, options: ExportOption
   });
 
   const media: PlannedMedia[] = keys.entries().map((entry) => {
-    const desc = source.media.get(entry.handle)?.desc;
-    return { ...entry, ...(desc ? { alt: desc } : {}) };
+    // The tidied caption (a description that's a file name reads badly
+    // to a screen reader too), else the description as written.
+    const desc = source.media.get(entry.handle)?.desc ?? "";
+    const alt = storyPhotoCaption(desc) || desc;
+    return { ...entry, ...(alt ? { alt } : {}) };
   });
   const language = storyLanguageTag(source.language) ?? storyLanguageTag(meta.language);
   const doc: Omit<StoryDoc, "media"> = {

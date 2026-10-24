@@ -8,6 +8,7 @@ import type { MediaItem, Place, Slide, StoryDoc } from "@gramps-connect/story";
 import { toEdtf } from "@gramps-connect/gramps-date";
 import { formatDisplayDate } from "./placeIndex";
 import { storyLanguageTag } from "./storyBuilder";
+import { storyPlaceName } from "./storyText";
 import type { HydratedMapFile, HydratedSlide, HydratedStory } from "./storyHydration";
 
 export type MediaPurpose = "photo" | "overlay";
@@ -54,7 +55,7 @@ export function slideToDoc(input: SlideDocInput, keyFor: MediaKeyFor): SlideDocR
   const hadPlace = Boolean(h.placeTitle || (h.lat != null && h.long != null) || (h.kmlMedia?.length ?? 0) > 0);
   if (hadPlace && !input.dropPlace) {
     const place: Place = {};
-    if (h.placeTitle) place.name = h.placeTitle;
+    if (h.placeTitle) place.name = storyPlaceName(h.placeTitle) || h.placeTitle;
     if (h.lat != null && h.long != null) {
       place.lat = h.lat;
       place.lon = h.long;
@@ -85,7 +86,14 @@ export function slideToDoc(input: SlideDocInput, keyFor: MediaKeyFor): SlideDocR
     if (Object.keys(place).length > 0) slide.place = place;
   }
 
-  if (input.photos?.length) slide.media = input.photos.map((photo) => ({ ref: keyFor(photo, "photo") }));
+  if (input.photos?.length) {
+    // Each photo's caption and credit, as its Media object gives them.
+    const info = new Map((h.photos ?? []).map((p) => [p.ref, p]));
+    slide.media = input.photos.map((photo) => {
+      const { caption, credit } = info.get(photo) ?? {};
+      return { ref: keyFor(photo, "photo"), ...(caption ? { caption } : {}), ...(credit ? { credit } : {}) };
+    });
+  }
   if (input.people?.length) slide.people = input.people.map((name) => ({ name }));
   return { slide, hadPlace, overlaysLeftOut };
 }
