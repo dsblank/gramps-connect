@@ -31,7 +31,7 @@ import { getToken } from "../auth/auth";
 import { apiFetch } from "./apiFetch";
 import type { ObjectDetail } from "./objectDetail";
 import { personDisplayName, type RawPerson, type StorySpec } from "./storyBuilder";
-import { mediaKeys, slidePhoto, slideToDoc } from "./storyDoc";
+import { mediaKeys, slidePhotos, slideToDoc } from "./storyDoc";
 import { hydrateStory, type HydratedSlide } from "./storyHydration";
 import { isSubjectRole } from "./storyText";
 
@@ -185,8 +185,7 @@ export async function gatherStoryExport(noteDetail: ObjectDetail, spec: StorySpe
   // Every image the story could show: slide photos and overlay images.
   const imageHandles = new Set<string>();
   for (const s of slides) {
-    const photo = slidePhoto(s.hydrated);
-    if (photo) imageHandles.add(photo);
+    for (const photo of slidePhotos(s.hydrated)) imageHandles.add(photo);
   }
   for (const f of hydratedMapFiles) for (const o of f.overlays) imageHandles.add(o.imageHandle);
   const media = new Map<string, ExportMedia>();
@@ -333,10 +332,12 @@ export function planStoryExport(source: StoryExportSource, options: ExportOption
     }
     const h = s.hydrated;
     const id = `s${slides.length}`;
-    const photo = slidePhoto(h);
-    if (photo) photosSeen.add(photo);
-    const photoHidden = photo !== undefined && mediaHidden(photo);
-    if (photoHidden) photosHidden.add(photo!);
+    // Each photo by itself: a hidden one drops just that photo.
+    const photos = slidePhotos(h);
+    for (const photo of photos) {
+      photosSeen.add(photo);
+      if (mediaHidden(photo)) photosHidden.add(photo);
+    }
     const dropPlace = !options.includePrivate && Boolean(s.event?.placePrivate);
     const names = people.map((p) => source.people.get(p)?.name).filter((n): n is string => Boolean(n));
     const built = slideToDoc({
@@ -348,7 +349,7 @@ export function planStoryExport(source: StoryExportSource, options: ExportOption
       }),
       dropPlace,
       overlayAllowed: (imageHandle) => !mediaHidden(imageHandle),
-      photo: photoHidden ? undefined : photo,
+      photos: photos.filter((photo) => !mediaHidden(photo)),
       people: names,
     }, keys.keyFor);
     if (dropPlace && built.hadPlace) placesLeftOut += 1;

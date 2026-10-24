@@ -23,8 +23,8 @@ export interface SlideDocInput {
   dropPlace?: boolean;
   /** Whether an overlay image may be shown; default all. */
   overlayAllowed?: (imageHandle: string) => boolean;
-  /** The slide's photo handle, or undefined for none. */
-  photo?: string;
+  /** The slide's photo handles, in order. */
+  photos?: string[];
   /** Names of the people the slide is about. */
   people?: string[];
 }
@@ -84,16 +84,16 @@ export function slideToDoc(input: SlideDocInput, keyFor: MediaKeyFor): SlideDocR
     if (Object.keys(place).length > 0) slide.place = place;
   }
 
-  if (input.photo) slide.media = [{ ref: keyFor(input.photo, "photo") }];
+  if (input.photos?.length) slide.media = input.photos.map((photo) => ({ ref: keyFor(photo, "photo") }));
   if (input.people?.length) slide.people = input.people.map((name) => ({ name }));
   return { slide, hadPlace, overlaysLeftOut };
 }
 
-/** The photo a hydrated slide shows, if it's an image: its own, or the
- * opening card's (storyHydration.ts's fallback, written out explicitly
- * here since the format has no fallback rule of its own). */
-export function slidePhoto(h: HydratedSlide): string | undefined {
-  return h.mediaRef && h.mediaMime?.startsWith("image/") ? h.mediaRef : undefined;
+/** The photos a hydrated slide shows, in order: those that are images,
+ * its own or the opening card's (storyHydration.ts's fallback, written out
+ * explicitly here since the format has no fallback rule of its own). */
+export function slidePhotos(h: HydratedSlide): string[] {
+  return (h.photos ?? []).filter((p) => p.mime?.startsWith("image/")).map((p) => p.ref);
 }
 
 export interface MediaKeys {
@@ -139,9 +139,8 @@ export function presentationDoc(hydrated: HydratedStory): StoryDoc {
   const keys = mediaKeys();
   const mimeByHandle = new Map<string, string>();
   const slides = hydrated.slides.map((h, i) => {
-    const photo = slidePhoto(h);
-    if (photo && h.mediaMime) mimeByHandle.set(photo, h.mediaMime);
-    return slideToDoc({ id: `s${i}`, hydrated: h, mapFiles: h.mapFiles ?? [], photo }, keys.keyFor).slide;
+    for (const p of h.photos ?? []) if (p.mime?.startsWith("image/")) mimeByHandle.set(p.ref, p.mime);
+    return slideToDoc({ id: `s${i}`, hydrated: h, mapFiles: h.mapFiles ?? [], photos: slidePhotos(h) }, keys.keyFor).slide;
   });
   const media: Record<string, MediaItem> = {};
   for (const { key, handle, purpose } of keys.entries()) {

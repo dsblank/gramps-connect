@@ -29,13 +29,33 @@ import { apiFetch } from "./apiFetch";
 // intro/introMediaRef fields of its own.
 export interface StoryPoint {
   eventRef?: string;
+  /** The slide's first photo -- all a story had before slides could have
+   * several, so a copy of the app that doesn't know `moreMediaRefs`
+   * still shows it. Read and write the list with pointPhotos/withPhotos. */
   mediaRef?: string;
+  /** The slide's other photos, in order, after `mediaRef`. */
+  moreMediaRefs?: string[];
   /** Slide heading. Falls back at presentation time to the referenced
    * event's type (or, for the opening card, the story's own title) when
    * absent -- which is what every story generated before this field
    * existed still does. */
   title?: string;
   text?: string;
+}
+
+/** A point's photos, in order. */
+export function pointPhotos(point: StoryPoint): string[] {
+  return point.mediaRef ? [point.mediaRef, ...(point.moreMediaRefs ?? [])] : [...(point.moreMediaRefs ?? [])];
+}
+
+/** `point` with these photos (see StoryPoint.mediaRef for the split). */
+export function withPhotos(point: StoryPoint, photos: string[]): StoryPoint {
+  const { mediaRef: _first, moreMediaRefs: _rest, ...rest } = point;
+  return {
+    ...rest,
+    ...(photos.length > 0 ? { mediaRef: photos[0] } : {}),
+    ...(photos.length > 1 ? { moreMediaRefs: photos.slice(1) } : {}),
+  };
 }
 
 export interface StorySpec {

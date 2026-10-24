@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildFamilyStory } from "../storyBuilder";
+import { buildFamilyStory, pointPhotos, withPhotos } from "../storyBuilder";
 import { EMPTY_VISUAL_DATA, type EventRecord, type VisualData } from "../visualData";
 import type { ObjectDetail } from "../objectDetail";
 
@@ -138,5 +138,16 @@ describe("buildFamilyStory", () => {
     detail.event_ref_list = [];
     (detail.extended as Record<string, unknown>).events = [];
     expect(await buildFamilyStory("t", detail, { ...EMPTY_VISUAL_DATA })).toBeNull();
+  });
+});
+
+describe("a point's photos", () => {
+  it("keeps the first in mediaRef, for copies of the app that only know one", () => {
+    const point = withPhotos({ eventRef: "e", text: "t" }, ["a", "b", "c"]);
+    expect(point).toEqual({ eventRef: "e", text: "t", mediaRef: "a", moreMediaRefs: ["b", "c"] });
+    expect(pointPhotos(point)).toEqual(["a", "b", "c"]);
+    expect(withPhotos(point, ["c"])).toEqual({ eventRef: "e", text: "t", mediaRef: "c" });
+    expect(withPhotos(point, [])).toEqual({ eventRef: "e", text: "t" });
+    expect(pointPhotos({ mediaRef: "only" })).toEqual(["only"]);
   });
 });

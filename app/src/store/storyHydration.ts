@@ -10,7 +10,7 @@ import type { Feature } from "geojson";
 import { toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
 import type { OverlayCorners } from "@gramps-connect/story/map-edit";
-import { fetchMediaMime, type StoryPoint, type StorySpec } from "./storyBuilder";
+import { fetchMediaMime, pointPhotos, type StoryPoint, type StorySpec } from "./storyBuilder";
 import { loadVisualData } from "./visualData";
 
 /** One of a place's map files (mapOverlays.ts), already fetched and
@@ -43,8 +43,9 @@ export interface HydratedSlide {
   /** The place's map files, resolved -- one entry per kmlMedia handle
    * that could be fetched. */
   mapFiles?: HydratedMapFile[];
-  mediaRef?: string;
-  mediaMime?: string;
+  /** The slide's photos, in order, each with its media type (only an
+   * image is shown -- see storyDoc.ts's slidePhotos). */
+  photos?: { ref: string; mime?: string }[];
 }
 
 export interface HydratedStory {
@@ -57,17 +58,18 @@ export interface HydratedStory {
  * to resolve a position for once hydrateStory's second pass below fetches
  * it. Undefined once resolved (or for the ordinary, already-located case),
  * so it's dropped rather than surviving into the public HydratedSlide. */
-interface DraftSlide extends Omit<HydratedSlide, "mediaMime"> {
+interface DraftSlide extends Omit<HydratedSlide, "photos"> {
   pendingPlaceHandle?: string;
+  photoRefs: string[];
 }
 
 /** A point's display fields -- `title`/`text` come straight from the stored
  * spec (storyBuilder.ts seeds both via storyText.ts, but any edit made
  * afterward sticks), while place/date/photo are derived the same way
  * storyBuilder.ts used to assemble them at generation time -- read from
- * the current cache instead of a snapshot frozen into the Note. `mediaRef`
- * falls back to the opening card's own photo, matching every point getting
- * a face even when it has no photo of its own. The opening point (no
+ * the current cache instead of a snapshot frozen into the Note. A point
+ * with no photos falls back to the opening card's first, matching every
+ * point getting a face even when it has no photo of its own. The opening point (no
  * `eventRef`) has no event to derive a title/place/date from, so its
  * title falls back to the story's own title. */
 function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<ReturnType<typeof loadVisualData>>, introMediaRef: string | undefined): DraftSlide {
@@ -100,7 +102,7 @@ function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<
     date: record?.dateText || undefined,
     edtf: toEdtf(record?.date),
     year: record?.year ?? undefined,
-    mediaRef: point.mediaRef ?? introMediaRef,
+    photoRefs: pointPhotos(point).length > 0 ? pointPhotos(point) : introMediaRef ? [introMediaRef] : [],
     pendingPlaceHandle: pending?.handle,
   };
 }
@@ -134,7 +136,7 @@ function cached<T>(cache: Map<string, Promise<T>> | undefined, key: string, load
 
 export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Promise<HydratedStory> {
   const visualData = await loadVisualData();
-  const introMediaRef = spec.points[0]?.mediaRef;
+  const introMediaRef = spec.points[0] ? pointPhotos(spec.points[0])[0] : undefined;
   const draftSlides: DraftSlide[] =
     spec.points.map((p) => hydratePoint(p, spec.title, visualData, introMediaRef));
 
@@ -189,7 +191,7 @@ export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Pro
   }
 
   const mimeByRef = new Map<string, string | undefined>();
-  const refs = [...new Set(draftSlides.map((s) => s.mediaRef).filter((r): r is string => Boolean(r)))];
+  const refs = [...new Set(draftSlides.flatMap((s) => s.photoRefs))];
   if (refs.length > 0) {
     await Promise.all(refs.map(async (ref) => {
       mimeByRef.set(ref, await cached(cache?.mimes, ref, async () => fetchMediaMime(await getToken(), ref)));
@@ -198,8 +200,9 @@ export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Pro
 
   return {
     title: spec.title,
-    slides: draftSlides.map(({ pendingPlaceHandle: _pendingPlaceHandle, ...s }) => ({
-      ...s, mediaMime: s.mediaRef ? mimeByRef.get(s.mediaRef) : undefined,
+    slides: draftSlides.map(({ pendingPlaceHandle: _pendingPlaceHandle, photoRefs, ...s }) => ({
+      ...s,
+      ...(photoRefs.length > 0 ? { photos: photoRefs.map((ref) => ({ ref, mime: mimeByRef.get(ref) })) } : {}),
     })),
   };
 }

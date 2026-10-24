@@ -40,11 +40,11 @@ function source(): StoryExportSource {
     notePrivate: false,
     subjects: ["josef"],
     slides: [
-      { hydrated: { title: "The Story of Josef Meyer", text: "4 moments.", mediaRef: "portrait", mediaMime: "image/jpeg" }, people: [] },
+      { hydrated: { title: "The Story of Josef Meyer", text: "4 moments.", photos: [{ ref: "portrait", mime: "image/jpeg" }] }, people: [] },
       slide("Birth", {
         hydrated: {
           date: "about 1850", edtf: "1850~", year: 1850.4, placeTitle: "Zürich", lat: 47.37, long: 8.54,
-          kmlMedia: ["mapfile"], mediaRef: "portrait", mediaMime: "image/jpeg",
+          kmlMedia: ["mapfile"], photos: [{ ref: "portrait", mime: "image/jpeg" }],
           mapFiles: [{
             handle: "mapfile",
             features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [8.54, 47.37] } }],
@@ -55,9 +55,9 @@ function source(): StoryExportSource {
         event: { grampsId: "E0001", private: false, placePrivate: false },
       }),
       slide("Christening", { event: { grampsId: "E0002", private: true, placePrivate: false } }),
-      slide("Marriage", { people: ["josef", "anna"], hydrated: { mediaRef: "couple", mediaMime: "image/jpeg" } }),
+      slide("Marriage", { people: ["josef", "anna"], hydrated: { photos: [{ ref: "couple", mime: "image/jpeg" }] } }),
       slide("Emigration", {
-        hydrated: { placeTitle: "Secret Harbor", lat: 49.49, long: 0.1, mediaRef: "ship", mediaMime: "image/jpeg" },
+        hydrated: { placeTitle: "Secret Harbor", lat: 49.49, long: 0.1, photos: [{ ref: "ship", mime: "image/jpeg" }] },
         event: { grampsId: "E0004", private: false, placePrivate: true },
       }),
     ],
@@ -110,6 +110,15 @@ describe("planStoryExport", () => {
     const marriage = plan.doc.slides.find((x) => x.title === "Marriage")!;
     expect(marriage.media).toBeUndefined();
     expect(plan.summary.photosLeftOut).toBe(2); // the couple photo and the private ship
+  });
+
+  it("keeps a slide's other photos when one of them is left out", () => {
+    const s = source();
+    s.slides[1].hydrated.photos = [{ ref: "portrait", mime: "image/jpeg" }, { ref: "ship", mime: "image/jpeg" }, { ref: "oldmap", mime: "image/png" }];
+    const plan = planStoryExport(s, STRICT, META);
+    const birth = plan.doc.slides[1];
+    // The private ship goes; the portrait and the map scan stay, in order.
+    expect(birth.media?.map((m) => plan.media.find((x) => x.key === m.ref)?.handle)).toEqual(["portrait", "oldmap"]);
   });
 
   it("writes dates, places, geometry and dated overlays", () => {

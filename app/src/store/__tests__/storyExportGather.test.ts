@@ -9,7 +9,7 @@ vi.mock("../storyHydration", () => ({
         title: "Marriage", text: "", kmlMedia: ["mapfile"],
         mapFiles: [{ handle: "mapfile", features: [], overlays: [{ imageHandle: "oldmap", corners: [[0, 1], [1, 1], [1, 0], [0, 0]], opacity: 0.5, order: 3 }] }],
       }
-      : { title: `Slide ${i}`, text: "", mediaRef: i === 0 ? "portrait" : undefined, mediaMime: i === 0 ? "image/jpeg" : undefined })),
+      : { title: `Slide ${i}`, text: "", photos: i === 0 ? [{ ref: "portrait", mime: "image/jpeg" }] : undefined })),
   })),
 }));
 

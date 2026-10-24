@@ -7,7 +7,7 @@ import type { HydratedStory } from "../storyHydration";
 const hydrated: HydratedStory = {
   title: "The Story of Josef Meyer",
   slides: [
-    { title: "The Story of Josef Meyer", text: "3 moments.", mediaRef: "portrait", mediaMime: "image/jpeg" },
+    { title: "The Story of Josef Meyer", text: "3 moments.", photos: [{ ref: "portrait", mime: "image/jpeg" }] },
     {
       title: "Birth", text: "Born.", date: "about 1850", edtf: "1850~", year: 1850.4,
       placeTitle: "Zürich", lat: 47.37, long: 8.54, kmlMedia: ["mapfile"],
@@ -17,10 +17,10 @@ const hydrated: HydratedStory = {
         features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [8.54, 47.37] } }],
         overlays: [{ imageHandle: "oldmap", corners: [[8.5, 47.39], [8.58, 47.39], [8.58, 47.36], [8.5, 47.36]], opacity: 0.7, order: 2 }],
       }],
-      mediaRef: "portrait", mediaMime: "image/jpeg",
+      photos: [{ ref: "portrait", mime: "image/jpeg" }],
     },
     // A PDF "photo" isn't something a slide can show.
-    { title: "Census", text: "Counted.", mediaRef: "scan", mediaMime: "application/pdf" },
+    { title: "Census", text: "Counted.", photos: [{ ref: "scan", mime: "application/pdf" }] },
   ],
 };
 
@@ -54,5 +54,15 @@ describe("presentationDoc", () => {
     });
     expect(parsePresentationMediaSrc("overlay/oldmap")).toEqual({ purpose: "overlay", handle: "oldmap" });
     expect(parsePresentationMediaSrc("media/m1.webp")).toBeNull();
+  });
+
+  it("shows a slide's photos in order, leaving out what isn't an image", () => {
+    const doc = presentationDoc({
+      title: "T",
+      slides: [{ title: "T", text: "", photos: [{ ref: "b", mime: "image/png" }, { ref: "scan", mime: "application/pdf" }, { ref: "a", mime: "image/jpeg" }] }],
+    });
+    expect(doc.slides[0].media).toEqual([{ ref: "m1" }, { ref: "m2" }]);
+    expect(doc.media.m1.src).toBe("photo/b");
+    expect(doc.media.m2).toEqual({ src: "photo/a", mime: "image/jpeg" });
   });
 });

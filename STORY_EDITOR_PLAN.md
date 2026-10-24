@@ -209,6 +209,12 @@ area at its own `opacity`, as the app's Map view does.
   HydrationCache so photos' types and map files are fetched once. App
   only. Wiki: "Editing a story" rewritten, "Seeing a story as you edit
   it".
+- Several photos per slide built 2026-10-23 (app only): StoryPoint keeps
+  its first photo in `mediaRef` (older copies of the app still show it)
+  and the rest in `moreMediaRefs` (pointPhotos/withPhotos);
+  HydratedSlide.photos carries each with its mime; downloads check each
+  photo's privacy by itself. Editor: StoryPhotosField (pick from the
+  tree or upload, reorder, remove). Wiki: "Several photos on a slide".
 - Anything learned in the file editor that the app's story editor lacks
   (Undo/Redo, the side-by-side preview) is offered for the app here, as its
   own change with its own wiki update.

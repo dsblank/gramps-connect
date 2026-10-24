@@ -19,25 +19,15 @@ import {
 import { getToken } from "../../auth/auth";
 import { fetchPage, type QueryItem } from "../../store/api";
 import { EVENT_VIEW, MEDIA_VIEW } from "../../store/views";
-import type { StoryPoint, StorySpec } from "../../store/storyBuilder";
+import { pointPhotos, withPhotos, type StoryPoint, type StorySpec } from "../../store/storyBuilder";
 import { RefSlot, pickerResultLabel } from "../RefPickerField";
 import { MediaThumbnail } from "../related/MediaThumbnail";
 import { StoryPreview, StoryView } from "../StoryView";
+import { refInfo, StoryPhotosField, type RefInfo } from "./StoryPhotosField";
 import { t } from "../../i18n/i18n";
 
 /** The story's own settings, in place of a slide index. */
 const STORY = -1;
-
-/** What the editor shows for a referenced event or photo: its label, and
- * for a photo its type (for the list's thumbnail). */
-interface RefInfo {
-  label: string;
-  mime?: string;
-}
-
-function refInfo(type: "event" | "media", item: QueryItem): RefInfo {
-  return { label: pickerResultLabel(type, item), mime: typeof item.mime === "string" ? item.mime : undefined };
-}
 
 /** Resolves display labels for every eventRef/mediaRef already on `spec`
  * that this component hasn't seen yet -- same `fetchPage(view, token, null,
@@ -51,7 +41,7 @@ function useRefInfo(spec: StorySpec) {
     const pending: { handle: string; type: "event" | "media" }[] = [];
     for (const p of spec.points) {
       if (p.eventRef && !(p.eventRef in info)) pending.push({ handle: p.eventRef, type: "event" });
-      if (p.mediaRef && !(p.mediaRef in info)) pending.push({ handle: p.mediaRef, type: "media" });
+      for (const photo of pointPhotos(p)) if (!(photo in info)) pending.push({ handle: photo, type: "media" });
     }
     if (pending.length === 0) return;
     (async () => {
@@ -75,14 +65,15 @@ function useRefInfo(spec: StorySpec) {
 function SlideRow({ point, index, info }: { point: StoryPoint; index: number; info: Record<string, RefInfo> }) {
   const event = point.eventRef ? info[point.eventRef]?.label : undefined;
   const name = point.title || event;
-  const photo = point.mediaRef ? info[point.mediaRef] : undefined;
+  const first = pointPhotos(point)[0];
+  const photo = first ? info[first] : undefined;
   return (
     <Group gap="sm" wrap="nowrap">
       <Box
         w={40} h={40}
         style={{ flex: "none", borderRadius: 4, background: "var(--mantine-color-default-hover)", overflow: "hidden" }}
       >
-        {point.mediaRef && photo && <MediaThumbnail handle={point.mediaRef} mime={photo.mime} size={40} />}
+        {first && photo && <MediaThumbnail handle={first} mime={photo.mime} size={40} />}
       </Box>
       <Box style={{ minWidth: 0 }}>
         <Text size="sm" fw={500} truncate dir="auto" c={name ? undefined : "dimmed"}>
@@ -141,6 +132,17 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
   function updatePoint(index: number, patch: Partial<StoryPoint>) {
     const typed = "title" in patch ? "title" : "text" in patch ? "text" : undefined;
     change({ ...current, points: current.points.map((p, i) => (i === index ? { ...p, ...patch } : p)) }, typed && `${index}:${typed}`);
+  }
+  /** Photos added to slide `index` as it is now (see StoryPhotosField's
+   * onAdd), each at most once. */
+  function addPhotos(index: number, handles: string[]) {
+    const latest = historyRef.current.present;
+    const target = latest.points[index];
+    if (!target) return;
+    const photos = pointPhotos(target);
+    const fresh = handles.filter((h, i) => !photos.includes(h) && handles.indexOf(h) === i);
+    if (!fresh.length) return;
+    change({ ...latest, points: latest.points.map((p, i) => (i === index ? withPhotos(p, [...photos, ...fresh]) : p)) });
   }
   function removePoint(index: number) {
     change({ ...current, points: current.points.filter((_, i) => i !== index) });
@@ -219,20 +221,12 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         minRows={5}
         onChange={(text) => updatePoint(index, { text: text || undefined })}
       />
-      <RefSlot
-        label={t("Photo")}
-        handle={point.mediaRef ?? null}
-        pickedLabel={point.mediaRef ? (info[point.mediaRef]?.label ?? null) : null}
-        onPick={(item) => {
-          remember("media", item);
-          updatePoint(index, { mediaRef: item.handle });
-        }}
-        onRemovePicked={() => updatePoint(index, { mediaRef: undefined })}
-        view={MEDIA_VIEW}
-        searchField="desc"
-        buildExpr={MEDIA_VIEW.simpleSearch?.buildExpr}
-        placeholder={MEDIA_VIEW.simpleSearch?.placeholder}
-        renderLabel={(item) => pickerResultLabel("media", item)}
+      <StoryPhotosField
+        photos={pointPhotos(point)}
+        info={info}
+        onChange={(photos) => change({ ...current, points: current.points.map((p, i) => (i === index ? withPhotos(p, photos) : p)) })}
+        onAdd={(handles) => addPhotos(index, handles)}
+        onPicked={(item) => remember("media", item)}
       />
     </Stack>
   );
