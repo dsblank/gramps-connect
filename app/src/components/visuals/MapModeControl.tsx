@@ -1,4 +1,5 @@
 import { Group, NumberInput, SegmentedControl, Slider, Text } from "@mantine/core";
+import type { PlayerStrings } from "@gramps-connect/story/player";
 import type { MapMode } from "./mapStyles";
 import { t } from "../../i18n/i18n";
 
@@ -7,7 +8,7 @@ import { t } from "../../i18n/i18n";
  * it resolved to (there's nothing to drag when the year comes from
  * context), "Historical" shows the slider the user drags themselves. */
 export function MapModeControl({
-  mode, onModeChange, autoYear, year, onYearChange, yearBounds,
+  mode, onModeChange, autoYear, year, onYearChange, yearBounds, words,
 }: {
   mode: MapMode;
   onModeChange: (mode: MapMode) => void;
@@ -20,7 +21,18 @@ export function MapModeControl({
   year: number;
   onYearChange: (year: number) => void;
   yearBounds: [number, number];
+  /** The story player's words for these, where a story brings its own
+   * (StoryView.tsx); else the app's t(). */
+  words?: Partial<PlayerStrings>;
 }) {
+  const say = {
+    auto: words?.auto ?? t("Auto"),
+    standard: words?.standard ?? t("Standard"),
+    historical: words?.historical ?? t("Historical"),
+    autoYear: words?.historicalMapYear ?? ((year: number) => `${t("Historical map")}, ${year}`),
+    noDate: words?.noDateStandardMap ?? t("No date here — standard map"),
+    year: words?.historicalYear ?? t("Historical map year"),
+  };
   return (
     <Group gap="sm" wrap="nowrap">
       <SegmentedControl
@@ -28,14 +40,14 @@ export function MapModeControl({
         value={mode}
         onChange={(value) => onModeChange(value as MapMode)}
         data={[
-          { value: "auto", label: t("Auto") },
-          { value: "standard", label: t("Standard") },
-          { value: "historical", label: t("Historical") },
+          { value: "auto", label: say.auto },
+          { value: "standard", label: say.standard },
+          { value: "historical", label: say.historical },
         ]}
       />
       {mode === "auto" && (
         <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-          {autoYear != null ? `${t("Historical map")}, ${autoYear}` : t("No date here — standard map")}
+          {autoYear != null ? say.autoYear(autoYear) : say.noDate}
         </Text>
       )}
       {mode === "historical" && (
@@ -48,7 +60,7 @@ export function MapModeControl({
             value={year}
             onChange={onYearChange}
             label={(value) => String(value)}
-            aria-label={t("Historical map year")}
+            aria-label={say.year}
           />
           {/* NumberInput's built-in up/down stepper is the "move back/forward
               by one year" control; typing directly into it is the "land on a
@@ -63,7 +75,7 @@ export function MapModeControl({
             allowDecimal={false}
             value={year}
             onChange={(value) => { if (typeof value === "number") onYearChange(Math.round(value)); }}
-            aria-label={t("Historical map year")}
+            aria-label={say.year}
           />
         </Group>
       )}

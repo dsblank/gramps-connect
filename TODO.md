@@ -165,6 +165,23 @@ fields) — ranked roughly by value, most first:
   worth doing, but as its own considered change, not a side effect of
   another feature.
 
+- **Story translations: more languages** — the story player, its
+  editors and the Story Editor page (`packages/story`: `player/strings.ts`,
+  `editor/translations/`, `site/editorStrings.ts`) have only English,
+  German, Spanish, French and Dutch, while the app has ~45. In another app
+  language the story editor, map editor tools and Present fall back to
+  `t()`, which has almost none of their words, so they're English. Add:
+  - **Chinese, Simplified and Traditional** first. Needs a script-aware
+    lookup: `editorLanguage`/`stringsFor` key on the base code only, so
+    `zh_CN`, `zh-Hans`, `zh-SG` -> Simplified and `zh_TW`, `zh_HK`,
+    `zh-Hant`, `zh-MO` -> Traditional.
+  - Then Italian, Portuguese (`pt_BR`/`pt_PT` can share one table),
+    Russian, Japanese, Polish, Swedish.
+  - Each language needs the player's, editor's, map editor's and page's
+    tables, plus the app-only words in `app/src/components/story/storyStrings.ts`
+    (`APP_WORDS`). Translations are machine-drafted: get a native speaker
+    to check them.
+
 ## Editing gaps
 
 Partially editable, by type:

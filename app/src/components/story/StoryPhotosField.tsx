@@ -12,6 +12,7 @@ import { pickerResultLabel } from "../RefPickerField";
 import { RecordPicker } from "../RecordPicker";
 import { MediaThumbnail } from "../related/MediaThumbnail";
 import { t } from "../../i18n/i18n";
+import { storyWords } from "./storyStrings";
 
 /** What the story editor shows for a referenced event or photo: its label,
  * and for a photo its type (for its thumbnail). */
@@ -37,6 +38,7 @@ export function StoryPhotosField({ photos, info, onChange, onAdd, onPicked }: {
   /** A photo picked from the tree, so its label is known straight away. */
   onPicked: (item: QueryItem) => void;
 }) {
+  const { editor: s, say } = storyWords();
   const [searching, setSearching] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,12 +71,12 @@ export function StoryPhotosField({ photos, info, onChange, onAdd, onPicked }: {
   return (
     <Stack gap="sm">
       <Group justify="space-between">
-        <Text size="sm" fw={500}>{t("Photos")}</Text>
+        <Text size="sm" fw={500}>{s.photos}</Text>
         <Group gap="xs">
           {uploading && <Loader size="xs" />}
-          <Button variant="default" size="xs" onClick={() => setSearching((s) => !s)}>{t("Select existing…")}</Button>
+          <Button variant="default" size="xs" onClick={() => setSearching((open) => !open)}>{say("Select existing…")}</Button>
           <FileButton onChange={(files) => void upload(files)} accept="image/*" multiple>
-            {(props) => <Button variant="default" size="xs" disabled={uploading} {...props}>+ {t("Upload photo")}</Button>}
+            {(props) => <Button variant="default" size="xs" disabled={uploading} {...props}>+ {say("Upload photo")}</Button>}
           </FileButton>
         </Group>
       </Group>
@@ -94,7 +96,7 @@ export function StoryPhotosField({ photos, info, onChange, onAdd, onPicked }: {
       )}
       {error && <Text size="xs" c="red" role="alert">{error}</Text>}
       {photos.length === 0 && (
-        <Text size="xs" c="dimmed">{t("No photos yet. A slide can show several, one after another.")}</Text>
+        <Text size="xs" c="dimmed">{say("No photos yet. A slide can show several, one after another.")}</Text>
       )}
       {photos.map((handle, i) => {
         const photo = info[handle];
@@ -109,17 +111,17 @@ export function StoryPhotosField({ photos, info, onChange, onAdd, onPicked }: {
             </Box>
             <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
               <Text size="sm" truncate dir="auto">{photo?.label ?? handle}</Text>
-              {notImage && <Text size="xs" c="dimmed">{t("Not shown: only images appear on a slide.")}</Text>}
+              {notImage && <Text size="xs" c="dimmed">{say("Not shown: only images appear on a slide.")}</Text>}
             </Stack>
             <Group gap={4} wrap="nowrap">
-              <Tooltip label={t("Move photo up")}>
-                <ActionIcon size="sm" variant="default" aria-label={t("Move photo up")} disabled={i === 0} onClick={() => move(i, i - 1)}>↑</ActionIcon>
+              <Tooltip label={s.movePhotoUp}>
+                <ActionIcon size="sm" variant="default" aria-label={s.movePhotoUp} disabled={i === 0} onClick={() => move(i, i - 1)}>↑</ActionIcon>
               </Tooltip>
-              <Tooltip label={t("Move photo down")}>
-                <ActionIcon size="sm" variant="default" aria-label={t("Move photo down")} disabled={i === photos.length - 1} onClick={() => move(i, i + 1)}>↓</ActionIcon>
+              <Tooltip label={s.movePhotoDown}>
+                <ActionIcon size="sm" variant="default" aria-label={s.movePhotoDown} disabled={i === photos.length - 1} onClick={() => move(i, i + 1)}>↓</ActionIcon>
               </Tooltip>
               <Button variant="subtle" size="compact-xs" color="red" onClick={() => onChange(photos.filter((_, j) => j !== i))}>
-                {t("Remove")}
+                {s.removePhoto}
               </Button>
             </Group>
           </Group>

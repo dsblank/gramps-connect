@@ -26,7 +26,7 @@ import { RefSlot, pickerResultLabel } from "../RefPickerField";
 import { MediaThumbnail } from "../related/MediaThumbnail";
 import { StoryPreview, StoryView } from "../StoryView";
 import { refInfo, StoryPhotosField, type RefInfo } from "./StoryPhotosField";
-import { t } from "../../i18n/i18n";
+import { storyWords } from "./storyStrings";
 
 /** The story's own settings, in place of a slide index. */
 const STORY = -1;
@@ -65,6 +65,7 @@ function useRefInfo(spec: StorySpec) {
 /** A slide's row in the list: its photo, its title (else its event), and
  * below, "Opening slide" or its event when it has a title of its own. */
 function SlideRow({ point, index, info }: { point: StoryPoint; index: number; info: Record<string, RefInfo> }) {
+  const s = storyWords().editor;
   const event = point.eventRef ? info[point.eventRef]?.label : undefined;
   const name = point.title || event;
   const first = pointPhotos(point)[0];
@@ -79,10 +80,10 @@ function SlideRow({ point, index, info }: { point: StoryPoint; index: number; in
       </Box>
       <Box style={{ minWidth: 0 }}>
         <Text size="sm" fw={500} truncate dir="auto" c={name ? undefined : "dimmed"}>
-          {name || t("Untitled slide")}
+          {name || s.untitledSlide}
         </Text>
         <Text size="xs" c="dimmed" truncate dir="auto">
-          {index === 0 ? t("Opening slide") : point.title ? (event ?? "") : ""}
+          {index === 0 ? s.openingSlide : point.title ? (event ?? "") : ""}
         </Text>
       </Box>
     </Group>
@@ -96,6 +97,8 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
    * not beneath (see StoryView.tsx's own doc comment on that prop). */
   previewStackId: string;
 }) {
+  // In the app's language (storyStrings.ts).
+  const { editor: s, say } = storyWords();
   // The spec as of each change since the dialog opened; `spec` is only the
   // starting point, as the parent re-parses it from the note every render.
   const [history, setHistory] = useState(() => startHistory(spec));
@@ -180,25 +183,25 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
   const languageText = current.language ?? "";
   const storyForm = (
     <Stack gap="md">
-      <Text fw={600} size="lg">{t("Story")}</Text>
+      <Text fw={600} size="lg">{s.story}</Text>
       <TextInput
-        label={t("Title")} required value={current.title}
+        label={s.title} required value={current.title}
         onChange={(e) => change({ ...current, title: e.currentTarget.value }, "title")}
       />
       <TextInput
-        label={t("Language")} w={260} value={languageText}
-        description={t("The language the story is written in, e.g. en, de or fr-CA. Left empty, a download says the app's language.")}
-        error={languageText.trim() && !storyLanguageTag(languageText) ? t("Not a language code, so it's left out.") : undefined}
+        label={s.language} w={260} value={languageText}
+        description={say("The language the story is written in, e.g. en, de or fr-CA. Left empty, a download says the app's language.")}
+        error={languageText.trim() && !storyLanguageTag(languageText) ? say("Not a language code, so it's left out.") : undefined}
         onChange={(e) => setSetting("language", e.currentTarget.value.trim() || undefined)}
       />
       <Select
-        label={t("Map")} w={320} allowDeselect={false}
-        description={t("How the map starts when the story plays. Readers can still change it.")}
+        label={s.map} w={320} allowDeselect={false}
+        description={s.mapHint}
         data={[
-          { value: "auto", label: t("Viewer's choice") },
-          { value: "standard", label: t("Today's map") },
-          { value: "historical", label: t("Historical maps for each slide's year") },
-          { value: "none", label: t("No map") },
+          { value: "auto", label: s.mapAuto },
+          { value: "standard", label: s.mapStandard },
+          { value: "historical", label: s.mapHistorical },
+          { value: "none", label: s.mapNone },
         ]}
         value={current.basemap ?? "auto"}
         // "auto" is what unset means, so it's stored as unset.
@@ -210,26 +213,26 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
   const slideForm = point && (
     <Stack gap="md" key={index}>
       <Group justify="space-between" wrap="wrap" gap="xs">
-        <Text fw={600} size="lg">{index === 0 ? t("Opening slide") : `${index + 1} / ${total}`}</Text>
+        <Text fw={600} size="lg">{index === 0 ? s.openingSlide : `${index + 1} / ${total}`}</Text>
         <Group gap={6}>
-          <Tooltip label={t("Move up")}>
-            <ActionIcon variant="default" aria-label={t("Move up")} disabled={index === 0} onClick={() => movePoint(index, index - 1)}>↑</ActionIcon>
+          <Tooltip label={s.moveUp}>
+            <ActionIcon variant="default" aria-label={s.moveUp} disabled={index === 0} onClick={() => movePoint(index, index - 1)}>↑</ActionIcon>
           </Tooltip>
-          <Tooltip label={t("Move down")}>
-            <ActionIcon variant="default" aria-label={t("Move down")} disabled={index === total - 1} onClick={() => movePoint(index, index + 1)}>↓</ActionIcon>
+          <Tooltip label={s.moveDown}>
+            <ActionIcon variant="default" aria-label={s.moveDown} disabled={index === total - 1} onClick={() => movePoint(index, index + 1)}>↓</ActionIcon>
           </Tooltip>
-          <Button variant="default" size="xs" onClick={() => insertPoint({ ...point })}>{t("Duplicate")}</Button>
-          <Button variant="default" size="xs" color="red" disabled={total <= 1} onClick={() => removePoint(index)}>{t("Delete")}</Button>
+          <Button variant="default" size="xs" onClick={() => insertPoint({ ...point })}>{s.duplicateSlide}</Button>
+          <Button variant="default" size="xs" color="red" disabled={total <= 1} onClick={() => removePoint(index)}>{s.deleteSlide}</Button>
         </Group>
       </Group>
       <TextInput
-        label={t("Title")}
-        placeholder={t("Defaults to the event's own type")}
+        label={s.title}
+        placeholder={say("Defaults to the event's own type")}
         value={point.title ?? ""}
         onChange={(e) => updatePoint(index, { title: e.currentTarget.value || undefined })}
       />
       <RefSlot
-        label={t("Event")}
+        label={say("Event")}
         handle={point.eventRef ?? null}
         pickedLabel={point.eventRef ? (info[point.eventRef]?.label ?? null) : null}
         onPick={(item) => {
@@ -244,10 +247,10 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         renderLabel={(item) => pickerResultLabel("event", item)}
       />
       <StoryTextField
-        label={t("Text")}
+        label={s.text}
         value={point.text ?? ""}
-        boldLabel={t("Bold")}
-        italicLabel={t("Italic")}
+        boldLabel={s.bold}
+        italicLabel={s.italic}
         minRows={5}
         onChange={(text) => updatePoint(index, { text: text || undefined })}
       />
@@ -267,12 +270,12 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         onClick={() => setSelected(STORY)}
         style={{ padding: 8, borderRadius: 6, background: index === STORY ? "var(--mantine-primary-color-light)" : undefined }}
       >
-        <Text fw={600} size="sm">{t("Story")}</Text>
-        <Text size="xs" c="dimmed">{t("Title, language and map")}</Text>
+        <Text fw={600} size="sm">{s.story}</Text>
+        <Text size="xs" c="dimmed">{s.storySettings}</Text>
       </UnstyledButton>
-      <Divider label={t("Slides")} labelPosition="left" />
+      <Divider label={s.slides} labelPosition="left" />
       <SlideList
-        label={t("Slides")}
+        label={s.slides}
         items={current.points}
         selected={index}
         onSelect={setSelected}
@@ -281,7 +284,7 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         renderItem={(p, i) => <SlideRow point={p} index={i} info={info} />}
       />
       <Button variant="light" size="xs" mt={4} onClick={() => insertPoint()}>
-        + {t("Add slide")}
+        + {s.addSlide}
       </Button>
     </Stack>
   );
@@ -302,7 +305,7 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         />
       ) : (
         <Stack align="center" justify="center" style={{ height: "100%" }}>
-          <Text size="sm" c="dimmed">{t("Add a slide to see the story here.")}</Text>
+          <Text size="sm" c="dimmed">{say("Add a slide to see the story here.")}</Text>
         </Stack>
       )}
     </Box>
@@ -316,18 +319,18 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
       >
         <Text fw={600} truncate dir="auto">{current.title}</Text>
         <Group gap="xs" wrap="nowrap">
-          <Tooltip label={t("Undo")}>
-            <ActionIcon variant="default" size="lg" aria-label={t("Undo")} disabled={history.past.length === 0} onClick={() => show(undo(historyRef.current))}>
+          <Tooltip label={s.undo}>
+            <ActionIcon variant="default" size="lg" aria-label={s.undo} disabled={history.past.length === 0} onClick={() => show(undo(historyRef.current))}>
               ↶
             </ActionIcon>
           </Tooltip>
-          <Tooltip label={t("Redo")}>
-            <ActionIcon variant="default" size="lg" aria-label={t("Redo")} disabled={history.future.length === 0} onClick={() => show(redo(historyRef.current))}>
+          <Tooltip label={s.redo}>
+            <ActionIcon variant="default" size="lg" aria-label={s.redo} disabled={history.future.length === 0} onClick={() => show(redo(historyRef.current))}>
               ↷
             </ActionIcon>
           </Tooltip>
           <Button variant="default" onClick={() => setPresenting(true)} disabled={total === 0}>
-            {t("Present")}
+            {s.present}
           </Button>
         </Group>
       </Group>

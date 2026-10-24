@@ -250,3 +250,12 @@ area at its own `opacity`, as the app's Map view does.
 4. **Order: Phases 2, 3, 4 first**, so the editor is usable sooner; then
    0 and 1 (moving the map code), then 5 (shapes and historical maps),
    then 6.
+
+**Editors translated (2026-10-24).** The package's story editor and map
+editor (and the Story Editor page) have German, Spanish, French and Dutch,
+the player's languages, in `src/editor/translations/`, picked by the
+browser's languages (`editorLanguage`: English counts, so "en-US, de" stays
+English). The app takes them for its own language (`storyWords` in
+`app/src/components/story/storyStrings.ts`), with a small table of the
+app-only phrases; other languages still go through `t()`. Validation
+messages in the problems list stay English (they're schema messages).

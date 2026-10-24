@@ -20,7 +20,7 @@ import { hydrateStory, hydrationCache, type HydratedStory } from "../store/story
 import { readVisualColors } from "./visuals/cssVar";
 import { seriesColor } from "./visuals/eventCategories";
 import { MapModeControl } from "./visuals/MapModeControl";
-import { t } from "../i18n/i18n";
+import { storyWords } from "./story/storyStrings";
 
 // Where the map's worker script is served -- without it the basemap draws
 // nothing at all. The player can't know a host's file layout, so each host
@@ -90,12 +90,13 @@ function useAppPlayerProps() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dark, visual.surface, visual.text, visual.muted, visual.border],
   );
-  const strings = useMemo(() => ({ previous: t("Previous"), next: t("Next"), close: t("Close") }), []);
+  // In the app's language, not the story's (story/storyStrings.ts).
+  const strings = storyWords().player;
   return { dark, colors, strings, renderMapModeControl: renderMapMode };
 }
 
 function renderMapMode(props: Parameters<typeof MapModeControl>[0]) {
-  return <MapModeControl {...props} />;
+  return <MapModeControl {...props} words={storyWords().player} />;
 }
 
 /** How long typing pauses before the preview catches up. */
@@ -190,7 +191,7 @@ export function StoryView({ spec, opened, onClose, stackId, initialSlide }: {
           <Stack align="center" justify="center" style={{ height: "100%" }}>
             <Loader />
             <ActionIcon
-              variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={t("Close")}
+              variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={storyWords().player.close}
               style={{ position: "absolute", top: 10, right: 12, opacity: 0.8 }}
             >
               <Text size="lg" c="white">×</Text>

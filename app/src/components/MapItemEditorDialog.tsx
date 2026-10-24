@@ -7,7 +7,7 @@ import { formatDisplayDate } from "../store/placeIndex";
 import { Alert, Anchor, Box, Button, Group, Modal, Stack, Text, TextInput, useComputedColorScheme } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
-  MAP_EDITOR_ENGLISH, MapEditor, MapEditorHelp, type MapEditorHandle, type MapEditorOverlay, type MapEditorStrings,
+  MapEditor, MapEditorHelp, type MapEditorHandle, type MapEditorOverlay,
 } from "@gramps-connect/story/editor";
 import type { Feature } from "geojson";
 import { getToken } from "../auth/auth";
@@ -37,22 +37,13 @@ import { WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import type { QueryItem } from "../store/api";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { t } from "../i18n/i18n";
+import { storyWords } from "./story/storyStrings";
 
 // Registered once, module-level -- the same worker file MapCanvas.tsx
 // points at, and maplibregl.setWorkerUrl is idempotent (it just sets a
 // static field the next Map reads), so calling it again here if MapCanvas's
 // module happens not to have loaded yet in this session costs nothing.
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
-
-/** The map editor's words in the current language: its English defaults
- * are this app's own t() keys, so they translate the same as before it
- * moved into the story package. */
-function mapEditorStrings(): MapEditorStrings {
-  const translated = Object.fromEntries(
-    Object.entries(MAP_EDITOR_ENGLISH).map(([key, value]) => [key, typeof value === "string" ? t(value) : value]),
-  ) as unknown as MapEditorStrings;
-  return { ...translated, lockedMany: (count) => `${count} ${t("shapes can't be edited here")}` };
-}
 
 /** A media handle's image, for the editor to show -- the same token-in-a-
  * header fetch every other media read uses (discussion #4: keeps the
@@ -129,7 +120,8 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
   // edits, and saves it with the description and place around it.
   const editorRef = useRef<MapEditorHandle>(null);
   const dark = useComputedColorScheme("light") === "dark";
-  const strings = mapEditorStrings();
+  // In the app's language (story/storyStrings.ts).
+  const strings = storyWords().mapEditor;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Anything drawn or placed yet (hasDrawn), and anything to save at all,

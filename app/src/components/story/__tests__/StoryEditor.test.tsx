@@ -4,8 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "../../../testUtils/renderWithProviders";
 import type { StorySpec } from "../../../store/storyBuilder";
 
+const i18n = vi.hoisted(() => ({ lang: "en" }));
 vi.mock("../../../i18n/i18n", () => ({
-  getI18nSnapshot: () => ({ lang: "en", strings: {} }),
+  getI18nSnapshot: () => ({ lang: i18n.lang, strings: {} }),
   subscribe: () => () => {},
   t: (s: string) => s,
 }));
@@ -47,6 +48,7 @@ async function pickMap(user: ReturnType<typeof userEvent.setup>, label: string) 
 
 describe("StoryEditor's story settings", () => {
   beforeEach(() => {
+    i18n.lang = "en";
     // jsdom has no layout; Mantine's Select scrolls to the picked option.
     Element.prototype.scrollIntoView ??= () => {};
     changes = [];
@@ -137,5 +139,24 @@ describe("StoryEditor's story settings", () => {
     await user.click(screen.getByRole("button", { name: "+ Add slide" }));
     expect(last().points).toHaveLength(3);
     expect(last()).toMatchObject({ language: "de", basemap: "none" });
+  });
+});
+
+describe("StoryEditor in another language", () => {
+  beforeEach(() => {
+    changes = [];
+    Element.prototype.scrollIntoView ??= () => {};
+  });
+
+  it("is in the app's language where the story package has it", async () => {
+    i18n.lang = "de";
+    const user = userEvent.setup();
+    renderEditor();
+    expect(screen.getByRole("button", { name: "+ Folie hinzufügen" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Rückgängig" })).toBeTruthy();
+    await user.click(screen.getByText("Titel, Sprache und Karte"));
+    expect((screen.getByRole("textbox", { name: "Karte" }) as HTMLInputElement).value).toBe("Wahl des Betrachters");
+    await user.type(screen.getByLabelText("Sprache"), "x!");
+    expect(screen.getByText("Kein Sprachcode, daher wird er weggelassen.")).toBeTruthy();
   });
 });
