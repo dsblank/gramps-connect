@@ -38,6 +38,9 @@ interface FakeServer {
    * *other* tree activity moved the cursor, unrelated to whatever view a
    * test is checking). */
   changedClasses?: string[];
+  /** Adds a bulk transaction (an import, say) to that walk: one whose
+   * history entry has no changes at all. */
+  bulkTransaction?: boolean;
 }
 
 /** Stands in for the two endpoints fetchServerState() reads, plus the
@@ -51,6 +54,7 @@ function mockServer({
   cursor = 7,
   metadataFails = false,
   changedClasses = [],
+  bulkTransaction = false,
 }: FakeServer = {}) {
   vi.stubGlobal(
     "fetch",
@@ -69,7 +73,10 @@ function mockServer({
         }
         return {
           ok: true,
-          json: async () => changedClasses.map((obj_class) => ({ changes: [{ obj_class }] })),
+          json: async () => [
+            ...changedClasses.map((obj_class) => ({ changes: [{ obj_class }] })),
+            ...(bulkTransaction ? [{ changes: [] }] : []),
+          ],
         } as unknown as Response;
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -156,6 +163,18 @@ describe("isCacheStale", () => {
     resetServerState();
     mockServer({ cursor: 8, changedClasses: ["Person"] });
     expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false, advanceCursorTo: 8 });
+  });
+
+  it("treats a bulk transaction (an import, with no recorded changes) as touching every table", async () => {
+    // A tree cached while still empty, then imported into elsewhere: the
+    // import's history entry lists no changes, so without this the empty
+    // cache would be kept.
+    mockServer({ cursor: 0, counts: { tags: 0 } });
+    const db = await cachedDb(TAG_VIEW, 0);
+
+    resetServerState();
+    mockServer({ cursor: 1, counts: { tags: 13 }, bulkTransaction: true });
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
   });
 
   it("treats an unreadable walk (a full page, more possibly beyond it) as stale", async () => {

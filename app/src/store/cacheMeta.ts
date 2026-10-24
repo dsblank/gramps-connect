@@ -26,8 +26,11 @@ const META_TABLE = "_cache_meta";
 
 /** Bump to invalidate every existing cache when the meta format itself
  * changes (a cache written by an older format can't be meaningfully
- * compared against a newer one). */
-const META_VERSION = "1";
+ * compared against a newer one), or when caches already on disk can't be
+ * trusted. "2": before isBulkTransaction(), a reload after an import made
+ * elsewhere advanced the cache's cursor past the import without refetching,
+ * leaving a cache that reads as current but is missing the imported rows. */
+const META_VERSION = "2";
 
 /** What the server looked like when a cache was written, or looks like
  * now -- the two sides ensureLoaded() compares. */
@@ -237,11 +240,20 @@ interface HistoryTransactionForWalk {
   changes: HistoryChangeForWalk[];
 }
 
+/** A bulk operation -- an import, "Delete all objects", Check Integrity --
+ * commits as a batch transaction that records no per-object undo data, so
+ * its history entry has an empty `changes` list even though it may have
+ * rewritten every table. Nothing about it can be ruled out per table. */
+function isBulkTransaction(tx: HistoryTransactionForWalk): boolean {
+  return tx.changes.length === 0;
+}
+
 /** Whether any change to `table` landed in the undo log after `afterId` --
  * lets isCacheStale() tell "something unrelated changed elsewhere in the
  * tree" (cache still good) apart from "this view's own table changed"
  * (cache stale), instead of the tree-wide cursor invalidating every view on
- * any change anywhere. Returns null ("can't tell") rather than false when
+ * any change anywhere. A bulk transaction (see isBulkTransaction()) counts
+ * as touching every table. Returns null ("can't tell") rather than false when
  * the walk can't rule it out: on a fetch failure, or when the page comes
  * back full (STALE_CHECK_PAGESIZE items -- there may be more beyond it this
  * single page can't see). A cache that far behind is due a refetch anyway
@@ -256,7 +268,9 @@ async function tableTouchedSince(afterId: number, table: string): Promise<boolea
     if (!res.ok) return null;
     const transactions: HistoryTransactionForWalk[] = await res.json();
     if (transactions.length >= STALE_CHECK_PAGESIZE) return null;
-    return transactions.some((tx) => tx.changes.some((change) => change.obj_class.toLowerCase() === table));
+    return transactions.some(
+      (tx) => isBulkTransaction(tx) || tx.changes.some((change) => change.obj_class.toLowerCase() === table)
+    );
   } catch {
     return null;
   }
