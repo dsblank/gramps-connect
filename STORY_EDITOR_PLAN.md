@@ -194,6 +194,13 @@ area at its own `opacity`, as the app's Map view does.
 
 - The app's StoryEditor switches to the package's slide list and text
   field. Its slides stay references; only the controls are shared.
+  (Built 2026-10-23, no package change: the stacked slide cards became the
+  list on the left and the picked slide's card on the right; the app's own
+  StoryTextField was deleted. Wiki: "Editing a story".)
+- Undo/Redo built 2026-10-23: the package's `History` became generic
+  (`History<T = StoryDoc>`), so the app keeps its StorySpec history with
+  the same `record`/`undo`/`redo` and coalescing. Wiki: "Undo and redo
+  while editing a story". Package change, so a 0.6.0 release.
 - Anything learned in the file editor that the app's story editor lacks
   (Undo/Redo, the side-by-side preview) is offered for the app here, as its
   own change with its own wiki update.

@@ -1,20 +1,25 @@
 // Structured replacement for ObjectEditDialog.tsx's old raw-JSON textarea
 // ("json" field kind) -- a story is just a title plus a list of slides, so
-// this exposes exactly that: one card per point with Event/Media pickers,
-// its own heading, and a lightly-stylable text field, plus add/remove/
-// reorder controls and a Preview button that opens the real StoryView on
-// the in-progress spec. Title and text are the two fields a generated
+// this exposes exactly that: the story package's slide list (pick a slide,
+// drag to reorder) beside the picked slide's card with Event/Media pickers,
+// its own heading, and the package's text field, plus add/remove/reorder
+// controls and a Preview button that opens the real StoryView on the
+// in-progress spec. Undo/Redo step back through changes made since the
+// dialog opened. The controls (and the undo history) are shared with the
+// package's file editor; the slides here stay references. Title and text are the two fields a generated
 // story seeds and then hands over (storyText.ts) -- everything else on a
 // slide stays a reference that's re-resolved at presentation time.
-import { useEffect, useState } from "react";
-import { Button, Card, Group, Stack, Text, TextInput } from "@mantine/core";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ActionIcon, Box, Button, Card, Grid, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import {
+  record, redo, SlideList, startHistory, StoryTextField, undo, type History,
+} from "@gramps-connect/story/editor";
 import { getToken } from "../../auth/auth";
 import { fetchPage } from "../../store/api";
 import { EVENT_VIEW, MEDIA_VIEW } from "../../store/views";
 import type { StoryPoint, StorySpec } from "../../store/storyBuilder";
 import { CircleGlyphButton } from "../CircleGlyphButton";
 import { RefSlot, pickerResultLabel } from "../RefPickerField";
-import { StoryTextField } from "./StoryTextField";
 import { StoryView } from "../StoryView";
 import { t } from "../../i18n/i18n";
 
@@ -116,10 +121,27 @@ function StorySlideCard({ point, index, total, labels, onLabel, onUpdate, onRemo
         <StoryTextField
           label={t("Text")}
           value={point.text ?? ""}
+          boldLabel={t("Bold")}
+          italicLabel={t("Italic")}
+          minRows={5}
           onChange={(text) => onUpdate({ text: text || undefined })}
         />
       </Stack>
     </Card>
+  );
+}
+
+/** A slide's row in the list: its title, else its event's label. */
+function SlideRow({ point, index, labels }: { point: StoryPoint; index: number; labels: Record<string, string> }) {
+  const name = point.title || (point.eventRef ? labels[point.eventRef] : undefined);
+  const media = point.mediaRef ? labels[point.mediaRef] : undefined;
+  return (
+    <Box style={{ minWidth: 0 }}>
+      <Text size="sm" fw={500} truncate dir="auto" c={name ? undefined : "dimmed"}>
+        {index + 1}. {name || t("Untitled slide")}
+      </Text>
+      <Text size="xs" c="dimmed" truncate dir="auto">{media ?? point.text ?? ""}</Text>
+    </Box>
   );
 }
 
@@ -130,55 +152,121 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
    * not beneath (see StoryView.tsx's own doc comment on that prop). */
   previewStackId: string;
 }) {
-  const [labels, setLabels] = useRefLabels(spec);
+  // The spec as of each change since the dialog opened; `spec` is only the
+  // starting point, as the parent re-parses it from the note every render.
+  const [history, setHistory] = useState(() => startHistory(spec));
+  const historyRef = useRef(history);
+  const current = history.present;
+  const [labels, setLabels] = useRefLabels(current);
   const [previewOpened, setPreviewOpened] = useState(false);
+  const [selected, setSelected] = useState(0);
+  const index = Math.min(selected, current.points.length - 1);
+  const point = index >= 0 ? current.points[index] : undefined;
+
+  // Every change goes through here, into the history and to the parent.
+  // Typing in the same field makes one undo step (see `key`).
+  function change(next: StorySpec, key?: string) {
+    show(record(historyRef.current, next, key));
+  }
+  function show(next: History<StorySpec>) {
+    if (next === historyRef.current) return;
+    historyRef.current = next;
+    setHistory(next);
+    onChange(next.present);
+  }
+  // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) anywhere in the editor, except in a
+  // text field, which has its own. Not from the Preview, whose keys reach
+  // here through its portal.
+  function onKeyDown(e: KeyboardEvent) {
+    if (previewOpened || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if ((e.target as HTMLElement).closest("input, textarea, [contenteditable=true]")) return;
+    const key = e.key.toLowerCase();
+    if (key === "z" && !e.shiftKey) { e.preventDefault(); show(undo(historyRef.current)); }
+    else if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); show(redo(historyRef.current)); }
+  }
 
   function updatePoint(index: number, patch: Partial<StoryPoint>) {
-    onChange({ ...spec, points: spec.points.map((p, i) => (i === index ? { ...p, ...patch } : p)) });
+    const typed = "title" in patch ? "title" : "text" in patch ? "text" : undefined;
+    change({ ...current, points: current.points.map((p, i) => (i === index ? { ...p, ...patch } : p)) }, typed && `${index}:${typed}`);
   }
   function removePoint(index: number) {
-    onChange({ ...spec, points: spec.points.filter((_, i) => i !== index) });
+    change({ ...current, points: current.points.filter((_, i) => i !== index) });
+    setSelected(Math.max(0, index - 1));
   }
-  function movePoint(index: number, delta: number) {
-    const target = index + delta;
-    if (target < 0 || target >= spec.points.length) return;
-    const points = [...spec.points];
-    [points[index], points[target]] = [points[target], points[index]];
-    onChange({ ...spec, points });
+  function movePoint(from: number, to: number) {
+    if (from === to || to < 0 || to >= current.points.length) return;
+    const points = [...current.points];
+    const [moved] = points.splice(from, 1);
+    points.splice(to, 0, moved);
+    change({ ...current, points });
+    setSelected(to);
   }
   function addPoint() {
-    onChange({ ...spec, points: [...spec.points, {}] });
+    // After the slide being edited, as in the story package's editor.
+    const at = index + 1;
+    change({ ...current, points: [...current.points.slice(0, at), {}, ...current.points.slice(at)] });
+    setSelected(at);
   }
 
   return (
-    <Stack gap="sm">
-      <TextInput
-        label={t("Title")}
-        value={spec.title}
-        onChange={(e) => onChange({ ...spec, title: e.currentTarget.value })}
-      />
-      {spec.points.map((point, i) => (
-        <StorySlideCard
-          key={i}
-          point={point}
-          index={i}
-          total={spec.points.length}
-          labels={labels}
-          onLabel={(handle, label) => setLabel(setLabels, handle, label)}
-          onUpdate={(patch) => updatePoint(i, patch)}
-          onRemove={() => removePoint(i)}
-          onMoveUp={() => movePoint(i, -1)}
-          onMoveDown={() => movePoint(i, 1)}
+    <Stack gap="sm" onKeyDown={onKeyDown}>
+      <Group gap="xs" align="flex-end" wrap="nowrap">
+        <TextInput
+          label={t("Title")}
+          value={current.title}
+          onChange={(e) => change({ ...current, title: e.currentTarget.value }, "title")}
+          style={{ flex: 1 }}
         />
-      ))}
-      <Group justify="space-between">
-        <CircleGlyphButton glyph="+" label={t("Add slide")} textLabel="Add slide" onClick={addPoint} />
-        <Button variant="default" size="xs" onClick={() => setPreviewOpened(true)} disabled={spec.points.length === 0}>
-          {t("Preview")}
-        </Button>
+        <Tooltip label={t("Undo")}>
+          <ActionIcon variant="default" size="lg" aria-label={t("Undo")} disabled={history.past.length === 0} onClick={() => show(undo(historyRef.current))}>
+            ↶
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={t("Redo")}>
+          <ActionIcon variant="default" size="lg" aria-label={t("Redo")} disabled={history.future.length === 0} onClick={() => show(redo(historyRef.current))}>
+            ↷
+          </ActionIcon>
+        </Tooltip>
       </Group>
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, sm: 4, lg: 3 }}>
+          <Stack gap="xs">
+            <SlideList
+              label={t("Slides")}
+              items={current.points}
+              selected={index}
+              onSelect={setSelected}
+              onMove={movePoint}
+              getKey={(_, i) => String(i)}
+              renderItem={(p, i) => <SlideRow point={p} index={i} labels={labels} />}
+            />
+            <Group justify="space-between">
+              <CircleGlyphButton glyph="+" label={t("Add slide")} textLabel="Add slide" onClick={addPoint} />
+              <Button variant="default" size="xs" onClick={() => setPreviewOpened(true)} disabled={current.points.length === 0}>
+                {t("Preview")}
+              </Button>
+            </Group>
+          </Stack>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, sm: 8, lg: 9 }}>
+          {point && (
+            <StorySlideCard
+              key={index}
+              point={point}
+              index={index}
+              total={current.points.length}
+              labels={labels}
+              onLabel={(handle, label) => setLabel(setLabels, handle, label)}
+              onUpdate={(patch) => updatePoint(index, patch)}
+              onRemove={() => removePoint(index)}
+              onMoveUp={() => movePoint(index, index - 1)}
+              onMoveDown={() => movePoint(index, index + 1)}
+            />
+          )}
+        </Grid.Col>
+      </Grid>
       <StoryView
-        spec={spec.points.length > 0 ? spec : null}
+        spec={current.points.length > 0 ? current : null}
         opened={previewOpened}
         onClose={() => setPreviewOpened(false)}
         stackId={previewStackId}
