@@ -1,27 +1,43 @@
 // Structured replacement for ObjectEditDialog.tsx's old raw-JSON textarea
-// ("json" field kind) -- a story is just a title plus a list of slides, so
-// this exposes exactly that: the story package's slide list (pick a slide,
-// drag to reorder) beside the picked slide's card with Event/Media pickers,
-// its own heading, and the package's text field, plus add/remove/reorder
-// controls and a Preview button that opens the real StoryView on the
-// in-progress spec. Undo/Redo step back through changes made since the
-// dialog opened. The controls (and the undo history) are shared with the
-// package's file editor; the slides here stay references. Title and text are the two fields a generated
-// story seeds and then hands over (storyText.ts) -- everything else on a
-// slide stays a reference that's re-resolved at presentation time.
+// ("json" field kind) -- a story is just a title plus a list of slides, laid
+// out like the story package's file editor: the slide list on the left
+// (pick a slide, drag to reorder), the picked slide's fields (or the
+// story's own) in the middle, and the real player on the right following
+// the story as it's edited (StoryView.tsx's StoryPreview). Undo/Redo step
+// back through changes made since the dialog opened; Present plays the
+// story full screen from the slide being edited. The controls and the undo
+// history are shared with the package's editor, but the slides here stay
+// references: title and text are the two fields a generated story seeds
+// and then hands over (storyText.ts) -- everything else on a slide is
+// re-resolved from its event and photo at presentation time.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ActionIcon, Box, Button, Card, Grid, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { ActionIcon, Box, Button, Divider, Group, Stack, Text, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import {
   record, redo, SlideList, startHistory, StoryTextField, undo, type History,
 } from "@gramps-connect/story/editor";
 import { getToken } from "../../auth/auth";
-import { fetchPage } from "../../store/api";
+import { fetchPage, type QueryItem } from "../../store/api";
 import { EVENT_VIEW, MEDIA_VIEW } from "../../store/views";
 import type { StoryPoint, StorySpec } from "../../store/storyBuilder";
-import { CircleGlyphButton } from "../CircleGlyphButton";
 import { RefSlot, pickerResultLabel } from "../RefPickerField";
-import { StoryView } from "../StoryView";
+import { MediaThumbnail } from "../related/MediaThumbnail";
+import { StoryPreview, StoryView } from "../StoryView";
 import { t } from "../../i18n/i18n";
+
+/** The story's own settings, in place of a slide index. */
+const STORY = -1;
+
+/** What the editor shows for a referenced event or photo: its label, and
+ * for a photo its type (for the list's thumbnail). */
+interface RefInfo {
+  label: string;
+  mime?: string;
+}
+
+function refInfo(type: "event" | "media", item: QueryItem): RefInfo {
+  return { label: pickerResultLabel(type, item), mime: typeof item.mime === "string" ? item.mime : undefined };
+}
 
 /** Resolves display labels for every eventRef/mediaRef already on `spec`
  * that this component hasn't seen yet -- same `fetchPage(view, token, null,
@@ -29,13 +45,13 @@ import { t } from "../../i18n/i18n";
  * ObjectEditDialog.tsx's own label-resolution effect uses for its
  * reference/refList/mediaList fields (lines 305-340 there), kept as its own
  * copy here since this is the only consumer of these particular refs. */
-function useRefLabels(spec: StorySpec) {
-  const [labels, setLabels] = useState<Record<string, string>>({});
+function useRefInfo(spec: StorySpec) {
+  const [info, setInfo] = useState<Record<string, RefInfo>>({});
   useEffect(() => {
     const pending: { handle: string; type: "event" | "media" }[] = [];
     for (const p of spec.points) {
-      if (p.eventRef && !(p.eventRef in labels)) pending.push({ handle: p.eventRef, type: "event" });
-      if (p.mediaRef && !(p.mediaRef in labels)) pending.push({ handle: p.mediaRef, type: "media" });
+      if (p.eventRef && !(p.eventRef in info)) pending.push({ handle: p.eventRef, type: "event" });
+      if (p.mediaRef && !(p.mediaRef in info)) pending.push({ handle: p.mediaRef, type: "media" });
     }
     if (pending.length === 0) return;
     (async () => {
@@ -43,111 +59,46 @@ function useRefLabels(spec: StorySpec) {
       for (const { handle, type } of pending) {
         const { page } = await fetchPage(type === "event" ? EVENT_VIEW : MEDIA_VIEW, token, null, false, `handle == "${handle}"`);
         const item = page.items[0];
-        if (item) setLabels((prev) => ({ ...prev, [handle]: pickerResultLabel(type, item) }));
+        if (item) setInfo((prev) => ({ ...prev, [handle]: refInfo(type, item) }));
       }
     })();
-    // `labels` deliberately excluded -- same reasoning as
+    // `info` deliberately excluded -- same reasoning as
     // ObjectEditDialog.tsx's identical effect (FamilyEditDialog.tsx has the
     // fuller doc comment on why).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec.points]);
-  return [labels, setLabels] as const;
+  return [info, setInfo] as const;
 }
 
-function setLabel(setLabels: (fn: (prev: Record<string, string>) => Record<string, string>) => void, handle: string, label: string) {
-  setLabels((prev) => ({ ...prev, [handle]: label }));
-}
-
-interface StorySlideCardProps {
-  point: StoryPoint;
-  index: number;
-  total: number;
-  labels: Record<string, string>;
-  onLabel: (handle: string, label: string) => void;
-  onUpdate: (patch: Partial<StoryPoint>) => void;
-  onRemove: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-}
-
-function StorySlideCard({ point, index, total, labels, onLabel, onUpdate, onRemove, onMoveUp, onMoveDown }: StorySlideCardProps) {
+/** A slide's row in the list: its photo, its title (else its event), and
+ * below, "Opening slide" or its event when it has a title of its own. */
+function SlideRow({ point, index, info }: { point: StoryPoint; index: number; info: Record<string, RefInfo> }) {
+  const event = point.eventRef ? info[point.eventRef]?.label : undefined;
+  const name = point.title || event;
+  const photo = point.mediaRef ? info[point.mediaRef] : undefined;
   return (
-    <Card withBorder padding="sm">
-      <Stack gap="xs">
-        <Group justify="space-between" wrap="nowrap">
-          <Text size="sm" fw={600}>Slide {index + 1}</Text>
-          <Group gap={4} wrap="nowrap">
-            {index > 0 && <CircleGlyphButton glyph="↑" label={t("Move up")} onClick={onMoveUp} size={20} />}
-            {index < total - 1 && <CircleGlyphButton glyph="↓" label={t("Move down")} onClick={onMoveDown} size={20} />}
-            <CircleGlyphButton glyph="−" label={t("Remove slide")} onClick={onRemove} size={20} />
-          </Group>
-        </Group>
-        <RefSlot
-          label={t("Event")}
-          handle={point.eventRef ?? null}
-          pickedLabel={point.eventRef ? (labels[point.eventRef] ?? null) : null}
-          onPick={(item) => {
-            onLabel(item.handle, pickerResultLabel("event", item));
-            onUpdate({ eventRef: item.handle });
-          }}
-          onRemovePicked={() => onUpdate({ eventRef: undefined })}
-          view={EVENT_VIEW}
-          searchField="description"
-          buildExpr={EVENT_VIEW.simpleSearch?.buildExpr}
-          placeholder={EVENT_VIEW.simpleSearch?.placeholder}
-          renderLabel={(item) => pickerResultLabel("event", item)}
-        />
-        <RefSlot
-          label={t("Media")}
-          handle={point.mediaRef ?? null}
-          pickedLabel={point.mediaRef ? (labels[point.mediaRef] ?? null) : null}
-          onPick={(item) => {
-            onLabel(item.handle, pickerResultLabel("media", item));
-            onUpdate({ mediaRef: item.handle });
-          }}
-          onRemovePicked={() => onUpdate({ mediaRef: undefined })}
-          view={MEDIA_VIEW}
-          searchField="desc"
-          buildExpr={MEDIA_VIEW.simpleSearch?.buildExpr}
-          placeholder={MEDIA_VIEW.simpleSearch?.placeholder}
-          renderLabel={(item) => pickerResultLabel("media", item)}
-        />
-        <TextInput
-          label={t("Title")}
-          placeholder={t("Defaults to the event's own type")}
-          value={point.title ?? ""}
-          onChange={(e) => onUpdate({ title: e.currentTarget.value || undefined })}
-        />
-        <StoryTextField
-          label={t("Text")}
-          value={point.text ?? ""}
-          boldLabel={t("Bold")}
-          italicLabel={t("Italic")}
-          minRows={5}
-          onChange={(text) => onUpdate({ text: text || undefined })}
-        />
-      </Stack>
-    </Card>
-  );
-}
-
-/** A slide's row in the list: its title, else its event's label. */
-function SlideRow({ point, index, labels }: { point: StoryPoint; index: number; labels: Record<string, string> }) {
-  const name = point.title || (point.eventRef ? labels[point.eventRef] : undefined);
-  const media = point.mediaRef ? labels[point.mediaRef] : undefined;
-  return (
-    <Box style={{ minWidth: 0 }}>
-      <Text size="sm" fw={500} truncate dir="auto" c={name ? undefined : "dimmed"}>
-        {index + 1}. {name || t("Untitled slide")}
-      </Text>
-      <Text size="xs" c="dimmed" truncate dir="auto">{media ?? point.text ?? ""}</Text>
-    </Box>
+    <Group gap="sm" wrap="nowrap">
+      <Box
+        w={40} h={40}
+        style={{ flex: "none", borderRadius: 4, background: "var(--mantine-color-default-hover)", overflow: "hidden" }}
+      >
+        {point.mediaRef && photo && <MediaThumbnail handle={point.mediaRef} mime={photo.mime} size={40} />}
+      </Box>
+      <Box style={{ minWidth: 0 }}>
+        <Text size="sm" fw={500} truncate dir="auto" c={name ? undefined : "dimmed"}>
+          {name || t("Untitled slide")}
+        </Text>
+        <Text size="xs" c="dimmed" truncate dir="auto">
+          {index === 0 ? t("Opening slide") : point.title ? (event ?? "") : ""}
+        </Text>
+      </Box>
+    </Group>
   );
 }
 
 export function StoryEditor({ spec, onChange, previewStackId }: {
   spec: StorySpec; onChange: (spec: StorySpec) => void;
-  /** Forwarded to StoryView's own `stackId` so the Preview modal registers
+  /** Forwarded to StoryView's own `stackId` so the Present modal registers
    * with the surrounding edit dialog's Modal.Stack and renders above it,
    * not beneath (see StoryView.tsx's own doc comment on that prop). */
   previewStackId: string;
@@ -157,11 +108,13 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
   const [history, setHistory] = useState(() => startHistory(spec));
   const historyRef = useRef(history);
   const current = history.present;
-  const [labels, setLabels] = useRefLabels(current);
-  const [previewOpened, setPreviewOpened] = useState(false);
+  const [info, setInfo] = useRefInfo(current);
+  const [presenting, setPresenting] = useState(false);
   const [selected, setSelected] = useState(0);
-  const index = Math.min(selected, current.points.length - 1);
+  const wide = useMediaQuery("(min-width: 1000px)", true);
+  const index = selected === STORY ? STORY : Math.min(selected, current.points.length - 1);
   const point = index >= 0 ? current.points[index] : undefined;
+  const total = current.points.length;
 
   // Every change goes through here, into the history and to the parent.
   // Typing in the same field makes one undo step (see `key`).
@@ -175,10 +128,10 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
     onChange(next.present);
   }
   // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) anywhere in the editor, except in a
-  // text field, which has its own. Not from the Preview, whose keys reach
-  // here through its portal.
+  // text field, which has its own. Not from Present, whose keys reach here
+  // through its portal.
   function onKeyDown(e: KeyboardEvent) {
-    if (previewOpened || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (presenting || !(e.ctrlKey || e.metaKey) || e.altKey) return;
     if ((e.target as HTMLElement).closest("input, textarea, [contenteditable=true]")) return;
     const key = e.key.toLowerCase();
     if (key === "z" && !e.shiftKey) { e.preventDefault(); show(undo(historyRef.current)); }
@@ -194,81 +147,178 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
     setSelected(Math.max(0, index - 1));
   }
   function movePoint(from: number, to: number) {
-    if (from === to || to < 0 || to >= current.points.length) return;
+    if (from === to || to < 0 || to >= total) return;
     const points = [...current.points];
     const [moved] = points.splice(from, 1);
     points.splice(to, 0, moved);
     change({ ...current, points });
     setSelected(to);
   }
-  function addPoint() {
-    // After the slide being edited, as in the story package's editor.
-    const at = index + 1;
-    change({ ...current, points: [...current.points.slice(0, at), {}, ...current.points.slice(at)] });
+  /** A new slide (or a copy of `copy`) right after the one being edited,
+   * or at the end from the story's settings. */
+  function insertPoint(slide: StoryPoint = {}) {
+    const at = index === STORY ? total : index + 1;
+    change({ ...current, points: [...current.points.slice(0, at), slide, ...current.points.slice(at)] });
     setSelected(at);
   }
+  function remember(type: "event" | "media", item: QueryItem) {
+    setInfo((prev) => ({ ...prev, [item.handle]: refInfo(type, item) }));
+  }
+
+  const storyForm = (
+    <Stack gap="md">
+      <Text fw={600} size="lg">{t("Story")}</Text>
+      <TextInput
+        label={t("Title")} required value={current.title}
+        onChange={(e) => change({ ...current, title: e.currentTarget.value }, "title")}
+      />
+    </Stack>
+  );
+
+  const slideForm = point && (
+    <Stack gap="md" key={index}>
+      <Group justify="space-between" wrap="wrap" gap="xs">
+        <Text fw={600} size="lg">{index === 0 ? t("Opening slide") : `${index + 1} / ${total}`}</Text>
+        <Group gap={6}>
+          <Tooltip label={t("Move up")}>
+            <ActionIcon variant="default" aria-label={t("Move up")} disabled={index === 0} onClick={() => movePoint(index, index - 1)}>↑</ActionIcon>
+          </Tooltip>
+          <Tooltip label={t("Move down")}>
+            <ActionIcon variant="default" aria-label={t("Move down")} disabled={index === total - 1} onClick={() => movePoint(index, index + 1)}>↓</ActionIcon>
+          </Tooltip>
+          <Button variant="default" size="xs" onClick={() => insertPoint({ ...point })}>{t("Duplicate")}</Button>
+          <Button variant="default" size="xs" color="red" disabled={total <= 1} onClick={() => removePoint(index)}>{t("Delete")}</Button>
+        </Group>
+      </Group>
+      <TextInput
+        label={t("Title")}
+        placeholder={t("Defaults to the event's own type")}
+        value={point.title ?? ""}
+        onChange={(e) => updatePoint(index, { title: e.currentTarget.value || undefined })}
+      />
+      <RefSlot
+        label={t("Event")}
+        handle={point.eventRef ?? null}
+        pickedLabel={point.eventRef ? (info[point.eventRef]?.label ?? null) : null}
+        onPick={(item) => {
+          remember("event", item);
+          updatePoint(index, { eventRef: item.handle });
+        }}
+        onRemovePicked={() => updatePoint(index, { eventRef: undefined })}
+        view={EVENT_VIEW}
+        searchField="description"
+        buildExpr={EVENT_VIEW.simpleSearch?.buildExpr}
+        placeholder={EVENT_VIEW.simpleSearch?.placeholder}
+        renderLabel={(item) => pickerResultLabel("event", item)}
+      />
+      <StoryTextField
+        label={t("Text")}
+        value={point.text ?? ""}
+        boldLabel={t("Bold")}
+        italicLabel={t("Italic")}
+        minRows={5}
+        onChange={(text) => updatePoint(index, { text: text || undefined })}
+      />
+      <RefSlot
+        label={t("Photo")}
+        handle={point.mediaRef ?? null}
+        pickedLabel={point.mediaRef ? (info[point.mediaRef]?.label ?? null) : null}
+        onPick={(item) => {
+          remember("media", item);
+          updatePoint(index, { mediaRef: item.handle });
+        }}
+        onRemovePicked={() => updatePoint(index, { mediaRef: undefined })}
+        view={MEDIA_VIEW}
+        searchField="desc"
+        buildExpr={MEDIA_VIEW.simpleSearch?.buildExpr}
+        placeholder={MEDIA_VIEW.simpleSearch?.placeholder}
+        renderLabel={(item) => pickerResultLabel("media", item)}
+      />
+    </Stack>
+  );
+
+  const list = (
+    <Stack gap="xs">
+      <UnstyledButton
+        onClick={() => setSelected(STORY)}
+        style={{ padding: 8, borderRadius: 6, background: index === STORY ? "var(--mantine-primary-color-light)" : undefined }}
+      >
+        <Text fw={600} size="sm">{t("Story")}</Text>
+        <Text size="xs" c="dimmed">{t("Title")}</Text>
+      </UnstyledButton>
+      <Divider label={t("Slides")} labelPosition="left" />
+      <SlideList
+        label={t("Slides")}
+        items={current.points}
+        selected={index}
+        onSelect={setSelected}
+        onMove={movePoint}
+        getKey={(_, i) => String(i)}
+        renderItem={(p, i) => <SlideRow point={p} index={i} info={info} />}
+      />
+      <Button variant="light" size="xs" mt={4} onClick={() => insertPoint()}>
+        + {t("Add slide")}
+      </Button>
+    </Stack>
+  );
+
+  // The story at the slide being edited (its first, from the settings).
+  const preview = (
+    <Box
+      style={{
+        position: wide ? "sticky" : "relative", top: 0, height: wide ? "min(70vh, 640px)" : 420,
+        borderRadius: 8, overflow: "hidden", border: "1px solid var(--mantine-color-default-border)",
+      }}
+    >
+      {total > 0 ? (
+        <StoryPreview
+          spec={current}
+          slide={index === STORY ? 0 : index}
+          onSlideChange={(i) => { if (i !== index && index !== STORY) setSelected(i); }}
+        />
+      ) : (
+        <Stack align="center" justify="center" style={{ height: "100%" }}>
+          <Text size="sm" c="dimmed">{t("Add a slide to see the story here.")}</Text>
+        </Stack>
+      )}
+    </Box>
+  );
 
   return (
     <Stack gap="sm" onKeyDown={onKeyDown}>
-      <Group gap="xs" align="flex-end" wrap="nowrap">
-        <TextInput
-          label={t("Title")}
-          value={current.title}
-          onChange={(e) => change({ ...current, title: e.currentTarget.value }, "title")}
-          style={{ flex: 1 }}
-        />
-        <Tooltip label={t("Undo")}>
-          <ActionIcon variant="default" size="lg" aria-label={t("Undo")} disabled={history.past.length === 0} onClick={() => show(undo(historyRef.current))}>
-            ↶
-          </ActionIcon>
-        </Tooltip>
-        <Tooltip label={t("Redo")}>
-          <ActionIcon variant="default" size="lg" aria-label={t("Redo")} disabled={history.future.length === 0} onClick={() => show(redo(historyRef.current))}>
-            ↷
-          </ActionIcon>
-        </Tooltip>
+      <Group
+        gap="sm" wrap="nowrap" justify="space-between" pb="xs"
+        style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+      >
+        <Text fw={600} truncate dir="auto">{current.title}</Text>
+        <Group gap="xs" wrap="nowrap">
+          <Tooltip label={t("Undo")}>
+            <ActionIcon variant="default" size="lg" aria-label={t("Undo")} disabled={history.past.length === 0} onClick={() => show(undo(historyRef.current))}>
+              ↶
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={t("Redo")}>
+            <ActionIcon variant="default" size="lg" aria-label={t("Redo")} disabled={history.future.length === 0} onClick={() => show(redo(historyRef.current))}>
+              ↷
+            </ActionIcon>
+          </Tooltip>
+          <Button variant="default" onClick={() => setPresenting(true)} disabled={total === 0}>
+            {t("Present")}
+          </Button>
+        </Group>
       </Group>
-      <Grid gutter="md">
-        <Grid.Col span={{ base: 12, sm: 4, lg: 3 }}>
-          <Stack gap="xs">
-            <SlideList
-              label={t("Slides")}
-              items={current.points}
-              selected={index}
-              onSelect={setSelected}
-              onMove={movePoint}
-              getKey={(_, i) => String(i)}
-              renderItem={(p, i) => <SlideRow point={p} index={i} labels={labels} />}
-            />
-            <Group justify="space-between">
-              <CircleGlyphButton glyph="+" label={t("Add slide")} textLabel="Add slide" onClick={addPoint} />
-              <Button variant="default" size="xs" onClick={() => setPreviewOpened(true)} disabled={current.points.length === 0}>
-                {t("Preview")}
-              </Button>
-            </Group>
-          </Stack>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 8, lg: 9 }}>
-          {point && (
-            <StorySlideCard
-              key={index}
-              point={point}
-              index={index}
-              total={current.points.length}
-              labels={labels}
-              onLabel={(handle, label) => setLabel(setLabels, handle, label)}
-              onUpdate={(patch) => updatePoint(index, patch)}
-              onRemove={() => removePoint(index)}
-              onMoveUp={() => movePoint(index, index - 1)}
-              onMoveDown={() => movePoint(index, index + 1)}
-            />
-          )}
-        </Grid.Col>
-      </Grid>
+      <Box style={{ display: "flex", flexDirection: wide ? "row" : "column", gap: 16, alignItems: "flex-start" }}>
+        <Box style={{ width: wide ? 260 : "100%", flex: "none" }}>{list}</Box>
+        <Box style={{ width: wide ? "min(480px, 36%)" : "100%", flex: "none", minWidth: 0 }}>
+          {index === STORY ? storyForm : slideForm}
+        </Box>
+        <Box style={{ flex: 1, minWidth: 0, width: wide ? undefined : "100%", alignSelf: "stretch" }}>{preview}</Box>
+      </Box>
       <StoryView
-        spec={current.points.length > 0 ? current : null}
-        opened={previewOpened}
-        onClose={() => setPreviewOpened(false)}
+        spec={total > 0 ? current : null}
+        opened={presenting}
+        onClose={() => setPresenting(false)}
+        initialSlide={index === STORY ? 0 : index}
         stackId={previewStackId}
       />
     </Stack>

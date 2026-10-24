@@ -4,7 +4,8 @@
 // hydrates the stored spec (storyHydration.ts), converts it to a story
 // document (storyDoc.ts's presentationDoc), and gives the player what only
 // the app has -- authenticated media, the app's colors and words, and its
-// own Mantine map-mode control.
+// own Mantine map-mode control. StoryPreview is the same player inline,
+// following a story as it's edited (StoryEditor.tsx).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionIcon, Box, Loader, Modal, Stack, Text, useComputedColorScheme } from "@mantine/core";
 // Namespace import: maplibre-gl v5+ has no default export.
@@ -15,7 +16,7 @@ import { getToken } from "../auth/auth";
 import { fetchAuthedBlobUrl } from "../store/authedFetch";
 import type { StorySpec } from "../store/storyBuilder";
 import { parsePresentationMediaSrc, presentationDoc } from "../store/storyDoc";
-import { hydrateStory, type HydratedStory } from "../store/storyHydration";
+import { hydrateStory, hydrationCache, type HydratedStory } from "../store/storyHydration";
 import { readVisualColors } from "./visuals/cssVar";
 import { seriesColor } from "./visuals/eventCategories";
 import { MapModeControl } from "./visuals/MapModeControl";
@@ -77,21 +78,10 @@ function useTreeMediaResolver(opened: boolean) {
   }, []);
 }
 
-export function StoryView({ spec, opened, onClose, stackId }: {
-  spec: StorySpec | null; opened: boolean; onClose: () => void;
-  /** Only set when opened from inside another Mantine Modal.Stack (see
-   * StoryEditor.tsx's Preview button) -- without it, this plain unstacked
-   * Modal defaults to the same base z-index as the dialog it's nested
-   * inside, and renders *underneath* it rather than on top (Modal.mjs only
-   * asks the stack for a z-index/focus-trap/overlay when both a `stackId`
-   * and a surrounding Modal.Stack context are present). StoryActions.tsx's
-   * standalone Present button (no surrounding stack) leaves this unset. */
-  stackId?: string;
-}) {
+/** What the player gets from the app wherever it plays: the app's dark
+ * mode, colors and words, and its map-mode control. */
+function useAppPlayerProps() {
   const dark = useComputedColorScheme("light") === "dark";
-  const hydrated = useHydratedStory(spec, opened);
-  const story = useMemo(() => (hydrated ? presentationDoc(hydrated) : null), [hydrated]);
-  const resolveMedia = useTreeMediaResolver(opened);
   // Resolved from the app's theme on each render, since they change under
   // the user when the color scheme flips.
   const visual = readVisualColors();
@@ -101,6 +91,81 @@ export function StoryView({ spec, opened, onClose, stackId }: {
     [dark, visual.surface, visual.text, visual.muted, visual.border],
   );
   const strings = useMemo(() => ({ previous: t("Previous"), next: t("Next"), close: t("Close") }), []);
+  return { dark, colors, strings, renderMapModeControl: renderMapMode };
+}
+
+function renderMapMode(props: Parameters<typeof MapModeControl>[0]) {
+  return <MapModeControl {...props} />;
+}
+
+/** How long typing pauses before the preview catches up. */
+const PREVIEW_DELAY_MS = 400;
+
+/** The story playing inline, as it's edited: re-hydrated a moment after
+ * each change, with what it fetched (photos' types, map files) kept for
+ * the next time, and the last version shown meanwhile. Shows slide
+ * `slide`; moving through the player's own controls calls onSlideChange. */
+export function StoryPreview({ spec, slide, onSlideChange }: {
+  spec: StorySpec; slide: number; onSlideChange: (index: number) => void;
+}) {
+  const player = useAppPlayerProps();
+  const resolveMedia = useTreeMediaResolver(true);
+  const cache = useRef(hydrationCache());
+  // The spec each hydration was made from, to tell a current one.
+  const [hydrated, setHydrated] = useState<{ spec: StorySpec; story: HydratedStory } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      hydrateStory(spec, cache.current).then((story) => {
+        if (!cancelled) setHydrated({ spec, story });
+      }).catch(() => {});
+    }, PREVIEW_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [spec]);
+  const story = useMemo(() => (hydrated ? presentationDoc(hydrated.story) : null), [hydrated]);
+  const current = hydrated?.spec === spec;
+
+  if (!story) {
+    return (
+      <Stack align="center" justify="center" style={{ height: "100%" }}>
+        <Loader size="sm" />
+      </Stack>
+    );
+  }
+  return (
+    <StoryPlayer
+      {...player}
+      story={story}
+      resolveMedia={resolveMedia}
+      keyboard={false}
+      initialSlide={slide}
+      // Only once caught up: a story that's behind (a slide just added
+      // isn't in it yet) would move the editor to one of its own slides.
+      onSlideChange={(i) => { if (current) onSlideChange(i); }}
+    />
+  );
+}
+
+export function StoryView({ spec, opened, onClose, stackId, initialSlide }: {
+  spec: StorySpec | null; opened: boolean; onClose: () => void;
+  /** The slide to open on (StoryEditor's Present: the one being edited). */
+  initialSlide?: number;
+  /** Only set when opened from inside another Mantine Modal.Stack (see
+   * StoryEditor.tsx's Preview button) -- without it, this plain unstacked
+   * Modal defaults to the same base z-index as the dialog it's nested
+   * inside, and renders *underneath* it rather than on top (Modal.mjs only
+   * asks the stack for a z-index/focus-trap/overlay when both a `stackId`
+   * and a surrounding Modal.Stack context are present). StoryActions.tsx's
+   * standalone Present button (no surrounding stack) leaves this unset. */
+  stackId?: string;
+}) {
+  const player = useAppPlayerProps();
+  const hydrated = useHydratedStory(spec, opened);
+  const story = useMemo(() => (hydrated ? presentationDoc(hydrated) : null), [hydrated]);
+  const resolveMedia = useTreeMediaResolver(opened);
 
   if (!spec) return null;
 
@@ -115,13 +180,11 @@ export function StoryView({ spec, opened, onClose, stackId }: {
       <Box style={{ position: "fixed", inset: 0, overflow: "hidden" }}>
         {story ? (
           <StoryPlayer
+            {...player}
             story={story}
             resolveMedia={resolveMedia}
-            dark={dark}
-            colors={colors}
-            strings={strings}
+            initialSlide={initialSlide}
             onClose={onClose}
-            renderMapModeControl={(props) => <MapModeControl {...props} />}
           />
         ) : (
           <Stack align="center" justify="center" style={{ height: "100%" }}>

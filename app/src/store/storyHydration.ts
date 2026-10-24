@@ -105,7 +105,34 @@ function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<
   };
 }
 
-export async function hydrateStory(spec: StorySpec): Promise<HydratedStory> {
+/** What hydrateStory fetched beyond the cached tree data, by handle, kept
+ * between calls by a caller that hydrates the same story over and over
+ * (StoryEditor's preview, on each change) so each file is fetched once. */
+export interface HydrationCache {
+  positions: Map<string, Promise<[number, number] | null>>;
+  mapFiles: Map<string, Promise<HydratedMapFile>>;
+  mimes: Map<string, Promise<string | undefined>>;
+}
+
+export function hydrationCache(): HydrationCache {
+  return { positions: new Map(), mapFiles: new Map(), mimes: new Map() };
+}
+
+/** `cache.<kind>.get(key)`, or `load()` stored there first; with no cache,
+ * just `load()`. */
+function cached<T>(cache: Map<string, Promise<T>> | undefined, key: string, load: () => Promise<T>): Promise<T> {
+  if (!cache) return load();
+  let value = cache.get(key);
+  if (!value) {
+    value = load();
+    cache.set(key, value);
+    // A failure isn't remembered: the next call tries again.
+    value.catch(() => cache.delete(key));
+  }
+  return value;
+}
+
+export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Promise<HydratedStory> {
   const visualData = await loadVisualData();
   const introMediaRef = spec.points[0]?.mediaRef;
   const draftSlides: DraftSlide[] =
@@ -126,7 +153,7 @@ export async function hydrateStory(spec: StorySpec): Promise<HydratedStory> {
     const positions = new Map<string, [number, number] | null>();
     await Promise.all(pendingHandles.map(async (handle) => {
       const pending = visualData.pendingKmlPlaces.find((p) => p.handle === handle)!;
-      positions.set(handle, kmlCenter(await fetchAllKmlFeatures(pending.kmlMedia)));
+      positions.set(handle, await cached(cache?.positions, handle, async () => kmlCenter(await fetchAllKmlFeatures(pending.kmlMedia))));
     }));
     for (const slide of draftSlides) {
       if (!slide.pendingPlaceHandle) continue;
@@ -144,14 +171,16 @@ export async function hydrateStory(spec: StorySpec): Promise<HydratedStory> {
   if (mapFileHandles.length > 0) {
     const { fetchAllKmlFeatures, fetchAllKmlImageOverlays } = await import("./kmlMedia");
     await Promise.all(mapFileHandles.map(async (handle) => {
-      const [features, overlays] = await Promise.all([
-        fetchAllKmlFeatures([handle]), fetchAllKmlImageOverlays([handle]),
-      ]);
-      mapFiles.set(handle, {
-        handle,
-        features,
-        overlays: overlays.map((o) => ({ imageHandle: o.imageHandle, corners: o.corners, opacity: o.opacity, order: o.order })),
-      });
+      mapFiles.set(handle, await cached(cache?.mapFiles, handle, async () => {
+        const [features, overlays] = await Promise.all([
+          fetchAllKmlFeatures([handle]), fetchAllKmlImageOverlays([handle]),
+        ]);
+        return {
+          handle,
+          features,
+          overlays: overlays.map((o) => ({ imageHandle: o.imageHandle, corners: o.corners, opacity: o.opacity, order: o.order })),
+        };
+      }));
     }));
     for (const slide of draftSlides) {
       if (!slide.kmlMedia?.length) continue;
@@ -162,9 +191,8 @@ export async function hydrateStory(spec: StorySpec): Promise<HydratedStory> {
   const mimeByRef = new Map<string, string | undefined>();
   const refs = [...new Set(draftSlides.map((s) => s.mediaRef).filter((r): r is string => Boolean(r)))];
   if (refs.length > 0) {
-    const token = await getToken();
     await Promise.all(refs.map(async (ref) => {
-      mimeByRef.set(ref, await fetchMediaMime(token, ref));
+      mimeByRef.set(ref, await cached(cache?.mimes, ref, async () => fetchMediaMime(await getToken(), ref)));
     }));
   }
 

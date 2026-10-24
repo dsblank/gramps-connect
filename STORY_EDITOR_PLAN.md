@@ -201,6 +201,14 @@ area at its own `opacity`, as the app's Map view does.
   (`History<T = StoryDoc>`), so the app keeps its StorySpec history with
   the same `record`/`undo`/`redo` and coalescing. Wiki: "Undo and redo
   while editing a story". Package change, so a 0.6.0 release.
+- Layout and live preview built 2026-10-23: the app's editor now has the
+  file editor's three columns (list with thumbnails and a Story row,
+  form, player), its top bar (Undo/Redo, Present from the slide being
+  edited), and Duplicate/Delete. The preview is StoryView.tsx's
+  StoryPreview: hydrateStory again 400ms after a change, through a
+  HydrationCache so photos' types and map files are fetched once. App
+  only. Wiki: "Editing a story" rewritten, "Seeing a story as you edit
+  it".
 - Anything learned in the file editor that the app's story editor lacks
   (Undo/Redo, the side-by-side preview) is offered for the app here, as its
   own change with its own wiki update.
