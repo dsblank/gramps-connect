@@ -1196,6 +1196,29 @@ export class ViewStore {
       this.pendingRequeryCursor = undefined;
       this.startRequery(cursor);
     }
+    const waiters = this.fillSettledWaiters;
+    this.fillSettledWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
+  /** whenFullyLoaded()'s callers, waiting on the fill in flight. */
+  private fillSettledWaiters: (() => void)[] = [];
+
+  /** Resolves once every row of this view's current result is in the
+   * local cache: ensureLoaded(), then the background fill that loads
+   * everything past the first page, if one is still walking. ensureLoaded()
+   * alone only promises that first page -- enough for a list, which shows
+   * the rest as it arrives, but not for a caller that looks up particular
+   * records (a story's events, say) and would otherwise find a large
+   * tree's later rows missing in a fresh session. A fill that fails still
+   * settles, so this never hangs; the caller just reads what loaded.
+   * The "current result" is filtered when the user has filtered this
+   * view's list. */
+  async whenFullyLoaded(): Promise<void> {
+    await this.ensureLoaded();
+    while (this.backgroundFillActive) {
+      await new Promise<void>((resolve) => this.fillSettledWaiters.push(resolve));
+    }
   }
 
   /** Sorts by `column` (a plain-column ColumnConfig.select value -- see

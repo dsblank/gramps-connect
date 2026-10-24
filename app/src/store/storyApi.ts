@@ -11,7 +11,7 @@ import { attachNoteToObject } from "./notesApi";
 import type { ObjectDetail } from "./objectDetail";
 import { getViewStore } from "./registry";
 import { buildFamilyStory, buildPersonStory, type StoryOptions, type StorySpec } from "./storyBuilder";
-import { loadVisualData } from "./visualData";
+import { loadCompleteVisualData } from "./visualData";
 import type { ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
 
@@ -69,7 +69,7 @@ export async function generateStory(
   subjectLabel: string,
   options?: StoryOptions
 ): Promise<StorySpec> {
-  const visualData = await loadVisualData();
+  const visualData = await loadCompleteVisualData();
   const built = view.key === "family"
     ? await buildFamilyStory(token, detail, visualData, options)
     : await buildPersonStory(token, detail, subjectLabel, visualData, options);

@@ -11,7 +11,7 @@ import { toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
 import type { OverlayCorners } from "@gramps-connect/story/map-edit";
 import { fetchMediaInfo, pointPhotos, type MediaInfo, type StoryBasemap, type StoryPoint, type StorySpec } from "./storyBuilder";
-import { loadVisualData } from "./visualData";
+import { loadCompleteVisualData, type VisualData } from "./visualData";
 
 /** One of a place's map files (mapOverlays.ts), already fetched and
  * parsed: its drawable shapes and its image overlays. */
@@ -76,7 +76,7 @@ interface DraftSlide extends Omit<HydratedSlide, "photos"> {
  * point getting a face even when it has no photo of its own. The opening point (no
  * `eventRef`) has no event to derive a title/place/date from, so its
  * title falls back to the story's own title. */
-function hydratePoint(point: StoryPoint, specTitle: string, visualData: Awaited<ReturnType<typeof loadVisualData>>, introMediaRef: string | undefined): DraftSlide {
+function hydratePoint(point: StoryPoint, specTitle: string, visualData: VisualData, introMediaRef: string | undefined): DraftSlide {
   const record = point.eventRef ? visualData.eventsByHandle.get(point.eventRef) : undefined;
   const placeHandle = point.eventRef ? visualData.placeOfEvent.get(point.eventRef) : undefined;
   const place = placeHandle ? visualData.places.find((p) => p.handle === placeHandle) : undefined;
@@ -139,7 +139,7 @@ function cached<T>(cache: Map<string, Promise<T>> | undefined, key: string, load
 }
 
 export async function hydrateStory(spec: StorySpec, cache?: HydrationCache): Promise<HydratedStory> {
-  const visualData = await loadVisualData();
+  const visualData = await loadCompleteVisualData();
   const introMediaRef = spec.points[0] ? pointPhotos(spec.points[0])[0] : undefined;
   const draftSlides: DraftSlide[] =
     spec.points.map((p) => hydratePoint(p, spec.title, visualData, introMediaRef));

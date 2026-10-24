@@ -219,6 +219,26 @@ export async function loadVisualData(): Promise<VisualData> {
   return readVisualData();
 }
 
+/** loadVisualData(), but with every place, event and media object loaded,
+ * not just the first page of each -- for a caller that looks up particular
+ * records rather than drawing whatever has arrived so far. A story is
+ * built from, and its slides filled in from, one person's or family's
+ * events and their places; on a large tree in a fresh session those are
+ * usually past the first page, and the story would come out with nothing
+ * to build from ("This person has no events to build a story from"), or
+ * with slides missing their dates and places. Costs the full load once per
+ * session; afterwards (or with a cache from an earlier session) it's no
+ * slower than loadVisualData(). */
+export async function loadCompleteVisualData(): Promise<VisualData> {
+  await Promise.all([
+    getViewStore("place").whenFullyLoaded(),
+    getViewStore("event").whenFullyLoaded(),
+    getViewStore("media").whenFullyLoaded(),
+    loadDisplaySettings().catch(() => {}),
+  ]);
+  return readVisualData();
+}
+
 /** Synchronous re-read of whatever is cached right now -- what a live-sync
  * revision bump or a completed background fill re-runs, with no fetching of
  * its own. */

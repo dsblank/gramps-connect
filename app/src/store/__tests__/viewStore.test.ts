@@ -1128,3 +1128,38 @@ describe("ViewStore path sort keys (orderPath)", () => {
     expect(orderBy).toEqual([{ column: "name.value", direction: "desc" }, { column: "title", direction: "desc" }]);
   });
 });
+
+describe("ViewStore.whenFullyLoaded", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("waits for the background fill, not just the first page", async () => {
+    const store = new ViewStore(TAG_VIEW, getSql);
+    let resolvePage2!: (value: Awaited<ReturnType<typeof fetchPage>>) => void;
+    const page2 = new Promise<Awaited<ReturnType<typeof fetchPage>>>((resolve) => {
+      resolvePage2 = resolve;
+    });
+    vi.mocked(fetchPage)
+      .mockResolvedValueOnce({ page: { items: [tagRow("H1")], next_after: "H1" }, totalCount: 2 })
+      .mockReturnValueOnce(page2);
+    await store.runQuery(null, false);
+    expect(store.getSnapshot().loadedCount).toBe(1);
+
+    let done = false;
+    const waiting = store.whenFullyLoaded().then(() => { done = true; });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(done).toBe(false);
+
+    resolvePage2({ page: { items: [tagRow("H2")], next_after: null }, totalCount: 2 });
+    await waiting;
+    expect(store.readColumns(["handle"]).map((r) => r[0])).toEqual(["H1", "H2"]);
+  });
+
+  it("returns at once when everything is already loaded", async () => {
+    const store = await loadedStore([tagRow("H1")]);
+    await store.whenFullyLoaded();
+    expect(store.getSnapshot().loadedCount).toBe(1);
+  });
+});
