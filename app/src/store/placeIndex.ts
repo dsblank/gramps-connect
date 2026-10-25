@@ -78,6 +78,21 @@ function getIndex(store: ViewStore): Map<string, PlaceRecord> | null {
   return places;
 }
 
+/** Starts loading the Places cache, once, if nothing has loaded it yet.
+ * Callers run on every render, and ensureLoaded() only becomes a no-op
+ * once its first load has finished -- until then each call starts another
+ * load, whose emit re-renders every useDisplayFormatVersion() subscriber,
+ * which calls again. */
+function requestPlaceLoad(store: ViewStore): void {
+  if (store.getSnapshot().loadedCount || placeLoadRequested) return;
+  placeLoadRequested = true;
+  // Cleared once settled: by then ensureLoaded() is a no-op (or, after a
+  // failure, should be tried again).
+  store.ensureLoaded().catch(() => {}).finally(() => {
+    placeLoadRequested = false;
+  });
+}
+
 /** The place's title as the display settings say to show it, or null when
  * the caller should fall back to the stored title: automatic titles off,
  * or the place not cached (yet). `date` is the event's date when this is an
@@ -89,16 +104,10 @@ export function displayPlaceTitle(handle: string | null | undefined, date?: Gram
   if (!settings.place.auto) return null;
   const store = placeStore;
   if (!store) return null;
-  if (!store.getSnapshot().loadedCount && !placeLoadRequested) {
-    // Formatting needs the hierarchy, which lives in the Places cache; a
-    // view that shows place titles (Events, Timeline...) may be the first
-    // thing to need it this session. Loading emits, which re-renders every
-    // useDisplayFormatVersion() subscriber.
-    placeLoadRequested = true;
-    store.ensureLoaded().catch(() => {
-      placeLoadRequested = false;
-    });
-  }
+  // Formatting needs the hierarchy, which lives in the Places cache; a
+  // view that shows place titles (Events, Timeline...) may be the first
+  // thing to need it this session.
+  requestPlaceLoad(store);
   // No complete hierarchy yet (see getIndex) -> stored title.
   const places = getIndex(store);
   if (!places) return null;
@@ -120,7 +129,7 @@ export function displayPlaceTitle(handle: string | null | undefined, date?: Gram
 export function formatPlaceWith(handle: string, fmt: PlaceFormatDef): string | null {
   if (!placeStore) return null;
   if (!placeStore.getSnapshot().loadedCount) {
-    placeStore.ensureLoaded().catch(() => {});
+    requestPlaceLoad(placeStore);
     return null;
   }
   const places = getIndex(placeStore);
@@ -135,7 +144,7 @@ let sample: { places: Map<string, PlaceRecord>; handle: string | null } | null =
 export function samplePlaceHandle(): string | null {
   if (!placeStore) return null;
   if (!placeStore.getSnapshot().loadedCount) {
-    placeStore.ensureLoaded().catch(() => {});
+    requestPlaceLoad(placeStore);
     return null;
   }
   const places = getIndex(placeStore);
