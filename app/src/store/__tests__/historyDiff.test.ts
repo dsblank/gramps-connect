@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffObjects, summarizeDiffPaths } from "../historyDiff";
+import { diffObjects, formatDiffValue, summarizeDiffPaths } from "../historyDiff";
 
 describe("diffObjects", () => {
   it("returns [] for identical objects", () => {
@@ -80,5 +80,65 @@ describe("summarizeDiffPaths", () => {
 
   it("honors a custom maxPaths", () => {
     expect(summarizeDiffPaths([row("a"), row("b"), row("c")], 1)).toBe("a +2 more");
+  });
+});
+
+describe("formatDiffValue", () => {
+  const opts = {
+    formatDate: (date: Record<string, unknown>) => (date.sortval ? `date ${date.sortval}` : ""),
+    translate: (label: string) => `[${label}]`,
+  };
+
+  it("shows an added web link by its fields, not as JSON", () => {
+    // As stored: a type typed into the form is kept as its string, one
+    // left empty is saved as Unknown (-1), which says nothing.
+    const url = {
+      path: "https://en.wikipedia.org/wiki/George_VI",
+      desc: "Wikipedia",
+      private: false,
+      type: { _class: "UrlType", value: -1, string: "" },
+      _class: "Url",
+    };
+    expect(formatDiffValue(url, opts)).toBe("path: https://en.wikipedia.org/wiki/George_VI, desc: Wikipedia");
+    expect(formatDiffValue({ ...url, type: { _class: "UrlType", value: 2, string: "" } }, opts)).toBe(
+      "path: https://en.wikipedia.org/wiki/George_VI, desc: Wikipedia, type: [Web Home]"
+    );
+  });
+
+  it("names types, skips empty fields and marks private items", () => {
+    const eventRef = {
+      attribute_list: [],
+      citation_list: [],
+      note_list: [],
+      private: true,
+      ref: "E1",
+      role: { _class: "EventRoleType", value: 1, string: "" },
+      _class: "EventRef",
+    };
+    expect(formatDiffValue(eventRef, opts)).toBe("ref: E1, role: [Primary], [Private]");
+    const attribute = { type: { _class: "AttributeType", value: 0, string: "RIN" }, value: "MH:I3042", _class: "Attribute" };
+    expect(formatDiffValue(attribute, opts)).toBe("type: RIN, value: MH:I3042");
+    expect(formatDiffValue({ _class: "FooType", value: 7, string: "" }, opts)).toBe("7");
+  });
+
+  it("shows dates and styled text as text, nested lists joined", () => {
+    const address = {
+      date: { _class: "Date", sortval: 2434531, text: "" },
+      street: "",
+      city: "London",
+      _class: "Address",
+    };
+    expect(formatDiffValue(address, opts)).toBe("date: date 2434531, city: London");
+    expect(formatDiffValue({ _class: "StyledText", string: "Hello", tags: [] }, opts)).toBe("Hello");
+    expect(formatDiffValue([{ city: "A" }, { city: "B" }], opts)).toBe("city: A; city: B");
+  });
+
+  it("keeps plain values, and marks missing and empty ones", () => {
+    expect(formatDiffValue("John", opts)).toBe("John");
+    expect(formatDiffValue(3, opts)).toBe("3");
+    expect(formatDiffValue(false, opts)).toBe("false");
+    expect(formatDiffValue(undefined, opts)).toBe("—");
+    expect(formatDiffValue(null, opts)).toBe("[(none)]");
+    expect(formatDiffValue({ _class: "Date", sortval: 0, text: "" }, opts)).toBe("[(none)]");
   });
 });

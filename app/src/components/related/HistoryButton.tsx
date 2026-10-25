@@ -2,7 +2,9 @@ import { useState, useSyncExternalStore } from "react";
 import { Avatar, Badge, Button, Group, Loader, Modal, ScrollArea, Stack, Text, UnstyledButton } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { fetchObjectHistory, objClassFor, type ObjectChange } from "../../store/historyApi";
-import { diffObjects, summarizeDiffPaths, type DiffRow } from "../../store/historyDiff";
+import { diffObjects, formatDiffValue, summarizeDiffPaths, type DiffRow, type DiffValueOptions } from "../../store/historyDiff";
+import { formatDisplayDate } from "../../store/placeIndex";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { formatChange, formatChangeTitle } from "../../store/views";
 import { colorForUsername, initialsFor } from "../../store/userAvatar";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../../store/userDirectory";
@@ -25,17 +27,10 @@ function transTypeColor(transType: number): string {
   return "blue";
 }
 
-/** JSON-stringifies a non-primitive leaf value (diffObjects falls back to a
- * single whole-value row when a path's shape changed type, e.g. an object
- * replaced outright rather than edited field-by-field) so the diff dialog
- * never shows the unreadable default `String()` coercion of an object
- * (`"[object Object]"`). */
-function formatDiffValue(value: unknown): string {
-  if (value === undefined) return "—";
-  if (value === null) return t("(none)");
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
+const DIFF_VALUE_OPTIONS: DiffValueOptions = {
+  formatDate: (date) => formatDisplayDate(date as unknown as GrampsDate),
+  translate: t,
+};
 
 /** "View history" button + its two dialogs, shown on RelatedPanel beside
  * VisualButtons -- a way of *looking at* the record (who changed it, when),
@@ -214,11 +209,11 @@ function HistoryDiffModal({ change, onClose }: { change: ObjectChange | null; on
                     </Text>
                     <Group gap="xs" wrap="nowrap">
                       <Text size="sm" c="red" td="line-through" style={{ wordBreak: "break-word" }}>
-                        {formatDiffValue(row.before)}
+                        {formatDiffValue(row.before, DIFF_VALUE_OPTIONS)}
                       </Text>
                       <Text size="sm">{"→"}</Text>
                       <Text size="sm" c="teal" style={{ wordBreak: "break-word" }}>
-                        {formatDiffValue(row.after)}
+                        {formatDiffValue(row.after, DIFF_VALUE_OPTIONS)}
                       </Text>
                     </Group>
                   </div>

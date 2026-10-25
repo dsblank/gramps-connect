@@ -98,3 +98,81 @@ export function summarizeDiffPaths(rows: DiffRow[], maxPaths = 2): string {
   const extra = rows.length - shown.length;
   return extra > 0 ? `${shown.join(", ")} +${extra} more` : shown.join(", ");
 }
+
+// Built-in names for the Gramps types that turn up inside list items (an
+// added web link, event reference, attribute, ...): stored values carry
+// only the number, and `string` only for a custom type. Unlisted classes
+// and values fall back to the number, never a guess.
+const TYPE_NAMES: Record<string, Record<number, string>> = {
+  UrlType: { 0: "Custom", 1: "E-mail", 2: "Web Home", 3: "Web Search", 4: "FTP" },
+  EventRoleType: {
+    0: "Custom", 1: "Primary", 2: "Clergy", 3: "Celebrant", 4: "Aide", 5: "Bride", 6: "Groom", 7: "Witness",
+    8: "Family", 9: "Informant",
+  },
+  NameType: { 0: "Custom", 1: "Also Known As", 2: "Birth Name", 3: "Married Name" },
+  NameOriginType: {
+    0: "Custom", 1: "", 2: "Inherited", 3: "Given", 4: "Taken", 5: "Patronymic", 6: "Matronymic", 7: "Feudal",
+    8: "Pseudonym", 9: "Patrilineal", 10: "Matrilineal", 11: "Occupation", 12: "Location",
+  },
+  ChildRefType: {
+    0: "None", 1: "Birth", 2: "Adopted", 3: "Stepchild", 4: "Sponsored", 5: "Foster", 6: "Unknown", 7: "Custom",
+  },
+  AttributeType: {
+    0: "Custom", 1: "Caste", 2: "Description", 3: "Identification Number", 4: "National Origin",
+    5: "Number of Children", 6: "Social Security Number", 7: "Nickname", 8: "Cause", 9: "Agency", 10: "Age",
+    11: "Father's Age", 12: "Mother's Age", 13: "Witness", 14: "Time",
+  },
+};
+
+export interface DiffValueOptions {
+  /** Shows a stored Gramps Date as text; "" for an empty one. */
+  formatDate: (date: Record<string, unknown>) => string;
+  /** Translates a fixed label ("Unknown", "Web Home", "(none)", ...). */
+  translate: (label: string) => string;
+}
+
+/** A Gramps type ({_class: "UrlType", value, string}) as its name: a
+ * custom type's own `string`, else the built-in name for its value. "" for
+ * Unknown (-1), which says nothing worth showing inside a larger value. */
+function typeName(value: Record<string, unknown>, opts: DiffValueOptions): string {
+  if (typeof value.string === "string" && value.string) return value.string;
+  const num = value.value;
+  if (typeof num !== "number" || num === -1) return "";
+  const name = TYPE_NAMES[value._class as string]?.[num];
+  return name === undefined ? String(num) : name && opts.translate(name);
+}
+
+function isGrampsType(value: Record<string, unknown>): boolean {
+  return typeof value._class === "string" && value._class.endsWith("Type") && "value" in value;
+}
+
+/** Text for one value inside a larger one; "" when it holds nothing worth
+ * showing (an empty list, string or date, an Unknown type, false). */
+function summarize(value: unknown, opts: DiffValueOptions): string {
+  if (value === null || value === undefined || value === false || value === "") return "";
+  if (Array.isArray(value)) return value.map((item) => summarize(item, opts)).filter(Boolean).join("; ");
+  if (!isPlainObject(value)) return String(value);
+  if (value._class === "Date") return opts.formatDate(value);
+  if (value._class === "StyledText") return typeof value.string === "string" ? value.string : "";
+  if (isGrampsType(value)) return typeName(value, opts);
+  const parts: string[] = [];
+  for (const [key, field] of Object.entries(value)) {
+    if (IGNORED_KEYS.has(key) || key === "private") continue;
+    const text = summarize(field, opts);
+    if (text) parts.push(`${key}: ${text}`);
+  }
+  if (value.private === true) parts.push(opts.translate("Private"));
+  return parts.join(", ");
+}
+
+/** A diff row's before/after value as readable text. A whole object (a web
+ * link, event reference or attribute added to or removed from a list, or
+ * one replaced outright) reads as its non-empty fields, "path:
+ * https://..., desc: Wikipedia, type: Web Home", with types, dates and
+ * styled text shown by name rather than as the stored JSON. */
+export function formatDiffValue(value: unknown, opts: DiffValueOptions): string {
+  if (value === undefined) return "—";
+  if (value === null) return opts.translate("(none)");
+  if (typeof value !== "object") return String(value);
+  return summarize(value, opts) || opts.translate("(none)");
+}
