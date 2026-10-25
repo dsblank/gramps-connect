@@ -1,4 +1,4 @@
-import { Card, Group, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { Autocomplete, Card, Group, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { t } from "../i18n/i18n";
 
@@ -196,6 +196,12 @@ export interface Url {
   private?: boolean;
 }
 
+// UrlType's built-in names (gramps/gen/lib/urltype.py), offered as
+// suggestions: the server matches them to the built-in type, and anything
+// else typed is kept as a custom type. Empty saves as Gramps' own default,
+// Unknown, so it isn't offered.
+const URL_TYPE_OPTIONS = ["E-mail", "Web Home", "Web Search", "FTP"];
+
 interface UrlListFieldProps {
   items: Url[];
   onChange: (items: Url[]) => void;
@@ -227,11 +233,13 @@ export function UrlListField({ items, onChange }: UrlListFieldProps) {
               onChange={(e) => onPatch({ desc: e.currentTarget.value })}
               style={{ flex: 1 }}
             />
-            <TextInput
+            <Autocomplete
               placeholder={TYPE_HINT}
               aria-label="Url type"
+              data={URL_TYPE_OPTIONS}
               value={url.type ?? ""}
-              onChange={(e) => onPatch({ type: e.currentTarget.value })}
+              onChange={(next) => onPatch({ type: next })}
+              comboboxProps={{ withinPortal: true }}
               style={{ flex: 1 }}
             />
             <Switch
