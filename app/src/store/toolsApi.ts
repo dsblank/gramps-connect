@@ -25,11 +25,9 @@ async function postTask(token: string, url: string): Promise<TaskPostResult> {
   return { kind: "done", result };
 }
 
-/** POST /api/search/index/ -- full vs incremental, full-text vs semantic
- * (the latter only meaningful when the server has an embedding model
- * configured, see metadataApi.ts's `server.semantic_search`). */
-export function triggerReindex(token: string, full: boolean, semantic: boolean): Promise<TaskPostResult> {
-  return postTask(token, `/api/search/index/?full=${full}&semantic=${semantic}`);
+/** POST /api/search/index/ -- full vs incremental. */
+export function triggerReindex(token: string, full: boolean): Promise<TaskPostResult> {
+  return postTask(token, `/api/search/index/?full=${full}`);
 }
 
 /** POST /api/trees/-/repair -- Gramps' own CheckIntegrity tool against the

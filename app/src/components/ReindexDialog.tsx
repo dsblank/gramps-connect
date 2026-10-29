@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Checkbox, Group, Loader, Modal, Stack, Text } from "@mantine/core";
 import { getToken } from "../auth/auth";
-import { fetchMetadata } from "../store/metadataApi";
 import { describeTaskFailure, waitForTask } from "../store/taskApi";
 import { triggerReindex } from "../store/toolsApi";
 import { t } from "../i18n/i18n";
@@ -14,35 +13,19 @@ interface ReindexDialogProps {
 }
 
 /** Tools -> Rebuild search index -- POST /api/search/index/, the same
- * action gramps-web's Administration screen offers as two separate buttons
- * (full-text vs semantic); combined here into one dialog with both choices,
- * since they're independent boolean query params on the same endpoint. The
- * semantic checkbox only appears once metadata confirms the server actually
- * has an embedding model configured (metadataApi.ts's
- * `server.semantic_search`) -- offering it otherwise would let a user
- * request an index the server has no way to build. */
+ * action gramps-web's Administration screen offers. Full-text only:
+ * gramps-web-api v3.25.0 removed semantic (vector) search, so this no
+ * longer offers rebuilding that index. */
 export function ReindexDialog({ opened, onClose }: ReindexDialogProps) {
   const [full, setFull] = useState(false);
-  const [semantic, setSemantic] = useState(false);
-  const [semanticAvailable, setSemanticAvailable] = useState(false);
   const [stage, setStage] = useState<Stage>("confirm");
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!opened) return;
     setFull(false);
-    setSemantic(false);
     setStage("confirm");
     setError("");
-    (async () => {
-      try {
-        const token = await getToken();
-        const metadata = await fetchMetadata(token);
-        setSemanticAvailable(metadata.server?.semantic_search ?? false);
-      } catch {
-        setSemanticAvailable(false);
-      }
-    })();
   }, [opened]);
 
   function handleClose() {
@@ -54,7 +37,7 @@ export function ReindexDialog({ opened, onClose }: ReindexDialogProps) {
     setStage("running");
     try {
       const token = await getToken();
-      const result = await triggerReindex(token, full, semantic);
+      const result = await triggerReindex(token, full);
       if (result.kind === "task") {
         const status = await waitForTask(result.task.id);
         if (status.state !== "SUCCESS") {
@@ -87,13 +70,6 @@ export function ReindexDialog({ opened, onClose }: ReindexDialogProps) {
               checked={full}
               onChange={(e) => setFull(e.currentTarget.checked)}
             />
-            {semanticAvailable && (
-              <Checkbox
-                label={t("Semantic (vector) index instead of full-text")}
-                checked={semantic}
-                onChange={(e) => setSemantic(e.currentTarget.checked)}
-              />
-            )}
             <Group justify="flex-end">
               <Button variant="default" onClick={handleClose}>{t("Cancel")}</Button>
               <Button onClick={handleRun}>{t("Rebuild")}</Button>

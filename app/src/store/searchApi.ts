@@ -1,5 +1,5 @@
-// GET /api/search/ -- gramps-web-api's server-side full-text (or, with
-// semantic=true, vector) index over every primary object type at once.
+// GET /api/search/ -- gramps-web-api's server-side full-text index over
+// every primary object type at once.
 // Deliberately separate from api.ts's fetchPage/where_expr machinery: those
 // query the local synced cache one object type at a time; this hits the
 // server's own index across all ten types in one call, for View > Search
@@ -9,6 +9,7 @@
 import { API_BASE } from "../config";
 import { parseErrorMessage } from "./api";
 import { apiFetch } from "./apiFetch";
+import { getI18nSnapshot } from "../i18n/i18n";
 
 /** One hit from the index. `object` carries the same raw, un-`extend`ed
  * fields summaryLine() (components/related/summary.ts) already knows how
@@ -31,9 +32,7 @@ export interface SearchHit {
   score: number | null;
 }
 
-/** `semantic` is deliberately not a parameter here -- View > Search all
- * always searches the plain full-text index, never the vector one (see
- * SearchView.tsx). `sort` is deliberately omitted from the request:
+/** `sort` is deliberately omitted from the request:
  * SearchQueryArgs.sort only accepts `change`/`type`, neither of which is
  * relevance, and leaving it out is what gets relevance order from a v3.25.0+
  * server (see sortByRelevance() below for older ones). `objectType` is
@@ -44,7 +43,11 @@ export interface SearchHit {
  * `profile=all` *is* always sent, unconditionally -- it costs nothing
  * extra (computed server-side as part of the same request, not a second
  * round trip) and is what gives SearchView's per-result detail line
- * something real to show instead of just a bare title. */
+ * something real to show instead of just a bare title. `locale` is the UI
+ * language: it puts those profiles' dates and types in that language, and
+ * from v3.25.0 (#1128) lets a standard type be found by its translated
+ * name ("Taufe" finds baptisms). An unknown code falls back to the
+ * server's default locale. */
 export async function fetchSearch(
   token: string,
   query: string,
@@ -58,11 +61,15 @@ export async function fetchSearch(
   // codebase builds a plain relative string the same way.
   const params = new URLSearchParams({
     query,
-    semantic: "false",
     profile: "all",
     page: String(page),
     pagesize: String(pagesize),
   });
+  // SearchQueryArgs.locale is at most 5 characters ("zh_CN") and a longer
+  // one 422s the whole search -- every bootstrapped code fits, but a stored
+  // language isn't guaranteed to be one of them.
+  const { lang } = getI18nSnapshot();
+  if (lang.length <= 5) params.set("locale", lang);
   if (objectType) params.set("type", objectType);
   // No nameFormatParam(): /api/search/'s query schema has no name_format and
   // gramps-web-api rejects unknown query args with a 422, so profiles'

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchSearch, sortByRelevance, type SearchHit } from "../searchApi";
+import { getI18nSnapshot } from "../../i18n/i18n";
 
 function hit(handle: string, score: number | null): SearchHit {
   return { handle, object_type: "person", object: {}, score };
@@ -19,13 +20,14 @@ function mockFetch(hits: unknown[], total: number) {
 }
 
 describe("fetchSearch", () => {
-  it("always forces semantic=false and profile=all, and omits type/sort", async () => {
+  it("always sends profile=all and the UI language as locale, and omits type/sort/semantic", async () => {
     const fetchMock = mockFetch([], 0);
     await fetchSearch("test-token", "smith", 1, 20);
     const url = new URL(fetchMock.mock.calls[0][0] as string, "http://localhost");
     expect(url.pathname).toBe("/api/search/");
     expect(url.searchParams.get("query")).toBe("smith");
-    expect(url.searchParams.get("semantic")).toBe("false");
+    expect(url.searchParams.has("semantic")).toBe(false);
+    expect(url.searchParams.get("locale")).toBe(getI18nSnapshot().lang);
     expect(url.searchParams.get("profile")).toBe("all");
     expect(url.searchParams.get("page")).toBe("1");
     expect(url.searchParams.get("pagesize")).toBe("20");

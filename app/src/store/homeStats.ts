@@ -72,12 +72,11 @@ const RECENT_LABEL: Record<string, (obj: RawObject) => string> = {
  * no where_expr to push it into. */
 const RECENT_EXCLUDED_NOTE_TYPES = new Set(["topic", "story", "topic-message"]);
 
-/** How many search hits to ask for per wanted Recently Changed row. Covers
- * the excluded note types above, plus a gramps-web-api bug where a user
- * without PERM_VIEW_PRIVATE gets short pages: the public search index still
- * contains private objects, and /api/search/ drops them only *after*
- * paginating (one page of 10 came back with 3 on a tree whose newest edits
- * were private notes). */
+/** How many search hits to ask for per wanted Recently Changed row, to
+ * cover the excluded note types above. Before gramps-web-api v3.23.0 it
+ * also covered short pages for a user without PERM_VIEW_PRIVATE (private
+ * objects dropped only *after* paginating); v3.25.0's own search index
+ * filters them out in SQL before paging. */
 const RECENT_OVERFETCH = 3;
 
 /** The where_expr actually sent for `view`: just its own fixed

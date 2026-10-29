@@ -62,6 +62,7 @@ const LOCKED_TASK_LABELS: Record<string, string> = {
   upgrade_database_schema: "A database upgrade",
   delete_objects: "A delete",
   search_reindex_full: "A search index rebuild",
+  // gramps-web-api v3.24.0 only; v3.25.0 removed semantic search
   search_reindex_full_semantic: "A search index rebuild",
 };
 

@@ -28,7 +28,6 @@ export interface Metadata {
   server?: {
     multi_tree?: boolean;
     task_queue?: boolean;
-    semantic_search?: boolean;
     /** whether outgoing email is configured (v3.22.0+) */
     email?: boolean;
     /** which non-image files get thumbnails (v3.22.0+) */
