@@ -24,24 +24,19 @@ export interface SearchHit {
   handle: string;
   object_type: string;
   object: Record<string, unknown> & { profile?: Record<string, unknown> };
-  /** The raw SQLite FTS5 bm25() value for this hit (gramps-web-api's
-   * indexer.py: `score = hit.get("rank")`, the FTS5 `rank` hidden column,
-   * a different thing from this same response's *own* `rank` field --
-   * that one is just the hit's position in the page). Null only for a
-   * wildcard/empty query (the `search.get()` branch in indexer.py, not
-   * `search.query()`) -- SearchView never sends one, so in practice this
-   * is always populated here. sortByRelevance() below is what actually
-   * uses it. */
+  /** The hit's relevance score -- its scale (and which way is better)
+   * depends on the server version and backend, see sortByRelevance(),
+   * which is what actually uses it. Null only for a wildcard/empty query,
+   * which SearchView never sends. */
   score: number | null;
 }
 
 /** `semantic` is deliberately not a parameter here -- View > Search all
  * always searches the plain full-text index, never the vector one (see
- * SearchView.tsx). `sort` is deliberately omitted from the request: not
- * because leaving it out gives relevance order -- it doesn't, see
- * sortByRelevance()'s own doc comment below -- but because
+ * SearchView.tsx). `sort` is deliberately omitted from the request:
  * SearchQueryArgs.sort only accepts `change`/`type`, neither of which is
- * relevance, and semantic search rejects `sort` outright. `objectType` is
+ * relevance, and leaving it out is what gets relevance order from a v3.25.0+
+ * server (see sortByRelevance() below for older ones). `objectType` is
  * optional and omitted by default -- SearchView's "All" tab -- rather than
  * always sent, unlike `profile=all` below: narrowing to one type is a
  * real, user-visible choice (the type tabs), not a fixed decision this
@@ -86,33 +81,29 @@ export async function fetchSearch(
   };
 }
 
-/** gramps-web-api's /api/search/ does NOT actually return relevance order
- * when `sort` is omitted -- confirmed by reading `sifts` (the search
- * library behind it) directly: `SearchIndexerBase.search()`'s `order_by`
- * parameter (this module's `sort`, deliberately never sent -- see
- * fetchSearch's own doc comment) only ever adds a SQL `ORDER BY` when
- * given a real value; left out, `sifts/core.py`'s `query()` adds none at
- * all, so rows come back in whatever order SQLite's FTS5 `MATCH` happens
- * to enumerate them. Verified live: one query's raw hits arrived scored
- * -6.48, -6.91, -6.62, -6.76, ... -- nowhere close to sorted. And there's
- * no server-side fix available to ask for instead: SearchQueryArgs.sort
- * only accepts `change`/`type`, neither of which means relevance.
+/** Puts one page of hits in best-match-first order, for any server version.
  *
- * So SearchView sorts the results itself, off each hit's own real bm25
- * `score` (already in the response, no extra request) -- correct to do
- * client-side specifically *because* SearchView only ever fetches one
- * page (RESULTS_LIMIT rows): sorting a single already-fetched page is
- * free, where a true multi-page relevance sort would need the server to
- * do it before slicing to a page at all.
+ * The score's scale depends on the server, and its sign tells which one:
+ * - gramps-web-api v3.25.0+ (its own search index, #1089): -bm25() on
+ *   SQLite or ts_rank() on PostgreSQL, >= 0, higher is better -- and
+ *   already returned best first (`ORDER BY score DESC`).
+ * - Older servers (the `sifts` library) on PostgreSQL: ts_rank(), >= 0,
+ *   higher is better, but in no particular order.
+ * - Older servers on SQLite: raw FTS5 bm25(), <= 0, *more negative* is
+ *   better (https://sqlite.org/fts5.html#the_bm25_function), in whatever
+ *   order FTS5's `MATCH` enumerated them -- no ORDER BY was ever added
+ *   when `sort` was left out.
  *
- * Ascending, not descending: SQLite's bm25() convention is that a *more
- * negative* score is a *better* match (https://sqlite.org/fts5.html#the_bm25_function).
- * A null score (see SearchHit.score) sorts last -- worse than any real
+ * So any positive score means sort descending (a no-op on v3.25.0+, whose
+ * ties the stable sort keeps in server order), otherwise ascending.
+ * Sorting client-side is only right because SearchView fetches a single
+ * page (RESULTS_LIMIT rows). A null score sorts last -- worse than any real
  * match, never better. */
 export function sortByRelevance(hits: SearchHit[]): SearchHit[] {
+  const higherIsBetter = hits.some((hit) => hit.score != null && hit.score > 0);
   return [...hits].sort((a, b) => {
     if (a.score == null) return b.score == null ? 0 : 1;
     if (b.score == null) return -1;
-    return a.score - b.score;
+    return higherIsBetter ? b.score - a.score : a.score - b.score;
   });
 }

@@ -34,7 +34,8 @@ export async function login(username: string, password: string): Promise<{ acces
 
 /** Exchanges the (long-lived) refresh token for a new access token. Gramps-
  * web-api rejects this with 401/422 once the refresh token itself is
- * invalid or revoked -- the caller's only recourse at that point is a
+ * invalid, or 403 (v3.25.0+) once a password change or disabling the user
+ * has ended it -- the caller's only recourse at that point is a
  * fresh login. */
 export async function refreshAccessToken(refreshToken: string): Promise<string> {
   const res = await apiFetch(`${API_BASE}/api/token/refresh/`, {

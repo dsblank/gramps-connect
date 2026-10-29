@@ -98,6 +98,16 @@ describe("sortByRelevance", () => {
     expect(sortByRelevance(hits).map((h) => h.handle)).toEqual(["b", "c", "a", "d"]);
   });
 
+  it("keeps a v3.25.0+ server's order (positive scores, already best first, ties included)", () => {
+    const hits = [hit("a", 9.1), hit("b", 4.2), hit("c", 4.2), hit("d", 0.5)];
+    expect(sortByRelevance(hits).map((h) => h.handle)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("sorts positive scores descending -- ts_rank from an older PostgreSQL server comes unsorted", () => {
+    const hits = [hit("a", 0.2), hit("b", 0.9), hit("c", null), hit("d", 0.5)];
+    expect(sortByRelevance(hits).map((h) => h.handle)).toEqual(["b", "d", "a", "c"]);
+  });
+
   it("doesn't mutate the array it's given", () => {
     const hits = [hit("a", -1), hit("b", -2)];
     const original = [...hits];

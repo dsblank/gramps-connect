@@ -105,6 +105,19 @@ export async function loginWithRefreshToken(refreshToken: string): Promise<void>
   emit();
 }
 
+/** Replaces this session's tokens with a pair the server just issued in
+ * place of the current ones -- ProfileDialog.tsx's own password change,
+ * which on gramps-web-api v3.25.0+ ends the old refresh token (see
+ * usersApi.ts's changeOwnPassword()). Without this, the next refresh would
+ * get a 403 and sign the user out minutes after they changed their
+ * password. */
+export function adoptSessionTokens(accessToken: string, refreshToken: string): void {
+  adoptAccessToken(accessToken);
+  cachedRefreshToken = refreshToken;
+  writeStored(REFRESH_STORAGE_KEY, refreshToken);
+  emit();
+}
+
 /** Signs out and reloads the page -- every ViewStore (registry.ts) is a
  * module-level singleton that lives for the whole page session and never
  * re-validates itself once loaded (viewStore.ts's ensureLoaded() is a no-op
@@ -182,12 +195,12 @@ function base64url(value: string): string {
  * GRAMPS_WEB_API_KEY makes Client.from_env() work without a second login.
  *
  * That means the key IS this session's refresh token, which is
- * password-equivalent: gramps-web-api's JWT_REFRESH_TOKEN_EXPIRES is False,
- * nothing revokes it (no JWT blocklist is configured), and signing out only
- * clears it locally. A password change doesn't retire a copy either --
- * /token/refresh/ (issue_access_token) only checks that the user still
- * exists -- so only deleting the account or rotating the server's
- * SECRET_KEY does, and the UI offering this must say so. */
+ * password-equivalent: gramps-web-api's JWT_REFRESH_TOKEN_EXPIRES is False
+ * and signing out only clears it locally. From v3.25.0 (#1129) a password
+ * change or disabling the user ends it (the refresh token carries a
+ * token_version the change bumps); before that /token/refresh/ only checked
+ * that the user still exists, so only deleting the account or rotating the
+ * server's SECRET_KEY did. The UI offering this must say so. */
 export function getApiKey(): string | null {
   if (!cachedRefreshToken) return null;
   return composeApiKey(cachedRefreshToken);

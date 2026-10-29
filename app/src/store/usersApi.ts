@@ -44,16 +44,25 @@ export async function updateOwnUser(
 /** Requires re-proving the current password server-side (authorized(name,
  * old_password)) even though the request is already authenticated -- this is
  * the "change while logged in" flow, distinct from the emailed
- * password-reset link's own scoped-token endpoint. */
+ * password-reset link's own scoped-token endpoint.
+ *
+ * From gramps-web-api v3.25.0 (#1129) a password change ends every refresh
+ * token the user has, this session's included, and answers with a fresh
+ * access/refresh pair so the session that made the change can continue --
+ * returned here for auth.ts's adoptSessionTokens(). Null from an older
+ * server, which answers with an empty body and revokes nothing. */
 export async function changeOwnPassword(
   token: string,
   oldPassword: string,
   newPassword: string,
-): Promise<void> {
+): Promise<{ accessToken: string; refreshToken: string } | null> {
   const res = await apiFetch(`${API_BASE}/api/users/-/password/change`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
+  const body = await res.json().catch(() => null);
+  if (typeof body?.access_token !== "string" || typeof body?.refresh_token !== "string") return null;
+  return { accessToken: body.access_token, refreshToken: body.refresh_token };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Divider, Group, Modal, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { getToken, hasPermissions, setCurrentUsername } from "../auth/auth";
+import { adoptSessionTokens, getToken, hasPermissions, setCurrentUsername } from "../auth/auth";
 import { fetchOwnUser, updateOwnUser, changeOwnPassword } from "../store/usersApi";
 import { t } from "../i18n/i18n";
 
@@ -89,7 +89,8 @@ export function ProfileDialog({ opened, onClose }: ProfileDialogProps) {
     setChangingPassword(true);
     try {
       const token = await getToken();
-      await changeOwnPassword(token, oldPassword, newPassword);
+      const tokens = await changeOwnPassword(token, oldPassword, newPassword);
+      if (tokens) adoptSessionTokens(tokens.accessToken, tokens.refreshToken);
       setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");

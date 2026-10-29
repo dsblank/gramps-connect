@@ -136,8 +136,9 @@ export function SearchView() {
       const token = await getToken();
       const { hits, total } = await fetchSearch(token, trimmed, 1, RESULTS_LIMIT, type);
       if (requestIdRef.current !== requestId) return;
-      // The server doesn't actually return these in relevance order -- see
-      // sortByRelevance's own doc comment in searchApi.ts.
+      // Servers before gramps-web-api v3.25.0 don't return these in
+      // relevance order -- see sortByRelevance's own doc comment in
+      // searchApi.ts.
       setState({ status: "ready", query: trimmed, hits: sortByRelevance(hits), total });
     } catch (err: any) {
       if (requestIdRef.current !== requestId) return;

@@ -20,9 +20,9 @@ function formatWhen(iso: string | null): string {
 /** Puts this session's own refresh-token key (getApiKey()) on the
  * clipboard -- the only kind of key a server older than gramps-web-api
  * v3.23.0 can give out, so it's the API keys dialog's fallback there. It
- * never expires and has the account's full permissions, and nothing short
- * of deleting the account revokes it (not even a password change -- see
- * getApiKey()), hence the warning. */
+ * never expires and has the account's full permissions, and only a
+ * password change on a v3.25.0+ server (or deleting the account) revokes
+ * it -- see getApiKey() -- hence the warning. */
 async function copySessionKey() {
   const apiKey = getApiKey();
   if (!apiKey) return;
@@ -43,8 +43,8 @@ async function copySessionKey() {
     title: "API key copied",
     message:
       "Set it as GRAMPS_WEB_API_KEY. It grants full access to your account " +
-      "and never expires -- treat it like a password. Changing your password " +
-      "does not revoke it.",
+      "and never expires -- treat it like a password. Only changing your " +
+      "password ends it, and only on Gramps Web API 3.25.0 or later.",
     autoClose: 10000,
   });
 }
@@ -217,7 +217,7 @@ function SessionKeyFallback({ unsupported }: { unsupported: boolean }) {
       {hasSessionKey && (
         <>
           <Text size="sm" c="dimmed">
-            {t("You can copy this session's key instead. Unlike a separate key, it has full access to your account, never expires, and can't be removed later -- not even by changing your password.")}
+            {t("You can copy this session's key instead. Unlike a separate key, it has full access to your account and never expires. It can't be removed later; only changing your password ends it, and only on Gramps Web API 3.25.0 or later.")}
           </Text>
           <Group>
             <Button variant="light" color="yellow" onClick={copySessionKey}>{t("Copy session key")}</Button>
