@@ -1472,6 +1472,34 @@ export class ViewStore {
     this.emit();
   }
 
+  /** Drops rows this tab itself just deleted on the server (the bulk
+   * Delete) from the local cache right away -- applyLiveChange()'s DELETE
+   * branch for a whole batch, without waiting for live sync or a requery.
+   * Then reconciles the selection, so it falls back to the first row that
+   * still exists. Without this, the selection fell back to row 0 of the
+   * not-yet-refreshed cache -- often one of the rows just deleted -- and
+   * the detail pane fetched it and showed a 404 until the requery landed,
+   * which after a large delete meant the whole refill (see runQuery()'s
+   * preserveDisplayUntilCaughtUp). Callers still requeryDebounced() after,
+   * to pick up whatever else the delete changed. */
+  removeDeleted(handles: string[]): void {
+    if (!this.db || handles.length === 0) return;
+    let removed = 0;
+    this.db.run("BEGIN TRANSACTION;");
+    const stmt = this.db.prepare(`DELETE FROM ${this.view.key} WHERE handle = ?;`);
+    for (const handle of handles) {
+      stmt.run([handle]);
+      removed += this.db.getRowsModified();
+    }
+    stmt.free();
+    this.db.run("COMMIT;");
+    if (removed === 0) return;
+    this.loadedCount -= removed;
+    this.totalCount -= removed;
+    this.reconcileSelection();
+    this.emit();
+  }
+
   private persistLiveTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Debounced OPFS write-back after applyLiveChange() has patched this

@@ -1163,6 +1163,47 @@ describe("ViewStore.readItemsByHandles (bulk pane labels from the cache)", () =>
   });
 });
 
+describe("ViewStore.removeDeleted (after this tab's own bulk delete)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("drops the rows at once, so the selection falls back to a row that still exists", async () => {
+    const store = await loadedStore([tagRow("A"), tagRow("B"), tagRow("C"), tagRow("D")]);
+    store.select(0);
+    store.selectRange(2); // A..C, then deleted on the server
+
+    store.removeDeleted(["A", "B", "C"]);
+
+    const snap = store.getSnapshot();
+    // Regression: falling back to row 0 of the stale cache selected "A",
+    // which the detail pane then fetched and got a 404 for.
+    expect(snap.selectedHandle).toBe("D");
+    expect(snap.selectedHandles).toEqual(["D"]);
+    expect(snap.selectedIndex).toBe(0);
+    expect(snap.totalCount).toBe(1);
+    expect(snap.loadedCount).toBe(1);
+  });
+
+  it("selects nothing when every row was deleted", async () => {
+    const store = await loadedStore([tagRow("A"), tagRow("B")]);
+    store.select(0);
+    store.selectRange(1);
+
+    store.removeDeleted(["A", "B"]);
+
+    expect(store.getSnapshot().selectedHandle).toBeNull();
+    expect(store.getSnapshot().totalCount).toBe(0);
+  });
+
+  it("only counts rows it actually had", async () => {
+    const store = await loadedStore([tagRow("A"), tagRow("B")]);
+    store.removeDeleted(["A", "NOT-LOADED"]);
+    expect(store.getSnapshot().totalCount).toBe(1);
+  });
+});
+
 describe("ViewStore selection consistency across every emitted frame (not just the final one)", () => {
   beforeEach(() => {
     vi.mocked(fetchPage).mockReset();

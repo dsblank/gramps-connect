@@ -39,14 +39,18 @@ export function BulkDeleteButton({ view, handles }: { view: ViewConfig; handles:
     const store = getViewStore(view.key);
     try {
       await deleteSelected(view, handles, setProgress);
+      // Out of the local list (and the selection) at once, so the detail
+      // pane never lands on a record that's gone -- see removeDeleted().
+      store.removeDeleted(handles);
       store.requeryDebounced();
-      store.clearSelection();
       setConfirmOpen(false);
       if (large) notifications.show({ color: "green", message: t("Deleted %s objects.").replace("%s", count) });
     } catch (err: any) {
       if (err instanceof PartialDeleteError) {
         // Some chunks went through (older server, see deleteSelected()):
-        // show the list as it now is, and say how far it got.
+        // they go in order, so it's the first `deleted` handles. Show the
+        // list as it now is, and say how far it got.
+        store.removeDeleted(handles.slice(0, err.deleted));
         store.requeryDebounced();
         setError(
           t("Deleted %s of %s before an error: %s")
