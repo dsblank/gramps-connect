@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import type { TreeChangeNotification } from "../historyPoll";
-import { PERSON_VIEW, PLACE_VIEW, TAG_VIEW } from "../views";
+import { EVENT_VIEW, PERSON_VIEW, PLACE_VIEW, TAG_VIEW } from "../views";
 
 vi.mock("../api", () => ({
   fetchPage: vi.fn(),
@@ -1139,6 +1139,29 @@ describe("ViewStore.readItemsByHandles (bulk pane labels from the cache)", () =>
 
     expect([...items.keys()].sort()).toEqual(["H1", "H2"]);
     expect(items.get("H2")).toMatchObject({ handle: "H2", name: "Todo", priority: 1 });
+  });
+
+  it("labels a cached event as \"Type: date\", like its record header", async () => {
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: {
+        items: [{
+          handle: "E1", gramps_id: "E0001", description: "Birth of Amy", change: 1000,
+          event_type: { _class: "EventType", string: "", value: 12 },
+          date: { _class: "Date", calendar: 0, modifier: 0, quality: 0, dateval: [0, 0, 1990, false], text: "", sortval: 2447893, newyear: 0 },
+        }],
+        next_after: null,
+      },
+      totalCount: 1,
+    });
+    const store = new ViewStore(EVENT_VIEW, getSql);
+    await store.runQuery(null, false);
+
+    const item = store.readItemsByHandles(["E1"]).get("E1")!;
+    const { cachedLabel } = await import("../../components/related/SelectionBulkView");
+    const label = cachedLabel(EVENT_VIEW, item);
+
+    expect(label).toMatch(/^\[E0001\] Birth: .*1990/);
+    expect(label).not.toContain("Birth of Amy");
   });
 
   it("gives a person row whose label pickerResultLabel can build (name stored as JSON)", async () => {

@@ -86,7 +86,7 @@ export function BulkDeleteButton({ view, handles }: { view: ViewConfig; handles:
             {view.key === "place" && (
               <> {t("Any place enclosed by one of these is reattached to its surviving parent instead of being left orphaned.")}</>
             )}{" "}
-            {t("There is no undo.")}
+            {t("This cannot be undone from here.")}
           </Text>
           {large && !deleting && !isTokenFresh() && (
             <Text size="sm" c="dimmed">

@@ -361,7 +361,9 @@ works against it, since that is just a poll against
 is the Postgres-backed one `app/.env.example` points at by default, and the
 only fixture for genuinely concurrent multi-writer edits — it additionally
 needs a running Postgres and the `SharedPostgreSQL` addon. Every fixture
-logs in as `gramps`/`gramps`. **Read a script before running it** — none of
+logs in as `gramps`/`gramps`. Each fixture's secrets (`SECRET_KEY`, the
+Postgres password) live in an untracked `.env` next to its `config.cfg`:
+copy that fixture's `.env.example` to `.env` and fill it in first. **Read a script before running it** — none of
 them are idempotent against an already-populated tree.
 
 Every fixture runs `gramps-web-api` from a source checkout in the *same*

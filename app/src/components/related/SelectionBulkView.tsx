@@ -36,15 +36,27 @@ const CACHED_LABEL_TYPES = new Set(["person", "family", "event", "place", "repos
  * `onNavigate` -- with no per-row RelatedPanel here to show the record's
  * own details inline, this is the only way to actually look at one of the
  * N selected objects individually while still in bulk-selection mode. */
-/** A cached row's label: pickerResultLabel(), except for places, which
- * show their title the way the table's own Title cell does (the tree's
- * place format, via that column's toDisplay) rather than the raw stored
- * title. */
-function cachedLabel(view: ViewConfig, item: Record<string, unknown> & { handle: string }): string {
+/** A cached column's text the way the table's own cell shows it (that
+ * column's toDisplay), or "" when it renders to nothing textual. */
+function cellText(view: ViewConfig, key: string, item: Record<string, unknown>): string {
+  const column = view.columns.find((c) => c.key === key);
+  const value = column?.toDisplay ? column.toDisplay(item[key], (k) => item[k]) : item[key];
+  return typeof value === "string" ? value : "";
+}
+
+/** A cached row's label: pickerResultLabel(), except for the types where
+ * that would read differently from the record's own header
+ * (summaryLine()): places show their title as the table's Title cell does
+ * (the tree's place format), and events show "Type: date" rather than
+ * "Type: description". Exported for its test. */
+export function cachedLabel(view: ViewConfig, item: Record<string, unknown> & { handle: string }): string {
+  const id = item.gramps_id as string | undefined;
   if (view.key === "place") {
-    const title = view.columns.find((c) => c.key === "title");
-    const text = title?.toDisplay ? title.toDisplay(item.title, (key) => item[key]) : item.title;
-    return withGrampsId(item.gramps_id as string | undefined, typeof text === "string" && text ? text : "(untitled)");
+    return withGrampsId(id, cellText(view, "title", item) || "(untitled)");
+  }
+  if (view.key === "event") {
+    const text = [cellText(view, "event_type", item), cellText(view, "date", item)].filter(Boolean).join(": ");
+    return withGrampsId(id, text || (item.description as string | undefined) || "(event)");
   }
   return pickerResultLabel(view.key, item);
 }

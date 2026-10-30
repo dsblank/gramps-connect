@@ -147,7 +147,7 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
             {view.key === "topics" && (
               <> {t("Every message in it is deleted too, not just the discussion itself.")}</>
             )}{" "}
-            There is no undo.
+            {t("This cannot be undone from here.")}
           </Text>
           <Checkbox
             checked={false}
