@@ -101,4 +101,7 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 # extra `/bin/sh -c`; the inner `exec` still lets gunicorn replace that shell
 # as PID 1 so it receives signals directly, while `sh -c` is kept only to
 # expand the GUNICORN_* env-var defaults, which JSON-array CMD can't do.
-CMD ["sh", "-c", "exec gunicorn -w ${GUNICORN_NUM_WORKERS:-4} -b 0.0.0.0:5000 gramps_webapi.wsgi:app --timeout ${GUNICORN_TIMEOUT:-120} --limit-request-line 8190"]
+# --preload loads the app once before forking the workers, so they share
+# its memory -- the base image's own CMD has it since gramps-web-api 3.25.0
+# (#1126), but this CMD replaces that one, so it's repeated here.
+CMD ["sh", "-c", "exec gunicorn -w ${GUNICORN_NUM_WORKERS:-4} -b 0.0.0.0:5000 gramps_webapi.wsgi:app --timeout ${GUNICORN_TIMEOUT:-120} --limit-request-line 8190 --preload"]

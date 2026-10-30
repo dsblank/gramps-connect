@@ -105,6 +105,25 @@ services:
       - postgres
       - redis
     restart: unless-stopped
+    # "Answers HTTP at all" -- any status, a 401 included, since there's no
+    # unauthenticated health route. gunicorn only starts once the
+    # entrypoint's `user migrate` has finished, so healthy also means the
+    # user database is on the current schema; the worker waits for that.
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import urllib.request, urllib.error
+          try:
+              urllib.request.urlopen("http://localhost:5000/api/metadata/", timeout=5)
+          except urllib.error.HTTPError:
+              pass
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
 
   # Import, media-archive-upload, search-indexing, etc. all dispatch through
   # Celery (GRAMPSWEB_CELERY_CONFIG__* above) instead of running inline --
@@ -119,9 +138,17 @@ services:
       # "database is locked" (see deploy/docker-entrypoint.sh).
       SKIP_MIGRATE_AND_SEED: "1"
     volumes: *app-volumes
+    # Waits for app to be healthy, i.e. done migrating the shared user
+    # database: a task run against the old schema fails (after a
+    # gramps-web-api upgrade adding a column, e.g. 3.25.0's
+    # users.token_version: "no such column").
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      app:
+        condition: service_healthy
     # --pool=solo: avoid celery's default prefork pool. Suspected cause of
     # "Import failed" with no real error (see investigation notes) --
     # Gramps' plugin registration lazily touches real GTK/GObject state
