@@ -1,13 +1,14 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { createRequire } from "node:module";
-
-// Reported by Help > System Information (see src/vite-env.d.ts). Read
-// through createRequire rather than an import so this stays the one place
-// package.json is touched -- importing it from src/ would bundle the whole
-// file, dependency list and all, into the client.
-const { version } = createRequire(import.meta.url)("./package.json");
+// Reported by Help > System Information (see src/vite-env.d.ts). Imported
+// here, in the config, rather than from src/ -- that would bundle the whole
+// file, dependency list and all, into the client. An import (unlike the
+// createRequire() this used to be) makes package.json one of the config's
+// own dependencies, so the dev server restarts itself on a version bump
+// instead of reporting whatever version it started with until restarted
+// by hand.
+import { version } from "./package.json";
 
 export default defineConfig({
   plugins: [react()],
