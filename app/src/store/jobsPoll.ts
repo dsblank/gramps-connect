@@ -6,7 +6,7 @@
 // off, and a slow, server-driven sweep that rescues jobs whose dispatching
 // tab is gone. Neither loop persists anything to localStorage -- TaskTree
 // (server-side) is already the durable record.
-import { getCurrentUsername, getToken } from "../auth/auth";
+import { getCurrentUsername, getToken, hasPermissions } from "../auth/auth";
 import { getTaskStatus, listOwnTasks } from "./jobsApi";
 import { ACTIVE_STATES } from "./taskApi";
 import {
@@ -47,8 +47,43 @@ export interface JobsPollCallbacks {
   // A media archive never reaches onPromoted -- see downloadArchiveLocally's
   // doc comment on why it goes straight to the user's disk instead of back
   // into the tree as Media.
-  onDownloaded: (desc: string, kind: JobKind) => void;
+  // A report/export the user can't save to the tree, or a media archive
+  // -- see jobsPromote.ts's deliverJob(). `messages` is what the job left
+  // out (jobResultMessages), which has no Media/Note to travel with here.
+  onDownloaded: (desc: string, kind: JobKind, messages: string[]) => void;
   onFailed: (kind: JobKind, message: string) => void;
+}
+
+/** Hands a finished report/export's file to its user, whichever way fits:
+ * saved into the tree as tagged Media (jobsPromote.ts's promoteJob(), which outlives the tab
+ * and shows up in the Output view), or -- for a media archive, or a user
+ * who can't add records -- straight to their downloads
+ * (downloadArchiveLocally()). Guests and Members have no AddObject, so the
+ * Media upload would 403 *after* the download step already consumed the
+ * server's only copy (delete-on-read), losing the report; gramps-web-api
+ * itself lets them run reports (without private records), so they get the
+ * file instead. Shared by both job-watcher loops below and the
+ * dialogs' ran-inline path, so every route delivers the same way. A file
+ * already claimed elsewhere (null/false below) is silently skipped -- that
+ * claimant announces it. */
+export async function deliverJob(
+  token: string,
+  kind: JobKind,
+  url: string,
+  desc: string,
+  messages: string[],
+  callbacks: {
+    onPromoted: (result: PromoteResult, kind: JobKind) => void;
+    onDownloaded: (desc: string, kind: JobKind, messages: string[]) => void;
+  }
+): Promise<void> {
+  const mediaArchive = kind === "export" && MEDIA_ARCHIVE_URL_RE.test(url);
+  if (mediaArchive || !hasPermissions("AddObject")) {
+    if (await downloadArchiveLocally(token, url, desc)) callbacks.onDownloaded(desc, kind, messages);
+    return;
+  }
+  const result = await promoteJob(token, kind, url, desc, messages);
+  if (result) callbacks.onPromoted(result, kind);
 }
 
 /** Fast, in-memory, dispatch-scoped tracking for a report/export *this tab*
@@ -90,15 +125,10 @@ export function trackJob(taskId: string, kind: JobKind, callbacks: JobsPollCallb
         return;
       }
       const desc = optionsSummary ?? (await describeGenericJob(token, kind, url));
-      if (kind === "export" && MEDIA_ARCHIVE_URL_RE.test(url)) {
-        // See downloadArchiveLocally's doc comment -- never promoted.
-        if (await downloadArchiveLocally(token, url, desc)) callbacks.onDownloaded(desc, kind);
-        return;
-      }
-      const result = await promoteJob(token, kind, url, desc, jobResultMessages(status.result_object));
-      // A null result means the file was already claimed -- e.g. the
-      // catch-up sweep won the race -- which already toasted (or will).
-      if (result) callbacks.onPromoted(result, kind);
+      // Saved to the tree, or downloaded -- see deliverJob(). Already
+      // claimed (e.g. the catch-up sweep won the race) toasts nothing here;
+      // the claimant already did (or will).
+      await deliverJob(token, kind, url, desc, jobResultMessages(status.result_object), callbacks);
     } catch (err: any) {
       console.error(`job ${taskId} tracking failed`, err);
       callbacks.onFailed(kind, err.message ?? String(err));
@@ -135,12 +165,7 @@ export async function sweepOnce(callbacks: JobsPollCallbacks): Promise<void> {
     // state is deliberately never toasted from here: the dispatching tab
     // (or an earlier sweep) already saw it fail, and a *different*
     // session's sweep re-surfacing a stranger's old failure serves no one.
-    if (kind === "export" && MEDIA_ARCHIVE_URL_RE.test(url)) {
-      if (await downloadArchiveLocally(token, url, desc)) callbacks.onDownloaded(desc, kind);
-      continue;
-    }
-    const result = await promoteJob(token, kind, url, desc, jobResultMessages(status.result_object));
-    if (result) callbacks.onPromoted(result, kind);
+    await deliverJob(token, kind, url, desc, jobResultMessages(status.result_object), callbacks);
   }
 }
 

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../auth/auth", () => ({
   getToken: vi.fn().mockResolvedValue("test-token"),
   getCurrentUsername: vi.fn(),
+  // AddObject: may this user save a job's file into the tree as Media?
+  hasPermissions: vi.fn(() => true),
 }));
 vi.mock("../jobsApi", () => ({
   getTaskStatus: vi.fn(),
@@ -16,10 +18,10 @@ vi.mock("../jobsPromote", async (importOriginal) => ({
   MEDIA_ARCHIVE_URL_RE: /^\/api\/media\/archive\//,
 }));
 
-import { getCurrentUsername } from "../../auth/auth";
+import { getCurrentUsername, hasPermissions } from "../../auth/auth";
 import { getTaskStatus, listOwnTasks, type TaskListItem, type TaskStatus } from "../jobsApi";
 import { promoteJob, downloadArchiveLocally } from "../jobsPromote";
-import { sweepOnce, trackJob } from "../jobsPoll";
+import { deliverJob, sweepOnce, trackJob } from "../jobsPoll";
 
 function task(overrides: Partial<TaskListItem> = {}): TaskListItem {
   return {
@@ -120,7 +122,7 @@ describe("sweepOnce", () => {
 
     expect(promoteJob).not.toHaveBeenCalled();
     expect(downloadArchiveLocally).toHaveBeenCalledWith("test-token", "/api/media/archive/abc.zip", "desc");
-    expect(onDownloaded).toHaveBeenCalledWith("desc", "export");
+    expect(onDownloaded).toHaveBeenCalledWith("desc", "export", []);
     expect(onPromoted).not.toHaveBeenCalled();
   });
 });
@@ -150,5 +152,55 @@ describe("trackJob", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("deliverJob", () => {
+  const callbacks = () => ({ onPromoted: vi.fn(), onDownloaded: vi.fn() });
+
+  beforeEach(() => {
+    vi.mocked(hasPermissions).mockReset().mockReturnValue(true);
+    vi.mocked(promoteJob).mockReset().mockResolvedValue({ handle: "h1", desc: "d", hasReport: false });
+    vi.mocked(downloadArchiveLocally).mockReset().mockResolvedValue(true);
+  });
+
+  it("saves a report into the tree for a user who can add records", async () => {
+    const cb = callbacks();
+    await deliverJob("tok", "report", "/api/reports/x/file/processed/y.pdf", "desc", [], cb);
+    expect(hasPermissions).toHaveBeenCalledWith("AddObject");
+    expect(promoteJob).toHaveBeenCalledTimes(1);
+    expect(downloadArchiveLocally).not.toHaveBeenCalled();
+    expect(cb.onPromoted).toHaveBeenCalledTimes(1);
+  });
+
+  it("downloads a report instead for a user who can't add records (Guest, Member)", async () => {
+    vi.mocked(hasPermissions).mockReturnValue(false);
+    const cb = callbacks();
+    await deliverJob("tok", "report", "/api/reports/x/file/processed/y.pdf", "desc", [], cb);
+    expect(promoteJob).not.toHaveBeenCalled();
+    expect(downloadArchiveLocally).toHaveBeenCalledWith("tok", "/api/reports/x/file/processed/y.pdf", "desc");
+    expect(cb.onDownloaded).toHaveBeenCalledWith("desc", "report", []);
+  });
+
+  it("downloads an export too, passing along what it left out", async () => {
+    vi.mocked(hasPermissions).mockReturnValue(false);
+    const cb = callbacks();
+    await deliverJob("tok", "export", "/api/exporters/gramps/file/processed/y.gramps", "desc", ["3 notes skipped"], cb);
+    expect(cb.onDownloaded).toHaveBeenCalledWith("desc", "export", ["3 notes skipped"]);
+  });
+
+  it("always downloads a media archive, whoever asks", async () => {
+    const cb = callbacks();
+    await deliverJob("tok", "export", "/api/media/archive/y.zip", "desc", [], cb);
+    expect(promoteJob).not.toHaveBeenCalled();
+    expect(cb.onDownloaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces nothing when the file was already claimed elsewhere", async () => {
+    vi.mocked(hasPermissions).mockReturnValue(false);
+    vi.mocked(downloadArchiveLocally).mockResolvedValue(false);
+    const cb = callbacks();
+    await deliverJob("tok", "report", "/api/reports/x/file/processed/y.pdf", "desc", [], cb);
+    expect(cb.onDownloaded).not.toHaveBeenCalled();
   });
 });

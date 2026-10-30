@@ -48,14 +48,33 @@ export const jobsPollCallbacks: JobsPollCallbacks = {
     });
     notifyBrowser(title, result.hasReport ? `${result.desc} — ${reportHint}` : result.desc);
   },
-  onDownloaded: (desc, kind) => {
-    // Media archives never reach onPromoted -- see
-    // jobsPromote.ts's downloadArchiveLocally doc comment -- so there's no
-    // Output-view row to link to here, just an acknowledgement that the
-    // browser's own save prompt already fired.
+  onDownloaded: (desc, kind, messages) => {
+    // A media archive, or a report/export by someone who can't add records
+    // to the tree (jobsPromote.ts's deliverJob()), never reaches
+    // onPromoted -- so there's no Output-view row to link to here, just an
+    // acknowledgement that the browser's own save prompt already fired.
+    // What the job left out has no attached Note to live in either, so a
+    // job that reported any lists it right here, yellow and sticky like
+    // onPromoted's own report toast.
     const title = kind === "report" ? "Report ready" : "Export ready";
     const message = `${desc} — saved to your downloads.`;
-    notifications.show({ color: "green", title, message });
+    notifications.show({
+      color: messages.length > 0 ? "yellow" : "green",
+      title,
+      autoClose: messages.length > 0 ? false : undefined,
+      message:
+        messages.length > 0 ? (
+          <>
+            <div>{message}</div>
+            <div>Some data couldn't be exported:</div>
+            <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
+              {messages.map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+          </>
+        ) : (
+          message
+        ),
+    });
     notifyBrowser(title, message);
   },
   onFailed: (kind, message) => {

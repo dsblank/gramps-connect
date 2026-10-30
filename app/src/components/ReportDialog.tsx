@@ -16,7 +16,7 @@ import {
   Textarea,
   TextInput,
 } from "@mantine/core";
-import { getToken } from "../auth/auth";
+import { getToken, hasPermissions } from "../auth/auth";
 import { getViewStore } from "../store/registry";
 import { getReport, runReport, type ReportDetail } from "../store/reportsApi";
 import {
@@ -25,9 +25,8 @@ import {
   toRequestOptions,
   type OptionField,
 } from "../store/reportOptions";
-import { trackJob } from "../store/jobsPoll";
+import { deliverJob, trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
-import { promoteJob } from "../store/jobsPromote";
 import { t } from "../i18n/i18n";
 import { BUILTIN_NAME_FORMATS, getDisplaySettings } from "../store/displaySettings";
 import { displayNameFormat } from "../store/nameDisplay";
@@ -183,9 +182,8 @@ export function ReportDialog({ reportId, onClose }: ReportDialogProps) {
         return;
       }
       // Ran inline, so the finished file is already there -- same
-      // promotion, just with no task to watch first.
-      const promoted = await promoteJob(token, "report", result.url, desc);
-      if (promoted) jobsPollCallbacks.onPromoted(promoted, "report");
+      // delivery, just with no task to watch first.
+      await deliverJob(token, "report", result.url, desc, [], jobsPollCallbacks);
     })().catch((err: any) => {
       jobsPollCallbacks.onFailed("report", err.message ?? String(err));
     });
@@ -283,6 +281,14 @@ export function ReportDialog({ reportId, onClose }: ReportDialogProps) {
                 </Collapse>
               </>
             )}
+
+            {/* Where the report ends up depends on whether this user may
+                add records -- see jobsPoll.ts's deliverJob(). */}
+            <Text size="sm" c="dimmed">
+              {hasPermissions("AddObject")
+                ? t("The finished report appears in Output, where you can download it.")
+                : t("The finished report downloads to your computer when it's ready.")}
+            </Text>
 
             <Group justify="flex-end">
               <Button variant="default" onClick={onClose}>

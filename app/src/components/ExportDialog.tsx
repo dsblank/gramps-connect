@@ -25,8 +25,8 @@ import {
   togglesFor,
   type ExporterSummary,
 } from "../store/exportersApi";
-import { exportLabel, promoteJob, stripMnemonic } from "../store/jobsPromote";
-import { trackJob } from "../store/jobsPoll";
+import { exportLabel, stripMnemonic } from "../store/jobsPromote";
+import { deliverJob, trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { t } from "../i18n/i18n";
 
@@ -143,9 +143,8 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
         return;
       }
       // Ran inline, so the finished file is already there -- same
-      // promotion, just with no task to watch first.
-      const promoted = await promoteJob(token, "export", result.url, desc, result.messages);
-      if (promoted) jobsPollCallbacks.onPromoted(promoted, "export");
+      // delivery, just with no task to watch first.
+      await deliverJob(token, "export", result.url, desc, result.messages, jobsPollCallbacks);
     })().catch((err: any) => {
       jobsPollCallbacks.onFailed("export", err.message ?? String(err));
     });
@@ -245,8 +244,12 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
               </Stack>
             </Collapse>
 
+            {/* Where the file ends up depends on whether this user may add
+                records -- see jobsPoll.ts's deliverJob(). */}
             <Text size="sm" c="dimmed">
-              {t("The finished file appears in Output, where you can download it.")}
+              {hasPermissions("AddObject")
+                ? t("The finished file appears in Output, where you can download it.")
+                : t("The finished file downloads to your computer when it's ready.")}
             </Text>
 
             <Group justify="flex-end">

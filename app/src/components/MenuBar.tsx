@@ -245,7 +245,7 @@ function handleExportMedia() {
       trackJob(result.taskId, "export", jobsPollCallbacks, desc);
       return;
     }
-    if (await downloadArchiveLocally(token, result.url, desc)) jobsPollCallbacks.onDownloaded(desc, "export");
+    if (await downloadArchiveLocally(token, result.url, desc)) jobsPollCallbacks.onDownloaded(desc, "export", []);
   })().catch((err: any) => {
     jobsPollCallbacks.onFailed("export", err.message ?? String(err));
   });
