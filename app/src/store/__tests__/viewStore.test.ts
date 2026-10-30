@@ -1126,6 +1126,43 @@ describe("ViewStore.selectAll (Ctrl/Cmd+A)", () => {
   });
 });
 
+describe("ViewStore.readItemsByHandles (bulk pane labels from the cache)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  it("returns cached rows keyed by handle, in /query/ item shape, skipping unknown handles", async () => {
+    const store = await loadedStore([tagRow("H1", { name: "Chores" }), tagRow("H2", { name: "Todo" }), tagRow("H3")]);
+
+    const items = store.readItemsByHandles(["H2", "H1", "NOPE"]);
+
+    expect([...items.keys()].sort()).toEqual(["H1", "H2"]);
+    expect(items.get("H2")).toMatchObject({ handle: "H2", name: "Todo", priority: 1 });
+  });
+
+  it("gives a person row whose label pickerResultLabel can build (name stored as JSON)", async () => {
+    const primary_name = {
+      _class: "Name", first_name: "Amy", surname_list: [{ _class: "Surname", surname: "Smith", primary: true }],
+      suffix: "", title: "", call: "", nick: "", famnick: "",
+    };
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [personRow("H1", { gramps_id: "I0001", primary_name })], next_after: null },
+      totalCount: 1,
+    });
+    const store = new ViewStore(PERSON_VIEW, getSql);
+    await store.runQuery(null, false);
+
+    const item = store.readItemsByHandles(["H1"]).get("H1")!;
+    const { pickerResultLabel } = await import("../../components/RefPickerField");
+    const label = pickerResultLabel("person", item as never);
+
+    expect(label).toMatch(/^\[I0001\] /);
+    expect(label).toContain("Amy");
+    expect(label).toContain("Smith");
+  });
+});
+
 describe("ViewStore selection consistency across every emitted frame (not just the final one)", () => {
   beforeEach(() => {
     vi.mocked(fetchPage).mockReset();

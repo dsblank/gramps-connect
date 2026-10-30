@@ -796,7 +796,27 @@ export class ViewStore {
     return res[0]?.values[0] ?? null;
   }
 
-  /** Shared guard for the two whole-row readers above: the column names are
+  /** Cached rows for `handles`, keyed by handle, each as `{ column key:
+   * value, handle }` -- the same shape a /query/ result item has, so
+   * labels built for query results (RefPickerField.tsx's
+   * pickerResultLabel()) work on it unchanged. One query for the whole
+   * batch. A handle with no cached row is just absent from the map. */
+  readItemsByHandles(handles: string[]): Map<string, Record<string, unknown> & { handle: string }> {
+    const items = new Map<string, Record<string, unknown> & { handle: string }>();
+    if (!this.db || handles.length === 0) return items;
+    const keys = this.view.columns.map((c) => c.key);
+    const res = this.db.exec(
+      `SELECT ${keys.join(", ")}, handle FROM ${this.view.key} WHERE handle IN (${handles.map(() => "?").join(", ")});`,
+      handles
+    );
+    for (const row of res[0]?.values ?? []) {
+      const handle = row[keys.length] as string;
+      items.set(handle, { ...Object.fromEntries(keys.map((key, i) => [key, row[i]])), handle });
+    }
+    return items;
+  }
+
+  /** Shared guard for the whole-row readers above: the column names are
    * spliced into SQL, so they're checked against this view's own
    * ColumnConfig keys (plus `handle`, the primary key, which isn't one).
    * Unknown names throw rather than being dropped -- a caller asking for a
