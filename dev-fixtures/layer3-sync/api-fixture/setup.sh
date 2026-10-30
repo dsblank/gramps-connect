@@ -30,6 +30,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+# GRAMPSWEB_SECRET_KEY / GRAMPSWEB_POSTGRES_PASSWORD (see .env.example).
+set -a; . ./.env; set +a
 export GRAMPSHOME="$PWD/gramps-home"
 export GRAMPS_RESOURCES="$HOME/gramps/gramps/build/share"
 EXAMPLE_GRAMPS="$HOME/gramps/gramps/example/gramps/example.gramps"
@@ -105,7 +107,7 @@ echo
 # ~2100 of 2157 event rows scanned per lookup x 1000 rows) instead of
 # the ~30ms it takes with fresh stats.
 echo "analyzing tables so the query planner has fresh stats..."
-PGPASSWORD="${POSTGRES_PASSWORD:-gramps}" psql -h "${POSTGRES_HOST:-localhost}" \
+PGPASSWORD="$GRAMPSWEB_POSTGRES_PASSWORD" psql -h "${POSTGRES_HOST:-localhost}" \
   -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-gramps}" -d gramps -c "ANALYZE;"
 
 echo

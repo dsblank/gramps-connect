@@ -43,6 +43,10 @@ already points at the fixture backend below.
 **1. Backend** (fixture data already imported — do **not** re-run
 `setup.sh`, just start the server it already set up):
 
+Its secrets (`SECRET_KEY`, the Postgres password) come from an untracked
+`.env` next to `config.cfg`, which `config.cfg` loads itself. On a fresh
+checkout, copy `.env.example` to `.env` and fill it in first.
+
 ```bash
 cd dev-fixtures/layer3-sync/api-fixture
 export GRAMPSHOME="$PWD/gramps-home"
