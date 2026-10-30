@@ -8,6 +8,7 @@ import { fetchPlainObject, updateObject, deleteObject } from "./objectsApi";
 import { VIEWS, TAG_VIEW } from "./views";
 import type { ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
+import type { TaskPostResult } from "./toolsApi";
 
 /** The view.key values gramps-web-api actually has a merge route for
  * (resources/merge.py + api/__init__.py:272-398) -- excludes the app's
@@ -108,6 +109,36 @@ export async function deleteObjectsBulk(token: string, view: ViewConfig, handles
     body: JSON.stringify({ namespace: namespaceFor(view), handles }),
   });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
+}
+
+/** deleteObjectsBulk() as a background task (gramps-web-api v3.25.0+,
+ * see serverCapabilities.ts's supportsBackgroundDelete()) -- for anything
+ * past a few hundred handles, so a large delete can't run into a proxy
+ * timeout. 202 with a task to poll when the server has Celery; a server
+ * without one (the desktop build) deletes inline and answers 200, same as
+ * toolsApi.ts's postTask(). Still one transaction either way. A 409
+ * `task_locked` (an import, restore or repair running) comes out of
+ * parseErrorMessage() as a readable message. */
+export async function deleteObjectsBulkBackground(
+  token: string,
+  view: ViewConfig,
+  handles: string[]
+): Promise<TaskPostResult> {
+  const res = await apiFetch(
+    `${API_BASE}/api/objects/delete-by-handle/?background=true`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ namespace: namespaceFor(view), handles }),
+    },
+    { lane: "long" }
+  );
+  if (res.status === 202) {
+    const body = await res.json();
+    return { kind: "task", task: body.task };
+  }
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  return { kind: "done", result: await res.json().catch(() => null) };
 }
 
 const VIEW_BY_KEY = new Map(VIEWS.map((v) => [v.key, v]));

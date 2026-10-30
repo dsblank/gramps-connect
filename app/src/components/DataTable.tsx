@@ -19,12 +19,6 @@ const ROW_HEIGHT = 28;
 const BUFFER_ROWS = 6;
 const DEFAULT_COLUMN_WIDTH = 160;
 const MIN_COLUMN_WIDTH = 60;
-// A view can have well over 100k rows -- shift+click range-select is capped
-// here (a UI-policy number ViewStore.selectRange() itself has no opinion
-// on) so a stray shift+click near the top of a huge, freshly sorted view
-// can't kick off a fetch/select of tens of thousands of rows. Past the cap
-// the click is simply ignored -- selection stays exactly as it was.
-const MAX_RANGE_SELECT = 50;
 // Multi-select's ctrl/shift modifiers aren't discoverable from the UI alone
 // -- this is the delay (from the cursor going idle, not from hover-start)
 // before the hint tooltip appears, so it doesn't flash on every pass of the
@@ -164,6 +158,30 @@ export function DataTable({ view }: DataTableProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [store, snapshot.selectedIndex, snapshot.totalCount]);
 
+  // Ctrl/Cmd+A selects every row the list shows (its search/filter
+  // included) -- ViewStore.selectAll() waits for the background fill
+  // first. Same "not while typing" rule as the arrow keys above, so the
+  // search box keeps its own select-all, and not inside a dialog either.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key.toLowerCase() !== "a" || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (target?.closest?.("[role='dialog']")) return;
+      e.preventDefault();
+      void store.selectAll();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [store]);
+
+  // Highlight lookup -- a Set rather than selectedIndices.includes() per
+  // rendered row, which is a scan of the whole selection each time (fine
+  // at a few rows, not at a Ctrl/Cmd+A of tens of thousands).
+  // selectedIndices is only replaced when the selection changes, so this
+  // rebuilds only then.
+  const selectedIndexSet = useMemo(() => new Set(snapshot.selectedIndices), [snapshot.selectedIndices]);
+
   // One windowed SQL query per render pass (mirrors the original's
   // renderVisible(), a single LIMIT/OFFSET query per scroll frame) rather
   // than one query per row. Keyed on snapshot.revision, not just
@@ -291,7 +309,7 @@ export function DataTable({ view }: DataTableProps) {
             <div
               key={item.key}
               className={classes.row}
-              data-selected={snapshot.selectedIndices.includes(item.index) || undefined}
+              data-selected={selectedIndexSet.has(item.index) || undefined}
               // Shift+click's native browser behavior (extending a text
               // selection across everything between the last click and
               // this one) fires on mousedown, before our own onClick below
@@ -303,7 +321,7 @@ export function DataTable({ view }: DataTableProps) {
               }}
               onClick={(e) => {
                 if (!rawRow) return;
-                if (e.shiftKey) store.selectRange(item.index, MAX_RANGE_SELECT);
+                if (e.shiftKey) store.selectRange(item.index);
                 else if (e.ctrlKey || e.metaKey) store.toggleSelect(item.index);
                 else store.select(item.index);
               }}
@@ -347,7 +365,7 @@ export function DataTable({ view }: DataTableProps) {
         })}
       </div>
       <Tooltip
-        label={t("Ctrl/Cmd+click selects another row, Shift+click selects a range")}
+        label={t("Ctrl/Cmd+click selects another row, Shift+click selects a range, Ctrl/Cmd+A selects every row")}
         opened={rowHintPos !== null}
         position="top-end"
         withArrow

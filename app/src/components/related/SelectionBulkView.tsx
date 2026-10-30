@@ -21,6 +21,12 @@ import { t } from "../../i18n/i18n";
  * `onNavigate` -- with no per-row RelatedPanel here to show the record's
  * own details inline, this is the only way to actually look at one of the
  * N selected objects individually while still in bulk-selection mode. */
+/** How many selected records the list names. A Ctrl/Cmd+A or long
+ * shift+click range can select tens of thousands, and each label is its
+ * own request -- past this the rest are just counted ("…and 4,900
+ * more"); the table beside this pane already shows them all. */
+const LISTED_LIMIT = 100;
+
 export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewConfig; handles: string[]; onNavigate: OnNavigate }) {
   // Keyed by handle and never wholesale-reset -- ctrl+clicking one more (or
   // fewer) row into an already-open bulk selection only needs to fetch the
@@ -32,9 +38,11 @@ export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewCon
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
+  const listed = handles.slice(0, LISTED_LIMIT);
+
   useEffect(() => {
     setError(null);
-    const missing = handles.filter((h) => !(h in labels));
+    const missing = listed.filter((h) => !(h in labels));
     if (missing.length === 0) return;
     let cancelled = false;
     (async () => {
@@ -55,18 +63,18 @@ export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewCon
     // to compute `missing` against this render's already-current value, not
     // something this effect should re-run for; including it would just
     // re-fire (harmlessly, since `missing` would then be empty) right after
-    // every setLabels this same effect just did. handles.join keys the
+    // every setLabels this same effect just did. listed.join keys the
     // effect on membership, not array identity -- AsideSplit passes a fresh
     // array from the store snapshot on every selection change, but only a
     // real membership change needs a fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, handles.join(",")]);
+  }, [view, listed.join(",")]);
 
   return (
     <Stack gap="md" p="md">
       <Group gap="xs" wrap="wrap" justify="flex-end">
         <Text size="sm" c="dimmed" style={{ flex: 1 }}>
-          {handles.length} {t("selected")}
+          {handles.length.toLocaleString()} {t("selected")}
         </Text>
         <BulkDeleteButton view={view} handles={handles} />
         <BulkTagButton view={view} handles={handles} />
@@ -77,11 +85,11 @@ export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewCon
         </Alert>
       )}
       <Stack gap={4}>
-        {handles.map((h, i) => {
+        {listed.map((h, i) => {
           const grampsId = getViewStore(view.key).grampsIdForHandle(h);
           return (
             <Group key={h} gap={6} wrap="nowrap">
-              <Text size="md" c="dimmed" style={{ flex: "none", textAlign: "right", minWidth: `${String(handles.length).length}ch` }}>
+              <Text size="md" c="dimmed" style={{ flex: "none", textAlign: "right", minWidth: `${String(listed.length).length}ch` }}>
                 {i + 1}.
               </Text>
               <Anchor
@@ -98,6 +106,11 @@ export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewCon
             </Group>
           );
         })}
+        {handles.length > listed.length && (
+          <Text size="sm" c="dimmed">
+            {t("…and %s more").replace("%s", (handles.length - listed.length).toLocaleString())}
+          </Text>
+        )}
       </Stack>
     </Stack>
   );

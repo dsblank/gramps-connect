@@ -90,7 +90,16 @@ export interface ViewSnapshot {
    * in the table is live-patched. See RelatedPanel.tsx's `revision`
    * prop, which is fed this instead of the table-wide `revision`. */
   selectedRevision: number;
+  /** True while selectAll() waits for the background fill -- so a
+   * Ctrl/Cmd+A on a large list that's still loading shows progress
+   * (loadedCount of totalCount) instead of appearing to do nothing. */
+  selectingAll: boolean;
 }
+
+/** Past this many selected handles, reconcileSelection() reads every
+ * handle's position in one pass instead of two queries per handle -- see
+ * indexOfSelected(). */
+const SELECTION_INDEX_LOOKUP_LIMIT = 20;
 
 const EMPTY_SNAPSHOT_BASE = {
   loadedCount: 0,
@@ -103,6 +112,7 @@ const EMPTY_SNAPSHOT_BASE = {
   selectedIndex: null,
   selectedHandle: null,
   selectedHandles: [] as string[],
+  selectingAll: false,
   selectedIndices: [] as number[],
   selectionIsDefault: false,
   selectedRevision: 0,
@@ -145,6 +155,7 @@ export class ViewStore {
   private rangeAnchorIndex: number | null = null;
   private selectionIsDefault = false;
   private selectedRevision = 0;
+  private selectingAll = false;
   /** Whatever was selected right before the currently-active filter
    * started (captured in runQuery() on the null -> non-null whereExpr
    * transition) -- clearFilter() falls back to this when the selection it
@@ -206,6 +217,7 @@ export class ViewStore {
       selectedIndices: this.selectedIndices,
       selectionIsDefault: this.selectionIsDefault,
       selectedRevision: this.selectedRevision,
+      selectingAll: this.selectingAll,
     };
     for (const listener of this.listeners) listener();
   }
@@ -260,39 +272,77 @@ export class ViewStore {
   /** Shift+click: replaces the selection with the contiguous range between
    * `rangeAnchorIndex` (wherever the last plain or ctrl/cmd+click landed --
    * see its own doc comment) and `index`, inclusive of both ends, same as
-   * a file browser's shift+click. Capped at `maxCount` rows -- deliberately
-   * a no-op (selection left exactly as it was) rather than clamping to a
-   * partial range when the span is larger, so a shift+click on a
-   * hundred-thousand-row view can't silently kick off a huge fetch; every
-   * caller of `selectRange` owns picking that cap; ViewStore itself has no
-   * opinion on what's "too many". Bails the same way (no-op) if any row in
-   * the range isn't in the local cache yet -- unlike select()/toggleSelect()
-   * this never falls back to a server round trip (findGlobalIndex), so a
-   * range reaching past what's loaded so far just can't be resolved yet. */
-  selectRange(index: number, maxCount: number): void {
+   * a file browser's shift+click. Any length: the whole range is read from
+   * the local cache in one query, never fetched. A clicked row is always
+   * already loaded, and the background fill loads from the top down, so
+   * every row between anchor and click is too; the bail when the range
+   * comes back short is only defensive (a range reaching past what's
+   * loaded can't be resolved, so the selection is left as it was). */
+  selectRange(index: number): void {
     if (!this.db) return;
     const anchor = this.rangeAnchorIndex ?? index;
     const lo = Math.min(anchor, index);
     const hi = Math.max(anchor, index);
-    if (hi - lo + 1 > maxCount) return;
-    const handles: string[] = [];
-    const indices: number[] = [];
-    for (let i = lo; i <= hi; i++) {
-      const h = this.getHandleAt(i);
-      if (h === null) return;
-      handles.push(h);
-      indices.push(i);
-    }
+    const handles = this.getHandlesInRange(lo, hi - lo + 1);
+    if (handles.length !== hi - lo + 1) return;
     this.selectedHandles = handles;
-    this.selectedIndices = indices;
+    this.selectedIndices = handles.map((_, i) => lo + i);
     // The just-clicked endpoint, not necessarily the last array element
     // (that's only true when extending downward) -- see this method's own
     // doc comment on rangeAnchorIndex staying put across repeated
     // shift+clicks, which the anchor-vs-index direction can flip.
-    this.selectedHandle = this.getHandleAt(index);
+    this.selectedHandle = handles[index - lo];
     this.selectedIndex = index;
     this.selectionIsDefault = false;
     this.emit();
+  }
+
+  /** Ctrl/Cmd+A: selects every row of the current result -- everything the
+   * list's search/filter shows, waiting for the background fill to load
+   * the rest first. The anchor (selectedHandle/selectedIndex) stays on the
+   * row that was already selected, so the detail pane and the URL don't
+   * jump; with nothing selected it becomes the first row. Bails if the
+   * query changes while waiting (a new search or sort means a different
+   * "all"). */
+  async selectAll(): Promise<void> {
+    const generation = this.queryGeneration;
+    if (this.backgroundFillActive) {
+      this.selectingAll = true;
+      this.emit();
+    }
+    try {
+      await this.whenFullyLoaded();
+    } finally {
+      if (this.selectingAll) {
+        this.selectingAll = false;
+        this.emit();
+      }
+    }
+    if (!this.db || generation !== this.queryGeneration) return;
+    const handles = this.getHandlesInRange(0, this.loadedCount);
+    if (handles.length === 0) return;
+    this.selectedHandles = handles;
+    this.selectedIndices = handles.map((_, i) => i);
+    if (this.selectedIndex === null || this.selectedHandle === null) {
+      this.selectedIndex = 0;
+      this.selectedHandle = handles[0];
+      this.rangeAnchorIndex = 0;
+    }
+    this.selectionIsDefault = false;
+    this.emit();
+  }
+
+  /** `count` handles from local index `start` on, in display order -- one
+   * query for any range length. LIMIT/OFFSET over `ORDER BY rowid`, same as
+   * getHandleAt(), not `rowid BETWEEN`: rowids keep display order but not
+   * necessarily contiguity. */
+  private getHandlesInRange(start: number, count: number): string[] {
+    if (!this.db || count <= 0) return [];
+    const res = this.db.exec(
+      `SELECT handle FROM ${this.view.key} ORDER BY rowid LIMIT ? OFFSET ?;`,
+      [count, start]
+    );
+    return (res[0]?.values ?? []).map((row) => row[0] as string);
   }
 
   /** Bumps selectedRevision (the same signal applyLiveChange() sends a
@@ -1464,6 +1514,22 @@ export class ViewStore {
    * correct not just when `handle`'s own rowid has moved but also when an
    * unrelated row's INSERT/DELETE/reposition has shifted everything after
    * it by one. */
+  /** reconcileSelection()'s per-handle index lookup. Two queries per
+   * handle (getIndexForHandle()) is fine for a few selected rows but not
+   * for thousands, re-run on every live change -- past a handful, one pass
+   * reading every handle in display order (`selectedPositions`, built
+   * lazily and dropped once the reconcile is done) answers them all. */
+  private indexOfSelected(handle: string): number | null {
+    if (this.selectedHandles.length <= SELECTION_INDEX_LOOKUP_LIMIT) return this.getIndexForHandle(handle);
+    if (!this.selectedPositions) {
+      const res = this.db?.exec(`SELECT handle FROM ${this.view.key} ORDER BY rowid;`);
+      this.selectedPositions = new Map((res?.[0]?.values ?? []).map((row, i) => [row[0] as string, i]));
+    }
+    return this.selectedPositions.get(handle) ?? null;
+  }
+
+  private selectedPositions: Map<string, number> | null = null;
+
   private getIndexForHandle(handle: string): number | null {
     if (!this.db) return null;
     const rowidRes = this.db.exec(`SELECT rowid FROM ${this.view.key} WHERE handle = ?;`, [handle]);
@@ -1490,8 +1556,9 @@ export class ViewStore {
     // anchor's, since an unrelated row's INSERT/DELETE/reposition can shift
     // every other selected row's position too.
     const survivors = this.selectedHandles
-      .map((h) => ({ h, i: this.getIndexForHandle(h) }))
+      .map((h) => ({ h, i: this.indexOfSelected(h) }))
       .filter((e): e is { h: string; i: number } => e.i !== null);
+    this.selectedPositions = null;
     this.selectedHandles = survivors.map((e) => e.h);
     this.selectedIndices = survivors.map((e) => e.i);
     const anchorVanished = this.selectedHandle !== null && !this.selectedHandles.includes(this.selectedHandle);

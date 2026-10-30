@@ -172,7 +172,7 @@ describe("fetchLatestStories", () => {
 describe("fetchHomeCounts", () => {
   it("reads counts off cacheMeta's already-memoized server state", async () => {
     vi.mocked(fetchServerState).mockResolvedValue({
-      dbName: "x", dbId: "y", grampsVersion: "6.0.8", cursor: null,
+      dbName: "x", dbId: "y", grampsVersion: "6.0.8", webApiVersion: "3.25.0", cursor: null,
       counts: { person: 4668, family: 2855 },
     });
 

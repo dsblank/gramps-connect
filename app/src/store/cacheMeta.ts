@@ -45,6 +45,9 @@ interface ServerState {
   /** The server's Gramps version (/api/metadata/'s gramps.version), "" if
    * not reported. */
   grampsVersion: string;
+  /** The server's gramps-web-api version (/api/metadata/'s
+   * gramps_webapi.version), "" if not reported. */
+  webApiVersion: string;
   /** Per-object-type row counts (/api/metadata/'s object_counts), keyed by
    * this app's own view/table keys rather than the API's plural names. */
   counts: Record<string, number>;
@@ -163,6 +166,7 @@ async function loadServerState(): Promise<ServerState> {
     dbName: String(metadata?.database?.name ?? ""),
     dbId: String(metadata?.database?.id ?? ""),
     grampsVersion: String(metadata?.gramps?.version ?? ""),
+    webApiVersion: String(metadata?.gramps_webapi?.version ?? ""),
     counts,
     cursor,
   };

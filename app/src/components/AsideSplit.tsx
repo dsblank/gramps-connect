@@ -155,6 +155,15 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
           onClickCapture={(e) => { lastClickedRef.current = e.target as HTMLElement; }}
           style={flow ? undefined : { flex: 1, minHeight: 0, overflow: "auto" }}
         >
+          {snapshot.selectingAll && (
+            // Ctrl/Cmd+A on a list still loading in the background --
+            // ViewStore.selectAll() selects once every row is in.
+            <Text size="sm" c="dimmed" px="md" pt="md">
+              {t("Selecting… %s of %s")
+                .replace("%s", snapshot.loadedCount.toLocaleString())
+                .replace("%s", snapshot.totalCount.toLocaleString())}
+            </Text>
+          )}
           {snapshot.selectedHandles.length >= 3 ? (
             <SelectionBulkView
               view={view}
