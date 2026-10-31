@@ -1,4 +1,5 @@
-import { createTheme, type MantineColorsTuple } from "@mantine/core";
+import { Avatar, createTheme, type MantineColorsTuple } from "@mantine/core";
+import avatarClasses from "./avatar.module.css";
 
 // A blue accent close to the Gramps project's own branding (the tree-icon
 // logo), used for the app bar, active nav item, links -- and, as
@@ -22,4 +23,7 @@ export const theme = createTheme({
   colors: { grampsBlue, selection },
   fontFamily: "system-ui, sans-serif",
   defaultRadius: "sm",
+  components: {
+    Avatar: Avatar.extend({ classNames: { placeholder: avatarClasses.placeholder } }),
+  },
 });

@@ -1,0 +1,16 @@
+/* Avatar initials ("PU") are centered by their line box, which reserves
+   room for descenders, so all-caps text sits visibly above center.
+   Mantine's placeholder is a flex container, and text-box trimming has no
+   effect there, so lay it out as a block instead: trim the line to cap
+   height and baseline, then push it down by half the leftover space, which
+   centers the capitals themselves. Browsers without text-box support
+   (Firefox, as of late 2026) skip the trim, so their initials sit a little
+   low instead of a little high. */
+.placeholder {
+  display: block;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
+  padding-top: calc((var(--avatar-size) - 1cap) / 2);
+}
