@@ -10,23 +10,28 @@ type Stage = "confirm" | "running" | "done" | "error";
 interface ReindexDialogProps {
   opened: boolean;
   onClose: () => void;
+  /** Start with "Full rebuild" ticked, e.g. for an index that was never
+   * built, where an incremental run would do a full one anyway. */
+  defaultFull?: boolean;
+  /** Called once the rebuild has finished successfully. */
+  onDone?: () => void;
 }
 
 /** Tools -> Rebuild search index -- POST /api/search/index/, the same
  * action gramps-web's Administration screen offers. Full-text only:
  * gramps-web-api v3.25.0 removed semantic (vector) search, so this no
  * longer offers rebuilding that index. */
-export function ReindexDialog({ opened, onClose }: ReindexDialogProps) {
+export function ReindexDialog({ opened, onClose, defaultFull = false, onDone }: ReindexDialogProps) {
   const [full, setFull] = useState(false);
   const [stage, setStage] = useState<Stage>("confirm");
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!opened) return;
-    setFull(false);
+    setFull(defaultFull);
     setStage("confirm");
     setError("");
-  }, [opened]);
+  }, [opened, defaultFull]);
 
   function handleClose() {
     if (stage === "running") return;
@@ -45,6 +50,7 @@ export function ReindexDialog({ opened, onClose }: ReindexDialogProps) {
         }
       }
       setStage("done");
+      onDone?.();
     } catch (err: any) {
       setError(err.message ?? String(err));
       setStage("error");

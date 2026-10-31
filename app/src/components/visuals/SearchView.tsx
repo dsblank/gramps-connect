@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Badge, Box, Button, CloseButton, Group, Image, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
-import { getToken } from "../../auth/auth";
+import { Alert, Badge, Box, Button, CloseButton, Group, Image, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
+import { getToken, hasPermissions } from "../../auth/auth";
 import { API_BASE } from "../../config";
 import { formatHash } from "../../hash";
 import { fetchSearch, sortByRelevance, type SearchHit } from "../../store/searchApi";
@@ -12,6 +12,8 @@ import { t } from "../../i18n/i18n";
 import { VisualFrame } from "./VisualFrame";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
 import { apiFetch } from "../../store/apiFetch";
+import { fetchMetadata } from "../../store/metadataApi";
+import { ReindexDialog } from "../ReindexDialog";
 
 // Point 5 of the "make it a Google results page" request this view was
 // redesigned for: a bounded top-N rather than an unbounded scroll -- each
@@ -83,6 +85,47 @@ function goToHit(hit: SearchHit) {
  * other view's filter box. */
 let lastSearch: { query: string; type: string | null } = { query: "", type: null };
 
+/** Whether the server's search index has been built for this tree, from
+ * /api/metadata/: "missing" when it holds nothing although the tree has
+ * records. A server without a task queue never builds it by itself (with
+ * one, fetching the metadata starts the build), and then every search
+ * finds nothing with no hint why. */
+type IndexState = "unknown" | "ok" | "missing" | "building";
+
+async function checkIndex(): Promise<IndexState> {
+  const metadata = await fetchMetadata(await getToken());
+  const indexed = metadata.search?.sifts?.count;
+  const records = Object.values(metadata.object_counts ?? {}).reduce((sum, n) => sum + (n || 0), 0);
+  if (typeof indexed !== "number" || indexed > 0 || records === 0) return "ok";
+  return metadata.search?.building ? "building" : "missing";
+}
+
+/** Shown in place of the results while the index is empty: owners and
+ * admins (TriggerReindex) get a button to build it right here, everyone
+ * else is told who can. */
+function IndexNotice({ state, onBuild }: { state: IndexState; onBuild: () => void }) {
+  if (state === "building") {
+    return (
+      <Alert color="blue" title={t("The search index is being built")} maw={520}>
+        {t("Searches will find records once it's done. Try again in a few minutes.")}
+      </Alert>
+    );
+  }
+  const canBuild = hasPermissions("TriggerReindex");
+  return (
+    <Alert color="yellow" title={t("This tree's search index hasn't been built")} maw={520}>
+      <Stack gap="sm" align="flex-start">
+        <Text size="sm">
+          {canBuild
+            ? t("Until it is, searches here find nothing. Building it can take a few minutes on a large tree.")
+            : t("Until it is, searches here find nothing. Ask the tree's owner to build it from Tools > Rebuild Search Index.")}
+        </Text>
+        {canBuild && <Button size="xs" onClick={onBuild}>{t("Build search index")}</Button>}
+      </Stack>
+    </Alert>
+  );
+}
+
 type State =
   | { status: "idle" }
   | { status: "loading"; query: string }
@@ -113,6 +156,15 @@ export function SearchView() {
   // timer to race against, just "the user submitted again before the
   // first one came back".
   const requestIdRef = useRef(0);
+  const [indexState, setIndexState] = useState<IndexState>("unknown");
+  const [reindexOpened, setReindexOpened] = useState(false);
+
+  // A failed check just leaves the notice off: the search itself still
+  // reports its own errors.
+  function refreshIndexState() {
+    checkIndex().then(setIndexState, () => setIndexState("ok"));
+  }
+  useEffect(refreshIndexState, []);
 
   // `overrides` lets a caller search with a selection that hasn't (or, for
   // the mount-restore below, never will) land in `query`/`typeFilter` state
@@ -172,8 +224,11 @@ export function SearchView() {
   const loading = state.status === "loading";
   const error = state.status === "error" ? state.message : null;
   const hits = state.status === "ready" ? state.hits : [];
+  const indexEmpty = indexState === "missing" || indexState === "building";
   const empty =
-    state.status === "idle" ? (
+    indexEmpty && hits.length === 0 ? (
+      <IndexNotice state={indexState} onBuild={() => setReindexOpened(true)} />
+    ) : state.status === "idle" ? (
       <Text size="sm" c="dimmed" ta="center">
         {t("Search across every person, family, event, place and more, then press Enter.")}
       </Text>
@@ -184,48 +239,61 @@ export function SearchView() {
     ) : undefined;
 
   return (
-    <VisualFrame
-      title={t("Search all")}
-      loading={loading}
-      error={error}
-      empty={empty}
-      scope={<TypeTabs active={typeFilter} onSelect={selectType} />}
-      toolbar={
-        <Group gap="xs" wrap="nowrap" style={{ width: "80%" }}>
-          <TextInput
-            size="sm"
-            style={{ flex: 1 }}
-            placeholder={t("Search every record in the tree…")}
-            value={query}
-            onChange={(e) => setQuery(e.currentTarget.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
-            rightSection={query ? <CloseButton size="sm" onClick={() => setQuery("")} /> : null}
-            aria-label="Search all"
-          />
-          <Button size="sm" onClick={() => runSearch()} style={{ flexShrink: 0 }}>{t("Search")}</Button>
-        </Group>
-      }
-      status={
-        state.status === "ready" && state.hits.length > 0 ? (
-          <Text size="xs" c="dimmed">
-            {state.hits.length.toLocaleString()} {t("of")} {state.total.toLocaleString()} {t("results for")} "{state.query}"
-          </Text>
-        ) : undefined
-      }
-    >
-      <Box style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {/* Offset from the left edge rather than centered -- the "Google
-            results page" ask specifically: a real Google results page sits
-            in a fixed-width column that starts well short of centered,
-            not a column centered in the viewport (which reads more like a
-            document than a list of results). */}
-        <Stack gap="xl" maw={720} ml="10%" p="md">
-          {hits.map((hit) => (
-            <SearchResultRow key={`${hit.object_type}:${hit.handle}`} hit={hit} />
-          ))}
-        </Stack>
-      </Box>
-    </VisualFrame>
+    <>
+      <VisualFrame
+        title={t("Search all")}
+        loading={loading}
+        error={error}
+        empty={empty}
+        scope={<TypeTabs active={typeFilter} onSelect={selectType} />}
+        toolbar={
+          <Group gap="xs" wrap="nowrap" style={{ width: "80%" }}>
+            <TextInput
+              size="sm"
+              style={{ flex: 1 }}
+              placeholder={t("Search every record in the tree…")}
+              value={query}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+              rightSection={query ? <CloseButton size="sm" onClick={() => setQuery("")} /> : null}
+              aria-label="Search all"
+            />
+            <Button size="sm" onClick={() => runSearch()} style={{ flexShrink: 0 }}>{t("Search")}</Button>
+          </Group>
+        }
+        status={
+          state.status === "ready" && state.hits.length > 0 ? (
+            <Text size="xs" c="dimmed">
+              {state.hits.length.toLocaleString()} {t("of")} {state.total.toLocaleString()} {t("results for")} "{state.query}"
+            </Text>
+          ) : undefined
+        }
+      >
+        <Box style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+          {/* Offset from the left edge rather than centered -- the "Google
+              results page" ask specifically: a real Google results page sits
+              in a fixed-width column that starts well short of centered,
+              not a column centered in the viewport (which reads more like a
+              document than a list of results). */}
+          <Stack gap="xl" maw={720} ml="10%" p="md">
+            {hits.map((hit) => (
+              <SearchResultRow key={`${hit.object_type}:${hit.handle}`} hit={hit} />
+            ))}
+          </Stack>
+        </Box>
+      </VisualFrame>
+      {/* Outside the frame: while the notice shows, VisualFrame renders
+          it in place of its children, which would unmount the dialog. */}
+      <ReindexDialog
+        opened={reindexOpened}
+        onClose={() => setReindexOpened(false)}
+        defaultFull
+        onDone={() => {
+          refreshIndexState();
+          if (query.trim()) runSearch();
+        }}
+      />
+    </>
   );
 }
 

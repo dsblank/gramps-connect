@@ -25,6 +25,12 @@ export interface Metadata {
   gramps_object_query_language?: { version?: string };
   locale?: { lang?: string; language?: string; description?: string };
   object_counts?: Record<string, number>;
+  /** The search index (still under the name of sifts, the library it
+   * replaced in v3.25.0): how many objects this user can find in it. 0 on
+   * a tree with records means the index hasn't been built; `building`
+   * says a build is under way (only with a task queue: fetching this
+   * metadata starts one). */
+  search?: { building?: boolean; sifts?: { count?: number } };
   server?: {
     multi_tree?: boolean;
     task_queue?: boolean;
