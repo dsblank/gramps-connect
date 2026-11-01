@@ -444,6 +444,8 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             // The same server index as Search all, listed newest change
             // first instead of by a query (ChangedView.tsx).
             { label: "Change Log", onClick: () => goTo("changed") },
+            // Records this user opened, kept in the browser (VisitedView.tsx).
+            { label: "Visited", onClick: () => goTo("visited") },
           ]}
         />
         {/* Per-tree maintenance actions, all ROLE_OWNER-level -- distinct

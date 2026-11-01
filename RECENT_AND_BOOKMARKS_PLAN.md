@@ -168,4 +168,6 @@ with the code.
 
 - Back/Forward: shipped (25af817).
 - Shared result list + Change Log: shipped.
-- Visited, Bookmarks: not started.
+- Visited: built (records only after a 1 s dwell; records fetched with
+  `GET /api/<type>/?handles=…&profile=all`, chunked at 50).
+- Bookmarks: not started.

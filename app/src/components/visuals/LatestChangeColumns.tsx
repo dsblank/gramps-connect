@@ -67,6 +67,25 @@ function ColumnLabel({ children }: { children: string }) {
   return <Text size="xs" c="dimmed" tt="uppercase" fw={600}>{children}</Text>;
 }
 
+/** One labeled date column: the date, then the time and how long ago.
+ * Shared with View > Visited's Visited / Last changed columns. */
+export function DateTimeColumn({ label, unix }: { label: string; unix: number }) {
+  const date = unix ? new Date(unix * 1000) : null;
+  return (
+    <Stack gap={2} w={170}>
+      <ColumnLabel>{label}</ColumnLabel>
+      {date && (
+        <>
+          <Text size="sm">{date.toLocaleDateString(undefined, { dateStyle: "medium" })}</Text>
+          <Text size="xs" c="dimmed">
+            {date.toLocaleTimeString(undefined, { timeStyle: "short" })} · {formatChange(unix)}
+          </Text>
+        </>
+      )}
+    </Stack>
+  );
+}
+
 /** View > Change Log's right-hand columns for one record: When (full date and
  * time, plus how long ago), Who (from the record's newest history entry),
  * and What (Added/Updated, which fields, how many changes in all). The
@@ -101,21 +120,10 @@ export function LatestChangeColumns({ hit }: { hit: SearchHit }) {
 
   const latest = loaded && typeof loaded === "object" ? loaded : null;
   const who = latest?.username ? nameFor(latest.username, latest.fullName) : null;
-  const date = changeUnix ? new Date(changeUnix * 1000) : null;
 
   return (
     <Group gap="xl" align="flex-start" wrap="nowrap" style={{ flex: "none" }}>
-      <Stack gap={2} w={170}>
-        <ColumnLabel>{t("When")}</ColumnLabel>
-        {date && (
-          <>
-            <Text size="sm">{date.toLocaleDateString(undefined, { dateStyle: "medium" })}</Text>
-            <Text size="xs" c="dimmed">
-              {date.toLocaleTimeString(undefined, { timeStyle: "short" })} · {formatChange(changeUnix)}
-            </Text>
-          </>
-        )}
-      </Stack>
+      <DateTimeColumn label={t("When")} unix={changeUnix} />
       <Stack gap={2} w={170}>
         <ColumnLabel>{t("Who")}</ColumnLabel>
         {latest ? (

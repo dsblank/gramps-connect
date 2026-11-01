@@ -3,6 +3,12 @@ import { formatHash, isStorelessKey, isVisualKey, parseHash, type VisualSubject 
 import { getViewStore } from "../store/registry";
 import { VIEWS } from "../store/views";
 import { useViewStore } from "./useViewStore";
+import { isVisitable, recordVisit } from "../store/visitedHistory";
+
+/** How long a record has to stay selected to count as a visit
+ * (View > Visited): long enough that arrowing through a list doesn't
+ * record every row it passes, short enough that a glance still counts. */
+const VISIT_DWELL_MS = 1000;
 
 /** Keeps the URL hash, the active sidebar tab, and the active view's
  * DataTable selection in sync with each other -- so the browser's native
@@ -125,6 +131,17 @@ export function useHistorySync(): {
     // leaves selectedHandle unchanged and only flips this flag -- which is
     // exactly the moment that handle has to start appearing in the hash.
   }, [visual, noStore, visualSubject, activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
+
+  // A record the user picked (a row click, Back/Forward onto it, a link
+  // to it), never a view's automatic first-row selection -- the same rule
+  // the hash itself follows above. Recorded once it has stayed selected
+  // for VISIT_DWELL_MS.
+  const visitHandle = noStore || activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle;
+  useEffect(() => {
+    if (!visitHandle || !isVisitable(activeKey)) return;
+    const timer = setTimeout(() => recordVisit(activeKey, visitHandle), VISIT_DWELL_MS);
+    return () => clearTimeout(timer);
+  }, [activeKey, visitHandle]);
 
   return { activeKey, setActiveKey, visualSubject };
 }

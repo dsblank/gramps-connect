@@ -59,7 +59,7 @@ function formatSubject(subject: VisualSubject): string {
 }
 
 /** The visual pages (View > Map, View > Timeline, View > Tree, View >
- * Search all, View > Change Log), which occupy the same slot in a route as an object type's
+ * Search all, View > Change Log, View > Visited), which occupy the same slot in a route as an object type's
  * key even though they aren't VIEWS entries: they have no table, no
  * selection and no store of their own, so there's nothing for a ViewConfig
  * to configure. Routed rather than held in component state so they behave
@@ -72,8 +72,9 @@ function formatSubject(subject: VisualSubject): string {
  * always. Search never takes a VisualSubject -- it's a query box over the
  * server's own full-text index (SearchView.tsx), not a plot of anything
  * already in the local cache; Change Log (ChangedView.tsx) is the same index
- * listed newest-change first, and takes none either. */
-export const VISUAL_KEYS = ["map", "timeline", "tree", "search", "changed"] as const;
+ * listed newest-change first, and takes none either; nor does Visited
+ * (VisitedView.tsx), the records this user opened, kept in the browser. */
+export const VISUAL_KEYS = ["map", "timeline", "tree", "search", "changed", "visited"] as const;
 export type VisualKey = (typeof VISUAL_KEYS)[number];
 
 export function isVisualKey(key: string): key is VisualKey {
