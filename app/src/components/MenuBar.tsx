@@ -30,6 +30,8 @@ import { grampletMenuGroups } from "../pyodidePoc/grampletMenu";
 import { MAX_GRAMPLET_WINDOWS, openGrampletWindow } from "../store/grampletWindows";
 import type { Gramplet } from "../pyodidePoc/types";
 import { notifications } from "@mantine/notifications";
+import { clearAllOpfs } from "../store/opfs";
+import { confirmDialog } from "../store/confirmDialog";
 
 // pyodidePoc/ pulls in prismjs/react-simple-code-editor -- lazy since a
 // session that never opens "New Gramplet…" never fetches either.
@@ -220,6 +222,23 @@ function reportMenuItems(reports: ReportSummary[], onPick: (id: string) => void)
 /** A menu item that navigates rather than opening something -- written to
  * the same location.hash channel useHistorySync listens on, so it lands in
  * browser history like any other view switch. */
+/** Tools > Update local cache: throws away this browser's copy of
+ * the tree (every view's OPFS cache, see opfs.ts) and reloads the page, so
+ * every list is fetched afresh. For when the server's data changed in a way
+ * the cache check (cacheMeta.ts) can't see -- the tree pointed at a
+ * different database, a file swapped on the server. Nothing on the server
+ * is touched, so it needs no permission. */
+async function reloadDataFromServer() {
+  const ok = await confirmDialog(
+    t("Throw away this browser's copy of the tree and download it again from the server? Nothing on the server changes. On a large tree the download takes a while."),
+    t("Update"),
+    { confirmVariant: "filled" },
+  );
+  if (!ok) return;
+  await clearAllOpfs();
+  window.location.reload();
+}
+
 function goTo(viewKey: string) {
   window.location.hash = formatHash({ viewKey, handle: null });
 }
@@ -456,10 +475,14 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
         <AppMenu
           label={t("Tools")}
           items={[
+            // Local to this browser, so offered to everyone -- unlike the
+            // server-side maintenance below, which needs owner rights.
+            { label: "Update local cache…", onClick: () => void reloadDataFromServer() },
             {
               label: "Rebuild Search Index…",
               perm: PERM_TRIGGER_REINDEX,
               onClick: () => setReindexOpened(true),
+              separatorBefore: true,
             },
             {
               label: "Check and Repair Database…",

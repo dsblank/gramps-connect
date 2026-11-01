@@ -85,11 +85,13 @@ function mockServer({
 }
 
 /** A cache database stamped with the server state currently mocked --
- * i.e. exactly what runQuery()'s persist path writes. */
+ * i.e. exactly what runQuery()'s persist path writes -- holding `rowCount`
+ * rows, as a real full load would. */
 async function cachedDb(view: ViewConfig = TAG_VIEW, rowCount = 2): Promise<Database> {
   const SQL = await getSql();
   const db = new SQL.Database();
   db.run(`CREATE TABLE ${view.key} (handle TEXT PRIMARY KEY);`);
+  for (let i = 0; i < rowCount; i++) db.run(`INSERT INTO ${view.key} (handle) VALUES (?);`, [`H${i}`]);
   writeCacheMeta(db, view, await fetchServerState(), rowCount);
   return db;
 }
@@ -184,6 +186,31 @@ describe("isCacheStale", () => {
     resetServerState();
     mockServer({ cursor: 8, changedClasses: Array(STALE_CHECK_PAGESIZE).fill("Person") });
     expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
+  });
+
+  it("rejects a cache whose rows no longer match the server's count, even with an unchanged cursor", async () => {
+    // A tree whose data was swapped underneath the history log (here: an
+    // empty tree repointed at a populated database) -- same tree id, same
+    // newest transaction id, but 0 cached rows against 13 on the server.
+    mockServer({ cursor: 7, counts: { tags: 0 } });
+    const db = await cachedDb(TAG_VIEW, 0);
+
+    resetServerState();
+    mockServer({ cursor: 7, counts: { tags: 13 } });
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: true });
+  });
+
+  it("counts the cached rows themselves, so a live-synced add doesn't read as stale", async () => {
+    // _cache_meta's rowCount is only written on a full load; a row added
+    // later by live sync is in the table but not in that number.
+    mockServer({ cursor: 7, counts: { tags: 2 } });
+    const db = await cachedDb(TAG_VIEW, 2);
+    db.run(`INSERT INTO ${TAG_VIEW.key} (handle) VALUES ('LIVE');`);
+    updateCachedCursor(db, 8);
+
+    resetServerState();
+    mockServer({ cursor: 8, counts: { tags: 3 } });
+    expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false });
   });
 
   it("falls back to row counts when the history endpoint is forbidden", async () => {

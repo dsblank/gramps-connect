@@ -345,6 +345,26 @@ export interface CacheStaleResult {
   advanceCursorTo?: number;
 }
 
+/** True when the cache's own table holds a different number of rows than
+ * the server says the tree has. Counts the rows actually in the cache
+ * rather than trusting `_cache_meta`'s rowCount, which is written on a full
+ * load only: live sync adds and deletes rows without rewriting it, so it
+ * goes stale in ordinary use. Skipped for a baseFilter view (its rows are a
+ * subset of the table, so never match the table-wide count) and whenever
+ * either number is unavailable. */
+function rowCountDisagrees(db: Database, view: ViewConfig, server: ServerState): boolean {
+  if (view.baseFilter) return false;
+  const expected = server.counts[view.table ?? view.key];
+  if (expected === undefined) return false;
+  try {
+    const res = db.exec(`SELECT COUNT(*) FROM ${view.key};`);
+    const actual = Number(res[0]?.values[0]?.[0]);
+    return Number.isFinite(actual) && actual !== expected;
+  } catch {
+    return false;
+  }
+}
+
 /** Whether `db`'s cached rows can still be trusted for `view`.
  *
  * Structured as tiers, cheapest first. The identity/schema tier is local
@@ -386,6 +406,12 @@ export async function isCacheStale(db: Database, view: ViewConfig): Promise<Cach
   // instead of invalidating every view on any change anywhere.
   if (meta.cursor !== "" && server.cursor !== null) {
     const cachedCursor = Number(meta.cursor);
+    // The history log only sees changes made through the API. Data swapped
+    // underneath it -- a tree pointed at a different database, a CLI
+    // import, a restored database file -- leaves the cursor where it was,
+    // so the row count is checked even when the cursor agrees. Free: the
+    // counts came with the same fetchServerState() call.
+    if (rowCountDisagrees(db, view, server)) return { stale: true };
     if (cachedCursor === server.cursor) return { stale: false };
     const touched = await tableTouchedSince(cachedCursor, view.table ?? view.key);
     if (touched === null) return { stale: true };
