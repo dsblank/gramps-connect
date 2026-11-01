@@ -108,7 +108,17 @@ export function useHistorySync(): {
       subject: visual ? visualSubject : null,
     });
     if (window.location.hash !== next) {
-      window.location.hash = next;
+      if (formatHash(parseHash()) === next) {
+        // Same route, only spelled differently -- most often a fresh load
+        // with no hash at all, which parses as Home. Rewrite it in place:
+        // pushing it would leave a Back step onto the unspelled URL, which
+        // just redirects here again (and wipes Forward on the way), so the
+        // header's Back button (HistoryNav.tsx) would look stuck. Same URL
+        // semantics, so no hashchange is needed or fired.
+        window.history.replaceState(window.history.state, "", next);
+      } else {
+        window.location.hash = next;
+      }
     }
     // selectionIsDefault is a dependency in its own right, not just a
     // derived read: clicking the very row that was already auto-selected

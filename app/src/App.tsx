@@ -23,6 +23,7 @@ import { HomeView } from "./components/HomeView";
 import { MenuBar } from "./components/MenuBar";
 import { UserMenu } from "./components/UserMenu";
 import { ActiveUsers } from "./components/ActiveUsers";
+import { HistoryNav } from "./components/HistoryNav";
 import { FilterBar } from "./components/FilterBar";
 import { ListHeader } from "./components/ListHeader";
 import { DataTable } from "./components/DataTable";
@@ -484,7 +485,12 @@ function AuthenticatedApp() {
             // own instead (HEADER_HEIGHT_STACKED covers both).
             <Stack gap={0} h="100%">
               <Group h={HEADER_HEIGHT} px="md" justify="space-between" wrap="nowrap">
-                {wordmark}
+                {/* Back/Forward beside the wordmark rather than on the menu
+                    row below, which scrolls sideways and could hide them. */}
+                <Group gap="sm" wrap="nowrap">
+                  {wordmark}
+                  <HistoryNav />
+                </Group>
                 <Group gap="xs" wrap="nowrap">
                   <ActiveUsers />
                   <UserMenu />
@@ -503,6 +509,7 @@ function AuthenticatedApp() {
             <Group h="100%" px="md" justify="space-between" wrap="nowrap">
               <Group gap="lg" wrap="nowrap">
                 {wordmark}
+                <HistoryNav />
                 <MenuBar draftStack={draftStack} onTreeRenamed={refreshTreeName} />
               </Group>
               <Group gap="xs" wrap="nowrap">
