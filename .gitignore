@@ -61,5 +61,11 @@ deploy/.env
 # automatically) -- not source, single source of truth is the TS file.
 tests/gql_presets/gql_presets.generated.json
 
+# deploy/loadtest: throwaway credentials, generated logins, run output
+deploy/loadtest/.env
+deploy/loadtest/trees.json
+deploy/loadtest/results/
+deploy/loadtest/venv/
+
 # Planning notes (*_PLAN.md at the repo root): local working files, never committed
 *_PLAN.md
