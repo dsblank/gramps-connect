@@ -40,7 +40,7 @@ const HINTS: Record<string, Partial<Record<VisualKey, string>>> = {
 
 // `search` has no HINTS entry on any type (see above) so its button never
 // actually renders -- this is only here to keep the Record exhaustive.
-const LABELS: Record<VisualKey, string> = { map: "Map", timeline: "Timeline", tree: "Graphs", search: "Search all", changed: "Change Log", visited: "Visited" };
+const LABELS: Record<VisualKey, string> = { map: "Map", timeline: "Timeline", tree: "Graphs", search: "Search all", changed: "Change Log", visited: "Visited", bookmarks: "Bookmarks" };
 
 /** Map/Timeline/Tree buttons on their own row directly beneath a
  * RelatedPanel's title, for the four types a visual can be scoped to

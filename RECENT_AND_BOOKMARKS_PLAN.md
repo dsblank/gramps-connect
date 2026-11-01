@@ -170,4 +170,6 @@ with the code.
 - Shared result list + Change Log: shipped.
 - Visited: built (records only after a 1 s dwell; records fetched with
   `GET /api/<type>/?handles=…&profile=all`, chunked at 50).
-- Bookmarks: not started.
+- Bookmarks: built. Star beside the title in PanelHeader (and the note
+  header); page groups by type in stored order; records that no longer
+  exist are hidden, never deleted from the shared list.

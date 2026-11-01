@@ -76,7 +76,7 @@ describe("formatHash", () => {
 
 describe("key predicates", () => {
   it("recognizes the visual keys and nothing else", () => {
-    for (const key of ["map", "timeline", "tree", "search", "changed", "visited"]) expect(isVisualKey(key)).toBe(true);
+    for (const key of ["map", "timeline", "tree", "search", "changed", "visited", "bookmarks"]) expect(isVisualKey(key)).toBe(true);
     expect(isVisualKey("place")).toBe(false);
   });
 

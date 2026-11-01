@@ -26,6 +26,7 @@ import { MediaGrampletEditButton } from "./related/MediaGrampletEditButton";
 import { MediaEditButton } from "./related/MediaEditButton";
 import { DiscussButton } from "./related/DiscussButton";
 import { EditButton } from "./related/EditButton";
+import { BookmarkStar } from "./related/BookmarkStar";
 import { EditTopicButton } from "./related/EditTopicButton";
 import { DeleteButton } from "./related/DeleteButton";
 import { HistoryButton } from "./related/HistoryButton";
@@ -299,6 +300,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
             </Text>
           </Tooltip>
           <PrivateIndicator detail={detail} />
+          <BookmarkStar type={view.key} handle={detail.handle} />
         </Group>
         {isSelf ? (
           <Box p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: "var(--mantine-radius-md)" }}>
@@ -342,6 +344,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
             {summaryLine(view.key, detail) || t(view.label)}
             {sex && SEX_SYMBOL[sex] ? ` ${SEX_SYMBOL[sex]}` : ""}
           </ClickableTitle>
+          <BookmarkStar type={view.key} handle={detail.handle} />
         </Group>
         <PrivateIndicator detail={detail} />
       </div>

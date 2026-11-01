@@ -39,10 +39,16 @@ function labelFor(objectType: string): string {
  * in dimmed text. Reuses VIEWS' own nav labels (VIEWS.find, same as
  * iconFor above) rather than labelFor's bare capitalization -- "People"
  * reads better as a tab than "Person" does. */
-export function TypeTabs({ active, onSelect }: { active: string | null; onSelect: (type: string | null) => void }) {
+export function TypeTabs({ active, onSelect, types = SEARCHABLE_TYPES }: {
+  active: string | null;
+  onSelect: (type: string | null) => void;
+  /** The tabs after "All" -- every searchable type unless a page has
+   * fewer (Bookmarks: Gramps has none for Tags). */
+  types?: readonly string[];
+}) {
   const tabs: { key: string | null; label: string }[] = [
     { key: null, label: "All" },
-    ...SEARCHABLE_TYPES.map((key) => ({ key, label: VIEWS.find((v) => v.key === key)!.label })),
+    ...types.map((key) => ({ key, label: VIEWS.find((v) => v.key === key)!.label })),
   ];
   return (
     <Group gap="lg">

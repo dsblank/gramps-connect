@@ -87,11 +87,12 @@ export function ObjectMenu({
     map: t("Show on Map"),
     timeline: t("Put on Timeline"),
     tree: t("See as Tree"),
-    // VISUAL_APPLICABLE above never lists "search", "changed" or "visited" -- these
+    // VISUAL_APPLICABLE above never lists "search", "changed", "visited" or "bookmarks" -- these
     // exist only to keep the Record exhaustive, same as VisualButtons.tsx's LABELS.
     search: t("Search all"),
     changed: t("Change Log"),
     visited: t("Visited"),
+    bookmarks: t("Bookmarks"),
   };
 
   return (

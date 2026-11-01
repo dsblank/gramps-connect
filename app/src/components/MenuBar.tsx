@@ -446,6 +446,8 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             { label: "Change Log", onClick: () => goTo("changed") },
             // Records this user opened, kept in the browser (VisitedView.tsx).
             { label: "Visited", onClick: () => goTo("visited") },
+            // The tree's shared Gramps bookmarks (BookmarksView.tsx).
+            { label: "Bookmarks", onClick: () => goTo("bookmarks") },
           ]}
         />
         {/* Per-tree maintenance actions, all ROLE_OWNER-level -- distinct
