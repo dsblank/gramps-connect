@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Checkbox, Group, Modal, Stack, Text } from "@mantine/core";
+import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
 import { deleteObject } from "../../store/objectsApi";
@@ -20,11 +20,10 @@ import { t } from "../../i18n/i18n";
  * no general "clean up now-orphaned linked items" capability to lean on
  * (the one maintenance endpoint, POST /api/trees/<id>/check/, only fixes
  * broken backlink bookkeeping and removes literally-empty records -- not
- * orphan cleanup), and computing that client-side was explicitly deferred
- * -- the confirmation dialog carries a disabled "Remove all orphaned
- * items" checkbox as a placeholder for that future work, not a working
- * option. What the server *does* do on delete (delete.py's per-type
- * delete_person/delete_event/delete_citation/...): strip the deleted
+ * orphan cleanup), and computing that client-side was deliberately left
+ * out, with no plans to add it. What the server *does* do on delete
+ * (delete.py's per-type delete_person/delete_event/delete_citation/...):
+ * strip the deleted
  * handle out of every *other* object that referenced it, so nothing is
  * left pointing at a handle that no longer exists -- and, where a
  * reference is *required* rather than optional (a Citation's
@@ -149,13 +148,6 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
             )}{" "}
             {t("This cannot be undone from here.")}
           </Text>
-          <Checkbox
-            checked={false}
-            disabled
-            label={t("Remove all orphaned items")}
-            description="Not implemented yet -- see this dialog's doc comment for why."
-            readOnly
-          />
           {error && (
             <Alert color="red" title={t("Could not delete")}>
               {error}
