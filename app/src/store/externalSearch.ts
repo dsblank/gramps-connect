@@ -20,10 +20,12 @@
 // Every URL below was checked on 2026-11-01. "Live" means the site was
 // fetched with that URL and its results reflected the query (for
 // Findmypast, its server-rendered search state listed each field). Sites
-// behind a bot wall (Cloudflare and the like) couldn't be fetched; for
-// those the URL's parameters match Gramps' WebSearch addon's own maintained
-// link lists (addons-source WebSearch/assets/csv), noted per site. When a
-// link stops working, recheck it in a browser and against those lists.
+// behind a bot wall (Cloudflare and the like) can't be fetched by a
+// script; their URLs follow Gramps' WebSearch addon's maintained link
+// lists (addons-source WebSearch/assets/csv) and were then opened by hand
+// in a browser, noted per site. When a link stops working, recheck it in
+// a browser and against those lists -- don't trust a scripted fetch of a
+// bot-walled site either way.
 //
 // The hidden-site list and custom engines are per browser (localStorage),
 // not per tree or shared, as in gramps-web.
@@ -130,7 +132,8 @@ export const BUILTIN_SITES: readonly ExternalSite[] = [
       "&birthyear={{birth_year}}&birthyearfilter=&deathyear={{death_year}}&deathyearfilter=",
   },
   {
-    // Bot wall; same parameters as the WebSearch addon's common list.
+    // Bot wall; the WebSearch addon's common-list URL, checked by hand in a
+    // browser.
     key: "billiongraves",
     name: "BillionGraves",
     access: "open",
@@ -149,7 +152,8 @@ export const BUILTIN_SITES: readonly ExternalSite[] = [
     url: "https://archive.org/search?query=%22{{name_given}}%20{{name_surname}}%22&sin=TXT",
   },
   {
-    // Bot wall; same parameters as the WebSearch addon's us/gb/fr lists.
+    // Bot wall; the WebSearch addon's us/gb/fr-list URL, checked by hand
+    // in a browser.
     // lmt=ft keeps to full-view (freely readable) volumes.
     key: "hathitrust",
     name: "HathiTrust (full text)",
@@ -190,8 +194,8 @@ export const SUGGESTED_SITES: readonly SuggestedSite[] = [
   },
   {
     // Bot wall. Trove's pre-2023 search URL, as in the WebSearch addon's au
-    // list; Trove still answers it with a redirect (checked). Family
-    // Notices are its birth, death and marriage notices.
+    // list, which Trove redirects to its current search; checked by hand in
+    // a browser. Family Notices are its birth, death and marriage notices.
     key: "troveFamilyNotices",
     name: "Trove (family notices)",
     region: "Australia",
