@@ -555,7 +555,7 @@ export function ObjectEditDialog({
           <TextInput
             key="placeNameLang"
             label={t(f.label)}
-            placeholder="e.g. en, fr, la"
+            placeholder={t("e.g. en, fr, la")}
             value={value}
             onChange={(e) => {
               const v = e.currentTarget.value;

@@ -225,7 +225,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
                 {living !== DEFAULT_LIVING && (
                   <NumberInput
                     label={t("Years after death")}
-                    description="Treat someone as living for this long after they died."
+                    description={t("Treat someone as living for this long after they died.")}
                     min={0}
                     allowDecimal={false}
                     value={yearsAfterDeath}

@@ -390,7 +390,7 @@ function OptionInput({ field, value, onChange }: OptionInputProps) {
       return (
         <TextInput
           label={field.label}
-          description="Gramps IDs, separated by spaces"
+          description={t("Gramps IDs, separated by spaces")}
           placeholder={t("I0044 I0128")}
           value={value}
           onChange={(event) => onChange(event.currentTarget.value)}

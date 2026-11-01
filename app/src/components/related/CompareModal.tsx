@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { ActionIcon, Box, Loader, Modal, Text } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
+import { t } from "../../i18n/i18n";
 
 export interface CompareImage {
   handle: string;
@@ -174,13 +175,13 @@ export function CompareModal({ opened, onClose, a, b }: {
         )}
 
         <ActionIcon
-          variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label="Close"
+          variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={t("Close")}
           style={{ position: "absolute", top: 16, right: 16, zIndex: 3 }}
         >
           ✕
         </ActionIcon>
         <ActionIcon
-          variant="filled" color="dark" size={48} radius="xl" onClick={() => setSwapped((s) => !s)} aria-label="Swap"
+          variant="filled" color="dark" size={48} radius="xl" onClick={() => setSwapped((s) => !s)} aria-label={t("Swap")}
           style={{ position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 3 }}
         >
           ⇄

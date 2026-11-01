@@ -47,10 +47,9 @@ export function SearchHelpDialog({
       <Stack gap="lg">
         <Stack gap="xs">
           <Text size="sm">
-            A search says what has to be true about a record for it to be listed. Type it
-            in the search box and press Enter; the box in this list searches{" "}
-            <Code>{help.typeName}</Code> records, so you don't name the kind of record
-            yourself, only the condition.
+            {t("A search says what has to be true about a record for it to be listed. Type it in the search box and press Enter; the box in this list searches")}{" "}
+            <Code>{help.typeName}</Code>{" "}
+            {t("records, so you don't name the kind of record yourself, only the condition.")}
           </Text>
           {help.scopeNote && (
             <Text size="sm" c="dimmed">{help.scopeNote}</Text>
@@ -105,11 +104,13 @@ export function SearchHelpDialog({
         {help.collections && (
           <Section title={t("Testing lists of related records")}>
             <Text size="sm">
-              These reach any number of records rather than exactly one, so instead of a
-              dot they take <Code>any(x.field == ... for x in list)</Code> — true when at
-              least one of them matches — or <Code>len([x for x in list if ...])</Code>,
-              which gives a number to compare. The condition can be left out entirely:{" "}
-              <Code>any(n for n in notes)</Code> just asks whether there are any.
+              {t("These reach any number of records rather than exactly one, so instead of a dot they take")}{" "}
+              <Code>any(x.field == ... for x in list)</Code>{" "}
+              {t("— true when at least one of them matches — or")}{" "}
+              <Code>len([x for x in list if ...])</Code>
+              {t(", which gives a number to compare. The condition can be left out entirely:")}{" "}
+              <Code>any(n for n in notes)</Code>{" "}
+              {t("just asks whether there are any.")}
             </Text>
             <EntryTable entries={help.collections} />
           </Section>

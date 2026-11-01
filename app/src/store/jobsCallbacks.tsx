@@ -9,6 +9,7 @@ import { formatHash } from "../hash";
 import type { JobsPollCallbacks } from "./jobsPoll";
 import type { JobKind } from "./jobsPromote";
 import { notifyBrowser } from "./browserNotifications";
+import { t } from "../i18n/i18n";
 
 /** Acknowledges a job the user just asked for. In-app only, deliberately:
  * unlike the finished/failed toasts below, the user is right here looking
@@ -66,7 +67,7 @@ export const jobsPollCallbacks: JobsPollCallbacks = {
         messages.length > 0 ? (
           <>
             <div>{message}</div>
-            <div>Some data couldn't be exported:</div>
+            <div>{t("Some data couldn't be exported:")}</div>
             <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
               {messages.map((m, i) => <li key={i}>{m}</li>)}
             </ul>

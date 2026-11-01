@@ -60,23 +60,21 @@ export function GoqlSyntaxReference() {
 
       <Section title={t("Things worth knowing")}>
         <Text size="sm">
-          <b>Dates are compared through <Code>sortval</Code>.</b> That is the date's
-          position on the calendar and nothing else — a date recorded as "before 1968"
-          has the same <Code>sortval</Code> as a plain "Jan 1, 1968", so a comparison
-          can't tell them apart. If the distinction matters, check{" "}
-          <Code>date.modifier</Code> as well.
+          <b>{t("Dates are compared through")} <Code>sortval</Code>.</b>{" "}
+          {t("That is the date's position on the calendar and nothing else — a date recorded as \"before 1968\" has the same")}{" "}
+          <Code>sortval</Code>{" "}
+          {t("as a plain \"Jan 1, 1968\", so a comparison can't tell them apart. If the distinction matters, check")}{" "}
+          <Code>date.modifier</Code> {t("as well.")}
         </Text>
         <Text size="sm">
-          <b>{t("Missing values never match.")}</b> A condition about something that was never
-          recorded is neither true nor false, and such a record stays out of the results
-          either way — even under <Code>not</Code>. To find records where something is
-          missing, ask for it directly with <Code>is None</Code>.
+          <b>{t("Missing values never match.")}</b>{" "}
+          {t("A condition about something that was never recorded is neither true nor false, and such a record stays out of the results either way — even under")}{" "}
+          <Code>not</Code>.{" "}
+          {t("To find records where something is missing, ask for it directly with")} <Code>is None</Code>.
         </Text>
         <Text size="sm">
-          <b>{t("Nothing else is accepted.")}</b> This is a small, fixed set of building blocks
-          rather than a programming language: anything outside it is refused with an
-          error rather than guessed at, so a search that runs is a search that means
-          what it says.
+          <b>{t("Nothing else is accepted.")}</b>{" "}
+          {t("This is a small, fixed set of building blocks rather than a programming language: anything outside it is refused with an error rather than guessed at, so a search that runs is a search that means what it says.")}
         </Text>
       </Section>
     </>

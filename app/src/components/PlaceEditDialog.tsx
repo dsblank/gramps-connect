@@ -93,7 +93,7 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
         />
         <TextInput
           label={t("Language")}
-          placeholder="e.g. en, fr, la"
+          placeholder={t("e.g. en, fr, la")}
           value={(name.lang as string | undefined) ?? ""}
           onChange={(e) => onChange({ name: { _class: "PlaceName", ...name, lang: e.currentTarget.value } })}
         />

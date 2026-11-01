@@ -33,14 +33,14 @@ async function copySessionKey() {
     // plain-http deployment there's nothing to fall back to.
     notifications.show({
       color: "red",
-      title: "Couldn't copy API key",
-      message: "The clipboard is unavailable in this browser context.",
+      title: t("Couldn't copy API key"),
+      message: t("The clipboard is unavailable in this browser context."),
     });
     return;
   }
   notifications.show({
     color: "yellow",
-    title: "API key copied",
+    title: t("API key copied"),
     message:
       "Set it as GRAMPS_WEB_API_KEY. It grants full access to your account " +
       "and never expires -- treat it like a password. Only changing your " +

@@ -159,7 +159,7 @@ function NativeDatePickerButton({
           size="lg"
           disabled={!enabled}
           onClick={() => pickerRef.current?.showPicker()}
-          aria-label="Pick a date"
+          aria-label={t("Pick a date")}
         >
           <CalendarIcon />
         </ActionIcon>

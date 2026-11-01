@@ -82,14 +82,14 @@ export function AttributeListField({ items, onChange }: AttributeListFieldProps)
         <Group gap="xs" wrap="nowrap">
           <TextInput
             placeholder={TYPE_HINT}
-            aria-label="Attribute type"
+            aria-label={t("Attribute type")}
             value={attr.type ?? ""}
             onChange={(e) => onPatch({ type: e.currentTarget.value })}
             style={{ flex: 1 }}
           />
           <TextInput
             placeholder={t("Value")}
-            aria-label="Attribute value"
+            aria-label={t("Attribute value")}
             value={attr.value ?? ""}
             onChange={(e) => onPatch({ value: e.currentTarget.value })}
             style={{ flex: 1 }}
@@ -221,21 +221,21 @@ export function UrlListField({ items, onChange }: UrlListFieldProps) {
         <Stack gap="xs">
           <TextInput
             placeholder={t("URL")}
-            aria-label="Url path"
+            aria-label={t("Url path")}
             value={url.path ?? ""}
             onChange={(e) => onPatch({ path: e.currentTarget.value })}
           />
           <Group gap="xs" wrap="nowrap">
             <TextInput
               placeholder={t("Description")}
-              aria-label="Url description"
+              aria-label={t("Url description")}
               value={url.desc ?? ""}
               onChange={(e) => onPatch({ desc: e.currentTarget.value })}
               style={{ flex: 1 }}
             />
             <Autocomplete
               placeholder={TYPE_HINT}
-              aria-label="Url type"
+              aria-label={t("Url type")}
               data={URL_TYPE_OPTIONS}
               value={url.type ?? ""}
               onChange={(next) => onPatch({ type: next })}

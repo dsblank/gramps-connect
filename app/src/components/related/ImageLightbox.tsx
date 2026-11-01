@@ -7,6 +7,7 @@ import { fetchObjectExtended } from "../../store/objectDetail";
 import { MEDIA_VIEW } from "../../store/views";
 import { formatHash } from "../../hash";
 import { personName, summaryLine } from "./summary";
+import { t } from "../../i18n/i18n";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
@@ -417,7 +418,7 @@ export function ImageLightbox({ opened, onClose, handle }: {
         )}
 
         <ActionIcon
-          variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label="Close"
+          variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={t("Close")}
           // Stops the pointerdown here, same as the region boxes above --
           // otherwise it bubbles to the frame's onPointerDown, which
           // setPointerCapture()s itself for this pointerId, and a captured

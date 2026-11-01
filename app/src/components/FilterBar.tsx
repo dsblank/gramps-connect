@@ -196,7 +196,7 @@ export function FilterBar({ view }: FilterBarProps) {
           <Tooltip label={t("Use Gramps Object Query Language")} withArrow>
             <Checkbox
               size="sm"
-              aria-label="Use Gramps Object Query Language"
+              aria-label={t("Use Gramps Object Query Language")}
               checked={useGoql}
               disabled={applying}
               onChange={(e) => {

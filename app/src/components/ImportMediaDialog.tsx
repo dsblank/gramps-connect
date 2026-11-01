@@ -146,10 +146,9 @@ export function ImportMediaDialog({ opened, onClose }: ImportMediaDialogProps) {
             {missingMedia.items.length > 0 && (
               <>
                 <Text size="sm" c="dimmed">
-                  Expected paths for objects still missing a file -- compare against the zip's
-                  folder structure
+                  {t("Expected paths for objects still missing a file -- compare against the zip's folder structure")}
                   {missingMedia.total > missingMedia.items.length &&
-                    ` (showing first ${missingMedia.items.length} of ${missingMedia.total})`}
+                    ` (${t("showing first")} ${missingMedia.items.length} ${t("of")} ${missingMedia.total})`}
                   :
                 </Text>
                 <ScrollArea.Autosize mah={200} type="auto">

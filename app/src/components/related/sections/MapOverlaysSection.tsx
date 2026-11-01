@@ -77,7 +77,7 @@ export function MapOverlaysSection({ detail, onNavigate, onRefetch }: SectionPro
   async function uploadMapFiles(files: File[]) {
     const result = await addMapFilesToPlace(detail.handle, files);
     for (const { name, message } of result.failed) {
-      notifications.show({ color: "red", title: "Map file upload failed", message: `${name}: ${message}` });
+      notifications.show({ color: "red", title: t("Map file upload failed"), message: `${name}: ${message}` });
     }
     if (result.empty.length > 0) {
       notifications.show({

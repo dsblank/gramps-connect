@@ -11,7 +11,7 @@ function PrivateBadge({ refMeta }: { refMeta?: RefMeta }) {
   if (!refMeta?.private) return null;
   return (
     <Tooltip label={t("Private")} withArrow>
-      <Text component="span" size="sm" aria-label="Private">🔒</Text>
+      <Text component="span" size="sm" aria-label={t("Private")}>🔒</Text>
     </Tooltip>
   );
 }

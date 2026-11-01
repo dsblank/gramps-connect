@@ -25,6 +25,7 @@ import { OBJECT_TYPES, OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import type { Gramplet, GrampletOutputResponse, PyodideWorkerResponse } from "./types";
 import { answerTokenRequest } from "./workerToken";
 import classes from "./PyodidePocPanel.module.css";
+import { t } from "../i18n/i18n";
 
 // Pulls in prismjs/react-simple-code-editor -- lazy for the same reason
 // MenuBar.tsx's own "Add Gramplet…" import is, so a session that never
@@ -702,7 +703,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
             {collapsed ? "▴" : "▾"}
           </Text>
           <Text size="xs" c="dimmed" fw={600}>
-            View Gramplets
+            {t("View Gramplets")}
           </Text>
         </Group>
       </UnstyledButton>
@@ -726,8 +727,8 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
           )}
           {listStatus === "error" && (
             <Box px="sm" pt="xs">
-              <Alert color="red" title="Couldn't load View Gramplets">
-                Check the console for details.
+              <Alert color="red" title={t("Couldn't load View Gramplets")}>
+                {t("Check the console for details.")}
               </Alert>
             </Box>
           )}
@@ -765,7 +766,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                             <CircleGlyphButton
                               component="span"
                               glyph="−"
-                              label="Remove from view"
+                              label={t("Remove from view")}
                               size={14}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -781,11 +782,11 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                   </Tabs.List>
                   <Menu position="bottom-end" withinPortal>
                     <Menu.Target>
-                      <CircleGlyphButton glyph="+" label="Add a View Gramplet" onClick={() => {}} />
+                      <CircleGlyphButton glyph="+" label={t("Add a View Gramplet")} onClick={() => {}} />
                     </Menu.Target>
                     <Menu.Dropdown>
                       {canAuthor && (
-                        <Menu.Item onClick={() => setCreatingNew(true)}>Create new View Gramplet</Menu.Item>
+                        <Menu.Item onClick={() => setCreatingNew(true)}>{t("Create new View Gramplet")}</Menu.Item>
                       )}
                       {availableGramplets.length > 0 && (
                         <>
@@ -833,8 +834,8 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                       color="gray.6"
                       size={32}
                       radius="xl"
-                      aria-label="Expand"
-                      title="Expand"
+                      aria-label={t("Expand")}
+                      title={t("Expand")}
                       onClick={() => setResultExpanded(true)}
                       className={classes.expandButton}
                       // Solid + round, not the subtle default -- this
@@ -920,8 +921,8 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
                 color="dark"
                 size={32}
                 radius="xl"
-                aria-label="Close"
-                title="Close"
+                aria-label={t("Close")}
+                title={t("Close")}
                 onClick={() => setResultExpanded(false)}
                 style={{ position: "absolute", top: 18, right: 18, zIndex: 1, opacity: 0.85 }}
               >

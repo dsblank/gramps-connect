@@ -156,7 +156,7 @@ export function SearchView() {
               onChange={(e) => setQuery(e.currentTarget.value)}
               onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
               rightSection={query ? <CloseButton size="sm" onClick={() => setQuery("")} /> : null}
-              aria-label="Search all"
+              aria-label={t("Search all")}
             />
             <Button size="sm" onClick={() => runSearch()} style={{ flexShrink: 0 }}>{t("Search")}</Button>
           </Group>

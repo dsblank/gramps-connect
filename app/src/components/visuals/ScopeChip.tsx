@@ -90,7 +90,7 @@ export function ScopeChip({
                 a real link means middle-click and copy-link behave. */}
             <a
               href={formatHash({ viewKey: visual })}
-              aria-label="Show the whole tree"
+              aria-label={t("Show the whole tree")}
               style={{ color: "inherit", textDecoration: "none", paddingLeft: 4 }}
             >
               ✕

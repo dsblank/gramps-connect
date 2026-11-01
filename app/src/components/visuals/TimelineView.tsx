@@ -219,7 +219,7 @@ export function TimelineView({ subject }: { subject: VisualSubject | null }) {
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
             rightSection={search ? <CloseButton size="sm" onClick={() => setSearch("")} /> : null}
-            aria-label="Filter events"
+            aria-label={t("Filter events")}
           />
           <Legend counts={counts} hidden={hidden} onToggle={toggle} />
         </Group>
@@ -290,7 +290,7 @@ function EventCard({ event, onOpen, onClose }: EventCardProps) {
     >
       <Group justify="space-between" wrap="nowrap" gap="xs" mb={4}>
         <Text size="sm" fw={600} lineClamp={2}>{event.type || "Event"}</Text>
-        <CloseButton size="sm" onClick={onClose} aria-label="Close event details" />
+        <CloseButton size="sm" onClick={onClose} aria-label={t("Close event details")} />
       </Group>
       <Group gap="xs" mb="xs">
         {event.grampsId && <Badge size="xs" variant="light" color="gray">{event.grampsId}</Badge>}
@@ -327,7 +327,7 @@ function Legend({ counts, hidden, onToggle }: LegendProps) {
   const dark = useComputedColorScheme("light") === "dark";
   const colors = readVisualColors();
   return (
-    <Group gap="xs" role="group" aria-label="Event categories">
+    <Group gap="xs" role="group" aria-label={t("Event categories")}>
       {CATEGORIES.map((category) => {
         const style = dotStyle(category.key, dark, colors.muted);
         const off = hidden.has(category.key);

@@ -422,7 +422,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
             rightSection={search ? <CloseButton size="sm" onClick={() => setSearch("")} /> : null}
-            aria-label="Find a place"
+            aria-label={t("Find a place")}
           />
           <Group gap="sm" wrap="nowrap" style={{ minWidth: 320, flex: 1, maxWidth: 520 }}>
             <Switch
@@ -446,7 +446,7 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
                 { value: yearBounds[0], label: String(yearBounds[0]) },
                 { value: yearBounds[1], label: String(yearBounds[1]) },
               ]}
-              aria-label="Limit to places with events in these years"
+              aria-label={t("Limit to places with events in these years")}
             />
           </Group>
           <Button size="xs" variant="default" onClick={() => setFitRequest((n) => n + 1)}>
@@ -582,7 +582,7 @@ function PlaceCard({ place, events, contributor, onOpen, onClose }: PlaceCardPro
     >
       <Group justify="space-between" wrap="nowrap" gap="xs" mb={4}>
         <Text size="sm" fw={600} lineClamp={2}>{place.title || "(untitled place)"}</Text>
-        <CloseButton size="sm" onClick={onClose} aria-label="Close place details" />
+        <CloseButton size="sm" onClick={onClose} aria-label={t("Close place details")} />
       </Group>
       <Group gap="xs" mb="xs">
         <Badge size="xs" variant="light" color="gray">{place.grampsId}</Badge>

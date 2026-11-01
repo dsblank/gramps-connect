@@ -100,21 +100,21 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
                 <Group gap="xs" wrap="nowrap">
                   <TextInput
                     placeholder={t("Prefix")}
-                    aria-label="Surname prefix"
+                    aria-label={t("Surname prefix")}
                     value={surname.prefix ?? ""}
                     onChange={(e) => onPatch({ prefix: e.currentTarget.value })}
                     style={{ flex: 1 }}
                   />
                   <TextInput
                     placeholder={t("Surname")}
-                    aria-label="Surname"
+                    aria-label={t("Surname")}
                     value={surname.surname ?? ""}
                     onChange={(e) => onPatch({ surname: e.currentTarget.value })}
                     style={{ flex: 2 }}
                   />
                   <TextInput
                     placeholder={t("Connector")}
-                    aria-label="Surname connector"
+                    aria-label={t("Surname connector")}
                     value={surname.connector ?? ""}
                     onChange={(e) => onPatch({ connector: e.currentTarget.value })}
                     style={{ flex: 1 }}
@@ -125,7 +125,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
                     <Text size="sm" c="dimmed">{t("Surname type:")}</Text>
                     <Select
                       placeholder={t("Origin")}
-                      aria-label="Surname origin"
+                      aria-label={t("Surname origin")}
                       data={ORIGIN_TYPE_OPTIONS.map((o) => ({ value: o, label: o || "(none)" }))}
                       value={surname.origintype ?? ""}
                       onChange={(next) => onPatch({ origintype: next ?? "" })}
@@ -197,7 +197,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
           <Stack gap="md">
             <TextInput
               label={t("Group as")}
-              description="Leave blank to group by primary surname"
+              description={t("Leave blank to group by primary surname")}
               value={(data.group_as as string | undefined) ?? ""}
               onChange={(e) => onChange({ group_as: e.currentTarget.value })}
             />

@@ -334,7 +334,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       if (!cancelled) {
         notifications.show({
           color: "red",
-          title: "Couldn't load the family group",
+          title: t("Couldn't load the family group"),
           message: err instanceof Error ? err.message : String(err),
         });
       }
@@ -450,7 +450,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       } catch (err) {
         notifications.show({
           color: "red",
-          title: "Couldn't load more of the family",
+          title: t("Couldn't load more of the family"),
           message: err instanceof Error ? err.message : String(err),
         });
       } finally {
@@ -487,7 +487,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       } catch (err) {
         notifications.show({
           color: "red",
-          title: "Couldn't load spouse(s)",
+          title: t("Couldn't load spouse(s)"),
           message: err instanceof Error ? err.message : String(err),
         });
       } finally {
@@ -556,7 +556,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         } catch (err) {
           notifications.show({
             color: "red",
-            title: "Couldn't load more of the tree",
+            title: t("Couldn't load more of the tree"),
             message: err instanceof Error ? err.message : String(err),
           });
           return; // leave it un-fetched/un-expanded -- a later reveal retries it
@@ -636,7 +636,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     } catch (err) {
       notifications.show({
         color: "red",
-        title: "Couldn't load more of the tree",
+        title: t("Couldn't load more of the tree"),
         message: err instanceof Error ? err.message : String(err),
       });
       return; // leave it un-fetched/un-expanded -- a later click retries it
@@ -1024,7 +1024,7 @@ function PersonCard({
     >
       <Group justify="space-between" wrap="nowrap" gap="xs" mb={4}>
         <Text size="sm" fw={600} lineClamp={2}>{name}</Text>
-        <CloseButton size="sm" onClick={onClose} aria-label="Close person details" />
+        <CloseButton size="sm" onClick={onClose} aria-label={t("Close person details")} />
       </Group>
       <Group gap="xs" mb="xs">
         <Badge size="xs" variant="light" color="gray">{person.gramps_id}</Badge>

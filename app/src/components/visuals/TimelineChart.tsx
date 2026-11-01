@@ -383,13 +383,13 @@ export function TimelineChart({
           same three actions as gramps-web's timeline. */}
       <Stack gap={4} style={{ position: "absolute", right: 8, bottom: AXIS_HEIGHT + 8, zIndex: 2 }}>
         <Tooltip label={t("Zoom in")} position="left" withArrow>
-          <ActionIcon variant="default" onClick={() => zoomBy(1 / BUTTON_FACTOR)} aria-label="Zoom in">+</ActionIcon>
+          <ActionIcon variant="default" onClick={() => zoomBy(1 / BUTTON_FACTOR)} aria-label={t("Zoom in")}>+</ActionIcon>
         </Tooltip>
         <Tooltip label={`Fit all (${Math.round(spanYears)} years shown)`} position="left" withArrow>
-          <ActionIcon variant="default" onClick={() => setDomain(fullDomain(allEvents))} aria-label="Fit all">⤢</ActionIcon>
+          <ActionIcon variant="default" onClick={() => setDomain(fullDomain(allEvents))} aria-label={t("Fit all")}>⤢</ActionIcon>
         </Tooltip>
         <Tooltip label={t("Zoom out")} position="left" withArrow>
-          <ActionIcon variant="default" onClick={() => zoomBy(BUTTON_FACTOR)} aria-label="Zoom out">−</ActionIcon>
+          <ActionIcon variant="default" onClick={() => zoomBy(BUTTON_FACTOR)} aria-label={t("Zoom out")}>−</ActionIcon>
         </Tooltip>
       </Stack>
     </Stack>
