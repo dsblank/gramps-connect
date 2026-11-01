@@ -8,8 +8,18 @@ vi.mock("../lifeEventDates", () => ({
   lifeEventPlace: (_obj: unknown, which: "birth" | "death") => place[which],
 }));
 
-const { BUILTIN_SITES, fillTemplate, isValidSearchUrl, loadPrefs, savePrefs, searchTermsFor, visibleSites } =
-  await import("../externalSearch");
+const {
+  BUILTIN_SITES,
+  engineFromSuggestion,
+  fillTemplate,
+  isValidSearchUrl,
+  loadPrefs,
+  savePrefs,
+  searchTermsFor,
+  SUGGESTED_SITES,
+  suggestionEngineKey,
+  visibleSites,
+} = await import("../externalSearch");
 
 beforeEach(() => localStorage.clear());
 
@@ -45,8 +55,10 @@ describe("fillTemplate", () => {
       .toBe("https://x/?q=A%26B%20%231&s=&z=");
   });
 
-  it("produces a valid URL for every built-in site", () => {
-    for (const site of BUILTIN_SITES) {
+  it("produces a valid https URL for every built-in and suggested site", () => {
+    for (const site of [...BUILTIN_SITES, ...SUGGESTED_SITES]) {
+      expect(isValidSearchUrl(site.url)).toBe(true);
+      expect(site.url.startsWith("https://")).toBe(true);
       expect(() => new URL(fillTemplate(site.url, { name_given: "Jo Ann", name_surname: "O'Neil" }))).not.toThrow();
       expect(fillTemplate(site.url, {})).not.toMatch(/\{\{/);
     }
@@ -77,5 +89,31 @@ describe("prefs", () => {
     expect(loadPrefs()).toEqual({ hidden: [], custom: [] });
     localStorage.setItem("gramps-connect_external_search", JSON.stringify({ hidden: [1, "x"], custom: [{ key: "k" }] }));
     expect(loadPrefs()).toEqual({ hidden: ["x"], custom: [] });
+  });
+});
+
+describe("sites", () => {
+  it("has unique keys across built-ins and suggestions", () => {
+    const keys = [...BUILTIN_SITES, ...SUGGESTED_SITES].map((s) => s.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("keeps gramps-web's keys for the sites both have, so hidden sites carry over", () => {
+    const keys = BUILTIN_SITES.map((s) => s.key);
+    for (const key of ["familySearch", "ancestry", "myheritage", "geneanet", "wikitree", "findagrave"]) {
+      expect(keys).toContain(key);
+    }
+  });
+});
+
+describe("suggested sites", () => {
+  it("become custom engines that keep their access level through storage", () => {
+    const site = SUGGESTED_SITES[0];
+    const engine = engineFromSuggestion(site);
+    expect(engine).toEqual({ key: suggestionEngineKey(site), name: site.name, url: site.url, access: site.access });
+    savePrefs({ hidden: [], custom: [engine, { key: "bad", name: "x", url: "https://x/", access: "free" as never }] });
+    const [kept, bad] = loadPrefs().custom;
+    expect(kept).toEqual(engine);
+    expect(bad).toEqual({ key: "bad", name: "x", url: "https://x/" });
   });
 });

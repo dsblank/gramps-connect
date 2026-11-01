@@ -15,11 +15,14 @@ import {
 } from "@mantine/core";
 import {
   BUILTIN_SITES,
+  engineFromSuggestion,
   fillTemplate,
   isValidSearchUrl,
   loadPrefs,
   savePrefs,
   searchTermsFor,
+  SUGGESTED_SITES,
+  suggestionEngineKey,
   TEMPLATE_VARS,
   visibleSites,
   type ExternalSearchPrefs,
@@ -235,6 +238,36 @@ function CustomizePanel({
             onChange={(e) => toggleSite(site.key, e.currentTarget.checked)}
           />
         ))}
+      </Stack>
+
+      <Stack gap={4}>
+        <Text size="sm" fw={500}>
+          {t("Suggested sites")}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {t("Regional sites, not listed by default. Adding one puts it with your own search engines below.")}
+        </Text>
+        {SUGGESTED_SITES.map((site) => {
+          const added = prefs.custom.some((e) => e.key === suggestionEngineKey(site));
+          return (
+            <Group key={site.key} gap="xs" wrap="nowrap">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm">{site.name}</Text>
+                <Text size="xs" c="dimmed">
+                  {t(site.region)}
+                </Text>
+              </div>
+              <Button
+                size="compact-xs"
+                variant="light"
+                disabled={added}
+                onClick={() => onChange({ ...prefs, custom: [...prefs.custom, engineFromSuggestion(site)] })}
+              >
+                {added ? t("Added") : t("Add")}
+              </Button>
+            </Group>
+          );
+        })}
       </Stack>
 
       {prefs.custom.length > 0 && (

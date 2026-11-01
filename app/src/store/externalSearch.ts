@@ -3,15 +3,27 @@
 // site's search-URL template. Nothing is fetched from those sites -- each
 // link just opens their own results page in a new tab.
 //
-// A port of gramps-web's GrampsjsFormExternalSearch.js, kept compatible on
-// purpose: the same site keys (for hidden sites) and the same {{variable}}
-// names, so a custom search URL written for Gramps Web works pasted in here
-// unchanged. gramps-web's CompGen (meta.genealogy.net, a German-societies
-// metasearch) is left out as too regional for a general list; it can be
-// added back as a custom engine. Two deliberate differences: every value is
-// URL-encoded before it goes into a template (gramps-web inserts it raw, so
-// a "&" or "#" in a name breaks the link), and the terms come from the raw
-// record rather than server-formatted profile strings (see searchTermsFor).
+// Started as a port of gramps-web's GrampsjsFormExternalSearch.js, kept
+// compatible on purpose: the same site keys (for hidden sites) and the
+// same {{variable}} names, so a custom search URL written for Gramps Web
+// works pasted in here unchanged. Two deliberate differences: every value
+// is URL-encoded before it goes into a template (gramps-web inserts it raw,
+// so a "&" or "#" in a name breaks the link), and the terms come from the
+// raw record rather than server-formatted profile strings (see
+// searchTermsFor).
+//
+// BUILTIN_SITES is for sites that cover the world, not one country;
+// regional ones go in SUGGESTED_SITES, which Customize offers as one-click
+// custom engines. That's why gramps-web's CompGen (meta.genealogy.net, a
+// German-societies metasearch) is a suggestion here, not built in.
+//
+// Every URL below was checked on 2026-11-01. "Live" means the site was
+// fetched with that URL and its results reflected the query (for
+// Findmypast, its server-rendered search state listed each field). Sites
+// behind a bot wall (Cloudflare and the like) couldn't be fetched; for
+// those the URL's parameters match Gramps' WebSearch addon's own maintained
+// link lists (addons-source WebSearch/assets/csv), noted per site. When a
+// link stops working, recheck it in a browser and against those lists.
 //
 // The hidden-site list and custom engines are per browser (localStorage),
 // not per tree or shared, as in gramps-web.
@@ -20,13 +32,14 @@ import { lifeEventPlace, lifeEventYear } from "./lifeEventDates";
 
 /** gramps-web's three access levels, shown as a badge on each site's row. */
 export type SiteAccess = "open" | "registration" | "subscription";
+const ACCESS_LEVELS: readonly SiteAccess[] = ["open", "registration", "subscription"];
 
 export interface ExternalSite {
   key: string;
   name: string;
   /** Full search URL with {{variable}} placeholders. */
   url: string;
-  /** Absent on custom engines: we can't know what a user's own site needs. */
+  /** Absent on a user's own custom engine: we can't know what it needs. */
   access?: SiteAccess;
 }
 
@@ -34,6 +47,8 @@ export interface CustomEngine {
   key: string;
   name: string;
   url: string;
+  /** Only on one added from SUGGESTED_SITES, copied from it. */
+  access?: SiteAccess;
 }
 
 export const TEMPLATE_VARS = [
@@ -48,6 +63,7 @@ export type TemplateVar = (typeof TEMPLATE_VARS)[number];
 export type SearchTerms = Record<TemplateVar, string>;
 
 export const BUILTIN_SITES: readonly ExternalSite[] = [
+  // --- Record collections ---
   {
     key: "familySearch",
     name: "FamilySearch",
@@ -73,11 +89,16 @@ export const BUILTIN_SITES: readonly ExternalSite[] = [
       "&qevents-event1=Event+et.birth+ey.{{birth_year}}+ep.{{place_name}}&qevents-any/1event_2=Event+et.death+ey.{{death_year}}&qevents=List",
   },
   {
-    key: "geneanet",
-    name: "Geneanet",
+    // Live. Years +/-2, as Findmypast's own form defaults to; an empty
+    // year is ignored rather than rejected.
+    key: "findmypast",
+    name: "Findmypast",
     access: "subscription",
-    url: "https://en.geneanet.org/fonds/individus/?size=10&nom={{name_surname}}&prenom={{name_given}}",
+    url:
+      "https://www.findmypast.com/search/results?firstname={{name_given}}&lastname={{name_surname}}" +
+      "&yearofbirth={{birth_year}}&yearofbirth_offset=2&yearofdeath={{death_year}}&yearofdeath_offset=2",
   },
+  // --- Shared family trees ---
   {
     key: "wikitree",
     name: "WikiTree",
@@ -87,12 +108,95 @@ export const BUILTIN_SITES: readonly ExternalSite[] = [
       "&MaxProfiles=500&SortOrder=Default&PageSize=10",
   },
   {
+    // Live. Searching needs no account; Geni's own profiles mostly do.
+    key: "geni",
+    name: "Geni",
+    access: "registration",
+    url: "https://www.geni.com/search?search_type=people&names={{name_given}}%20{{name_surname}}",
+  },
+  {
+    key: "geneanet",
+    name: "Geneanet",
+    access: "subscription",
+    url: "https://en.geneanet.org/fonds/individus/?size=10&nom={{name_surname}}&prenom={{name_given}}",
+  },
+  // --- Graves ---
+  {
     key: "findagrave",
     name: "Find A Grave",
     access: "open",
     url:
       "https://www.findagrave.com/memorial/search?firstname={{name_given}}&middlename={{name_middle}}&lastname={{name_surname}}" +
       "&birthyear={{birth_year}}&birthyearfilter=&deathyear={{death_year}}&deathyearfilter=",
+  },
+  {
+    // Bot wall; same parameters as the WebSearch addon's common list.
+    key: "billiongraves",
+    name: "BillionGraves",
+    access: "open",
+    url:
+      "https://billiongraves.com/search/results?given_names={{name_given}}&family_names={{name_surname}}" +
+      "&birth_year={{birth_year}}&death_year={{death_year}}",
+  },
+  // --- Books and the wider web: an exact-phrase name ---
+  {
+    // sin=TXT selects "Search text contents" (the OCR of scanned books,
+    // directories, local histories) -- read from archive.org's own search
+    // page code, which maps sin=TXT to its full-text search type.
+    key: "internetArchive",
+    name: "Internet Archive (full text)",
+    access: "open",
+    url: "https://archive.org/search?query=%22{{name_given}}%20{{name_surname}}%22&sin=TXT",
+  },
+  {
+    // Bot wall; same parameters as the WebSearch addon's us/gb/fr lists.
+    // lmt=ft keeps to full-view (freely readable) volumes.
+    key: "hathitrust",
+    name: "HathiTrust (full text)",
+    access: "open",
+    url: "https://babel.hathitrust.org/cgi/ls?q1=%22{{name_given}}%20{{name_surname}}%22&lmt=ft&a=srchls",
+  },
+  {
+    // Live. Family websites, blogs and forum posts no database indexes.
+    key: "google",
+    name: "Google",
+    access: "open",
+    url: "https://www.google.com/search?q=%22{{name_given}}%20{{name_surname}}%22%20{{birth_year}}%20genealogy",
+  },
+];
+
+/** A regional site Customize offers to add as a custom engine. `region` is
+ * shown beside it; it's a country or language name, so it's translated. */
+export interface SuggestedSite extends ExternalSite {
+  region: string;
+}
+
+export const SUGGESTED_SITES: readonly SuggestedSite[] = [
+  {
+    // Live. gramps-web's own built-in.
+    key: "compgen",
+    name: "CompGen",
+    region: "Germany",
+    access: "open",
+    url: "https://meta.genealogy.net/search?lastname={{name_surname}}&place={{place_name}}",
+  },
+  {
+    // Live. Indexes Dutch and Belgian archives (and some German ones).
+    key: "openArchives",
+    name: "Open Archives",
+    region: "Netherlands",
+    access: "open",
+    url: "https://www.openarchieven.nl/search.php?lang=en&name={{name_given}}%20{{name_surname}}",
+  },
+  {
+    // Bot wall. Trove's pre-2023 search URL, as in the WebSearch addon's au
+    // list; Trove still answers it with a redirect (checked). Family
+    // Notices are its birth, death and marriage notices.
+    key: "troveFamilyNotices",
+    name: "Trove (family notices)",
+    region: "Australia",
+    access: "open",
+    url: "https://trove.nla.gov.au/newspaper/result?q=%22{{name_given}}%20{{name_surname}}%22&l-advcategory=Family+Notices",
   },
 ];
 
@@ -160,10 +264,12 @@ export function loadPrefs(): ExternalSearchPrefs {
     return {
       hidden: Array.isArray(raw.hidden) ? raw.hidden.filter((k) => typeof k === "string") : [],
       custom: Array.isArray(raw.custom)
-        ? raw.custom.filter(
-            (e): e is CustomEngine =>
-              !!e && typeof e.key === "string" && typeof e.name === "string" && typeof e.url === "string",
-          )
+        ? raw.custom
+            .filter(
+              (e): e is CustomEngine =>
+                !!e && typeof e.key === "string" && typeof e.name === "string" && typeof e.url === "string",
+            )
+            .map(({ key, name, url, access }) => (access && ACCESS_LEVELS.includes(access) ? { key, name, url, access } : { key, name, url }))
         : [],
     };
   } catch {
@@ -182,4 +288,14 @@ export function savePrefs(prefs: ExternalSearchPrefs): void {
 /** The sites to list: built-ins not hidden, then custom engines. */
 export function visibleSites(prefs: ExternalSearchPrefs): ExternalSite[] {
   return [...BUILTIN_SITES.filter((site) => !prefs.hidden.includes(site.key)), ...prefs.custom];
+}
+
+/** A suggested site as a custom engine. Its key is the suggestion's own
+ * (prefixed), so Customize can tell it's already been added. */
+export function engineFromSuggestion(site: SuggestedSite): CustomEngine {
+  return { key: suggestionEngineKey(site), name: site.name, url: site.url, access: site.access };
+}
+
+export function suggestionEngineKey(site: SuggestedSite): string {
+  return `suggested_${site.key}`;
 }
