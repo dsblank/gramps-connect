@@ -4,20 +4,21 @@
 // link just opens their own results page in a new tab.
 //
 // A port of gramps-web's GrampsjsFormExternalSearch.js, kept compatible on
-// purpose: the same seven sites, the same site keys (for hidden sites) and
-// the same {{variable}} names, so a custom search URL written for Gramps Web
-// works pasted in here unchanged. Two deliberate differences: every value
-// is URL-encoded before it goes into a template (gramps-web inserts it raw,
-// so a "&" or "#" in a name breaks the link), and the terms come from the
-// raw record rather than server-formatted profile strings (see
-// searchTermsFor).
+// purpose: the same site keys (for hidden sites) and the same {{variable}}
+// names, so a custom search URL written for Gramps Web works pasted in here
+// unchanged. gramps-web's CompGen (meta.genealogy.net, a German-societies
+// metasearch) is left out as too regional for a general list; it can be
+// added back as a custom engine. Two deliberate differences: every value is
+// URL-encoded before it goes into a template (gramps-web inserts it raw, so
+// a "&" or "#" in a name breaks the link), and the terms come from the raw
+// record rather than server-formatted profile strings (see searchTermsFor).
 //
 // The hidden-site list and custom engines are per browser (localStorage),
 // not per tree or shared, as in gramps-web.
 import type { ObjectDetail } from "./objectDetail";
 import { lifeEventPlace, lifeEventYear } from "./lifeEventDates";
 
-/** gramps-web's three access levels, shown under each site's name. */
+/** gramps-web's three access levels, shown as a badge on each site's row. */
 export type SiteAccess = "open" | "registration" | "subscription";
 
 export interface ExternalSite {
@@ -47,12 +48,6 @@ export type TemplateVar = (typeof TEMPLATE_VARS)[number];
 export type SearchTerms = Record<TemplateVar, string>;
 
 export const BUILTIN_SITES: readonly ExternalSite[] = [
-  {
-    key: "compgen",
-    name: "CompGen",
-    access: "open",
-    url: "https://meta.genealogy.net/search?lastname={{name_surname}}&place={{place_name}}",
-  },
   {
     key: "familySearch",
     name: "FamilySearch",
