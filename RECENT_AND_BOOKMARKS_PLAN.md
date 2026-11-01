@@ -160,3 +160,12 @@ with the code.
 3. **Visited:** only records opened from a table.
 4. **Back/Forward buttons** added to the scope (section 4): app-wide
    history, in the app header on every page.
+5. **"Changed" is labeled "Change Log"** in the menu and page title
+   (route stays `#/changed`, component `ChangedView.tsx`). Each row also
+   shows When / Who / What columns from the record's newest history entry.
+
+## Status
+
+- Back/Forward: shipped (25af817).
+- Shared result list + Change Log: shipped.
+- Visited, Bookmarks: not started.

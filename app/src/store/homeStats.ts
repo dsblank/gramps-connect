@@ -72,6 +72,12 @@ const RECENT_LABEL: Record<string, (obj: RawObject) => string> = {
  * no where_expr to push it into. */
 const RECENT_EXCLUDED_NOTE_TYPES = new Set(["topic", "story", "topic-message"]);
 
+/** True for a hit Recently Changed lists leave out -- see
+ * RECENT_EXCLUDED_NOTE_TYPES. Shared with View > Change Log (ChangedView.tsx). */
+export function isExcludedFromRecent(objectType: string, obj: Record<string, unknown> | undefined): boolean {
+  return objectType === "note" && RECENT_EXCLUDED_NOTE_TYPES.has(String(obj?.type));
+}
+
 /** How many search hits to ask for per wanted Recently Changed row, to
  * cover the excluded note types above. Before gramps-web-api v3.23.0 it
  * also covered short pages for a user without PERM_VIEW_PRIVATE (private
@@ -140,7 +146,7 @@ export async function fetchRecentlyChanged(token: string, limit: number): Promis
   }
   return hits
     .filter((hit) => viewKeys.has(hit.object_type) && hit.object)
-    .filter((hit) => !(hit.object_type === "note" && RECENT_EXCLUDED_NOTE_TYPES.has(String(hit.object!.type))))
+    .filter((hit) => !isExcludedFromRecent(hit.object_type, hit.object))
     .map((hit) => {
       const obj = hit.object!;
       const build = RECENT_LABEL[hit.object_type];

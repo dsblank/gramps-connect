@@ -54,7 +54,7 @@ export interface ObjectChange {
   timestamp: number;
   /** Resolved server-side (fix_transaction_user); null/absent for a
    * system-driven change with no acting user. */
-  connection?: { user?: { name: string | null } | null } | null;
+  connection?: { user?: { name: string | null; full_name?: string | null } | null } | null;
   /** Only present when requested via old=true/new=true. */
   old_data?: Record<string, unknown> | null;
   new_data?: Record<string, unknown> | null;

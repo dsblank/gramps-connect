@@ -33,6 +33,7 @@ import { MapView } from "./components/visuals/MapView";
 import { TimelineView } from "./components/visuals/TimelineView";
 import { TreeView } from "./components/visuals/TreeView";
 import { SearchView } from "./components/visuals/SearchView";
+import { ChangedView } from "./components/visuals/ChangedView";
 import { useHistorySync } from "./hooks/useHistorySync";
 import { useLiveSync } from "./hooks/useLiveSync";
 import type { TreeChangeNotification } from "./store/historyPoll";
@@ -540,6 +541,9 @@ function AuthenticatedApp() {
           )}
           {visualKey === "search" && (
             <Box style={{ height: visualHeight }}><SearchView /></Box>
+          )}
+          {visualKey === "changed" && (
+            <Box style={{ height: visualHeight }}><ChangedView /></Box>
           )}
           {/* Unlike the two above, not height-bounded to visualHeight: a
               dashboard's content isn't a canvas that measures itself against

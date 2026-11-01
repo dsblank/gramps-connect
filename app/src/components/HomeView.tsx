@@ -185,6 +185,9 @@ export function HomeView() {
                   })}
                 </Stack>
               )}
+              <Anchor component="a" href={formatHash({ viewKey: "changed" })} mt="sm" display="inline-block">
+                {t("See all changes")}
+              </Anchor>
             </Panel>
           </Stack>
 

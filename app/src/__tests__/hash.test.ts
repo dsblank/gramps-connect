@@ -75,10 +75,14 @@ describe("formatHash", () => {
 });
 
 describe("key predicates", () => {
-  it("recognizes the two visual keys and nothing else", () => {
-    expect(isVisualKey("map")).toBe(true);
-    expect(isVisualKey("timeline")).toBe(true);
+  it("recognizes the visual keys and nothing else", () => {
+    for (const key of ["map", "timeline", "tree", "search", "changed"]) expect(isVisualKey(key)).toBe(true);
     expect(isVisualKey("place")).toBe(false);
+  });
+
+  it("parses #/changed as a page with no handle or subject", () => {
+    expect(parseHash("#/changed")).toEqual({ viewKey: "changed", handle: null, subject: null });
+    expect(formatHash({ viewKey: "changed" })).toBe("#/changed");
   });
 
   it("recognizes exactly the four scopable types", () => {

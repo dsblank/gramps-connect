@@ -441,6 +441,9 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             // object type at once, not the per-view local-cache search
             // boxes each table's own FilterBar already has.
             { label: "Search all", onClick: () => goTo("search"), separatorBefore: true },
+            // The same server index as Search all, listed newest change
+            // first instead of by a query (ChangedView.tsx).
+            { label: "Change Log", onClick: () => goTo("changed") },
           ]}
         />
         {/* Per-tree maintenance actions, all ROLE_OWNER-level -- distinct

@@ -54,7 +54,10 @@ export async function fetchSearch(
   page: number,
   pagesize: number,
   objectType?: string | null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  /** Only View > Change Log sends one ("-change", newest first) -- see the
+   * doc comment above for why a relevance search must leave it out. */
+  sort?: string
 ): Promise<{ hits: SearchHit[]; total: number }> {
   // Not `new URL(...)` -- API_BASE is "" in the common case (see config.ts),
   // which `new URL()` rejects as not absolute; every other fetch in this
@@ -71,6 +74,7 @@ export async function fetchSearch(
   const { lang } = getI18nSnapshot();
   if (lang.length <= 5) params.set("locale", lang);
   if (objectType) params.set("type", objectType);
+  if (sort) params.set("sort", sort);
   // No nameFormatParam(): /api/search/'s query schema has no name_format and
   // gramps-web-api rejects unknown query args with a 422, so profiles'
   // name_display come in the server's own default name format.
