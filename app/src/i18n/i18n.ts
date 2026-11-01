@@ -54,12 +54,12 @@ function writeStoredLang(lang: string) {
  * gramps-connect-specific -- no corpus has them yet, so they stay English
  * until this app gets its own Weblate component.) */
 const desktopStrings = [
-  "About", "Add", "Addresses", "Alternate names", "Associations", "Attributes", "Author",
+  "About", "Add", "Added", "Addresses", "Alternate names", "Associations", "Attributes", "Author",
   "Birth", "Birth place", "Books", "Calendar", "Call name", "Call number", "Cancel",
-  "Children", "Citations", "City", "Close", "Code Generators", "Color", "Confidence",
-  "Connector", "Continue", "Country", "County", "Date", "Death", "Death place", "Delete",
+  "Children", "Citations", "City", "Clear", "Close", "Code Generators", "Color", "Confidence",
+  "Connector", "Continue", "Country", "County", "Date", "Death", "Death place", "Delete", "Deleted",
   "Description", "Display as", "Download", "Edit", "Edit relationship", "Event", "Events",
-  "Families", "Family", "Family Trees", "Father", "Format", "Gender", "Given name", "Gramps",
+  "Families", "Family", "Family Trees", "Father", "Format", "Forward", "Gender", "Given name", "Gramps",
   "Gramps ID", "Graphical Reports", "Graphs", "Group as", "Help", "Home", "Import",
   "Import Family Tree", "Import failed", "Last changed", "Latitude", "Locality", "Longitude",
   "Map", "Media", "Message", "Mother", "Name", "Name type", "New year begins", "Nickname",
@@ -67,7 +67,7 @@ const desktopStrings = [
   "Place", "Places", "Postal code", "Prefix", "Preview", "Primary", "Private",
   "Quality", "Relationship", "Remove", "Reports", "Repositories", "Role", "Save", "Select",
   "Sort as", "Source", "Sources", "State", "Statistics", "Street", "Suffix", "Surname",
-  "Surnames", "System Information", "Tags", "Text", "Text Reports", "Timeline", "Title",
+  "Surnames", "System Information", "Tags", "Text", "Text Reports", "Timeline", "Title", "Update", "Updated",
   "Trees", "Type", "URL", "Value", "View", "Web Pages",
   "Years", "new", "to",
 ];
