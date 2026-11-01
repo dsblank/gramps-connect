@@ -3,6 +3,7 @@ import { formatHash, isSubjectKey, VISUAL_KEYS, type VisualKey } from "../../has
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
 import { ViewButton } from "./ViewButton";
+import { ExternalSearchButton } from "./ExternalSearchButton";
 
 /** What each button promises for the type it's shown on. The wording is
  * deliberately different per type: for a person or a family the visual
@@ -81,6 +82,10 @@ export function VisualButtons({ view, detail }: { view: ViewConfig; detail: Obje
           href={formatHash({ viewKey: visual, subject: { type: view.key, handle: detail.handle } })}
         />
       ))}
+      {/* Not a visual (it opens a dialog of links to other websites, not a
+          route in this app), but the same "look this person up" kind of
+          offer, so it shares the row -- see ExternalSearchButton.tsx. */}
+      {view.key === "person" && <ExternalSearchButton detail={detail} />}
     </Group>
   );
 }

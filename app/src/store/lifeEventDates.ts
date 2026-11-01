@@ -12,7 +12,7 @@
 // christening, burial, ...). When that event isn't cached (Events not
 // loaded yet, or not reached by a background fill), the server's string is
 // used as before.
-import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { Calendar, gregorianYmd, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getViewStore } from "./registry";
 import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
 
@@ -126,4 +126,21 @@ export function lifeEventPlace(obj: ObjectWithEvents | null | undefined, which: 
   if (event === null) return serverText;
   if (event === "none" || !event.place) return "";
   return displayPlaceTitle(event.place, event.date) ?? serverText;
+}
+
+/** The same event's year in the Gregorian calendar, as text ("" when
+ * there's none) -- for search terms sent to other sites (store/
+ * externalSearch.ts), which want a plain year whatever calendar the date
+ * was entered in. A non-Gregorian date is converted through its sortval
+ * (a day number); a Gregorian one, or one with no sortval, reads the year
+ * straight from dateval. When the events cache can't answer, the first
+ * 3-4 digit number in the server's formatted date stands in. */
+export function lifeEventYear(obj: ObjectWithEvents | null | undefined, which: Which): string {
+  if (!obj) return "";
+  const event = resolveEvent(obj, which);
+  if (event === null) return obj.profile?.[which]?.date?.match(/\b\d{3,4}\b/)?.[0] ?? "";
+  if (event === "none" || !event.date) return "";
+  const { dateval, calendar, sortval } = event.date;
+  const year = calendar !== Calendar.GREGORIAN && sortval ? gregorianYmd(sortval)[0] : dateval[2];
+  return year > 0 ? String(year) : "";
 }

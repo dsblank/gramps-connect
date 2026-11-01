@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DateFormat, parseDate } from "@gramps-connect/gramps-date";
+import { Calendar, DateFormat, gregorianSdn, parseDate } from "@gramps-connect/gramps-date";
 
 // event handle -> [date JSON, type JSON, place handle]
 const events = new Map<string, [string | null, string | null, string | null]>();
@@ -21,7 +21,7 @@ vi.mock("../placeIndex", async () => {
   };
 });
 
-const { lifeEventDate, lifeEventPlace } = await import("../lifeEventDates");
+const { lifeEventDate, lifeEventPlace, lifeEventYear } = await import("../lifeEventDates");
 
 function addEvent(handle: string, date: string, type: number, place: string | null = null) {
   events.set(handle, [JSON.stringify(parseDate(date)), JSON.stringify({ string: "", value: type }), place]);
@@ -70,5 +70,24 @@ describe("lifeEventDate", () => {
     addEvent("mar", "1851", 1);
     expect(lifeEventDate({ event_ref_list: [ref("eng", 8), ref("mar", 8)] }, "marriage")).toBe("1851");
     expect(lifeEventDate({ event_ref_list: [ref("eng", 8)] }, "marriage")).toBe("1850");
+  });
+});
+
+describe("lifeEventYear", () => {
+  it("reads the year from the cached event, the server text when uncached", () => {
+    addEvent("b", "1854-03-12", 12);
+    const person = { event_ref_list: [ref("b")], birth_ref_index: 0, death_ref_index: -1, profile };
+    expect(lifeEventYear(person, "birth")).toBe("1854");
+    expect(lifeEventYear(person, "death")).toBe("");
+    const uncached = { event_ref_list: [ref("missing")], birth_ref_index: 0, profile: { birth: { date: "12 March 1854" } } };
+    expect(lifeEventYear(uncached, "birth")).toBe("1854");
+  });
+
+  it("converts a non-Gregorian date to its Gregorian year", () => {
+    // 1 Tishri 5600 (Hebrew) is 9 September 1839 (Gregorian).
+    const date = { ...parseDate("1854"), calendar: Calendar.HEBREW, dateval: [1, 1, 5600, false], sortval: gregorianSdn(1839, 9, 9) };
+    events.set("h", [JSON.stringify(date), JSON.stringify({ string: "", value: 12 }), null]);
+    const person = { event_ref_list: [ref("h")], birth_ref_index: 0, profile };
+    expect(lifeEventYear(person, "birth")).toBe("1839");
   });
 });

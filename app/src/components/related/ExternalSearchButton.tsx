@@ -1,0 +1,318 @@
+import { useRef, useState } from "react";
+import {
+  Anchor,
+  Badge,
+  Button,
+  CloseButton,
+  Group,
+  Modal,
+  SimpleGrid,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  UnstyledButton,
+} from "@mantine/core";
+import {
+  BUILTIN_SITES,
+  fillTemplate,
+  isValidSearchUrl,
+  loadPrefs,
+  savePrefs,
+  searchTermsFor,
+  TEMPLATE_VARS,
+  visibleSites,
+  type ExternalSearchPrefs,
+  type ExternalSite,
+  type SearchTerms,
+  type SiteAccess,
+  type TemplateVar,
+} from "../../store/externalSearch";
+import type { ObjectDetail } from "../../store/objectDetail";
+import { t } from "../../i18n/i18n";
+import { ViewButton } from "./ViewButton";
+
+// gramps-web's own wording, so these come already translated from its
+// Weblate catalog (app/public/lang/).
+const ACCESS_LABEL: Record<SiteAccess, string> = {
+  open: "Open access",
+  registration: "Registration required",
+  subscription: "Records require additional access",
+};
+const ACCESS_COLOR: Record<SiteAccess, string> = { open: "green", registration: "blue", subscription: "gray" };
+
+const TERM_LABEL: Record<TemplateVar, string> = {
+  name_given: "Given name",
+  name_middle: "Middle name",
+  name_surname: "Surname",
+  place_name: "Place",
+  birth_year: "Birth year",
+  death_year: "Death year",
+};
+
+/** One line saying what will be searched for: "Johann Schmidt · 1832–1901
+ * · Kirchheim" -- numbers and names only, so it needs no translation. */
+function termsSummary(terms: SearchTerms): string {
+  const name = [terms.name_given, terms.name_surname].filter(Boolean).join(" ");
+  const years = terms.birth_year || terms.death_year ? `${terms.birth_year}–${terms.death_year}` : "";
+  return [name, years, terms.place_name].filter(Boolean).join(" · ");
+}
+
+/** "External Search" on a person's RelatedPanel, in VisualButtons' row
+ * beside Map/Timeline/Graphs: a dialog of links that look this person up
+ * on other genealogy websites (store/externalSearch.ts). An onClick
+ * ViewButton rather than one of VisualButtons' own route links, since it
+ * opens a dialog here instead of another view of this app.
+ *
+ * The terms are worked out once per opening and shown at the top; Edit
+ * lets them be changed for this search only (a spelling variant, dropping
+ * a wrong place) without touching the record. Customize, in the same
+ * dialog, switches built-in sites off and adds the user's own search URLs,
+ * both kept per browser. */
+export function ExternalSearchButton({ detail }: { detail: ObjectDetail }) {
+  const [open, setOpen] = useState(false);
+  const [terms, setTerms] = useState<SearchTerms | null>(null);
+  const [editingTerms, setEditingTerms] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const [prefs, setPrefs] = useState<ExternalSearchPrefs>(loadPrefs);
+
+  function openDialog() {
+    setTerms(searchTermsFor(detail));
+    setPrefs(loadPrefs());
+    setEditingTerms(false);
+    setCustomizing(false);
+    setOpen(true);
+  }
+
+  function updatePrefs(next: ExternalSearchPrefs) {
+    setPrefs(next);
+    savePrefs(next);
+  }
+
+  return (
+    <>
+      <ViewButton
+        label={t("External Search")}
+        hint={t("Search external services for matching records.")}
+        onClick={openDialog}
+      />
+      <Modal opened={open} onClose={() => setOpen(false)} title={t("External Search")} size="md">
+        {terms &&
+          (customizing ? (
+            <CustomizePanel prefs={prefs} terms={terms} onChange={updatePrefs} onDone={() => setCustomizing(false)} />
+          ) : (
+            <Stack gap="sm">
+              <Text size="sm" c="dimmed">
+                {t("Search external services for matching records.")}
+              </Text>
+              <Group gap="xs" wrap="nowrap" align="flex-start">
+                <Text size="sm" fw={500} style={{ flex: 1, minWidth: 0 }}>
+                  {termsSummary(terms) || "—"}
+                </Text>
+                <Button variant="subtle" size="compact-xs" onClick={() => setEditingTerms((v) => !v)}>
+                  {editingTerms ? t("Done") : t("Edit")}
+                </Button>
+              </Group>
+              {editingTerms && (
+                <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="xs" verticalSpacing="xs">
+                  {TEMPLATE_VARS.map((key) => (
+                    <TextInput
+                      key={key}
+                      size="xs"
+                      label={t(TERM_LABEL[key])}
+                      value={terms[key]}
+                      onChange={(e) => setTerms({ ...terms, [key]: e.currentTarget.value })}
+                    />
+                  ))}
+                </SimpleGrid>
+              )}
+              <Stack gap={2}>
+                {visibleSites(prefs).map((site) => (
+                  <SiteLink key={site.key} site={site} terms={terms} />
+                ))}
+                {visibleSites(prefs).length === 0 && (
+                  <Text size="sm" c="dimmed">
+                    {t("No sites to show.")}
+                  </Text>
+                )}
+              </Stack>
+              <Group justify="flex-end">
+                <Button variant="subtle" size="xs" onClick={() => setCustomizing(true)}>
+                  {t("Customize…")}
+                </Button>
+              </Group>
+            </Stack>
+          ))}
+      </Modal>
+    </>
+  );
+}
+
+/** A real link, so middle-click and copy-link work as on the app's other
+ * links; noreferrer so the other site isn't sent this app's URL. */
+function SiteLink({ site, terms }: { site: ExternalSite; terms: SearchTerms }) {
+  return (
+    <UnstyledButton
+      component="a"
+      href={fillTemplate(site.url, terms)}
+      target="_blank"
+      rel="noopener noreferrer"
+      p="xs"
+      style={{ borderRadius: 4 }}
+    >
+      <Group gap="sm" wrap="nowrap">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Text size="sm">{site.name}</Text>
+        </div>
+        {site.access && (
+          <Badge variant="light" size="sm" color={ACCESS_COLOR[site.access]} tt="none">
+            {t(ACCESS_LABEL[site.access])}
+          </Badge>
+        )}
+        <Text size="sm" c="dimmed" aria-hidden>
+          ↗
+        </Text>
+      </Group>
+    </UnstyledButton>
+  );
+}
+
+function newKey(): string {
+  return `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function CustomizePanel({
+  prefs,
+  terms,
+  onChange,
+  onDone,
+}: {
+  prefs: ExternalSearchPrefs;
+  terms: SearchTerms;
+  onChange: (prefs: ExternalSearchPrefs) => void;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const urlRef = useRef<HTMLInputElement>(null);
+  const urlOk = isValidSearchUrl(url);
+  const canAdd = name.trim() !== "" && urlOk;
+
+  function toggleSite(key: string, shown: boolean) {
+    const hidden = shown ? prefs.hidden.filter((k) => k !== key) : [...prefs.hidden, key];
+    onChange({ ...prefs, hidden });
+  }
+
+  /** Puts {{variable}} at the URL field's cursor, not just at the end. */
+  function insertVar(key: TemplateVar) {
+    const input = urlRef.current;
+    const token = `{{${key}}}`;
+    const start = input?.selectionStart ?? url.length;
+    const end = input?.selectionEnd ?? url.length;
+    setUrl(url.slice(0, start) + token + url.slice(end));
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(start + token.length, start + token.length);
+    });
+  }
+
+  function addEngine() {
+    if (!canAdd) return;
+    onChange({ ...prefs, custom: [...prefs.custom, { key: newKey(), name: name.trim(), url: url.trim() }] });
+    setName("");
+    setUrl("");
+  }
+
+  return (
+    <Stack gap="md">
+      <Stack gap={6}>
+        {BUILTIN_SITES.map((site) => (
+          <Switch
+            key={site.key}
+            size="sm"
+            label={site.name}
+            checked={!prefs.hidden.includes(site.key)}
+            onChange={(e) => toggleSite(site.key, e.currentTarget.checked)}
+          />
+        ))}
+      </Stack>
+
+      {prefs.custom.length > 0 && (
+        <Stack gap={4}>
+          {prefs.custom.map((engine) => (
+            <Group key={engine.key} gap="xs" wrap="nowrap">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text size="sm">{engine.name}</Text>
+                <Text size="xs" c="dimmed" ff="monospace" truncate title={engine.url}>
+                  {engine.url}
+                </Text>
+              </div>
+              <CloseButton
+                size="sm"
+                aria-label={t("Remove")}
+                title={t("Remove")}
+                onClick={() => onChange({ ...prefs, custom: prefs.custom.filter((e) => e.key !== engine.key) })}
+              />
+            </Group>
+          ))}
+        </Stack>
+      )}
+
+      <Stack gap="xs">
+        <Text size="sm" fw={500}>
+          {t("Add custom search engine")}
+        </Text>
+        <TextInput size="xs" label={t("Name")} placeholder={t("e.g., MyGenealogy")} value={name} onChange={(e) => setName(e.currentTarget.value)} />
+        <TextInput
+          ref={urlRef}
+          size="xs"
+          label={t("Search URL")}
+          placeholder="https://example.com/search?name={{name_given}}_{{name_surname}}"
+          value={url}
+          onChange={(e) => setUrl(e.currentTarget.value)}
+          error={url.trim() !== "" && !urlOk ? t("Enter a web address starting with https://") : undefined}
+          styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+        />
+        <Text size="xs" c="dimmed">
+          {t("Enter a search URL with template variables for person data. Available variables:")}
+        </Text>
+        <Group gap={4}>
+          {TEMPLATE_VARS.map((key) => (
+            <Badge
+              key={key}
+              component="button"
+              type="button"
+              variant="light"
+              size="sm"
+              tt="none"
+              ff="monospace"
+              style={{ cursor: "pointer" }}
+              onClick={() => insertVar(key)}
+              title={t(TERM_LABEL[key])}
+            >
+              {`{{${key}}}`}
+            </Badge>
+          ))}
+        </Group>
+        <Group justify="space-between">
+          {urlOk ? (
+            <Anchor size="xs" href={fillTemplate(url.trim(), terms)} target="_blank" rel="noopener noreferrer">
+              {t("Try it with this person")} ↗
+            </Anchor>
+          ) : (
+            <div />
+          )}
+          <Button size="xs" disabled={!canAdd} onClick={addEngine}>
+            {t("Add")}
+          </Button>
+        </Group>
+      </Stack>
+
+      <Group justify="flex-end">
+        <Button variant="default" size="xs" onClick={onDone}>
+          {t("Done")}
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
