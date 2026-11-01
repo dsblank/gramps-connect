@@ -6,6 +6,7 @@ import { formatHash } from "../hash";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   fetchHomeCounts, fetchRecentTopics, fetchLatestStories, fetchLatestBlogPosts, fetchRecentlyChanged, fetchHomePerson, STAT_VIEWS, timeAgo,
+  fetchRecentlyVisited, fetchHomeBookmarks,
   type RecentItem, type StoryItem, type TopicItem, type BlogPostItem,
 } from "../store/homeStats";
 import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
@@ -46,6 +47,8 @@ export function HomeView() {
   const [error, setError] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [recent, setRecent] = useState<RecentItem[]>([]);
+  const [visited, setVisited] = useState<RecentItem[]>([]);
+  const [bookmarks, setBookmarks] = useState<RecentItem[]>([]);
   const [topics, setTopics] = useState<TopicItem[]>([]);
   const [stories, setStories] = useState<StoryItem[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPostItem[]>([]);
@@ -57,13 +60,17 @@ export function HomeView() {
     (async () => {
       const token = await getToken();
       const homeHandle = getHomePersonHandle();
-      const [countsResult, recentResult, topicsResult, storiesResult, blogResult, homePersonResult] = await Promise.all([
+      const [
+        countsResult, recentResult, topicsResult, storiesResult, blogResult, homePersonResult, visitedResult, bookmarksResult,
+      ] = await Promise.all([
         fetchHomeCounts(),
         fetchRecentlyChanged(token, RECENT_LIMIT),
         fetchRecentTopics(token, TOPIC_LIMIT),
         fetchLatestStories(token, STORY_LIMIT),
         fetchLatestBlogPosts(token, BLOG_LIMIT),
         homeHandle ? fetchHomePerson(token, homeHandle) : Promise.resolve(null),
+        fetchRecentlyVisited(token, RECENT_LIMIT),
+        fetchHomeBookmarks(token, RECENT_LIMIT),
       ]);
       if (cancelled) return;
       setCounts(countsResult);
@@ -72,6 +79,8 @@ export function HomeView() {
       setStories(storiesResult);
       setBlogPosts(blogResult);
       setHomePerson(homePersonResult);
+      setVisited(visitedResult);
+      setBookmarks(bookmarksResult);
       setStage("ready");
     })().catch((err: any) => {
       if (cancelled) return;
@@ -123,6 +132,17 @@ export function HomeView() {
                 ))}
               </Stack>
             </Panel>
+
+            <Panel title={t("Recently visited")}>
+              {visited.length === 0 ? (
+                <Text c="dimmed">{t("Records you open will be listed here.")}</Text>
+              ) : (
+                <RecordRows items={visited} />
+              )}
+              <Anchor component="a" href={formatHash({ viewKey: "visited" })} mt="sm" display="inline-block">
+                {t("See all visited")}
+              </Anchor>
+            </Panel>
           </Stack>
 
           <Stack gap="lg">
@@ -158,32 +178,11 @@ export function HomeView() {
               </Anchor>
             </Panel>
 
-            <Panel title={t("Recently changed objects")}>
+            <Panel title={t("Change Log")}>
               {recent.length === 0 ? (
                 <Text c="dimmed">{t("Nothing changed yet.")}</Text>
               ) : (
-                <Stack gap="xs">
-                  {recent.map((item) => {
-                    const view = STAT_VIEWS.find((v) => v.key === item.viewKey);
-                    return (
-                      <Anchor
-                        key={`${item.viewKey}-${item.handle}`}
-                        component="a"
-                        href={formatHash({ viewKey: item.viewKey, handle: item.handle })}
-                        underline="never"
-                        c="inherit"
-                      >
-                        <Group gap="xs" wrap="nowrap">
-                          {view && <Image src={view.icon} alt="" w={20} h={20} />}
-                          <Text truncate style={{ flex: 1, minWidth: 0 }}>
-                            {item.label}
-                          </Text>
-                          <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(item.changeUnix)}</Text>
-                        </Group>
-                      </Anchor>
-                    );
-                  })}
-                </Stack>
+                <RecordRows items={recent} />
               )}
               <Anchor component="a" href={formatHash({ viewKey: "changed" })} mt="sm" display="inline-block">
                 {t("See all changes")}
@@ -260,6 +259,17 @@ export function HomeView() {
                 {t("See all blog posts")}
               </Anchor>
             </Panel>
+
+            <Panel title={t("Bookmarks")}>
+              {bookmarks.length === 0 ? (
+                <Text c="dimmed">{t("No bookmarks yet. The star next to a record's name adds one.")}</Text>
+              ) : (
+                <RecordRows items={bookmarks} />
+              )}
+              <Anchor component="a" href={formatHash({ viewKey: "bookmarks" })} mt="sm" display="inline-block">
+                {t("See all bookmarks")}
+              </Anchor>
+            </Panel>
           </Stack>
         </SimpleGrid>
       )}
@@ -270,6 +280,38 @@ export function HomeView() {
         onNavigate={navigateAway}
       />
     </Box>
+  );
+}
+
+/** A Home card's list of records: type icon, name, and how long ago (a
+ * change for Change Log and Bookmarks, a visit for Recently visited), each
+ * row a link to that record. */
+function RecordRows({ items }: { items: RecentItem[] }) {
+  return (
+    <Stack gap="xs">
+      {items.map((item) => {
+        const view = STAT_VIEWS.find((v) => v.key === item.viewKey);
+        return (
+          <Anchor
+            key={`${item.viewKey}-${item.handle}`}
+            component="a"
+            href={formatHash({ viewKey: item.viewKey, handle: item.handle })}
+            underline="never"
+            c="inherit"
+          >
+            <Group gap="xs" wrap="nowrap">
+              {view && <Image src={view.icon} alt="" w={20} h={20} />}
+              <Text truncate style={{ flex: 1, minWidth: 0 }}>
+                {item.label}
+              </Text>
+              {item.changeUnix > 0 && (
+                <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(item.changeUnix)}</Text>
+              )}
+            </Group>
+          </Anchor>
+        );
+      })}
+    </Stack>
   );
 }
 

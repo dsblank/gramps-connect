@@ -25,7 +25,7 @@ type State =
 
 /** View > Change Log: every record in the tree, most recently changed first,
  * grouped Today / Yesterday / Last 7 days / ... -- the full-page version of
- * Home's "Recently changed objects" panel, from the same query
+ * Home's "Change Log" card, from the same query
  * (GET /api/search/?query=*&sort=-change). Like that panel it leaves out
  * Topics, Stories and topic messages, which have their own pages.
  *

@@ -10,6 +10,7 @@ import { apiFetch } from "./apiFetch";
 import { endpointBaseFor } from "./objectDetail";
 import { VIEWS } from "./views";
 import { getI18nSnapshot } from "../i18n/i18n";
+import { nameFormatParam } from "./nameDisplay";
 
 /** Handles per request. A Gramps handle is ~25 characters, so this keeps
  * the URL around 1.5 KB; a few hundred at once got 414 URI Too Long. */
@@ -33,7 +34,9 @@ export async function fetchObjectsByHandle(
     // Profiles' dates and types in the UI language, as on Search all.
     const { lang } = getI18nSnapshot();
     if (lang.length <= 5) params.set("locale", lang);
-    const res = await apiFetch(`${API_BASE}${base}?${params}`, {
+    // Unlike /api/search/, the list endpoints take name_format, so the
+    // profiles' names (a family's parents) follow the user's own format.
+    const res = await apiFetch(`${API_BASE}${base}?${params}&${nameFormatParam()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(await parseErrorMessage(res));

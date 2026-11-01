@@ -29,6 +29,8 @@ describe("fetchObjectsByHandle", () => {
     expect(url.searchParams.get("handles")).toBe("A,GONE");
     expect(url.searchParams.get("profile")).toBe("all");
     expect(url.searchParams.get("locale")).toBe("de");
+    // The user's name format, which /api/search/ can't take but these can.
+    expect(url.searchParams.get("name_format")).toBeTruthy();
     expect([...found.keys()]).toEqual(["A"]);
   });
 

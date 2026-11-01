@@ -9,6 +9,9 @@ import { fetchPage, parseErrorMessage, type QueryItem } from "./api";
 import { fetchServerState } from "./cacheMeta";
 import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
+import { forgetVisits, getVisits } from "./visitedHistory";
+import { BOOKMARKABLE_TYPES, getBookmarks, loadBookmarks } from "./bookmarks";
+import { fetchObjectsByHandle } from "./objectsByHandle";
 import { formatDisplayName, type RawName } from "./nameDisplay";
 
 /** The object types Home's Statistics/Recently-changed sections cover --
@@ -285,3 +288,70 @@ export async function fetchHomeCounts(): Promise<Record<string, number>> {
  * their own "Last changed" column -- re-exported here under its established
  * Home-dashboard name rather than duplicated. */
 export const timeAgo = formatChange;
+
+/** The `limit` records this user opened most recently (View > Visited's
+ * list, kept in the browser -- visitedHistory.ts), newest first, with
+ * `changeUnix` holding when each was *visited*. One request per record type
+ * among them. Records that no longer exist are dropped from the list, as
+ * the Visited page does. Never throws: Home shows an empty card instead. */
+export async function fetchRecentlyVisited(token: string, limit: number): Promise<RecentItem[]> {
+  const visits = getVisits().slice(0, limit);
+  try {
+    const found = await fetchRecords(token, visits);
+    forgetVisits(visits.filter((v) => !found.has(`${v.type}:${v.handle}`)));
+    return visits.flatMap((v) => {
+      const obj = found.get(`${v.type}:${v.handle}`);
+      return obj ? [toItem(v.type, v.handle, obj, v.at)] : [];
+    });
+  } catch (err) {
+    console.warn("[home] recently visited: fetch failed", err);
+    return [];
+  }
+}
+
+/** Up to `limit` of the tree's bookmarks (bookmarks.ts), People first and
+ * then each other type in the Bookmarks page's order, each in the order it
+ * was added; `changeUnix` is the record's last change. Reloads the list, so
+ * Home also picks up bookmarks other people added. Bookmarks whose record no
+ * longer exists are skipped, not removed (the list is shared). Never throws. */
+export async function fetchHomeBookmarks(token: string, limit: number): Promise<RecentItem[]> {
+  try {
+    await loadBookmarks(token, true);
+    // A few spares, so a deleted record or two still leaves a full card.
+    const wanted = BOOKMARKABLE_TYPES.flatMap((type) => getBookmarks(type).map((handle) => ({ type, handle })))
+      .slice(0, limit * 2);
+    const found = await fetchRecords(token, wanted);
+    return wanted
+      .flatMap(({ type, handle }) => {
+        const obj = found.get(`${type}:${handle}`);
+        return obj ? [toItem(type, handle, obj, Number(obj.change ?? 0))] : [];
+      })
+      .slice(0, limit);
+  } catch (err) {
+    console.warn("[home] bookmarks: fetch failed", err);
+    return [];
+  }
+}
+
+/** "type:handle" -> raw record for whichever of `refs` exist, one request
+ * per type (objectsByHandle.ts). */
+async function fetchRecords(token: string, refs: { type: string; handle: string }[]): Promise<Map<string, RawObject>> {
+  const byType = new Map<string, string[]>();
+  for (const { type, handle } of refs) byType.set(type, [...(byType.get(type) ?? []), handle]);
+  const found = new Map<string, RawObject>();
+  await Promise.all([...byType].map(async ([type, handles]) => {
+    for (const [handle, obj] of await fetchObjectsByHandle(token, type, handles)) found.set(`${type}:${handle}`, obj);
+  }));
+  return found;
+}
+
+function toItem(viewKey: string, handle: string, obj: RawObject, unix: number): RecentItem {
+  const build = RECENT_LABEL[viewKey];
+  return {
+    viewKey,
+    handle,
+    grampsId: typeof obj.gramps_id === "string" ? obj.gramps_id : "",
+    label: build ? build(obj) : String(obj.gramps_id ?? ""),
+    changeUnix: unix,
+  };
+}
