@@ -175,7 +175,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
         <Group grow align="flex-end">
           <Select
             label={t("Name type")}
-            data={NAME_TYPE_OPTIONS}
+            data={NAME_TYPE_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
             value={(data.type as string | undefined) ?? "Birth Name"}
             onChange={(next) => onChange({ type: next ?? "Birth Name" })}
             allowDeselect={false}
@@ -203,7 +203,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
             />
             <Select
               label={t("Sort as")}
-              data={FORMAT_OPTIONS}
+              data={FORMAT_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
               value={String((data.sort_as as number | undefined) ?? 0)}
               onChange={(next) => onChange({ sort_as: Number(next ?? 0) })}
               allowDeselect={false}
@@ -211,7 +211,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
             />
             <Select
               label={t("Display as")}
-              data={FORMAT_OPTIONS}
+              data={FORMAT_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
               value={String((data.display_as as number | undefined) ?? 0)}
               onChange={(next) => onChange({ display_as: Number(next ?? 0) })}
               allowDeselect={false}

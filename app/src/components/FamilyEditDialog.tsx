@@ -131,7 +131,7 @@ function ChildrenField({
         <Group gap="xs">
           <Select
             label={t("Relationship to father")}
-            data={CHILD_REL_OPTIONS}
+            data={CHILD_REL_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
             value={frel}
             onChange={(next) => setFrel(next ?? "Birth")}
             allowDeselect={false}
@@ -141,7 +141,7 @@ function ChildrenField({
           />
           <Select
             label={t("Relationship to mother")}
-            data={CHILD_REL_OPTIONS}
+            data={CHILD_REL_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
             value={mrel}
             onChange={(next) => setMrel(next ?? "Birth")}
             allowDeselect={false}
@@ -535,7 +535,7 @@ export function FamilyEditDialog({
 
         <Select
           label={t("Relationship type")}
-          data={REL_TYPE_OPTIONS}
+          data={REL_TYPE_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
           value={(draft.data.type as string) ?? "Married"}
           onChange={(next) => onChange({ type: next ?? "Married" })}
           allowDeselect={false}

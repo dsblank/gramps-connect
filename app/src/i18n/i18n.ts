@@ -70,6 +70,41 @@ const desktopStrings = [
   "Surnames", "System Information", "Tags", "Text", "Text Reports", "Timeline", "Title", "Update", "Updated",
   "Trees", "Type", "URL", "Value", "View", "Web Pages",
   "Years", "new", "to",
+  // Added 2026-11-01: Gramps desktop msgids the app already used (in t() or in
+  // a label rendered through t()) but never listed. Each checked against its
+  // meaning in Gramps; left out on purpose: "Code" (Gramps: a place code),
+  // "Run" (de translation ends in a stray period) and "Tag" (Gramps: the noun).
+  "Abbreviation", "Address", "Adopted people", "After", "Age at death", "All",
+  "Alternative names", "Apply", "Arabic", "Auto", "Before", "Birth date", "Bulgarian",
+  "Calculated", "Catalan", "Category", "Change", "Check and Repair Database", "Checksum",
+  "Colors", "Compact", "Content", "Croatian", "Custom", "Czech", "Danish", "Date format",
+  "Death date", "Default", "Disconnected people", "Do not include living people", "Dutch",
+  "Email", "English", "Estimated", "Example", "Failed", "Families with incomplete events",
+  "Female", "Females", "Filters", "Finnish", "French", "From", "Generations", "German",
+  "Greek", "Hebrew", "Hungarian", "Icelandic", "Include all selected people",
+  "Include children", "Include data marked private", "Include marriages", "Include places",
+  "Install", "Installed", "Italian", "Japanese", "Korean", "Landscape", "Language",
+  "Lithuanian", "Male", "Males", "Marriage", "Name format", "Never", "New", "Next", "None",
+  "Number Street", "Off", "On", "Other", "PDF", "Path", "People missing parents",
+  "People who are neither male nor female", "People with a nickname",
+  "People with an alternate name", "People with children", "People with incomplete events",
+  "People with incomplete names", "People with multiple marriage records",
+  "People with no marriage records", "People with unknown gender",
+  "People without a known birth date", "People without a known death date", "Place format",
+  "Place:", "Polish", "Portrait", "Preferences", "Previous", "Publication info", "Range",
+  "Regular", "Reload", "Replace complete name of living people",
+  "Replace given names of living people", "Researcher", "Russian", "Serbian", "Setting",
+  "Show all", "Slovak", "Slovenian", "Span", "Spanish", "Standard", "Stop", "Street Number",
+  "Swedish", "Text only", "To", "Tools", "Ukrainian", "Undo", "Unknown", "Warnings",
+  // Gramps type names shown in the edit dialogs' dropdowns (child and family
+  // relationship, event role, name type, repository media type): the same
+  // strings Gramps desktop translates for its own type lists. The web link
+  // type is left out: its Autocomplete would save the translated label.
+  "Adopted", "Stepchild", "Sponsored", "Foster", "Married", "Unmarried", "Civil Union",
+  "Birth Name", "Married Name", "Also Known As", "Clergy", "Celebrant", "Aide", "Bride",
+  "Groom", "Witness", "Informant", "Godparent", "Parent", "Child", "Multiple birth",
+  "Friend", "Neighbor", "Officiator", "Audio", "Book", "Card", "Electronic", "Fiche", "Film",
+  "Magazine", "Manuscript", "Newspaper", "Photo", "Tombstone", "Video",
 ];
 
 // Locale codes actually bootstrapped by scripts/bootstrap-translations.py --

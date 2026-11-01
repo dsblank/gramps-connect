@@ -619,7 +619,7 @@ export function EventsField({
       <Stack gap={4}>
         <Select
           label={t("Role")}
-          data={EVENT_ROLE_OPTIONS}
+          data={EVENT_ROLE_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
           value={role}
           onChange={(next) => setRole(next ?? "Primary")}
           allowDeselect={false}

@@ -1,6 +1,7 @@
 import { Group, Stack, Text } from "@mantine/core";
 import { DETAIL_FIELDS } from "./detailFieldDefinitions";
 import type { ObjectDetail } from "../../store/objectDetail";
+import { t } from "../../i18n/i18n";
 
 /** Renders whichever of DETAIL_FIELDS' flat facts this type has and this
  * particular record actually has a value for -- always visible (not
@@ -15,7 +16,7 @@ export function DetailFields({ type, detail }: { type: string; detail: ObjectDet
     <Stack gap={4}>
       {rows.map((r) => (
         <Group key={r.label} gap={6} wrap="nowrap" align="flex-start">
-          <Text size="sm" c="dimmed">{r.label}:</Text>
+          <Text size="sm" c="dimmed">{t(r.label)}:</Text>
           <Text size="sm">{r.value}</Text>
         </Group>
       ))}

@@ -104,13 +104,13 @@ export function RefEditDialog({
           <>
             <Select
               label={t("Relationship to father")}
-              data={CHILD_REL_OPTIONS}
+              data={CHILD_REL_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
               value={frel || null}
               onChange={(next) => setFrel(next ?? "")}
             />
             <Select
               label={t("Relationship to mother")}
-              data={CHILD_REL_OPTIONS}
+              data={CHILD_REL_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
               value={mrel || null}
               onChange={(next) => setMrel(next ?? "")}
             />
@@ -119,7 +119,7 @@ export function RefEditDialog({
         {refType === "event" && (
           <Select
             label={t("Role")}
-            data={EVENT_ROLE_OPTIONS}
+            data={EVENT_ROLE_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
             value={role || null}
             onChange={(next) => setRole(next ?? "")}
           />
@@ -141,7 +141,7 @@ export function RefEditDialog({
             />
             <Select
               label={t("Media type")}
-              data={REPO_MEDIA_TYPE_OPTIONS}
+              data={REPO_MEDIA_TYPE_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
               value={mediaType || null}
               onChange={(next) => setMediaType(next ?? "")}
             />

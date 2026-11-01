@@ -394,7 +394,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
           <Group grow gap="xs" wrap="nowrap">
             <Select
               label={t("Type")}
-              data={MODIFIER_OPTIONS}
+              data={MODIFIER_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
               value={String(modifier)}
               onChange={(v) => commit({ modifier: (Number(v) as Modifier) ?? Modifier.NONE })}
               allowDeselect={false}
@@ -402,7 +402,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
             />
             <Select
               label={t("Quality")}
-              data={QUALITY_OPTIONS}
+              data={QUALITY_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
               value={String(quality)}
               onChange={(v) => commit({ quality: (Number(v) as Quality) ?? Quality.NONE })}
               allowDeselect={false}
@@ -411,7 +411,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
             {!textOnly && (
               <Select
                 label={t("Calendar")}
-                data={calendarOptions(serverHasLunar, calendar)}
+                data={calendarOptions(serverHasLunar, calendar).map((o) => ({ ...o, label: t(o.label) }))}
                 value={String(calendar)}
                 onChange={(v) => setCalendar((Number(v) as Calendar) ?? Calendar.GREGORIAN)}
                 allowDeselect={false}

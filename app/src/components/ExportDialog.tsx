@@ -213,7 +213,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
               <Stack gap="md">
                 <Select
                   label={t("Living people")}
-                  data={LIVING_MODES.map((mode) => ({ value: mode.value, label: mode.label }))}
+                  data={LIVING_MODES.map((mode) => ({ value: mode.value, label: t(mode.label) }))}
                   value={living}
                   onChange={(next) => setLiving(next ?? living)}
                   allowDeselect={false}
@@ -235,7 +235,7 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
                 {optionToggles.map((toggle) => (
                   <Switch
                     key={toggle.key}
-                    label={toggle.label}
+                    label={t(toggle.label)}
                     description={toggle.description}
                     checked={toggles[toggle.key] ?? toggle.initial}
                     onChange={(event) => setToggle(toggle.key, event.currentTarget.checked)}

@@ -349,7 +349,7 @@ function Legend({ counts, hidden, onToggle }: LegendProps) {
                   }}
                 />
                 {/* Label in a text token, not the series colour. */}
-                <Text size="xs" td={off ? "line-through" : undefined}>{category.label}</Text>
+                <Text size="xs" td={off ? "line-through" : undefined}>{t(category.label)}</Text>
                 <Badge size="xs" variant="light" color="gray">
                   {(counts.get(category.key) ?? 0).toLocaleString()}
                 </Badge>

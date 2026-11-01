@@ -474,7 +474,7 @@ export function ObjectEditDialog({
         return (
           <TextInput
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             placeholder={f.placeholder}
             value={(draft.data[f.key] as string | undefined) ?? ""}
             onChange={(e) => onChange({ [f.key]: e.currentTarget.value })}
@@ -484,7 +484,7 @@ export function ObjectEditDialog({
         return (
           <NumberInput
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             min={f.min}
             max={f.max}
             allowDecimal={false}
@@ -496,7 +496,7 @@ export function ObjectEditDialog({
         return (
           <Switch
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             checked={Boolean(draft.data[f.key])}
             onChange={(e) => onChange({ [f.key]: e.currentTarget.checked })}
           />
@@ -505,7 +505,7 @@ export function ObjectEditDialog({
         return (
           <ColorInput
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             value={(draft.data[f.key] as string | undefined) ?? ""}
             onChange={(v) => onChange({ [f.key]: v })}
           />
@@ -515,7 +515,7 @@ export function ObjectEditDialog({
           <DateInput
             key={f.key}
             id={`${draft.handle}-${f.key}`}
-            label={f.label}
+            label={t(f.label)}
             value={(draft.data[f.key] as GrampsDate | undefined) ?? null}
             onChange={(date) => onChange({ [f.key]: date })}
           />
@@ -526,7 +526,7 @@ export function ObjectEditDialog({
         return (
           <TextInput
             key="placeName"
-            label={f.label}
+            label={t(f.label)}
             value={value}
             onChange={(e) => {
               const v = e.currentTarget.value;
@@ -542,7 +542,7 @@ export function ObjectEditDialog({
           <DateInput
             key="placeNameDate"
             id={`${draft.handle}-name-date`}
-            label={f.label}
+            label={t(f.label)}
             value={value}
             onChange={(date) => onChange({ name: { _class: "PlaceName", ...name, date: date ?? undefined } })}
           />
@@ -554,7 +554,7 @@ export function ObjectEditDialog({
         return (
           <TextInput
             key="placeNameLang"
-            label={f.label}
+            label={t(f.label)}
             placeholder="e.g. en, fr, la"
             value={value}
             onChange={(e) => {
@@ -596,7 +596,7 @@ export function ObjectEditDialog({
         return (
           <Textarea
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             autosize
             minRows={12}
             maxRows={30}
@@ -637,7 +637,7 @@ export function ObjectEditDialog({
         return (
           <RefSlot
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             required={f.required}
             handle={handle}
             pickedLabel={handle ? (pickedLabels[handle] ?? null) : null}
@@ -693,7 +693,7 @@ export function ObjectEditDialog({
         return (
           <RefListField
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             refs={refs}
             labels={pickedLabels}
             newDraftsByHandle={newDraftsByHandle(stack, draft.handle, f.refType, fieldPrefix)}
@@ -721,7 +721,7 @@ export function ObjectEditDialog({
         return (
           <MediaListField
             key={f.key}
-            label={f.label}
+            label={t(f.label)}
             refs={refsRaw.map((r) => r.ref)}
             labels={pickedLabels}
             onAddExisting={(item) => {

@@ -691,7 +691,7 @@ export function PersonEditDialog({
         </Group>
         <Select
           label={t("Gender")}
-          data={GENDER_OPTIONS}
+          data={GENDER_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
           value={gender}
           onChange={(next) => onChange({ gender: Number(next ?? 2) })}
           allowDeselect={false}
