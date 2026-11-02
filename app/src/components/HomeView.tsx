@@ -10,7 +10,10 @@ import {
   type RecentItem, type StoryItem, type TopicItem, type BlogPostItem,
 } from "../store/homeStats";
 import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
-import { PERSON_VIEW } from "../store/views";
+import { EVENT_VIEW, PERSON_VIEW } from "../store/views";
+import {
+  fetchUpcomingAnniversaries, formatDaysUntil, formatYears, type AnniversaryItem,
+} from "../store/upcomingAnniversaries";
 import { BlogPostView } from "./BlogPostView";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { RecordPicker } from "./RecordPicker";
@@ -24,6 +27,7 @@ const RECENT_LIMIT = 8;
 const TOPIC_LIMIT = 5;
 const STORY_LIMIT = 5;
 const BLOG_LIMIT = 3;
+const ANNIVERSARY_LIMIT = 8;
 
 type Stage = "loading" | "ready" | "error";
 
@@ -54,6 +58,25 @@ export function HomeView() {
   const [blogPosts, setBlogPosts] = useState<BlogPostItem[]>([]);
   const [openBlogHandle, setOpenBlogHandle] = useState<string | null>(null);
   const [homePerson, setHomePerson] = useState<QueryItem | null>(null);
+  // null while loading. Fetched on its own, not in the Promise.all below:
+  // for a Guest the server answers this query in Python, not SQL (7 s on a
+  // 100k tree vs 0.9 s with view-private), so it mustn't hold up the page.
+  const [anniversaries, setAnniversaries] = useState<AnniversaryItem[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      // never throws: logs and returns [] on error
+      const items = await fetchUpcomingAnniversaries(token, ANNIVERSARY_LIMIT);
+      if (!cancelled) setAnniversaries(items);
+    })().catch(() => {
+      if (!cancelled) setAnniversaries([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +211,19 @@ export function HomeView() {
                 {t("See all changes")}
               </Anchor>
             </Panel>
+
+            <Panel title={t("Upcoming anniversaries")}>
+              {anniversaries === null ? (
+                <Group gap="xs">
+                  <Loader size="xs" />
+                  <Text c="dimmed">{t("Looking for anniversaries…")}</Text>
+                </Group>
+              ) : anniversaries.length === 0 ? (
+                <Text c="dimmed">{t("No births, marriages or deaths with an exact date yet.")}</Text>
+              ) : (
+                <AnniversaryRows items={anniversaries} />
+              )}
+            </Panel>
           </Stack>
 
           <Stack gap="lg">
@@ -311,6 +347,38 @@ function RecordRows({ items }: { items: RecentItem[] }) {
           </Anchor>
         );
       })}
+    </Stack>
+  );
+}
+
+/** The Upcoming anniversaries card's rows: event type and who, the
+ * original date and how many years it marks, and how soon. Each row links
+ * to the person (or family) rather than the event itself. */
+function AnniversaryRows({ items }: { items: AnniversaryItem[] }) {
+  return (
+    <Stack gap="xs">
+      {items.map((item) => (
+        <Anchor
+          key={item.eventHandle}
+          component="a"
+          href={formatHash({ viewKey: item.viewKey, handle: item.handle })}
+          underline="never"
+          c="inherit"
+        >
+          <Group gap="xs" wrap="nowrap" align="flex-start">
+            <Image src={EVENT_VIEW.icon} alt="" w={20} h={20} mt={2} />
+            <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+              <Text truncate>{item.who ? `${item.typeLabel} — ${item.who}` : item.typeLabel}</Text>
+              <Text size="xs" c="dimmed" truncate>
+                {item.years === null ? item.dateLabel : `${item.dateLabel} · ${formatYears(item.years)}`}
+              </Text>
+            </Stack>
+            <Text size="xs" c={item.daysUntil === 0 ? undefined : "dimmed"} fw={item.daysUntil === 0 ? 600 : undefined} style={{ flex: "none" }}>
+              {formatDaysUntil(item.daysUntil)}
+            </Text>
+          </Group>
+        </Anchor>
+      ))}
     </Stack>
   );
 }
