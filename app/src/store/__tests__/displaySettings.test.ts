@@ -39,7 +39,15 @@ describe("normalizeDisplaySettings", () => {
       name: { format: "%l, %f" },
       place: { auto: false, active: 1, formats: [FULL_PLACE_FORMAT, custom] },
       ids: DEFAULT_DISPLAY_SETTINGS.ids,
+      living: { maxAge: 110 },
     });
+  });
+
+  it("keeps a whole-number living age limit from 1 to 200, else 110", () => {
+    expect(normalizeDisplaySettings({ living: { maxAge: 95 } }).living.maxAge).toBe(95);
+    for (const bad of [0, 201, 99.5, "100", null]) {
+      expect(normalizeDisplaySettings({ living: { maxAge: bad } }).living.maxAge).toBe(110);
+    }
   });
 
   it("falls back per field on bad values", () => {

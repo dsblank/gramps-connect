@@ -17,6 +17,7 @@ import {
   FULL_PLACE_FORMAT,
   type CustomNameFormat,
   isValidIdTemplate,
+  isValidMaxAge,
   type DisplaySettings,
   type IdType,
   type PlaceFormatDef,
@@ -175,7 +176,7 @@ const DESKTOP_ID_KEYS: Record<IdType, string> = {
   note: "nprefix",
 };
 
-export type ImportKey = "date" | "name" | "placeAuto" | "placeFormats" | "placeActive" | "ids";
+export type ImportKey = "date" | "name" | "placeAuto" | "placeFormats" | "placeActive" | "ids" | "livingAge";
 
 export interface ImportItem {
   key: ImportKey;
@@ -332,6 +333,20 @@ export function buildImportItems(input: ImportInput): ImportItem[] {
         ...s,
         ids: { ...s.ids, ...Object.fromEntries(valid.map((entry) => [entry.type, entry.template!])) },
       }),
+    });
+  }
+
+  const maxAgeValue = ini.get("behavior.max-age-prob-alive");
+  const maxAge = intValue(maxAgeValue);
+  if (maxAgeValue && maxAge !== null) {
+    const usable = isValidMaxAge(maxAge);
+    items.push({
+      key: "livingAge",
+      desktop: String(maxAge),
+      usable,
+      reason: usable ? undefined : "Out of range",
+      isDefault: maxAgeValue.isDefault,
+      apply: (s) => (usable ? { ...s, living: { maxAge } } : s),
     });
   }
 

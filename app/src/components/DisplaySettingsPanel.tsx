@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActionIcon, Alert, Button, Checkbox, Group, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Alert, Button, Checkbox, Group, NumberInput, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getLocale } from "@gramps-connect/gramps-date";
 import { describeDateFormat, describeGrampsFormat } from "./displayFormatLabels";
@@ -16,6 +16,8 @@ import {
   GRAMPS_DEFAULT_ID_TEMPLATES,
   ID_TYPES,
   isValidIdTemplate,
+  DEFAULT_MAX_AGE_PROB_ALIVE,
+  isValidMaxAge,
   type IdType,
   type DisplaySettings,
   type CustomNameFormat,
@@ -304,6 +306,21 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
           </Button>
         </Group>
       )}
+
+      <Title order={5}>{t("Living people")}</Title>
+      <NumberInput
+        size="xs"
+        w={220}
+        label={t("Living age limit")}
+        description={t("Someone with no death recorded counts as living until this many years after their birth, as in Gramps' own preferences. Used by the Home page's anniversaries.")}
+        disabled={!canEdit}
+        min={1}
+        max={200}
+        allowDecimal={false}
+        value={draft.living.maxAge}
+        error={isValidMaxAge(draft.living.maxAge) ? undefined : t("A whole number from 1 to 200")}
+        onChange={(value) => update((d) => ({ ...d, living: { maxAge: typeof value === "number" ? value : DEFAULT_MAX_AGE_PROB_ALIVE } }))}
+      />
 
       <Title order={5}>{t("New records")}</Title>
       <Text size="xs" c="dimmed">

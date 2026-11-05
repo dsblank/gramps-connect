@@ -11,7 +11,7 @@ const fetchObjectsByHandle = vi.fn(async (_token: string, _type: string, handles
 vi.mock("../objectsByHandle", () => ({ fetchObjectsByHandle: (...args: [string, string, string[]]) => fetchObjectsByHandle(...args) }));
 vi.mock("../../i18n/i18n", () => ({ getI18nSnapshot: () => ({ lang: "en" }) }));
 
-const { windowRange, windowExpr, occurrenceIn, fetchAnniversaryWindow, formatDaysUntil, formatYears, formatWindow } =
+const { windowRange, windowExpr, occurrenceIn, fetchAnniversaryWindow, formatDaysUntil, formatYears, formatWindow, displayYear } =
   await import("../upcomingAnniversaries");
 
 function page(handles: string[], total: number | null = handles.length) {
@@ -131,6 +131,25 @@ describe("fetchAnniversaryWindow", () => {
       expect(fetchPage.mock.calls[1][2]).toBe("c1");
     });
 
+    it("counts someone with no death but born over the living age limit ago as dead", async () => {
+      const old = { name_display: "Old", death: {}, birth: { date: "1900-03-04" } };
+      const young = { name_display: "Young", death: {}, birth: { date: "4 Mar 1950" } };
+      fetchPage.mockResolvedValueOnce(page(["b-old", "b-young", "m-old", "m-young", "b-unknown"], null));
+      events.byHandle.set("b-old", event("b-old", [2, 11, 1900, false], person("p1", old)));
+      events.byHandle.set("b-young", event("b-young", [2, 11, 1950, false], person("p2", young)));
+      events.byHandle.set("m-old", event("m-old", [3, 11, 1925, false], family(old, young)));
+      events.byHandle.set("m-young", event("m-young", [3, 11, 1975, false], family(young, living)));
+      events.byHandle.set("b-unknown", event("b-unknown", [4, 11, 0, false], person("p3", living)));
+
+      const win = await fetchAnniversaryWindow("tok", 8, 0, NOV_1, { onlyLiving: true, maxAge: 110 });
+      // 2026 - 1900 = 126 > 110; no birth year at all: living.
+      expect(win.items.map((i) => i.eventHandle)).toEqual(["b-young", "m-young", "b-unknown"]);
+
+      fetchPage.mockResolvedValueOnce(page(["b-old"], null));
+      const lenient = await fetchAnniversaryWindow("tok", 8, 0, NOV_1, { onlyLiving: true, maxAge: 130 });
+      expect(lenient.items.map((i) => i.eventHandle)).toEqual(["b-old"]);
+    });
+
     it("says none more once the whole week has been checked", async () => {
       fetchPage.mockResolvedValueOnce(page(["b-alive"], null));
       events.byHandle.set("b-alive", event("b-alive", [2, 11, 1990, false], person("p1", living)));
@@ -138,6 +157,17 @@ describe("fetchAnniversaryWindow", () => {
       expect([win.items.length, win.more]).toEqual([1, 0]);
       expect(fetchPage).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe("displayYear", () => {
+  it("reads the year out of a display date in any format", () => {
+    expect(displayYear("1850-11-03")).toBe(1850);
+    expect(displayYear("3 Nov 1850")).toBe(1850);
+    expect(displayYear("about 1850")).toBe(1850);
+    expect(displayYear("11/03/1850")).toBe(1850);
+    expect(displayYear("")).toBeNull();
+    expect(displayYear(undefined)).toBeNull();
   });
 });
 

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ActionIcon, Alert, Anchor, Box, Checkbox, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { getToken } from "../auth/auth";
+import { useDisplaySettings } from "../store/displaySettings";
 import type { QueryItem } from "../store/api";
 import { formatHash } from "../hash";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -339,9 +340,10 @@ function AnniversaryCard() {
   // days up to yesterday, ...
   const [index, setIndex] = useState(0);
   const [onlyLiving, setOnlyLiving] = useState(getOnlyLivingPreference);
-  // Keyed by the box as well as the week, so ticking it back and forth
-  // reuses what's already been fetched either way.
-  const key = `${onlyLiving ? "living" : "all"}:${index}`;
+  const { maxAge } = useDisplaySettings().living;
+  // Keyed by the box (and the living age limit it uses) as well as the
+  // week, so ticking it back and forth reuses what's already been fetched.
+  const key = `${onlyLiving ? `living${maxAge}` : "all"}:${index}`;
   const [windows, setWindows] = useState<Map<string, AnniversaryWindow>>(() => new Map());
   const current = windows.get(key);
 
@@ -351,14 +353,14 @@ function AnniversaryCard() {
     (async () => {
       const token = await getToken();
       // never throws: logs and returns an empty window on error
-      return fetchAnniversaryWindow(token, ANNIVERSARY_LIMIT, index, new Date(), { onlyLiving });
+      return fetchAnniversaryWindow(token, ANNIVERSARY_LIMIT, index, new Date(), { onlyLiving, maxAge });
     })().catch((): AnniversaryWindow => ({ ...windowRange(index, new Date()), items: [], more: 0 })).then((loaded) => {
       if (!cancelled) setWindows((prev) => new Map(prev).set(key, loaded));
     });
     return () => {
       cancelled = true;
     };
-  }, [key, index, onlyLiving, windows]);
+  }, [key, index, onlyLiving, maxAge, windows]);
 
   // What's still showing while the next window loads: the one just left.
   const [shown, setShown] = useState<AnniversaryWindow | undefined>(undefined);
@@ -393,7 +395,7 @@ function AnniversaryCard() {
         size="xs"
         mb="sm"
         label={t("Only living")}
-        title={t("Leave out anyone with a death recorded")}
+        title={t("Leave out anyone with a death recorded, or born longer ago than the living age limit in Preferences")}
         checked={onlyLiving}
         onChange={(e) => {
           setOnlyLiving(e.currentTarget.checked);

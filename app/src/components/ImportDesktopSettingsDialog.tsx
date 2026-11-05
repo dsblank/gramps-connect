@@ -35,6 +35,7 @@ const ROW_LABELS: Record<ImportKey, string> = {
   placeFormats: "Place formats",
   placeActive: "Place format in use",
   ids: "Gramps IDs for new records",
+  livingAge: "Living age limit",
 };
 
 /** "Import from Gramps desktop…" -- a one-shot copy of the desktop display
@@ -150,6 +151,8 @@ export function ImportDesktopSettingsDialog({ opened, onClose, current, customNa
         const set = Object.values(s.ids).filter(Boolean);
         return set.length ? set.join(", ") : t("Server default");
       }
+      case "livingAge":
+        return String(s.living.maxAge);
       case "placeActive": {
         const fmt = s.place.formats[s.place.active];
         const example = fmt && sampleHandle ? formatPlaceWith(sampleHandle, fmt) : null;

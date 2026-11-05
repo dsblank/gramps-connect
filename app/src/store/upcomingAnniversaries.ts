@@ -17,6 +17,7 @@ import { fetchPage } from "./api";
 import { EVENT_VIEW, type OrderBy } from "./views";
 import { fetchObjectsByHandle, type RawRecord } from "./objectsByHandle";
 import { getI18nSnapshot } from "../i18n/i18n";
+import { DEFAULT_MAX_AGE_PROB_ALIVE } from "./displaySettings";
 
 /** Days in one window of the card. */
 export const WINDOW_DAYS = 7;
@@ -56,9 +57,13 @@ export interface AnniversaryWindow {
 }
 
 export interface AnniversaryOptions {
-  /** Leave out anyone with a death recorded: no deaths, a birth only when
-   * that person has no death, a marriage only when neither spouse has. */
+  /** Leave out anyone who has died: no deaths, a birth only when that
+   * person is living, a marriage only when both spouses are. */
   onlyLiving?: boolean;
+  /** For onlyLiving: someone with no death recorded but born more than
+   * this many years ago counts as dead too (the Preferences' Living age
+   * limit, Gramps' behavior.max-age-prob-alive). */
+  maxAge?: number;
 }
 
 const BASE_EXPR =
@@ -153,23 +158,38 @@ function participant(profile: Profile | undefined): Pick<AnniversaryItem, "viewK
   return null;
 }
 
-/** A death, or the burial or cremation gramps-web-api falls back to, is
- * recorded for this person (their profile's `death` isn't empty). */
-function hasDied(person: Profile | undefined): boolean {
-  return !!person?.death && Object.keys(person.death).length > 0;
+/** The year in a profile's display date ("1850-11-03", "3 Nov 1850",
+ * "about 1850"): the last run of four digits, or null. A profile only
+ * carries the date as the server displays it, in whichever date format
+ * its gramps.ini sets, so this reads it back rather than a dateval. */
+export function displayYear(date: unknown): number | null {
+  const years = typeof date === "string" ? date.match(/\d{4}/g) : null;
+  return years ? Number(years[years.length - 1]) : null;
+}
+
+/** Whether this person (a participant profile) counts as dead: a death,
+ * or the burial or cremation gramps-web-api falls back to, is recorded
+ * (their profile's `death` isn't empty), or their birth (or the baptism
+ * or christening it falls back to) was more than `maxAge` years before
+ * `year`. No birth year, no death: living. */
+function hasDied(person: Profile | undefined, maxAge: number, year: number): boolean {
+  if (!person) return false;
+  if (person.death && Object.keys(person.death).length > 0) return true;
+  const born = displayYear(person.birth?.date);
+  return born !== null && year - born > maxAge;
 }
 
 /** For Only living: the event's person (or, for a marriage, both spouses)
- * has no death recorded. GOQL can't ask this in the query: `backlinks`
+ * is living (hasDied()). GOQL can't ask this in the query: `backlinks`
  * (event -> person) only tests the referrer's class, not its fields, so
  * it's the participant profiles fetched for the rows that tell. An event
  * with no participant can't be shown to be about the living, so it's out. */
-export function isAboutTheLiving(event: RawRecord): boolean {
+export function isAboutTheLiving(event: RawRecord, maxAge = DEFAULT_MAX_AGE_PROB_ALIVE, year = new Date().getFullYear()): boolean {
   const profile = event.profile as Profile | undefined;
   const person = profile?.participants?.people?.[0]?.person;
-  if (person?.handle) return !hasDied(person);
+  if (person?.handle) return !hasDied(person, maxAge, year);
   const family = profile?.participants?.families?.[0]?.family;
-  if (family?.handle) return !hasDied(family.father) && !hasDied(family.mother);
+  if (family?.handle) return !hasDied(family.father, maxAge, year) && !hasDied(family.mother, maxAge, year);
   return false;
 }
 
@@ -206,6 +226,7 @@ export async function fetchAnniversaryWindow(
 ): Promise<AnniversaryWindow> {
   const { start, end } = windowRange(index, today);
   const onlyLiving = !!options.onlyLiving;
+  const maxAge = options.maxAge ?? DEFAULT_MAX_AGE_PROB_ALIVE;
   const expr = windowExpr(start, end, !onlyLiving);
   try {
     const items: AnniversaryItem[] = [];
@@ -222,7 +243,7 @@ export async function fetchAnniversaryWindow(
         if (items.length >= limit) break;
         used++;
         const event = events.get(handle);
-        if (event && (!onlyLiving || isAboutTheLiving(event))) items.push(toItem(event, start, end, today));
+        if (event && (!onlyLiving || isAboutTheLiving(event, maxAge, today.getFullYear()))) items.push(toItem(event, start, end, today));
       }
       if (!onlyLiving) {
         more = totalCount === null ? null : Math.max(0, totalCount - items.length);

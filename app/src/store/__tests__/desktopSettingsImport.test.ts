@@ -107,6 +107,15 @@ describe("buildImportItems / applyImport", () => {
     expect(buildImportItems(input({ ini: defaults })).find((i) => i.key === "ids")!.isDefault).toBe(true);
   });
 
+  it("imports the living age limit from [behavior]", () => {
+    const ini = parseGrampsIni("[behavior]\nmax-age-prob-alive=95\n");
+    const item = buildImportItems(input({ ini })).find((i) => i.key === "livingAge")!;
+    expect([item.desktop, item.usable, item.isDefault]).toEqual(["95", true, false]);
+    expect(applyImport(DEFAULT_DISPLAY_SETTINGS, [item], new Set(["livingAge"])).living.maxAge).toBe(95);
+    const bad = buildImportItems(input({ ini: parseGrampsIni("[behavior]\nmax-age-prob-alive=0\n") }));
+    expect(bad.find((i) => i.key === "livingAge")!.usable).toBe(false);
+  });
+
   it("maps the date index through the desktop language", () => {
     // French #4 is "Jour. Mois Année", not English's "Day Month Year"... which
     // happens to be the same shape; #2 is where they differ.

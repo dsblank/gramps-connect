@@ -70,6 +70,21 @@ export interface DisplaySettings {
    * never its gramps.ini's -- see grampsIds.ts). Not display, despite
    * the key: the Preferences tab holds both (see grampsIds.ts). */
   ids: Record<IdType, string>;
+  living: {
+    /** Desktop's behavior.max-age-prob-alive: someone with no death
+     * recorded but born more than this many years ago counts as dead
+     * (e.g. Home's Anniversaries card's Only living). gramps-web-api
+     * applies its own gramps.ini's value server-side with no endpoint to
+     * read it, hence a copy here. */
+    maxAge: number;
+  };
+}
+
+/** Gramps' own default for behavior.max-age-prob-alive. */
+export const DEFAULT_MAX_AGE_PROB_ALIVE = 110;
+
+export function isValidMaxAge(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 200;
 }
 
 /** Desktop's built-in format 0 -- PlaceDisplay.__init__'s fallback when
@@ -90,6 +105,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   name: { format: "" },
   place: { auto: true, active: 0, formats: [FULL_PLACE_FORMAT] },
   ids: Object.fromEntries(ID_TYPES.map((type) => [type, ""])) as Record<IdType, string>,
+  living: { maxAge: DEFAULT_MAX_AGE_PROB_ALIVE },
 };
 
 /** Desktop's own defaults (gen/config.py's preferences.*prefix). */
@@ -194,7 +210,9 @@ export function normalizeDisplaySettings(raw: unknown): DisplaySettings {
     }),
   ) as Record<IdType, string>;
 
-  return { version: 1, date, name, place, ids };
+  const living = { maxAge: isValidMaxAge(r.living?.maxAge) ? r.living.maxAge : d.living.maxAge };
+
+  return { version: 1, date, name, place, ids, living };
 }
 
 // -- Date format per language --
