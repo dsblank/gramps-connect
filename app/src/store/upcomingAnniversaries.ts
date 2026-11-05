@@ -116,8 +116,13 @@ function onOrBefore(month: number, day: number): string {
  * `end` (at most a year apart). A window over New Year is two pieces, one
  * per calendar year. Each piece leaves out events dated after its year:
  * nothing has happened yet to have an anniversary of. A yearless date
- * (year 0) passes. */
-export function windowExpr(start: Date, end: Date, withDeaths = true): string {
+ * (year 0) passes.
+ *
+ * For Only living, `living` leaves out deaths, and any event dated before
+ * `living.fromYear` (more than the living age limit ago, so whoever it's
+ * about has died, by the same rule as a birth that long ago). A yearless
+ * date still passes. */
+export function windowExpr(start: Date, end: Date, living: { fromYear: number } | null = null): string {
   const piece = (year: number, from: string, to: string) => `(date.dateval[2] <= ${year} and ${from} and ${to})`;
   const sm = start.getMonth() + 1, sd = start.getDate();
   const em = end.getMonth() + 1, ed = end.getDate();
@@ -125,7 +130,9 @@ export function windowExpr(start: Date, end: Date, withDeaths = true): string {
     ? [piece(start.getFullYear(), onOrAfter(sm, sd), onOrBefore(em, ed))]
     : [piece(start.getFullYear(), onOrAfter(sm, sd), onOrBefore(12, 31)),
       piece(end.getFullYear(), onOrAfter(1, 1), onOrBefore(em, ed))];
-  const types = withDeaths ? "" : " and type.value != EventType.DEATH";
+  const types = living
+    ? ` and type.value != EventType.DEATH and (date.dateval[2] == 0 or date.dateval[2] >= ${living.fromYear})`
+    : "";
   return `${BASE_EXPR}${types} and (${pieces.join(" or ")})`;
 }
 
@@ -227,7 +234,7 @@ export async function fetchAnniversaryWindow(
   const { start, end } = windowRange(index, today);
   const onlyLiving = !!options.onlyLiving;
   const maxAge = options.maxAge ?? DEFAULT_MAX_AGE_PROB_ALIVE;
-  const expr = windowExpr(start, end, !onlyLiving);
+  const expr = windowExpr(start, end, onlyLiving ? { fromYear: today.getFullYear() - maxAge } : null);
   try {
     const items: AnniversaryItem[] = [];
     let after: string | null = null;

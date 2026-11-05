@@ -83,6 +83,7 @@ describe("fetchAnniversaryWindow", () => {
     ]);
     expect(win.more).toBe(17);
     expect(fetchPage.mock.calls[0][3]).toBe(true); // wants the count
+    expect(fetchPage.mock.calls[0][4]).not.toContain("EventType.DEATH and");
     expect(fetchPage.mock.calls[0][5][0]).toEqual({ column: "date.dateval[2]", direction: "desc" });
     expect(fetchPage.mock.calls[0][6]).toBe(3);
   });
@@ -144,10 +145,13 @@ describe("fetchAnniversaryWindow", () => {
       const win = await fetchAnniversaryWindow("tok", 8, 0, NOV_1, { onlyLiving: true, maxAge: 110 });
       // 2026 - 1900 = 126 > 110; no birth year at all: living.
       expect(win.items.map((i) => i.eventHandle)).toEqual(["b-young", "m-young", "b-unknown"]);
+      // Events themselves dated before 2026 - 110 are left out by the query.
+      expect(fetchPage.mock.calls[0][4]).toContain("(date.dateval[2] == 0 or date.dateval[2] >= 1916)");
 
       fetchPage.mockResolvedValueOnce(page(["b-old"], null));
       const lenient = await fetchAnniversaryWindow("tok", 8, 0, NOV_1, { onlyLiving: true, maxAge: 130 });
       expect(lenient.items.map((i) => i.eventHandle)).toEqual(["b-old"]);
+      expect(fetchPage.mock.calls[1][4]).toContain("date.dateval[2] >= 1896");
     });
 
     it("says none more once the whole week has been checked", async () => {
