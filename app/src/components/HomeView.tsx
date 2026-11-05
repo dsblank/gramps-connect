@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ActionIcon, Alert, Anchor, Box, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Box, Checkbox, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import type { QueryItem } from "../store/api";
 import { formatHash } from "../hash";
@@ -13,6 +13,7 @@ import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPre
 import { EVENT_VIEW, PERSON_VIEW } from "../store/views";
 import {
   fetchAnniversaryWindow, formatDaysUntil, formatWindow, formatYears, windowRange,
+  getOnlyLivingPreference, setOnlyLivingPreference,
   type AnniversaryItem, type AnniversaryWindow,
 } from "../store/upcomingAnniversaries";
 import { BlogPostView } from "./BlogPostView";
@@ -337,23 +338,27 @@ function AnniversaryCard() {
   // 0 = today and the 6 days after, 1 = the week after that, -1 = the 7
   // days up to yesterday, ...
   const [index, setIndex] = useState(0);
-  const [windows, setWindows] = useState<Map<number, AnniversaryWindow>>(() => new Map());
-  const current = windows.get(index);
+  const [onlyLiving, setOnlyLiving] = useState(getOnlyLivingPreference);
+  // Keyed by the box as well as the week, so ticking it back and forth
+  // reuses what's already been fetched either way.
+  const key = `${onlyLiving ? "living" : "all"}:${index}`;
+  const [windows, setWindows] = useState<Map<string, AnniversaryWindow>>(() => new Map());
+  const current = windows.get(key);
 
   useEffect(() => {
-    if (windows.has(index)) return;
+    if (windows.has(key)) return;
     let cancelled = false;
     (async () => {
       const token = await getToken();
       // never throws: logs and returns an empty window on error
-      return fetchAnniversaryWindow(token, ANNIVERSARY_LIMIT, index);
-    })().catch((): AnniversaryWindow => ({ ...windowRange(index, new Date()), items: [], total: null })).then((loaded) => {
-      if (!cancelled) setWindows((prev) => new Map(prev).set(index, loaded));
+      return fetchAnniversaryWindow(token, ANNIVERSARY_LIMIT, index, new Date(), { onlyLiving });
+    })().catch((): AnniversaryWindow => ({ ...windowRange(index, new Date()), items: [], more: 0 })).then((loaded) => {
+      if (!cancelled) setWindows((prev) => new Map(prev).set(key, loaded));
     });
     return () => {
       cancelled = true;
     };
-  }, [index, windows]);
+  }, [key, index, onlyLiving, windows]);
 
   // What's still showing while the next window loads: the one just left.
   const [shown, setShown] = useState<AnniversaryWindow | undefined>(undefined);
@@ -362,7 +367,7 @@ function AnniversaryCard() {
   }, [current]);
 
   const loading = !current;
-  const more = shown && shown.total !== null ? shown.total - shown.items.length : 0;
+  const more = shown?.more;
 
   return (
     <Panel
@@ -384,17 +389,34 @@ function AnniversaryCard() {
         </Group>
       }
     >
+      <Checkbox
+        size="xs"
+        mb="sm"
+        label={t("Only living")}
+        title={t("Leave out anyone with a death recorded")}
+        checked={onlyLiving}
+        onChange={(e) => {
+          setOnlyLiving(e.currentTarget.checked);
+          setOnlyLivingPreference(e.currentTarget.checked);
+        }}
+      />
       {!shown ? (
         <Group gap="xs">
           <Loader size="xs" />
           <Text c="dimmed">{t("Looking for anniversaries…")}</Text>
         </Group>
       ) : shown.items.length === 0 ? (
-        <Text c="dimmed">{t("No births, marriages or deaths with an exact date in these 7 days.")}</Text>
+        <Text c="dimmed" style={{ opacity: loading ? 0.5 : 1 }}>
+          {onlyLiving
+            ? t("No births or marriages of living people with an exact date in these 7 days.")
+            : t("No births, marriages or deaths with an exact date in these 7 days.")}
+        </Text>
       ) : (
         <Box style={{ opacity: loading ? 0.5 : 1 }}>
           <AnniversaryRows items={shown.items} />
-          {more > 0 && (
+          {more === null ? (
+            <Text size="xs" c="dimmed" mt="xs">{t("…and maybe more in these 7 days")}</Text>
+          ) : more !== undefined && more > 0 && (
             <Text size="xs" c="dimmed" mt="xs">
               {t("…and %s more in these 7 days").replace("%s", String(more))}
             </Text>

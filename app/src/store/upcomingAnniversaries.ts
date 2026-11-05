@@ -48,9 +48,17 @@ export interface AnniversaryWindow {
   end: Date;
   /** The most recent `limit` events in it. */
   items: AnniversaryItem[];
-  /** How many events the window holds in all (null if the server didn't
-   * say), so the card can say how many more there are. */
-  total: number | null;
+  /** How many more the window holds than `items`: a count, or null when
+   * there may be more but it isn't known how many (Only living stops
+   * looking once the card is full, since what's left would each need its
+   * profile fetched to tell). */
+  more: number | null;
+}
+
+export interface AnniversaryOptions {
+  /** Leave out anyone with a death recorded: no deaths, a birth only when
+   * that person has no death, a marriage only when neither spouse has. */
+  onlyLiving?: boolean;
 }
 
 const BASE_EXPR =
@@ -104,7 +112,7 @@ function onOrBefore(month: number, day: number): string {
  * per calendar year. Each piece leaves out events dated after its year:
  * nothing has happened yet to have an anniversary of. A yearless date
  * (year 0) passes. */
-export function windowExpr(start: Date, end: Date): string {
+export function windowExpr(start: Date, end: Date, withDeaths = true): string {
   const piece = (year: number, from: string, to: string) => `(date.dateval[2] <= ${year} and ${from} and ${to})`;
   const sm = start.getMonth() + 1, sd = start.getDate();
   const em = end.getMonth() + 1, ed = end.getDate();
@@ -112,7 +120,8 @@ export function windowExpr(start: Date, end: Date): string {
     ? [piece(start.getFullYear(), onOrAfter(sm, sd), onOrBefore(em, ed))]
     : [piece(start.getFullYear(), onOrAfter(sm, sd), onOrBefore(12, 31)),
       piece(end.getFullYear(), onOrAfter(1, 1), onOrBefore(em, ed))];
-  return `${BASE_EXPR} and (${pieces.join(" or ")})`;
+  const types = withDeaths ? "" : " and type.value != EventType.DEATH";
+  return `${BASE_EXPR}${types} and (${pieces.join(" or ")})`;
 }
 
 /** The (month, day)'s occurrence within [start, end], and its year. 29
@@ -144,6 +153,26 @@ function participant(profile: Profile | undefined): Pick<AnniversaryItem, "viewK
   return null;
 }
 
+/** A death, or the burial or cremation gramps-web-api falls back to, is
+ * recorded for this person (their profile's `death` isn't empty). */
+function hasDied(person: Profile | undefined): boolean {
+  return !!person?.death && Object.keys(person.death).length > 0;
+}
+
+/** For Only living: the event's person (or, for a marriage, both spouses)
+ * has no death recorded. GOQL can't ask this in the query: `backlinks`
+ * (event -> person) only tests the referrer's class, not its fields, so
+ * it's the participant profiles fetched for the rows that tell. An event
+ * with no participant can't be shown to be about the living, so it's out. */
+export function isAboutTheLiving(event: RawRecord): boolean {
+  const profile = event.profile as Profile | undefined;
+  const person = profile?.participants?.people?.[0]?.person;
+  if (person?.handle) return !hasDied(person);
+  const family = profile?.participants?.families?.[0]?.family;
+  if (family?.handle) return !hasDied(family.father) && !hasDied(family.mother);
+  return false;
+}
+
 function toItem(event: RawRecord, start: Date, end: Date, today: Date): AnniversaryItem {
   const profile = event.profile as Profile | undefined;
   const [day, month, year] = ((event.date as Profile | undefined)?.dateval ?? []) as number[];
@@ -162,30 +191,75 @@ function toItem(event: RawRecord, start: Date, end: Date, today: Date): Annivers
   };
 }
 
+/** With Only living, rows are fetched this many at a time until the card
+ * is full, since some of each batch get left out. */
+const LIVING_BATCH = 25;
+
 /** The most recent `limit` anniversaries in window `index` (see
  * windowRange()), listed soonest first (the same day: most recent year
- * first, yearless last), and how many it holds in all: one query, plus one to
- * fetch the events' profiles. Never throws: Home shows an empty card
- * instead. */
+ * first, yearless last), and how many more the window holds. Without
+ * Only living that's one query, plus one to fetch the events' profiles;
+ * with it, a batch at a time until `limit` pass. Never throws: Home shows
+ * an empty card instead. */
 export async function fetchAnniversaryWindow(
-  token: string, limit: number, index: number, today = new Date(),
+  token: string, limit: number, index: number, today = new Date(), options: AnniversaryOptions = {},
 ): Promise<AnniversaryWindow> {
   const { start, end } = windowRange(index, today);
+  const onlyLiving = !!options.onlyLiving;
+  const expr = windowExpr(start, end, !onlyLiving);
   try {
-    const { page, totalCount } = await fetchPage(
-      EVENT_VIEW, token, null, true, windowExpr(start, end), ORDER, limit, []
-    );
-    const handles = page.items.map((item) => item.handle);
-    const events = await fetchObjectsByHandle(token, "event", handles);
-    const items = handles.flatMap((handle) => {
-      const event = events.get(handle);
-      return event ? [toItem(event, start, end, today)] : [];
-    });
+    const items: AnniversaryItem[] = [];
+    let after: string | null = null;
+    let more: number | null = 0;
+    for (;;) {
+      const { page, totalCount } = await fetchPage(
+        EVENT_VIEW, token, after, !onlyLiving, expr, ORDER, onlyLiving ? LIVING_BATCH : limit, []
+      );
+      const handles = page.items.map((item) => item.handle);
+      const events = await fetchObjectsByHandle(token, "event", handles);
+      let used = 0;
+      for (const handle of handles) {
+        if (items.length >= limit) break;
+        used++;
+        const event = events.get(handle);
+        if (event && (!onlyLiving || isAboutTheLiving(event))) items.push(toItem(event, start, end, today));
+      }
+      if (!onlyLiving) {
+        more = totalCount === null ? null : Math.max(0, totalCount - items.length);
+        break;
+      }
+      if (items.length >= limit) {
+        // Full: anything unchecked might still pass.
+        more = used < handles.length || page.next_after ? null : 0;
+        break;
+      }
+      if (!page.next_after) break;
+      after = page.next_after;
+    }
     items.sort((a, b) => a.daysUntil - b.daysUntil || (a.years ?? Infinity) - (b.years ?? Infinity));
-    return { start, end, items, total: totalCount };
+    return { start, end, items, more };
   } catch (err) {
     console.warn("[home] anniversaries: fetch failed", err);
-    return { start, end, items: [], total: null };
+    return { start, end, items: [], more: 0 };
+  }
+}
+
+const ONLY_LIVING_KEY = "gramps-connect_anniversaries_only_living";
+
+/** The card's Only living box, remembered per browser. */
+export function getOnlyLivingPreference(): boolean {
+  try {
+    return localStorage.getItem(ONLY_LIVING_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setOnlyLivingPreference(on: boolean): void {
+  try {
+    localStorage.setItem(ONLY_LIVING_KEY, on ? "1" : "0");
+  } catch {
+    // private window / blocked storage: just not remembered
   }
 }
 

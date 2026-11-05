@@ -81,7 +81,7 @@ describe("fetchAnniversaryWindow", () => {
       ["event", "e3", "Birth", "", 0, null],
       ["family", "f1", "Marriage", "Smith, Bob & Cat Jones", 4, 14],
     ]);
-    expect(win.total).toBe(20);
+    expect(win.more).toBe(17);
     expect(fetchPage.mock.calls[0][3]).toBe(true); // wants the count
     expect(fetchPage.mock.calls[0][5][0]).toEqual({ column: "date.dateval[2]", direction: "desc" });
     expect(fetchPage.mock.calls[0][6]).toBe(3);
@@ -98,7 +98,46 @@ describe("fetchAnniversaryWindow", () => {
     fetchPage.mockRejectedValueOnce(new Error("offline"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const win = await fetchAnniversaryWindow("tok", 8, 0, NOV_1);
-    expect([win.items, win.total]).toEqual([[], null]);
+    expect([win.items, win.more]).toEqual([[], 0]);
+  });
+
+  describe("Only living", () => {
+    const living = { name_display: "Alive", death: {} };
+    const dead = { name_display: "Gone", death: { date: "1990-01-01" } };
+    const person = (handle: string, p: Record<string, unknown>) =>
+      ({ participants: { people: [{ role: "Primary", person: { handle, ...p } }], families: [] } });
+    const family = (father: Record<string, unknown>, mother: Record<string, unknown>) =>
+      ({ type: "Marriage", participants: { people: [], families: [{ role: "Family", family: { handle: "f", father, mother } }] } });
+
+    it("keeps births of the living and marriages with both spouses living, in batches until full", async () => {
+      fetchPage
+        .mockResolvedValueOnce({ page: { items: ["b-alive", "b-dead", "m-alive", "m-widowed", "orphan"].map((handle) => ({ handle })), next_after: "c1" }, totalCount: null })
+        .mockResolvedValueOnce({ page: { items: [{ handle: "b2" }, { handle: "b3" }], next_after: "c2" }, totalCount: null });
+      events.byHandle.set("b-alive", event("b-alive", [2, 11, 1990, false], person("p1", living)));
+      events.byHandle.set("b-dead", event("b-dead", [2, 11, 1900, false], person("p2", dead)));
+      events.byHandle.set("m-alive", event("m-alive", [3, 11, 2012, false], family(living, living)));
+      events.byHandle.set("m-widowed", event("m-widowed", [3, 11, 1960, false], family(dead, living)));
+      events.byHandle.set("orphan", event("orphan", [4, 11, 1980, false], { participants: { people: [], families: [] } }));
+      events.byHandle.set("b2", event("b2", [5, 11, 1970, false], person("p3", living)));
+      events.byHandle.set("b3", event("b3", [6, 11, 1960, false], person("p4", living)));
+
+      const win = await fetchAnniversaryWindow("tok", 3, 0, NOV_1, { onlyLiving: true });
+      expect(win.items.map((i) => i.eventHandle)).toEqual(["b-alive", "m-alive", "b2"]);
+      // Stopped with b3 and a further cursor unchecked: may be more.
+      expect(win.more).toBeNull();
+      expect(fetchPage.mock.calls[0][4]).toContain("type.value != EventType.DEATH");
+      expect(fetchPage.mock.calls[0][3]).toBe(false); // no count needed
+      // The first batch left the card short: the second continues from it.
+      expect(fetchPage.mock.calls[1][2]).toBe("c1");
+    });
+
+    it("says none more once the whole week has been checked", async () => {
+      fetchPage.mockResolvedValueOnce(page(["b-alive"], null));
+      events.byHandle.set("b-alive", event("b-alive", [2, 11, 1990, false], person("p1", living)));
+      const win = await fetchAnniversaryWindow("tok", 8, 0, NOV_1, { onlyLiving: true });
+      expect([win.items.length, win.more]).toEqual([1, 0]);
+      expect(fetchPage).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
