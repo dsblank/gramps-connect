@@ -31,10 +31,10 @@ beforeEach(() => {
 });
 
 describe("windowRange", () => {
-  it("steps 30 days at a time from today, ignoring the time of day", () => {
-    expect(windowRange(0, new Date(2026, 10, 1, 23, 59))).toEqual({ start: NOV_1, end: new Date(2026, 10, 30) });
-    expect(windowRange(1, NOV_1)).toEqual({ start: new Date(2026, 11, 1), end: new Date(2026, 11, 30) });
-    expect(windowRange(-1, NOV_1)).toEqual({ start: new Date(2026, 9, 2), end: new Date(2026, 9, 31) });
+  it("steps a week at a time from today, ignoring the time of day", () => {
+    expect(windowRange(0, new Date(2026, 10, 1, 23, 59))).toEqual({ start: NOV_1, end: new Date(2026, 10, 7) });
+    expect(windowRange(1, NOV_1)).toEqual({ start: new Date(2026, 10, 8), end: new Date(2026, 10, 14) });
+    expect(windowRange(-1, NOV_1)).toEqual({ start: new Date(2026, 9, 25), end: new Date(2026, 9, 31) });
   });
 });
 
@@ -61,7 +61,8 @@ describe("occurrenceIn", () => {
 });
 
 describe("fetchAnniversaryWindow", () => {
-  it("asks for the most recent first, and labels each event", async () => {
+  it("asks for the most recent, lists them soonest first, and labels each event", async () => {
+    // Served most recent first: 2012, 1890, yearless.
     fetchPage.mockResolvedValueOnce(page(["e1", "e2", "e3"], 20));
     events.byHandle.set("e1", event("e1", [5, 11, 2012, false], {
       type: "Marriage",
@@ -72,13 +73,13 @@ describe("fetchAnniversaryWindow", () => {
     events.byHandle.set("e2", event("e2", [1, 11, 1890, false], {
       participants: { people: [{ role: "Primary", person: { handle: "p1", name_display: "Smith, Ann" } }], families: [] },
     }));
-    events.byHandle.set("e3", event("e3", [9, 11, 0, false], { participants: { people: [], families: [] } }));
+    events.byHandle.set("e3", event("e3", [1, 11, 0, false], { participants: { people: [], families: [] } }));
 
     const win = await fetchAnniversaryWindow("tok", 3, 0, NOV_1);
     expect(win.items.map((i) => [i.viewKey, i.handle, i.typeLabel, i.who, i.daysUntil, i.years])).toEqual([
-      ["family", "f1", "Marriage", "Smith, Bob & Cat Jones", 4, 14],
       ["person", "p1", "Birth", "Smith, Ann", 0, 136],
-      ["event", "e3", "Birth", "", 8, null],
+      ["event", "e3", "Birth", "", 0, null],
+      ["family", "f1", "Marriage", "Smith, Bob & Cat Jones", 4, 14],
     ]);
     expect(win.total).toBe(20);
     expect(fetchPage.mock.calls[0][3]).toBe(true); // wants the count

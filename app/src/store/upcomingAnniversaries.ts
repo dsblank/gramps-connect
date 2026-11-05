@@ -1,8 +1,9 @@
 // Home's "Anniversaries" card: the births, marriages and deaths whose day
-// and month fall in a 30-day window -- from today at first, then (with the
-// card's arrows) the 30 days before or after that, and so on -- with the
-// most recent events first, so a sister's 14th wedding anniversary comes
-// ahead of a death from 1890.
+// and month fall in a 7-day window -- from today at first, then (with the
+// card's arrows) the week before or after that, and so on. When the week
+// holds more than the card shows, the most recent events win the places,
+// so a sister's 14th wedding anniversary beats a death from 1890; the ones
+// picked are then listed soonest first.
 //
 // gramps-web's own dashboard card (GrampsjsViewAnniversaries.js) only shows
 // *today*, via /api/events/?dates=*/m/d. A window needs a month/day range
@@ -18,7 +19,7 @@ import { fetchObjectsByHandle, type RawRecord } from "./objectsByHandle";
 import { getI18nSnapshot } from "../i18n/i18n";
 
 /** Days in one window of the card. */
-export const WINDOW_DAYS = 30;
+export const WINDOW_DAYS = 7;
 
 export interface AnniversaryItem {
   /** The event's own handle. */
@@ -58,7 +59,9 @@ const BASE_EXPR =
   " and date.calendar == Date.CAL_GREGORIAN" +
   " and date.dateval[0] > 0 and date.dateval[1] > 0";
 
-/** Most recent year first; a yearless date (year 0) last. Then by day. */
+/** Which events win the card's places: most recent year first, a yearless
+ * date (year 0) last. Then by day. (Display order is fetchAnniversaryWindow's
+ * own: soonest first.) */
 const ORDER: OrderBy[] = [
   { column: "date.dateval[2]", direction: "desc" },
   { column: "date.dateval[1]", direction: "asc" },
@@ -81,8 +84,8 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / DAY_MS);
 }
 
-/** Window `index` around `today`: 0 is today and the 29 days after, 1 the
- * 30 after those, -1 the 30 days up to yesterday, ... */
+/** Window `index` around `today`: 0 is today and the 6 days after, 1 the
+ * 7 after those, -1 the 7 days up to yesterday, ... */
 export function windowRange(index: number, today: Date): { start: Date; end: Date } {
   const start = addDays(midnight(today), index * WINDOW_DAYS);
   return { start, end: addDays(start, WINDOW_DAYS - 1) };
@@ -160,7 +163,8 @@ function toItem(event: RawRecord, start: Date, end: Date, today: Date): Annivers
 }
 
 /** The most recent `limit` anniversaries in window `index` (see
- * windowRange()), and how many it holds in all: one query, plus one to
+ * windowRange()), listed soonest first (the same day: most recent year
+ * first, yearless last), and how many it holds in all: one query, plus one to
  * fetch the events' profiles. Never throws: Home shows an empty card
  * instead. */
 export async function fetchAnniversaryWindow(
@@ -177,6 +181,7 @@ export async function fetchAnniversaryWindow(
       const event = events.get(handle);
       return event ? [toItem(event, start, end, today)] : [];
     });
+    items.sort((a, b) => a.daysUntil - b.daysUntil || (a.years ?? Infinity) - (b.years ?? Infinity));
     return { start, end, items, total: totalCount };
   } catch (err) {
     console.warn("[home] anniversaries: fetch failed", err);

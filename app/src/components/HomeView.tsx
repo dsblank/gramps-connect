@@ -29,8 +29,8 @@ const TOPIC_LIMIT = 5;
 const STORY_LIMIT = 5;
 const BLOG_LIMIT = 3;
 const ANNIVERSARY_LIMIT = 8;
-// How many 30-day windows the arrows go either way: about a year.
-const ANNIVERSARY_WINDOWS = 12;
+// How many weeks the arrows go either way: a year.
+const ANNIVERSARY_WINDOWS = 52;
 
 type Stage = "loading" | "ready" | "error";
 
@@ -324,9 +324,9 @@ function RecordRows({ items }: { items: RecentItem[] }) {
   );
 }
 
-/** The Anniversaries card: a 30-day window at a time, starting today,
- * showing the eight most recent events in it (so living memory comes
- * before 1850), and how many more it holds. The arrows step a window back
+/** The Anniversaries card: a week at a time, starting today, showing the
+ * eight most recent events in it (so living memory beats 1850) soonest
+ * first, and how many more it holds. The arrows step a window back
  * or forward, up to about a year either way. Windows are kept as they're
  * fetched, so stepping back over them doesn't ask again.
  *
@@ -334,7 +334,7 @@ function RecordRows({ items }: { items: RecentItem[] }) {
  * answers this query in Python, not SQL (7 s on a 100k tree vs 0.9 s with
  * view-private), so it mustn't hold up the page. */
 function AnniversaryCard() {
-  // 0 = today and the 29 days after, 1 = the 30 after those, -1 = the 30
+  // 0 = today and the 6 days after, 1 = the week after that, -1 = the 7
   // days up to yesterday, ...
   const [index, setIndex] = useState(0);
   const [windows, setWindows] = useState<Map<number, AnniversaryWindow>>(() => new Map());
@@ -390,13 +390,13 @@ function AnniversaryCard() {
           <Text c="dimmed">{t("Looking for anniversaries…")}</Text>
         </Group>
       ) : shown.items.length === 0 ? (
-        <Text c="dimmed">{t("No births, marriages or deaths with an exact date in these 30 days.")}</Text>
+        <Text c="dimmed">{t("No births, marriages or deaths with an exact date in these 7 days.")}</Text>
       ) : (
         <Box style={{ opacity: loading ? 0.5 : 1 }}>
           <AnniversaryRows items={shown.items} />
           {more > 0 && (
             <Text size="xs" c="dimmed" mt="xs">
-              {t("…and %s more in these 30 days").replace("%s", String(more))}
+              {t("…and %s more in these 7 days").replace("%s", String(more))}
             </Text>
           )}
         </Box>
