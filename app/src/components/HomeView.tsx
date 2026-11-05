@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Alert, Anchor, Box, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Box, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import type { QueryItem } from "../store/api";
 import { formatHash } from "../hash";
@@ -12,7 +12,7 @@ import {
 import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
 import { EVENT_VIEW, PERSON_VIEW } from "../store/views";
 import {
-  fetchUpcomingAnniversaries, formatDaysUntil, formatYears, type AnniversaryItem,
+  fetchAnniversaryPage, formatDaysUntil, formatYears, type AnniversaryItem, type AnniversaryPage,
 } from "../store/upcomingAnniversaries";
 import { BlogPostView } from "./BlogPostView";
 import { CircleGlyphButton } from "./CircleGlyphButton";
@@ -58,25 +58,6 @@ export function HomeView() {
   const [blogPosts, setBlogPosts] = useState<BlogPostItem[]>([]);
   const [openBlogHandle, setOpenBlogHandle] = useState<string | null>(null);
   const [homePerson, setHomePerson] = useState<QueryItem | null>(null);
-  // null while loading. Fetched on its own, not in the Promise.all below:
-  // for a Guest the server answers this query in Python, not SQL (7 s on a
-  // 100k tree vs 0.9 s with view-private), so it mustn't hold up the page.
-  const [anniversaries, setAnniversaries] = useState<AnniversaryItem[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const token = await getToken();
-      // never throws: logs and returns [] on error
-      const items = await fetchUpcomingAnniversaries(token, ANNIVERSARY_LIMIT);
-      if (!cancelled) setAnniversaries(items);
-    })().catch(() => {
-      if (!cancelled) setAnniversaries([]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,18 +193,7 @@ export function HomeView() {
               </Anchor>
             </Panel>
 
-            <Panel title={t("Upcoming anniversaries")}>
-              {anniversaries === null ? (
-                <Group gap="xs">
-                  <Loader size="xs" />
-                  <Text c="dimmed">{t("Looking for anniversaries…")}</Text>
-                </Group>
-              ) : anniversaries.length === 0 ? (
-                <Text c="dimmed">{t("No births, marriages or deaths with an exact date yet.")}</Text>
-              ) : (
-                <AnniversaryRows items={anniversaries} />
-              )}
-            </Panel>
+            <AnniversaryCard />
           </Stack>
 
           <Stack gap="lg">
@@ -351,9 +321,92 @@ function RecordRows({ items }: { items: RecentItem[] }) {
   );
 }
 
-/** The Upcoming anniversaries card's rows: event type and who, the
- * original date and how many years it marks, and how soon. Each row links
- * to the person (or family) rather than the event itself. */
+/** The Anniversaries card: a page of eight at a time, starting with the
+ * ones coming up from today. The arrows page back to the ones just missed
+ * and on again; each direction stops after a full year. Pages are kept as
+ * they're fetched, so paging back over them doesn't ask again (and each
+ * one's cursor is where the next one further out starts).
+ *
+ * Loads on its own, not in HomeView's Promise.all: for a Guest the server
+ * answers this query in Python, not SQL (7 s on a 100k tree vs 0.9 s with
+ * view-private), so it mustn't hold up the page. */
+function AnniversaryCard() {
+  // 0 = from today on, 1 = the page after that, -1 = the ones just before
+  // today, -2 = the ones before those, ...
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pages, setPages] = useState<Map<number, AnniversaryPage>>(() => new Map());
+  const page = pages.get(pageIndex);
+
+  useEffect(() => {
+    if (pages.has(pageIndex)) return;
+    const backward = pageIndex < 0;
+    // Page n's cursor is the next of the page one step nearer today, which
+    // the arrows only let you leave once it has loaded.
+    const nearer = pages.get(backward ? pageIndex + 1 : pageIndex - 1);
+    const cursor = pageIndex === 0 || pageIndex === -1 ? null : nearer?.next ?? null;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      // never throws: logs and returns an empty page on error
+      return fetchAnniversaryPage(token, ANNIVERSARY_LIMIT, backward, cursor);
+    })().catch((): AnniversaryPage => ({ items: [], next: null })).then((loaded) => {
+      if (!cancelled) setPages((prev) => new Map(prev).set(pageIndex, loaded));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageIndex, pages]);
+
+  // What's still showing while the next page loads: the one just left.
+  const [shown, setShown] = useState<AnniversaryPage | undefined>(undefined);
+  useEffect(() => {
+    if (page) setShown(page);
+  }, [page]);
+
+  const loading = !page;
+  const canGoBack = !loading && (pageIndex >= 0 || page.next !== null);
+  const canGoForward = !loading && (pageIndex < 0 || page.next !== null);
+
+  return (
+    <Panel
+      title={pageIndex < 0 ? t("Recent anniversaries") : t("Upcoming anniversaries")}
+      actions={
+        <Group gap={4} wrap="nowrap">
+          {loading && shown && <Loader size="xs" />}
+          <ActionIcon variant="subtle" size="sm" onClick={() => setPageIndex((i) => i - 1)} disabled={!canGoBack}
+            aria-label={t("Earlier anniversaries")} title={t("Earlier anniversaries")}>
+            ‹
+          </ActionIcon>
+          <ActionIcon variant="subtle" size="sm" onClick={() => setPageIndex((i) => i + 1)} disabled={!canGoForward}
+            aria-label={t("Later anniversaries")} title={t("Later anniversaries")}>
+            ›
+          </ActionIcon>
+        </Group>
+      }
+    >
+      {!shown ? (
+        <Group gap="xs">
+          <Loader size="xs" />
+          <Text c="dimmed">{t("Looking for anniversaries…")}</Text>
+        </Group>
+      ) : shown.items.length === 0 ? (
+        <Text c="dimmed">
+          {pageIndex === 0 && !loading
+            ? t("No births, marriages or deaths with an exact date yet.")
+            : t("No more anniversaries this way.")}
+        </Text>
+      ) : (
+        <Box style={{ opacity: loading ? 0.5 : 1 }}>
+          <AnniversaryRows items={shown.items} />
+        </Box>
+      )}
+    </Panel>
+  );
+}
+
+/** The Anniversaries card's rows: event type and who, the original date
+ * and how many years it marks, and how soon (or how long ago). Each row
+ * links to the person (or family) rather than the event itself. */
 function AnniversaryRows({ items }: { items: AnniversaryItem[] }) {
   return (
     <Stack gap="xs">
@@ -385,10 +438,17 @@ function AnniversaryRows({ items }: { items: AnniversaryItem[] }) {
 
 /** Bordered section, same convention VisualFrame uses for its own panel --
  * this page has five of them instead of one. */
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   return (
     <Paper withBorder p="md" radius="sm">
-      <Title order={5} mb="sm">{title}</Title>
+      {actions ? (
+        <Group justify="space-between" wrap="nowrap" mb="sm">
+          <Title order={5}>{title}</Title>
+          {actions}
+        </Group>
+      ) : (
+        <Title order={5} mb="sm">{title}</Title>
+      )}
       {children}
     </Paper>
   );
