@@ -1,19 +1,24 @@
-// Home's "Anniversaries" card: the next few births, marriages and deaths
-// whose day and month fall on or after today, wrapping into January, and
-// (paging back with the card's arrows) the ones just missed.
+// Home's "Anniversaries" card: the births, marriages and deaths whose day
+// and month fall in a 30-day window -- from today at first, then (with the
+// card's arrows) the 30 days before or after that, and so on -- with the
+// most recent events first, so a sister's 14th wedding anniversary comes
+// ahead of a death from 1890.
 //
 // gramps-web's own dashboard card (GrampsjsViewAnniversaries.js) only shows
-// *today*, via /api/events/?dates=*/m/d. Looking ahead needs a month/day
-// range instead, which that endpoint can't express, so this is a GOQL query
-// on the event table, ordered by the date's month then day. Like the ICS feed
-// (gramps-web-api's /api/anniversaries.ics), only exact dates count: no
-// about/before/after/range, no estimated or calculated quality, and a known
-// day and month. Unlike it, only the Gregorian calendar (converting a Julian
-// or Hebrew date's day and month would need doing in SQL to sort on).
+// *today*, via /api/events/?dates=*/m/d. A window needs a month/day range
+// instead, which that endpoint can't express, so this is a GOQL query on the
+// event table. Like the ICS feed (gramps-web-api's /api/anniversaries.ics),
+// only exact dates count: no about/before/after/range, no estimated or
+// calculated quality, and a known day and month. Unlike it, only the
+// Gregorian calendar (converting a Julian or Hebrew date's day and month
+// would need doing in SQL to filter on).
 import { fetchPage } from "./api";
 import { EVENT_VIEW, type OrderBy } from "./views";
 import { fetchObjectsByHandle, type RawRecord } from "./objectsByHandle";
 import { getI18nSnapshot } from "../i18n/i18n";
+
+/** Days in one window of the card. */
+export const WINDOW_DAYS = 30;
 
 export interface AnniversaryItem {
   /** The event's own handle. */
@@ -28,12 +33,23 @@ export interface AnniversaryItem {
   who: string;
   /** The full date as the server displays it, e.g. "1850-11-03". */
   dateLabel: string;
-  /** 0 = today, 1 = tomorrow, ...; -1 = yesterday, ... for one already
-   * passed (a page paged back to). */
+  /** Days from today to this occurrence: 0 = today, 1 = tomorrow, -1 =
+   * yesterday, ... */
   daysUntil: number;
-  /** How many years this occurrence marks (the next one, or for a passed
-   * one the most recent), or null when the year isn't recorded. */
+  /** How many years this occurrence marks, or null when the year isn't
+   * recorded. */
   years: number | null;
+}
+
+export interface AnniversaryWindow {
+  /** First and last day of the window, inclusive, at local midnight. */
+  start: Date;
+  end: Date;
+  /** The most recent `limit` events in it. */
+  items: AnniversaryItem[];
+  /** How many events the window holds in all (null if the server didn't
+   * say), so the card can say how many more there are. */
+  total: number | null;
 }
 
 const BASE_EXPR =
@@ -42,50 +58,69 @@ const BASE_EXPR =
   " and date.calendar == Date.CAL_GREGORIAN" +
   " and date.dateval[0] > 0 and date.dateval[1] > 0";
 
-/** Soonest first; on the same day, the most recent year first, as
- * gramps-web's card does. */
-const FORWARD_ORDER: OrderBy[] = [
+/** Most recent year first; a yearless date (year 0) last. Then by day. */
+const ORDER: OrderBy[] = [
+  { column: "date.dateval[2]", direction: "desc" },
   { column: "date.dateval[1]", direction: "asc" },
   { column: "date.dateval[0]", direction: "asc" },
-  { column: "date.dateval[2]", direction: "desc" },
 ];
 
-/** The exact reverse, for paging back from yesterday: reversing a fetched
- * page then reads in the same order as a forward one. */
-const BACKWARD_ORDER: OrderBy[] = FORWARD_ORDER.map((o) => ({
-  ...o, direction: o.direction === "asc" ? "desc" : "asc",
-}));
+const DAY_MS = 86_400_000;
 
-/** The where_expr for events from (month, day) through 31 December
- * (`onOrAfter`), or from 1 January up to the day before. Dated after this
- * year is left out: nothing has happened yet to have an anniversary of. A
- * yearless date (year 0) passes. */
-export function anniversaryExpr(month: number, day: number, year: number, onOrAfter: boolean): string {
-  const range = onOrAfter
-    ? `(date.dateval[1] > ${month} or (date.dateval[1] == ${month} and date.dateval[0] >= ${day}))`
-    : `(date.dateval[1] < ${month} or (date.dateval[1] == ${month} and date.dateval[0] < ${day}))`;
-  return `${BASE_EXPR} and date.dateval[2] <= ${year} and ${range}`;
+function midnight(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-/** Days from `today` back to the most recent (month, day) before it (a
- * negative number), and that occurrence's year. */
-export function previousOccurrence(month: number, day: number, today: Date): { daysUntil: number; year: number } {
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  let prev = new Date(start.getFullYear(), month - 1, day);
-  if (prev >= start) prev = new Date(start.getFullYear() - 1, month - 1, day);
-  const daysUntil = Math.round((prev.getTime() - start.getTime()) / 86_400_000);
-  return { daysUntil, year: prev.getFullYear() };
+function addDays(d: Date, days: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days);
 }
 
-/** Days from `today` to the next (month, day), and that occurrence's year.
- * 29 February in a year without one falls on 1 March, as JS Date rolls it. */
-export function nextOccurrence(month: number, day: number, today: Date): { daysUntil: number; year: number } {
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  let next = new Date(start.getFullYear(), month - 1, day);
-  if (next < start) next = new Date(start.getFullYear() + 1, month - 1, day);
-  // Math.round: a daylight-saving change makes one day 23 or 25 hours.
-  const daysUntil = Math.round((next.getTime() - start.getTime()) / 86_400_000);
-  return { daysUntil, year: next.getFullYear() };
+/** Whole days from a to b. Math.round: a daylight-saving change makes one
+ * day 23 or 25 hours. */
+function daysBetween(a: Date, b: Date): number {
+  return Math.round((b.getTime() - a.getTime()) / DAY_MS);
+}
+
+/** Window `index` around `today`: 0 is today and the 29 days after, 1 the
+ * 30 after those, -1 the 30 days up to yesterday, ... */
+export function windowRange(index: number, today: Date): { start: Date; end: Date } {
+  const start = addDays(midnight(today), index * WINDOW_DAYS);
+  return { start, end: addDays(start, WINDOW_DAYS - 1) };
+}
+
+function onOrAfter(month: number, day: number): string {
+  return `(date.dateval[1] > ${month} or (date.dateval[1] == ${month} and date.dateval[0] >= ${day}))`;
+}
+
+function onOrBefore(month: number, day: number): string {
+  return `(date.dateval[1] < ${month} or (date.dateval[1] == ${month} and date.dateval[0] <= ${day}))`;
+}
+
+/** The where_expr for events whose day and month fall from `start` through
+ * `end` (at most a year apart). A window over New Year is two pieces, one
+ * per calendar year. Each piece leaves out events dated after its year:
+ * nothing has happened yet to have an anniversary of. A yearless date
+ * (year 0) passes. */
+export function windowExpr(start: Date, end: Date): string {
+  const piece = (year: number, from: string, to: string) => `(date.dateval[2] <= ${year} and ${from} and ${to})`;
+  const sm = start.getMonth() + 1, sd = start.getDate();
+  const em = end.getMonth() + 1, ed = end.getDate();
+  const pieces = start.getFullYear() === end.getFullYear()
+    ? [piece(start.getFullYear(), onOrAfter(sm, sd), onOrBefore(em, ed))]
+    : [piece(start.getFullYear(), onOrAfter(sm, sd), onOrBefore(12, 31)),
+      piece(end.getFullYear(), onOrAfter(1, 1), onOrBefore(em, ed))];
+  return `${BASE_EXPR} and (${pieces.join(" or ")})`;
+}
+
+/** The (month, day)'s occurrence within [start, end], and its year. 29
+ * February in a year without one falls on 1 March, as JS Date rolls it. */
+export function occurrenceIn(month: number, day: number, start: Date, end: Date): Date {
+  for (const year of [start.getFullYear(), end.getFullYear()]) {
+    const date = new Date(year, month - 1, day);
+    if (date >= start && date <= end) return date;
+  }
+  // Only a 29 February rolled past the window's end: the nearest day.
+  return new Date(end.getFullYear(), month - 1, day) > end ? end : start;
 }
 
 type Profile = Record<string, any>;
@@ -106,11 +141,12 @@ function participant(profile: Profile | undefined): Pick<AnniversaryItem, "viewK
   return null;
 }
 
-function toItem(event: RawRecord, today: Date, backward: boolean): AnniversaryItem {
+function toItem(event: RawRecord, start: Date, end: Date, today: Date): AnniversaryItem {
   const profile = event.profile as Profile | undefined;
   const [day, month, year] = ((event.date as Profile | undefined)?.dateval ?? []) as number[];
-  const next = backward ? previousOccurrence(month, day, today) : nextOccurrence(month, day, today);
+  const occurrence = occurrenceIn(month, day, start, end);
   const who = participant(profile);
+  const years = occurrence.getFullYear() - year;
   return {
     eventHandle: event.handle,
     viewKey: who?.viewKey ?? "event",
@@ -118,67 +154,33 @@ function toItem(event: RawRecord, today: Date, backward: boolean): AnniversaryIt
     typeLabel: String(profile?.type ?? ""),
     who: who?.who ?? "",
     dateLabel: String(profile?.date ?? ""),
-    daysUntil: next.daysUntil,
-    years: year > 0 && next.year - year > 0 ? next.year - year : null,
+    daysUntil: daysBetween(midnight(today), occurrence),
+    years: year > 0 && years > 0 ? years : null,
   };
 }
 
-/** Where the next page in one direction starts: which of the two
- * year-segments (see anniversaryPage()), and the server's keyset cursor
- * within it. */
-export interface AnniversaryCursor {
-  segment: 0 | 1;
-  after: string | null;
-}
-
-export interface AnniversaryPage {
-  /** Always in calendar order, earliest first, whichever the direction. */
-  items: AnniversaryItem[];
-  /** Where the page after this one (further from today) starts, or null
-   * once the whole year has been covered in this direction. */
-  next: AnniversaryCursor | null;
-}
-
-/** One page of `limit` anniversaries, walking away from today: forward
- * (`backward` false) from today through 31 December then 1 January up to
- * yesterday, or backward from yesterday through 1 January then 31 December
- * down to today. Either way one full year at most, so the two directions
- * meet but never repeat a day. `cursor` is the previous page's `next`
- * (null for the first page). A page straddling 31 December/1 January takes
- * a second query. Never throws: Home shows an empty card instead. */
-export async function fetchAnniversaryPage(
-  token: string, limit: number, backward = false, cursor: AnniversaryCursor | null = null, today = new Date(),
-): Promise<AnniversaryPage> {
-  const month = today.getMonth() + 1;
-  const day = today.getDate();
-  const year = today.getFullYear();
-  // Forward: [today..31 Dec, 1 Jan..yesterday]. Backward: [yesterday..1 Jan,
-  // 31 Dec..today], whose second segment's occurrences were last year, so
-  // anything dated this year there hasn't happened yet.
-  const segments = backward
-    ? [anniversaryExpr(month, day, year, false), anniversaryExpr(month, day, year - 1, true)]
-    : [anniversaryExpr(month, day, year, true), anniversaryExpr(month, day, year, false)];
-  const order = backward ? BACKWARD_ORDER : FORWARD_ORDER;
+/** The most recent `limit` anniversaries in window `index` (see
+ * windowRange()), and how many it holds in all: one query, plus one to
+ * fetch the events' profiles. Never throws: Home shows an empty card
+ * instead. */
+export async function fetchAnniversaryWindow(
+  token: string, limit: number, index: number, today = new Date(),
+): Promise<AnniversaryWindow> {
+  const { start, end } = windowRange(index, today);
   try {
-    const handles: string[] = [];
-    let at: AnniversaryCursor | null = cursor ?? { segment: 0, after: null };
-    while (at && handles.length < limit) {
-      const want = limit - handles.length;
-      const { page } = await fetchPage(EVENT_VIEW, token, at.after, false, segments[at.segment], order, want, []);
-      handles.push(...page.items.map((item) => item.handle));
-      if (page.items.length >= want && page.next_after) at = { segment: at.segment, after: page.next_after };
-      else at = at.segment === 0 ? { segment: 1, after: null } : null;
-    }
+    const { page, totalCount } = await fetchPage(
+      EVENT_VIEW, token, null, true, windowExpr(start, end), ORDER, limit, []
+    );
+    const handles = page.items.map((item) => item.handle);
     const events = await fetchObjectsByHandle(token, "event", handles);
     const items = handles.flatMap((handle) => {
       const event = events.get(handle);
-      return event ? [toItem(event, today, backward)] : [];
+      return event ? [toItem(event, start, end, today)] : [];
     });
-    if (backward) items.reverse();
-    return { items, next: at };
+    return { start, end, items, total: totalCount };
   } catch (err) {
     console.warn("[home] anniversaries: fetch failed", err);
-    return { items: [], next: null };
+    return { start, end, items: [], total: null };
   }
 }
 
@@ -203,4 +205,18 @@ export function formatYears(years: number): string {
   } catch {
     return `${years} years`;
   }
+}
+
+/** "4 Nov – 3 Dec", in the UI language. (formatRange isn't in this
+ * project's TS lib, though every supported browser has it.) */
+export function formatWindow(start: Date, end: Date): string {
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat(intlLocale(), opts);
+  } catch {
+    fmt = new Intl.DateTimeFormat("en", opts);
+  }
+  const ranged = fmt as Intl.DateTimeFormat & { formatRange?: (a: Date, b: Date) => string };
+  return ranged.formatRange ? ranged.formatRange(start, end) : `${fmt.format(start)} – ${fmt.format(end)}`;
 }

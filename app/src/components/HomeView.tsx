@@ -12,7 +12,8 @@ import {
 import { getHomePersonHandle, setHomePersonHandle } from "../store/homePersonPreference";
 import { EVENT_VIEW, PERSON_VIEW } from "../store/views";
 import {
-  fetchAnniversaryPage, formatDaysUntil, formatYears, type AnniversaryItem, type AnniversaryPage,
+  fetchAnniversaryWindow, formatDaysUntil, formatWindow, formatYears, windowRange,
+  type AnniversaryItem, type AnniversaryWindow,
 } from "../store/upcomingAnniversaries";
 import { BlogPostView } from "./BlogPostView";
 import { CircleGlyphButton } from "./CircleGlyphButton";
@@ -28,6 +29,8 @@ const TOPIC_LIMIT = 5;
 const STORY_LIMIT = 5;
 const BLOG_LIMIT = 3;
 const ANNIVERSARY_LIMIT = 8;
+// How many 30-day windows the arrows go either way: about a year.
+const ANNIVERSARY_WINDOWS = 12;
 
 type Stage = "loading" | "ready" | "error";
 
@@ -321,63 +324,60 @@ function RecordRows({ items }: { items: RecentItem[] }) {
   );
 }
 
-/** The Anniversaries card: a page of eight at a time, starting with the
- * ones coming up from today. The arrows page back to the ones just missed
- * and on again; each direction stops after a full year. Pages are kept as
- * they're fetched, so paging back over them doesn't ask again (and each
- * one's cursor is where the next one further out starts).
+/** The Anniversaries card: a 30-day window at a time, starting today,
+ * showing the eight most recent events in it (so living memory comes
+ * before 1850), and how many more it holds. The arrows step a window back
+ * or forward, up to about a year either way. Windows are kept as they're
+ * fetched, so stepping back over them doesn't ask again.
  *
  * Loads on its own, not in HomeView's Promise.all: for a Guest the server
  * answers this query in Python, not SQL (7 s on a 100k tree vs 0.9 s with
  * view-private), so it mustn't hold up the page. */
 function AnniversaryCard() {
-  // 0 = from today on, 1 = the page after that, -1 = the ones just before
-  // today, -2 = the ones before those, ...
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pages, setPages] = useState<Map<number, AnniversaryPage>>(() => new Map());
-  const page = pages.get(pageIndex);
+  // 0 = today and the 29 days after, 1 = the 30 after those, -1 = the 30
+  // days up to yesterday, ...
+  const [index, setIndex] = useState(0);
+  const [windows, setWindows] = useState<Map<number, AnniversaryWindow>>(() => new Map());
+  const current = windows.get(index);
 
   useEffect(() => {
-    if (pages.has(pageIndex)) return;
-    const backward = pageIndex < 0;
-    // Page n's cursor is the next of the page one step nearer today, which
-    // the arrows only let you leave once it has loaded.
-    const nearer = pages.get(backward ? pageIndex + 1 : pageIndex - 1);
-    const cursor = pageIndex === 0 || pageIndex === -1 ? null : nearer?.next ?? null;
+    if (windows.has(index)) return;
     let cancelled = false;
     (async () => {
       const token = await getToken();
-      // never throws: logs and returns an empty page on error
-      return fetchAnniversaryPage(token, ANNIVERSARY_LIMIT, backward, cursor);
-    })().catch((): AnniversaryPage => ({ items: [], next: null })).then((loaded) => {
-      if (!cancelled) setPages((prev) => new Map(prev).set(pageIndex, loaded));
+      // never throws: logs and returns an empty window on error
+      return fetchAnniversaryWindow(token, ANNIVERSARY_LIMIT, index);
+    })().catch((): AnniversaryWindow => ({ ...windowRange(index, new Date()), items: [], total: null })).then((loaded) => {
+      if (!cancelled) setWindows((prev) => new Map(prev).set(index, loaded));
     });
     return () => {
       cancelled = true;
     };
-  }, [pageIndex, pages]);
+  }, [index, windows]);
 
-  // What's still showing while the next page loads: the one just left.
-  const [shown, setShown] = useState<AnniversaryPage | undefined>(undefined);
+  // What's still showing while the next window loads: the one just left.
+  const [shown, setShown] = useState<AnniversaryWindow | undefined>(undefined);
   useEffect(() => {
-    if (page) setShown(page);
-  }, [page]);
+    if (current) setShown(current);
+  }, [current]);
 
-  const loading = !page;
-  const canGoBack = !loading && (pageIndex >= 0 || page.next !== null);
-  const canGoForward = !loading && (pageIndex < 0 || page.next !== null);
+  const loading = !current;
+  const more = shown && shown.total !== null ? shown.total - shown.items.length : 0;
 
   return (
     <Panel
-      title={pageIndex < 0 ? t("Recent anniversaries") : t("Upcoming anniversaries")}
+      title={t("Anniversaries")}
       actions={
         <Group gap={4} wrap="nowrap">
           {loading && shown && <Loader size="xs" />}
-          <ActionIcon variant="subtle" size="sm" onClick={() => setPageIndex((i) => i - 1)} disabled={!canGoBack}
+          {shown && <Text size="xs" c="dimmed">{formatWindow(shown.start, shown.end)}</Text>}
+          <ActionIcon variant="subtle" size="sm" onClick={() => setIndex((i) => i - 1)}
+            disabled={loading || index <= -ANNIVERSARY_WINDOWS}
             aria-label={t("Earlier anniversaries")} title={t("Earlier anniversaries")}>
             ‹
           </ActionIcon>
-          <ActionIcon variant="subtle" size="sm" onClick={() => setPageIndex((i) => i + 1)} disabled={!canGoForward}
+          <ActionIcon variant="subtle" size="sm" onClick={() => setIndex((i) => i + 1)}
+            disabled={loading || index >= ANNIVERSARY_WINDOWS}
             aria-label={t("Later anniversaries")} title={t("Later anniversaries")}>
             ›
           </ActionIcon>
@@ -390,14 +390,15 @@ function AnniversaryCard() {
           <Text c="dimmed">{t("Looking for anniversaries…")}</Text>
         </Group>
       ) : shown.items.length === 0 ? (
-        <Text c="dimmed">
-          {pageIndex === 0 && !loading
-            ? t("No births, marriages or deaths with an exact date yet.")
-            : t("No more anniversaries this way.")}
-        </Text>
+        <Text c="dimmed">{t("No births, marriages or deaths with an exact date in these 30 days.")}</Text>
       ) : (
         <Box style={{ opacity: loading ? 0.5 : 1 }}>
           <AnniversaryRows items={shown.items} />
+          {more > 0 && (
+            <Text size="xs" c="dimmed" mt="xs">
+              {t("…and %s more in these 30 days").replace("%s", String(more))}
+            </Text>
+          )}
         </Box>
       )}
     </Panel>
