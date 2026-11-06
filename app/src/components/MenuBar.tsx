@@ -18,6 +18,7 @@ import { AboutDialog } from "./AboutDialog";
 import { DocumentationDialog } from "./DocumentationDialog";
 import { formatHash } from "../hash";
 import { getHomePersonHandle } from "../store/homePersonPreference";
+import { BLOG_VIEW, GENERATED_VIEW, STORY_VIEW, TOPICS_VIEW } from "../store/views";
 import { DISCUSSION_FORUM_URL } from "../config";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
@@ -479,6 +480,14 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             // A chart needs a root (TreeView.tsx), so this roots it on the
             // home person; with none set, TreeView's own person picker.
             { label: "Graphs, home person", onClick: goToHomePersonGraphs },
+            // The rail's non-Gramps-type lists, which are ordinary table
+            // views (store/views.ts) -- labels taken from there so the menu
+            // and the rail can't drift apart.
+            ...[GENERATED_VIEW, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW].map((view, i) => ({
+              label: view.label,
+              onClick: () => goTo(view.key),
+              separatorBefore: i === 0,
+            })),
           ]}
         />
         {/* Per-tree maintenance actions, all ROLE_OWNER-level -- distinct
