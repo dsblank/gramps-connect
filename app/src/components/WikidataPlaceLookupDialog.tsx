@@ -9,14 +9,15 @@ import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage } from "../store/api";
-import { PLACE_VIEW } from "../store/views";
+import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import {
   fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, searchWikidata,
   type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
-import { createOverlay } from "../store/mapOverlays";
+import { createOverlay, findOverlayTagHandle, isOverlay } from "../store/mapOverlays";
+import { fetchOverlaySource } from "../store/kmlMedia";
 import { getDisplaySettings } from "../store/displaySettings";
 import { PLACE_TYPE_VALUES, formatPlace, type PlaceRecord } from "../store/placeDisplay";
 import { getI18nSnapshot, t } from "../i18n/i18n";
@@ -160,8 +161,41 @@ async function fetchOutlineMedia(
   // place (not e.g. "Alabama outline"): this is what the Media view's list
   // and MediaThumbnail's hover text show, and it should read the same way
   // any other place-named attachment does.
-  const mediaHandle = await createOverlay(token, features, [], node.label);
+  // The Wikidata item is recorded as the overlay's source, so a later
+  // lookup of the same place can tell it already has this outline (see
+  // hasWikidataOutline).
+  const mediaHandle = await createOverlay(token, features, [], node.label, wikidataItemUrl(node.qid));
   return { _class: "MediaRef", ref: mediaHandle };
+}
+
+function wikidataItemUrl(qid: string): string {
+  return `https://www.wikidata.org/wiki/${qid}`;
+}
+
+/** True when one of `mediaRefs` is already an overlay of `node`'s Wikidata
+ * outline, so looking the same place up again doesn't attach a second
+ * copy. An outline made by this dialog records its Wikidata item as the
+ * overlay's source; an older one (made before that) has no source, so an
+ * unsourced overlay named exactly like the place counts too. A media
+ * object that can't be read is just not a match. */
+async function hasWikidataOutline(
+  token: string,
+  mediaRefs: { ref?: string }[],
+  node: WikidataPlaceNode
+): Promise<boolean> {
+  if (mediaRefs.length === 0) return false;
+  const tagHandle = await findOverlayTagHandle();
+  if (!tagHandle) return false;
+  const url = wikidataItemUrl(node.qid);
+  for (const { ref } of mediaRefs) {
+    if (!ref) continue;
+    const media = await fetchPlainObject(token, MEDIA_VIEW, ref).catch(() => undefined);
+    if (!isOverlay(media, tagHandle)) continue;
+    const source = await fetchOverlaySource(ref);
+    if (source === url) return true;
+    if (!source && (media as { desc?: string }).desc === node.label) return true;
+  }
+  return false;
 }
 
 /** Escapes a Wikidata label for splicing into a query_lang string literal
@@ -245,11 +279,14 @@ interface WikidataPlaceLookupDialogProps {
    * the picked place's Wikidata label, the confirm screen offers to
    * replace it (see WikidataLookupResult.replaceName). */
   currentName?: string;
+  /** The place's own current media_list, if any -- an outline of the
+   * picked item already in it isn't fetched again. */
+  existingMedia?: { ref?: string }[];
   onApply: (result: WikidataLookupResult) => void;
 }
 
 export function WikidataPlaceLookupDialog({
-  opened, onClose, stackId, zIndex, initialQuery, currentName = "", onApply,
+  opened, onClose, stackId, zIndex, initialQuery, currentName = "", existingMedia, onApply,
 }: WikidataPlaceLookupDialogProps) {
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<WikidataSearchResult[]>([]);
@@ -279,8 +316,11 @@ export function WikidataPlaceLookupDialog({
     }
   }, [opened, initialQuery]);
 
+  // `opened` is a dependency so the initial query (the place's current
+  // name) is searched on open: the dialog stays mounted while closed, so
+  // `query` already equals `initialQuery` and wouldn't change on its own.
   useEffect(() => {
-    if (phase.name !== "search") return;
+    if (!opened || phase.name !== "search") return;
     const term = query.trim();
     if (term.length < MIN_SEARCH_LENGTH) {
       setResults([]);
@@ -303,7 +343,7 @@ export function WikidataPlaceLookupDialog({
       cancelled = true;
       controller.abort();
     };
-  }, [query, phase.name]);
+  }, [opened, query, phase.name]);
 
   async function handlePick(qid: string) {
     setPhase({ name: "resolving" });
@@ -490,7 +530,10 @@ export function WikidataPlaceLookupDialog({
         // its own outline -- if it has one -- has to be fetched here instead
         // and handed back for the caller to attach once that place's handle
         // actually exists (see WikidataLookupResult.mediaRef).
-        const mediaRef = fetchOutlines ? (await fetchOutlineMedia(token, leaf.node, leaf.typeOverride)) ?? null : null;
+        const mediaRef =
+          fetchOutlines && !(await hasWikidataOutline(token, existingMedia ?? [], leaf.node))
+            ? ((await fetchOutlineMedia(token, leaf.node, leaf.typeOverride)) ?? null)
+            : null;
         onApply({
           qid: leaf.node.qid,
           label: leaf.node.label,
@@ -785,6 +828,7 @@ export function WikidataPlaceLookupButton({ stackId, zIndex, data, onChange }: W
         zIndex={zIndex}
         initialQuery={currentTitle}
         currentName={currentTitle}
+        existingMedia={data.media_list as { ref?: string }[] | undefined}
         onApply={(result) => onChange(applyWikidataLookupResult(data, result))}
       />
     </>

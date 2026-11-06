@@ -59,7 +59,9 @@ function cleanFeature(feature: Feature): Feature {
   return { ...feature, properties };
 }
 
-/** Uploads a new overlay -- the GeoJSON, then its tag and description. */
+/** Uploads a new overlay -- the GeoJSON, then its tag and description.
+ * `source` is what it was made from: a Media handle, or for a Wikidata
+ * outline the item's URL. */
 export async function createOverlay(
   token: string, features: Feature[], overlays: ImageOverlay[], desc: string, source?: string,
 ): Promise<string> {
