@@ -269,9 +269,18 @@ export function MapView({ subject }: { subject: VisualSubject | null }) {
   }, [search]);
 
   // A place that drops out of the filtered set can't stay selected -- its
-  // card would describe a marker that's no longer drawn.
+  // card would describe a marker that's no longer drawn. One that's still
+  // there is swapped for its current MapPlace: `selected` is a snapshot
+  // taken when it was clicked (or on arriving with a place subject), and
+  // the data can move on underneath it -- most visibly an overlay whose
+  // Media object wasn't in the cache yet at that moment (a background fill
+  // or live sync brings it in later), which overlayPlacesFor() would never
+  // see through the stale snapshot's empty kmlMedia.
   useEffect(() => {
-    if (selected && !places.some((p) => p.handle === selected.handle)) setSelected(null);
+    if (!selected) return;
+    const current = places.find((p) => p.handle === selected.handle);
+    if (!current) setSelected(null);
+    else if (current !== selected) setSelected(current);
   }, [places, selected]);
 
   const overlayPlaces = useMemo(() => overlayPlacesFor(selected, data), [selected, data.childPlaces, data.places]);
