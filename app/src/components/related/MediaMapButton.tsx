@@ -1,4 +1,4 @@
-import { Button, Group, Tooltip } from "@mantine/core";
+import { Button, Tooltip } from "@mantine/core";
 import { formatHash } from "../../hash";
 import { getBacklinks, type ObjectDetail } from "../../store/objectDetail";
 import { isOverlay } from "../../store/mapOverlays";
@@ -19,7 +19,7 @@ export function MediaMapButton({ detail }: { detail: ObjectDetail }) {
   const places = (getBacklinks(detail).place ?? []) as { handle: string; title?: string }[];
   if (places.length === 0) return null;
   return (
-    <Group gap="xs" wrap="wrap">
+    <>
       {places.map((place) => (
         <Tooltip key={place.handle} label={t("See this file's shape on the map")} withArrow>
           <Button
@@ -32,6 +32,6 @@ export function MediaMapButton({ detail }: { detail: ObjectDetail }) {
           </Button>
         </Tooltip>
       ))}
-    </Group>
+    </>
   );
 }

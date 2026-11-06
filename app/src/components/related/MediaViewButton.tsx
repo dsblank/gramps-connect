@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Group } from "@mantine/core";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { previewKindForMime } from "./mediaPreviewKind";
@@ -20,7 +20,13 @@ import { t } from "../../i18n/i18n";
  * a different way, right now"), not History/Topic's muted gray -- viewing
  * the file itself is exactly that, not a secondary/muted action, so this
  * deliberately leaves ViewButton's `color` unset. */
-export function MediaViewButton({ detail, withDownload = false }: { detail: ObjectDetail; withDownload?: boolean }) {
+export function MediaViewButton({ detail, withDownload = false, children }: {
+  detail: ObjectDetail;
+  withDownload?: boolean;
+  /** More buttons for this same row (Media's overlay Map, MediaMapButton.tsx),
+   * so every blue "look at / get this file" button sits on one line. */
+  children?: ReactNode;
+}) {
   const [opened, setOpened] = useState(false);
   const kind = previewKindForMime(detail.mime as string | undefined);
   if (!kind && !withDownload) return null;
@@ -29,9 +35,10 @@ export function MediaViewButton({ detail, withDownload = false }: { detail: Obje
       {/* withDownload (Media rows, not Output -- see MediaDownloadButton.tsx)
           puts Download on this same row, so View and Download sit together
           and a non-previewable file still gets its Download. */}
-      <Group gap="xs">
+      <Group gap="xs" wrap="wrap">
         {kind && <ViewButton label={t("View")} onClick={() => setOpened(true)} />}
         {withDownload && <MediaDownloadButton detail={detail} />}
+        {children}
       </Group>
       {opened && kind && (
         <MediaPreviewDialog

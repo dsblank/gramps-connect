@@ -590,7 +590,9 @@ export function RelatedPanel({
           link-management controls instead). */}
       <VisualButtons view={view} detail={detail} />
       {(view.key === "media" || view.key === "generated") && (
-        <MediaViewButton detail={detail} withDownload={view.key === "media"} />
+        <MediaViewButton detail={detail} withDownload={view.key === "media"}>
+          {view.key === "media" && <MediaMapButton detail={detail} />}
+        </MediaViewButton>
       )}
       {view.key === "topics" && (
         <Group gap="xs">
@@ -599,7 +601,6 @@ export function RelatedPanel({
       )}
       {view.key === "blog" && <BlogActions detail={detail} onNavigate={onNavigate} />}
       <HistoryButton view={view} detail={detail} />
-      {view.key === "media" && <MediaMapButton detail={detail} />}
       <DetailFields type={view.key} detail={detail} />
       {/* A Topic's body is bespoke, not SECTION_COMPONENTS-driven (see
           RELATED_CONFIG.topics' own doc comment): the actual chat thread
