@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
-  Anchor, Button, Checkbox, CloseButton, Collapse, Divider, Group, Modal, NumberInput, ScrollArea, Select,
+  Anchor, Autocomplete, Button, Checkbox, CloseButton, Collapse, Divider, Group, Modal, NumberInput, ScrollArea, Select,
   SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip,
 } from "@mantine/core";
 import {
   gqlFilterPresets, type GqlFilterCategory, type GqlFilterNamespace, type GqlFilterParam, type GqlFilterPreset,
+  type GqlPresetParam,
 } from "../data/gqlFilterPresets";
+import { GRAMPS_TYPE_TABLES } from "../data/grampsTypeTables";
 import { FilterCombineError } from "../store/goqlFilterCombiner";
 import {
   addRuleGroup, addRuleRow, combineFilterTree, countRules, createEmptyTree,
@@ -1209,36 +1211,14 @@ function RowView({
           </Group>
           {preset.params && preset.params.length > 0 && (
             <Group gap="xs">
-              {preset.params.map((param) =>
-                param.type === "string" ? (
-                  <TextInput
-                    key={param.name}
-                    size="xs"
-                    w={140}
-                    placeholder={t(param.label)}
-                    value={row.values?.[param.name] ?? ""}
-                    onChange={(e) =>
-                      mutate((t) =>
-                        updateRowValues(t, row.id, { ...row.values, [param.name]: e.currentTarget.value }),
-                      )
-                    }
-                  />
-                ) : (
-                  <NumberInput
-                    key={param.name}
-                    size="xs"
-                    w={100}
-                    placeholder={t(param.label)}
-                    hideControls
-                    value={row.values?.[param.name] ?? ""}
-                    onChange={(v) =>
-                      mutate((t) =>
-                        updateRowValues(t, row.id, { ...row.values, [param.name]: v === "" ? "" : String(v) }),
-                      )
-                    }
-                  />
-                ),
-              )}
+              {preset.params.map((param) => (
+                <ParamInput
+                  key={param.name}
+                  param={param}
+                  value={row.values?.[param.name] ?? ""}
+                  onChange={(v) => mutate((t) => updateRowValues(t, row.id, { ...row.values, [param.name]: v }))}
+                />
+              ))}
             </Group>
           )}
         </Stack>
@@ -1252,6 +1232,78 @@ function RowView({
       <CloseButton size="sm" onClick={() => mutate((t) => removeNode(t, row.id))} aria-label={t("Remove")} />
     </Group>
   );
+}
+
+/** Placeholder text for a value input -- regex/datetime say what shape
+ * they want, since the label alone doesn't. */
+function paramPlaceholder(param: GqlPresetParam): string {
+  if (param.type === "datetime") return t("YYYY-MM-DD hh:mm");
+  return t(param.label);
+}
+
+/** One rule value's input, by its param type (gqlFilterPresets.ts's
+ * GqlPresetParam). A "gramps-type" shows Gramps' standard type names
+ * translated, stores the English name (what goqlFilterCombiner.ts looks
+ * up), and keeps anything else typed as a custom type name. */
+function ParamInput({ param, value, onChange }: {
+  param: GqlPresetParam;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  switch (param.type) {
+    case "integer":
+      return (
+        <NumberInput
+          size="xs"
+          w={100}
+          placeholder={t(param.label)}
+          hideControls
+          value={value}
+          onChange={(v) => onChange(v === "" ? "" : String(v))}
+        />
+      );
+    case "choice":
+      return (
+        <Select
+          size="xs"
+          w={130}
+          placeholder={t(param.label)}
+          data={param.options.map((o) => ({ value: o.value, label: t(o.label) }))}
+          value={value || null}
+          onChange={(v) => onChange(v ?? "")}
+          comboboxProps={{ zIndex: 1001 }}
+          data-mantine-stop-propagation
+        />
+      );
+    case "gramps-type": {
+      const names = Object.entries(GRAMPS_TYPE_TABLES[param.table])
+        .filter(([, v]) => v !== 0)
+        .map(([name]) => name);
+      const isStandard = names.includes(value);
+      return (
+        <Autocomplete
+          size="xs"
+          w={170}
+          placeholder={t(param.label)}
+          data={names.map((name) => t(name))}
+          value={isStandard ? t(value) : value}
+          onChange={(v) => onChange(names.find((name) => t(name) === v) ?? v)}
+          comboboxProps={{ zIndex: 1001 }}
+          data-mantine-stop-propagation
+        />
+      );
+    }
+    default:
+      return (
+        <TextInput
+          size="xs"
+          w={param.type === "regex" ? 170 : 140}
+          placeholder={paramPlaceholder(param)}
+          value={value}
+          onChange={(e) => onChange(e.currentTarget.value)}
+        />
+      );
+  }
 }
 
 /** The "+ Add rule" inline (never floating) search list -- a search box

@@ -25,9 +25,17 @@ function ruleSummary(row: FilterRuleRow, presetsById: ReadonlyMap<string, GqlFil
   // a still-being-edited row with some params blank just shows the bare
   // label, same "not ready to compile yet" state combineFilterTree()
   // itself would reject rather than half-render.
-  const values = params.length > 0 && params.every((p) => row.values?.[p.name])
-    ? ` ${params.map((p) => row.values![p.name]).join(" and ")}`
-    : "";
+  // A choice shows its label ("more than", "High"), not its stored value,
+  // and reads straight into the next value ("more than 3") without "and".
+  let values = "";
+  if (params.length > 0 && params.every((p) => row.values?.[p.name])) {
+    params.forEach((p, i) => {
+      const raw = row.values![p.name];
+      const shown = p.type === "choice" ? (p.options.find((o) => o.value === raw)?.label ?? raw) : raw;
+      const joiner = i === 0 ? " " : params[i - 1].type === "choice" ? " " : " and ";
+      values += joiner + shown;
+    });
+  }
   const text = `${preset.label}${values}`;
   return row.negate ? `NOT ${text}` : text;
 }

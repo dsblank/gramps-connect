@@ -62,6 +62,16 @@ is. `example.gramps` has no private objects and few tagged non-Person
 ones, so several of those cases only prove the rule compiles and matches
 nothing it shouldn't.
 
+## Rules with values (Events and Places)
+
+`test_event_place_presets.py` covers the Event and Place rules that take
+a value (type, ID, regex, changed-since, reference count, note text/type,
+citation confidence, ...). Its `fill()` mirrors goqlFilterCombiner.ts's
+`fillParam()`, and `app/src/store/__tests__/goqlFilterParamTypes.test.ts`
+pins the TypeScript side to the same strings. Each case asserts the
+gramps-core rule matched something wherever the fixture has anything to
+match.
+
 ## Running
 
 ```

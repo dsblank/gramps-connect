@@ -9,7 +9,8 @@
  * namespaces in one tree.
  */
 
-import type { GqlFilterNamespace, GqlFilterPreset } from "../data/gqlFilterPresets";
+import type { GqlFilterNamespace, GqlFilterPreset, GqlPresetParam } from "../data/gqlFilterPresets";
+import { GRAMPS_TYPE_TABLES } from "../data/grampsTypeTables";
 
 export interface FilterPresetNode {
   kind: "preset";
@@ -58,11 +59,75 @@ function sanitizeTextParam(raw: string): string {
   return raw.replace(/['\\]/g, "");
 }
 
+/** A "regex" param's value inside a `'...'` literal: quotes stripped (as
+ * for text), backslashes doubled so the pattern's own escapes (`\d`)
+ * survive the literal. A doubled backslash can't end the literal, and no
+ * quote is left that could. */
+function escapeRegexParam(raw: string): string {
+  return raw.replace(/'/g, "").replace(/\\/g, "\\\\");
+}
+
+const DATETIME_RE = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2})(?:\s+(\d{1,2})(?::(\d{2})(?::(\d{2}))?)?)?)?)?$/;
+
+/** gramps-core's ChangedSinceBase.time_str_to_sec(): a date, optionally
+ * with a time, missing parts filled with the earliest value, in local
+ * time; Unix seconds, or null if it isn't that shape. */
+export function datetimeParamToSeconds(raw: string): number | null {
+  const m = DATETIME_RE.exec(raw.trim());
+  if (!m) return null;
+  const [y, mo, d, h, mi, sec] = m.slice(1).map((v, i) => (v === undefined ? (i === 1 || i === 2 ? 1 : 0) : Number(v)));
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || sec > 59) return null;
+  const date = new Date(y, mo - 1, d, h, mi, sec);
+  if (date.getMonth() !== mo - 1) return null; // e.g. 2020-02-31
+  return Math.floor(date.getTime() / 1000);
+}
+
+/** A "gramps-type" param's whole condition: the standard type's value, or
+ * value 0 (Custom) plus the custom name -- GrampsType's own equality. */
+function grampsTypeCondition(param: Extract<GqlPresetParam, { type: "gramps-type" }>, raw: string): string {
+  const name = raw.trim();
+  const value = GRAMPS_TYPE_TABLES[param.table][name];
+  if (value !== undefined && value !== 0) return `(${param.field}.value == ${value})`;
+  return `(${param.field}.value == 0 and ${param.field}.string == '${sanitizeTextParam(name)}')`;
+}
+
+function fillParam(preset: GqlFilterPreset, param: GqlPresetParam, raw: string): string {
+  const bad = (why: string) => new FilterCombineError(`"${preset.label}"'s "${param.label}" ${why}`);
+  switch (param.type) {
+    case "integer":
+      if (!INTEGER_RE.test(raw)) throw bad(`must be a whole number (e.g. 1968), got "${raw}"`);
+      return raw;
+    case "string": {
+      const safe = sanitizeTextParam(raw);
+      if (safe === "") throw bad("can't be made up of only quotes/backslashes");
+      return safe;
+    }
+    case "regex": {
+      try {
+        new RegExp(raw);
+      } catch {
+        throw bad(`isn't a valid regular expression: "${raw}"`);
+      }
+      const safe = escapeRegexParam(raw);
+      if (safe === "") throw bad("can't be made up of only quotes");
+      return safe;
+    }
+    case "datetime": {
+      const seconds = datetimeParamToSeconds(raw);
+      if (seconds === null) throw bad(`must be a date like 2024-05-01, optionally with a time like 2024-05-01 14:30, got "${raw}"`);
+      return String(seconds);
+    }
+    case "choice":
+      if (!param.options.some((o) => o.value === raw)) throw bad(`must be one of the listed choices, got "${raw}"`);
+      return raw;
+    case "gramps-type":
+      if (sanitizeTextParam(raw).trim() === "") throw bad("needs a type");
+      return grampsTypeCondition(param, raw);
+  }
+}
+
 function fillParams(preset: GqlFilterPreset, values: Record<string, string> | undefined): string {
   const params = preset.params ?? [];
-  if (params.length === 0) {
-    return preset.expr;
-  }
   let expr = preset.expr;
   for (const param of params) {
     const raw = values?.[param.name];
@@ -71,18 +136,7 @@ function fillParams(preset: GqlFilterPreset, values: Record<string, string> | un
         `"${preset.label}" needs a value for "${param.label}"`,
       );
     }
-    if (param.type === "integer" && !INTEGER_RE.test(raw)) {
-      throw new FilterCombineError(
-        `"${preset.label}"'s "${param.label}" must be a whole number (e.g. 1968), got "${raw}"`,
-      );
-    }
-    const safeValue = param.type === "string" ? sanitizeTextParam(raw) : raw;
-    if (safeValue === "") {
-      throw new FilterCombineError(
-        `"${preset.label}"'s "${param.label}" can't be made up of only quotes/backslashes`,
-      );
-    }
-    expr = expr.split(`{${param.name}}`).join(safeValue);
+    expr = expr.split(`{${param.name}}`).join(fillParam(preset, param, raw));
   }
   return expr;
 }

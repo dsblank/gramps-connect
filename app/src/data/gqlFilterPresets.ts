@@ -11,6 +11,8 @@
  * translation today -- see each one's `notes`.
  */
 
+import type { GrampsTypeTable } from "./grampsTypeTables";
+
 /** GOQL's own registered object types, 1:1 with `gramps_object_query_language
  * .query.py`'s `PERSON`/`FAMILY`/`EVENT`/.../`NOTE` specs and
  * gramps-web-api's matching `/api/<type>/query/` resources -- every Gramps
@@ -91,6 +93,29 @@ export interface GqlFilterParam {
   type: "integer" | "string";
 }
 
+/** A value a built-in rule needs beyond plain text/number -- only built-in
+ * presets use these; Custom Rules stay on GqlFilterParam's two types (see
+ * customRuleMedia.ts's isCustomRuleParam()). goqlFilterCombiner.ts's
+ * fillParams() renders each:
+ *
+ * - "regex": a regular expression, spliced into a `'...'` literal with
+ *   quotes stripped and backslashes doubled (so `\d` survives). The expr
+ *   adds `(?i)` itself, matching gramps-core's case-insensitive regex
+ *   rules.
+ * - "datetime": "YYYY[-MM[-DD[ hh[:mm[:ss]]]]]" in the browser's local
+ *   time, spliced as Unix seconds -- gramps-core's ChangedSinceBase
+ *   (add_time() + time.mktime()) does the same.
+ * - "choice": one of `options`, spliced raw; anything else is rejected.
+ * - "gramps-type": a type name from `table` (or a custom name), replaced by
+ *   a whole condition on `field` -- `(field.value == 12)` for a standard
+ *   type, `(field.value == 0 and field.string == 'name')` for a custom one,
+ *   the same equality gramps-core's GrampsType uses. */
+export type GqlPresetParam =
+  | GqlFilterParam
+  | { name: string; label: string; type: "regex" | "datetime" }
+  | { name: string; label: string; type: "choice"; options: { value: string; label: string }[] }
+  | { name: string; label: string; type: "gramps-type"; table: GrampsTypeTable; field: string };
+
 export interface GqlFilterPreset {
   id: string;
   label: string;
@@ -99,7 +124,7 @@ export interface GqlFilterPreset {
   /** Matches the corresponding gramps-core rule's name, for cross-reference. */
   sourceRule: string;
   expr: string;
-  params?: GqlFilterParam[];
+  params?: GqlPresetParam[];
   supported: boolean;
   notes?: string;
 }
@@ -184,6 +209,142 @@ function genericPresets(g: GenericRuleTarget): GqlFilterPreset[] {
   );
   return out;
 }
+
+/** Rules with values, shared by several types -- gramps-core's
+ * HasIdOf, RegExpIdOf, ChangedSince, the HasNote... rules, HasReferenceCountOf and
+ * MatchesSourceConfidence, each of which exists (with the same base class)
+ * in most rules/<type>/ modules. Enabled per type in DETAIL_RULE_TARGETS. */
+const CONFIDENCE_OPTIONS = [
+  { value: "0", label: "Very Low" },
+  { value: "1", label: "Low" },
+  { value: "2", label: "Normal" },
+  { value: "3", label: "High" },
+  { value: "4", label: "Very High" },
+];
+
+const COMPARISON_OPTIONS = [
+  { value: ">", label: "more than" },
+  { value: "<", label: "fewer than" },
+  { value: "==", label: "exactly" },
+];
+
+function detailPresets(namespace: GqlFilterNamespace, idPrefix: string, hasNotes: boolean, hasCitations: boolean): GqlFilterPreset[] {
+  const out: GqlFilterPreset[] = [
+    {
+      id: `${idPrefix}-id-is`, label: "Gramps ID is", category: "Properties", namespace,
+      sourceRule: "HasIdOf", expr: "gramps_id == '{id}'",
+      params: [{ name: "id", label: "ID", type: "string" }], supported: true,
+    },
+    {
+      id: `${idPrefix}-id-matches`, label: "Gramps ID matches a regular expression", category: "Properties", namespace,
+      sourceRule: "RegExpIdOf", expr: "regex(gramps_id, '(?i){pattern}')",
+      params: [{ name: "pattern", label: "Regular expression", type: "regex" }], supported: true,
+    },
+    {
+      id: `${idPrefix}-changed-since`, label: "Changed since", category: "Dates", namespace,
+      sourceRule: "ChangedSince", expr: "change >= {since}",
+      params: [{ name: "since", label: "YYYY-MM-DD hh:mm", type: "datetime" }], supported: true,
+      notes: "gramps-core's ChangedSince also takes an optional 'but before' time; combine with NOT on a second Changed since for that.",
+    },
+    {
+      id: `${idPrefix}-reference-count`, label: "Number of references", category: "Associations", namespace,
+      sourceRule: "HasReferenceCountOf", expr: "len(backlinks) {comparison} {count}",
+      params: [
+        { name: "comparison", label: "Comparison", type: "choice", options: COMPARISON_OPTIONS },
+        { name: "count", label: "Count", type: "integer" },
+      ],
+      supported: true,
+    },
+  ];
+  if (hasNotes) {
+    out.push(
+      {
+        id: `${idPrefix}-notes-contain`, label: "Notes contain text", category: "Associations", namespace,
+        sourceRule: "HasNoteMatchingSubstringOf", expr: "any('{text}' in n.text.string for n in notes)",
+        params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+      },
+      {
+        id: `${idPrefix}-notes-match`, label: "Notes match a regular expression", category: "Associations", namespace,
+        sourceRule: "HasNoteRegexp", expr: "any(regex(n.text.string, '(?i){pattern}') for n in notes)",
+        params: [{ name: "pattern", label: "Regular expression", type: "regex" }], supported: true,
+      },
+      {
+        id: `${idPrefix}-note-type`, label: "Has a note of type", category: "Associations", namespace,
+        sourceRule: "HasNoteType", expr: "any({noteType} for n in notes)",
+        params: [{ name: "noteType", label: "Note type", type: "gramps-type", table: "NoteType", field: "n.type" }],
+        supported: true,
+      },
+    );
+  }
+  if (hasCitations) {
+    out.push({
+      id: `${idPrefix}-citation-confidence`, label: "Has a citation with confidence at least", category: "Associations",
+      namespace, sourceRule: "MatchesSourceConfidence", expr: "any(c.confidence >= {level} for c in citations)",
+      params: [{ name: "level", label: "Confidence", type: "choice", options: CONFIDENCE_OPTIONS }], supported: true,
+    });
+  }
+  return out;
+}
+
+const DETAIL_RULE_TARGETS: { namespace: GqlFilterNamespace; idPrefix: string; notes: boolean; citations: boolean }[] = [
+  { namespace: "Event", idPrefix: "event", notes: true, citations: true },
+  { namespace: "Place", idPrefix: "place", notes: true, citations: true },
+];
+
+/** Rules only one type has (rules/event/, rules/place/). */
+const typeSpecificPresets: GqlFilterPreset[] = [
+  {
+    id: "event-type", label: "Event type is", category: "Properties", namespace: "Event",
+    sourceRule: "HasType", expr: "{eventType}",
+    params: [{ name: "eventType", label: "Event type", type: "gramps-type", table: "EventType", field: "type" }],
+    supported: true,
+  },
+  {
+    id: "event-date-between", label: "Event date between", category: "Dates", namespace: "Event",
+    sourceRule: "HasData", expr: "Date('{startDate}') <= date.sortval <= Date('{endDate}')",
+    params: [
+      { name: "startDate", label: "Start date", type: "string" },
+      { name: "endDate", label: "End date", type: "string" },
+    ],
+    supported: true,
+    notes: "gramps-core's HasData matches one date with Date.match() (fuzzy, so 'about 1850' overlaps a range); this is a plain range on the sort value instead, same as Birth date between. Events with no date never match.",
+  },
+  {
+    id: "event-description-contains", label: "Description contains", category: "Properties", namespace: "Event",
+    sourceRule: "HasData", expr: "'{text}' in description",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  },
+  {
+    id: "event-attribute", label: "Has attribute", category: "Properties", namespace: "Event",
+    sourceRule: "HasAttribute", expr: "any({attributeType} and '{value}' in a.value for a in attribute_list)",
+    params: [
+      { name: "attributeType", label: "Attribute", type: "gramps-type", table: "AttributeType", field: "a.type" },
+      { name: "value", label: "Value contains", type: "string" },
+    ],
+    supported: true,
+  },
+  {
+    id: "place-type", label: "Place type is", category: "Properties", namespace: "Place",
+    sourceRule: "HasData", expr: "{placeType}",
+    params: [{ name: "placeType", label: "Place type", type: "gramps-type", table: "PlaceType", field: "place_type" }],
+    supported: true,
+  },
+  {
+    id: "place-name-contains", label: "Name contains", category: "Properties", namespace: "Place",
+    sourceRule: "HasData", expr: "'{text}' in name.value or any('{text}' in n.value for n in alt_names)",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+    notes: "Checks the place's own name and its alternative names, like gramps-core's HasData (get_all_names()) -- not the full title built from enclosing places.",
+  },
+  {
+    id: "place-code-contains", label: "Code contains", category: "Properties", namespace: "Place",
+    sourceRule: "HasData", expr: "'{text}' in code",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  },
+  {
+    id: "place-no-coordinates", label: "Places without coordinates", category: "Properties", namespace: "Place",
+    sourceRule: "HasNoLatOrLon", expr: "regex(lat, '^\\\\s*$') or regex(long, '^\\\\s*$')", supported: true,
+  },
+];
 
 const handWrittenPresets: GqlFilterPreset[] = [
   // -- Dates --------------------------------------------------------------
@@ -485,4 +646,6 @@ const handWrittenPresets: GqlFilterPreset[] = [
 export const gqlFilterPresets: GqlFilterPreset[] = [
   ...handWrittenPresets,
   ...GENERIC_RULE_TARGETS.flatMap(genericPresets),
+  ...DETAIL_RULE_TARGETS.flatMap((d) => detailPresets(d.namespace, d.idPrefix, d.notes, d.citations)),
+  ...typeSpecificPresets,
 ];

@@ -49,10 +49,15 @@ PLAIN_CHECKS = {
 COUNT_ARGS = ["0", "greater than"]
 
 
+GENERIC_KINDS = set(PLAIN_CHECKS) | {"has-tag"}
+
+
 def _generated(presets):
+    """GENERIC_RULE_TARGETS' presets only -- other `<type>-...` ids (the
+    rules with values) are covered by test_event_place_presets.py."""
     return [
         p for p in presets
-        if p["namespace"] != "Person" and p["id"].startswith(p["namespace"].lower() + "-")
+        if p["namespace"] != "Person" and p["id"].startswith(p["namespace"].lower() + "-") and _kind(p) in GENERIC_KINDS
     ] + [p for p in presets if p["id"] == "has-attributes"]
 
 
