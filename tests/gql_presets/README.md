@@ -50,6 +50,18 @@ which gramps-core `Rule` class it stopped matching, and a few presets
 `supported: false` set) each need a slightly different comparison a
 single generic loop couldn't express cleanly anyway.
 
+## Generated presets
+
+The rules that mean the same thing on every object type (Tagged,
+Private, Not private, and "has any notes/media/sources/attributes") are
+generated per namespace from `GENERIC_RULE_TARGETS` rather than written
+out by hand. `test_generic_presets.py` covers them with one parametrized
+test whose case ids are the preset ids. Where gramps-core has a matching
+rule it's the reference; where it has none, the object's own list or flag
+is. `example.gramps` has no private objects and few tagged non-Person
+ones, so several of those cases only prove the rule compiles and matches
+nothing it shouldn't.
+
 ## Running
 
 ```

@@ -16,7 +16,7 @@
 import { getToken } from "../auth/auth";
 import { fetchPage, parseErrorMessage } from "./api";
 import { API_BASE } from "../config";
-import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
+import { isGqlFilterNamespace, type GqlFilterNamespace } from "../data/gqlFilterPresets";
 import type { FilterTree } from "./goqlFilterTree";
 import { getOrCreateTagHandle, tagAndDescribeMedia, updateMediaFile, uploadMedia, deleteMedia } from "./jobsApi";
 import { MEDIA_VIEW } from "./views";
@@ -39,7 +39,7 @@ function isFilterTree(value: unknown): value is FilterTree {
   if (!value || typeof value !== "object") return false;
   const t = value as Record<string, unknown>;
   return (
-    (t.namespace === "Person" || t.namespace === "Family") &&
+    isGqlFilterNamespace(t.namespace) &&
     !!t.root && typeof t.root === "object"
   );
 }
@@ -50,7 +50,7 @@ function isSavedFilter(value: unknown): value is SavedFilter {
   return (
     typeof f.id === "string" &&
     typeof f.name === "string" &&
-    (f.namespace === "Person" || f.namespace === "Family") &&
+    isGqlFilterNamespace(f.namespace) &&
     isFilterTree(f.tree)
   );
 }

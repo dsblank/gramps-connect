@@ -14,7 +14,7 @@ import { FilterPickerDialog } from "./FilterPickerDialog";
  * mounts this inside the same Box as FilterBar/DataTable, not the aside) --
  * the view's plural label (e.g. "People", "Places"), plus a "Filters"
  * trigger right after it for any view whose GOQL namespace has presets
- * (see gqlFilterPresets.ts's namespaceForViewKey -- Person/Family today).
+ * (see gqlFilterPresets.ts's namespaceForViewKey).
  * The per-type "Add a Person"/"Start a discussion" action used to live
  * here too; it now lives beside RelatedPanel's own Edit/Delete/etc row
  * instead (see related/AddButton.tsx's own doc comment for why). */

@@ -18,7 +18,7 @@
 import { getToken } from "../auth/auth";
 import { fetchPage, parseErrorMessage } from "./api";
 import { API_BASE } from "../config";
-import type { GqlFilterNamespace, GqlFilterParam, GqlFilterPreset } from "../data/gqlFilterPresets";
+import { isGqlFilterNamespace, type GqlFilterNamespace, type GqlFilterParam, type GqlFilterPreset } from "../data/gqlFilterPresets";
 import { getOrCreateTagHandle, tagAndDescribeMedia, updateMediaFile, uploadMedia, deleteMedia } from "./jobsApi";
 import { MEDIA_VIEW, viewForNamespace } from "./views";
 import { apiFetch } from "./apiFetch";
@@ -63,7 +63,7 @@ function isCustomRule(value: unknown): value is CustomRule {
   return (
     typeof c.id === "string" &&
     typeof c.name === "string" &&
-    (c.namespace === "Person" || c.namespace === "Family") &&
+    isGqlFilterNamespace(c.namespace) &&
     typeof c.whereExpr === "string" &&
     (c.params === undefined || (Array.isArray(c.params) && c.params.every(isCustomRuleParam)))
   );

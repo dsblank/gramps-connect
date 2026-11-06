@@ -27,6 +27,16 @@ export type GqlFilterNamespace =
   | "Media"
   | "Note";
 
+/** Every GqlFilterNamespace, for runtime checks (e.g. validating a stored
+ * Custom Rule or Saved Filter's `namespace`). */
+export const GQL_FILTER_NAMESPACES: readonly GqlFilterNamespace[] = [
+  "Person", "Family", "Event", "Place", "Repository", "Source", "Citation", "Media", "Note",
+];
+
+export function isGqlFilterNamespace(value: unknown): value is GqlFilterNamespace {
+  return (GQL_FILTER_NAMESPACES as readonly unknown[]).includes(value);
+}
+
 /** Which GOQL namespace (if any) a list view's presets come from --
  * `undefined` for a view with no presets in the catalog yet, which the
  * "Filters" trigger in ListHeader.tsx uses to decide whether to render at
@@ -94,7 +104,88 @@ export interface GqlFilterPreset {
   notes?: string;
 }
 
-export const gqlFilterPresets: GqlFilterPreset[] = [
+/** Rules that mean the same thing on (nearly) every object type -- tags,
+ * privacy, and "has any notes/media/sources/attributes" -- generated per
+ * namespace instead of hand-copied. Person's own copies are hand-written
+ * in the main catalog below (their ids -- "has-tag", "private", ... --
+ * predate this table and are referenced by stored Saved Filters, so they
+ * keep them); every other namespace gets `<viewkey>-<rule>` ids.
+ *
+ * Each flag says whether that namespace's GOQL spec has the field at all
+ * (checked by compiling against every namespace). `sourceRule` names the
+ * gramps-core rule in rules/<type>/ where one exists -- the has-notes/
+ * has-media/has-sources ones are its count-based HasNote/HasGallery/
+ * HasSourceCount run as "greater than 0". gramps-core has no "has any
+ * attribute" rule (its HasAttribute matches one named attribute), and no
+ * has-notes rule for Repository or Media, so those cite "" and are tested
+ * against the object's own list being non-empty instead. */
+interface GenericRuleTarget {
+  namespace: GqlFilterNamespace;
+  idPrefix: string;
+  plural: string;
+  privateRule: string;
+  notes: string | false;
+  media: string | false;
+  sources: string | false;
+  attributes: boolean;
+}
+
+const GENERIC_RULE_TARGETS: GenericRuleTarget[] = [
+  { namespace: "Family", idPrefix: "family", plural: "Families", privateRule: "FamilyPrivate", notes: "HasNote", media: "HasGallery", sources: "HasSourceCount", attributes: true },
+  { namespace: "Event", idPrefix: "event", plural: "Events", privateRule: "EventPrivate", notes: "HasNote", media: "HasGallery", sources: "HasSourceCount", attributes: true },
+  { namespace: "Place", idPrefix: "place", plural: "Places", privateRule: "PlacePrivate", notes: "HasNote", media: "HasGallery", sources: "HasSourceCount", attributes: false },
+  { namespace: "Repository", idPrefix: "repository", plural: "Repositories", privateRule: "RepoPrivate", notes: "", media: false, sources: false, attributes: false },
+  { namespace: "Source", idPrefix: "source", plural: "Sources", privateRule: "SourcePrivate", notes: "HasNote", media: "HasGallery", sources: false, attributes: true },
+  { namespace: "Citation", idPrefix: "citation", plural: "Citations", privateRule: "CitationPrivate", notes: "HasNote", media: "HasGallery", sources: false, attributes: true },
+  { namespace: "Media", idPrefix: "media", plural: "Media", privateRule: "MediaPrivate", notes: "", media: false, sources: "HasSourceCount", attributes: true },
+  { namespace: "Note", idPrefix: "note", plural: "Notes", privateRule: "NotePrivate", notes: false, media: false, sources: false, attributes: false },
+];
+
+function genericPresets(g: GenericRuleTarget): GqlFilterPreset[] {
+  const out: GqlFilterPreset[] = [];
+  if (g.notes !== false) {
+    out.push({
+      id: `${g.idPrefix}-has-notes`, label: `${g.plural} with notes`, category: "Associations",
+      namespace: g.namespace, sourceRule: g.notes, expr: "any(n for n in notes)", supported: true,
+    });
+  }
+  if (g.media !== false) {
+    out.push({
+      id: `${g.idPrefix}-has-media`, label: `${g.plural} with media`, category: "Associations",
+      namespace: g.namespace, sourceRule: g.media, expr: "any(m for m in media)", supported: true,
+    });
+  }
+  if (g.sources !== false) {
+    out.push({
+      id: `${g.idPrefix}-has-sources`, label: `${g.plural} with sources`, category: "Associations",
+      namespace: g.namespace, sourceRule: g.sources, expr: "len([c for c in citations]) > 0", supported: true,
+    });
+  }
+  if (g.attributes) {
+    out.push({
+      id: `${g.idPrefix}-has-attributes`, label: `${g.plural} with attributes`, category: "Properties",
+      namespace: g.namespace, sourceRule: "", expr: "len([a for a in attribute_list]) > 0", supported: true,
+    });
+  }
+  out.push(
+    {
+      id: `${g.idPrefix}-has-tag`, label: "Tagged", category: "Tags", namespace: g.namespace,
+      sourceRule: "HasTag", expr: "any(t.name == '{tagName}' for t in tags)",
+      params: [{ name: "tagName", label: "Tag name", type: "string" }], supported: true,
+    },
+    {
+      id: `${g.idPrefix}-private`, label: "Private", category: "Privacy", namespace: g.namespace,
+      sourceRule: g.privateRule, expr: "private == True", supported: true,
+    },
+    {
+      id: `${g.idPrefix}-not-private`, label: "Not private", category: "Privacy", namespace: g.namespace,
+      sourceRule: "", expr: "private == False", supported: true,
+    },
+  );
+  return out;
+}
+
+const handWrittenPresets: GqlFilterPreset[] = [
   // -- Dates --------------------------------------------------------------
   {
     id: "birth-year-between",
@@ -346,6 +437,15 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     expr: "any(a for a in associations)",
     supported: true,
   },
+  {
+    id: "has-attributes",
+    label: "People with attributes",
+    category: "Properties",
+    namespace: "Person",
+    sourceRule: "",
+    expr: "len([a for a in attribute_list]) > 0",
+    supported: true,
+  },
 
   // -- Tags -------------------------------------------------------------------
   {
@@ -380,4 +480,9 @@ export const gqlFilterPresets: GqlFilterPreset[] = [
     expr: "private == False",
     supported: true,
   },
+];
+
+export const gqlFilterPresets: GqlFilterPreset[] = [
+  ...handWrittenPresets,
+  ...GENERIC_RULE_TARGETS.flatMap(genericPresets),
 ];
