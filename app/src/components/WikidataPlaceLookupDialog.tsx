@@ -217,6 +217,10 @@ export interface WikidataLookupResult {
    * merge this into the place's own media_list itself, once that place's
    * handle actually exists. */
   mediaRef: Record<string, unknown> | null;
+  /** The user ticked "Replace the name" on the confirm screen: the place's
+   * existing name (and title) give way to Wikidata's, the old name kept as
+   * an alternative name. Without it an existing name is never touched. */
+  replaceName?: boolean;
 }
 
 interface WikidataPlaceLookupDialogProps {
@@ -237,11 +241,15 @@ interface WikidataPlaceLookupDialogProps {
    * -- most lookups start from a name already typed into the place being
    * edited, not a blank search. */
   initialQuery: string;
+  /** The place's own current name, if it has one -- when it differs from
+   * the picked place's Wikidata label, the confirm screen offers to
+   * replace it (see WikidataLookupResult.replaceName). */
+  currentName?: string;
   onApply: (result: WikidataLookupResult) => void;
 }
 
 export function WikidataPlaceLookupDialog({
-  opened, onClose, stackId, zIndex, initialQuery, onApply,
+  opened, onClose, stackId, zIndex, initialQuery, currentName = "", onApply,
 }: WikidataPlaceLookupDialogProps) {
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<WikidataSearchResult[]>([]);
@@ -252,6 +260,9 @@ export function WikidataPlaceLookupDialog({
   // newly-created row in the confirmed chain, not reused/"Existing" ones
   // (see handleApply).
   const [fetchOutlines, setFetchOutlines] = useState(true);
+  // Off by default: an existing name may be deliberately different from
+  // Wikidata's ("Grandma's farm near Indianapolis").
+  const [replaceName, setReplaceName] = useState(false);
 
   // Every open starts fresh -- resuming mid-resolve or on an already-
   // decided confirm screen from a previous open would be confusing, and
@@ -264,6 +275,7 @@ export function WikidataPlaceLookupDialog({
       setResults([]);
       setPhase({ name: "search" });
       setFetchOutlines(true);
+      setReplaceName(false);
     }
   }, [opened, initialQuery]);
 
@@ -490,6 +502,7 @@ export function WikidataPlaceLookupDialog({
           placeType: leaf.typeOverride || null,
           parentHandle,
           mediaRef,
+          replaceName: replaceName && currentName.trim() !== "" && currentName.trim() !== leaf.node.label,
         });
       }
       onClose();
@@ -610,6 +623,15 @@ export function WikidataPlaceLookupDialog({
                           onChange={(e) => updateRow(i, { skip: e.currentTarget.checked })}
                         />
                       )}
+                      {row.isLeaf && currentName.trim() !== "" && currentName.trim() !== row.node.label && (
+                        <Checkbox
+                          size="xs"
+                          label={t("Replace the name \"%s\" with \"%s\"").replace("%s", currentName.trim()).replace("%s", row.node.label)}
+                          checked={replaceName}
+                          disabled={phase.name === "applying"}
+                          onChange={(e) => setReplaceName(e.currentTarget.checked)}
+                        />
+                      )}
                     </Stack>
                   </Stack>
                   <TextInput
@@ -673,10 +695,19 @@ export function applyWikidataLookupResult(
   );
   const existingRefs = (data.placeref_list as { ref?: string }[] | undefined) ?? [];
   const existingMedia = (data.media_list as { ref?: string }[] | undefined) ?? [];
-  const existingAltNames = (data.alt_names as { lang?: string }[] | undefined) ?? [];
+  const oldValue = ((name.value as string | undefined) ?? "").trim();
+  const setName = !currentTitle.trim() || Boolean(result.replaceName);
+  let existingAltNames = (data.alt_names as Record<string, unknown>[] | undefined) ?? [];
+  // A replaced name isn't lost: it stays on as an alternative name (unless
+  // one with that same value is already there).
+  if (result.replaceName && oldValue && oldValue !== result.label && !existingAltNames.some((n) => n.value === oldValue)) {
+    existingAltNames = [...existingAltNames, { _class: "PlaceName", ...name }];
+  }
   // A language the place already has a name in keeps it.
-  const namedLangs = new Set([name.lang, ...existingAltNames.map((n) => n.lang)].map((l) => (l as string | undefined) ?? ""));
+  const primaryLang = setName ? result.labelLang : name.lang;
+  const namedLangs = new Set([primaryLang, ...existingAltNames.map((n) => n.lang)].map((l) => (l as string | undefined) ?? ""));
   const newAltNames = result.altNames.filter((l) => !namedLangs.has(l.lang)).map(placeName);
+  const altNamesChanged = newAltNames.length > 0 || existingAltNames !== data.alt_names;
   return {
     // Only filled in when there's no title yet -- the common case this
     // bug report came from (a brand-new place, blank title, searched
@@ -685,14 +716,15 @@ export function applyWikidataLookupResult(
     // -- "Grandma's farm near Indianapolis") keeps it; this feature only
     // ever adds lat/long/hierarchy on top of an existing title, never
     // overwrites one. The name is the bare label: automatic place titles
-    // add the enclosing places from placeref_list themselves.
-    ...(currentTitle.trim()
-      ? {}
-      : {
+    // add the enclosing places from placeref_list themselves. The one
+    // exception is an explicit "Replace the name" (result.replaceName).
+    ...(setName
+      ? {
           title: result.hierarchyTitle,
           name: { _class: "PlaceName", ...name, value: result.label, lang: result.labelLang },
-        }),
-    alt_names: newAltNames.length ? [...existingAltNames, ...newAltNames] : data.alt_names,
+        }
+      : {}),
+    alt_names: altNamesChanged ? [...existingAltNames, ...newAltNames] : data.alt_names,
     lat: result.lat != null ? String(result.lat) : data.lat,
     long: result.long != null ? String(result.long) : data.long,
     place_type: result.placeType ?? data.place_type,
@@ -752,6 +784,7 @@ export function WikidataPlaceLookupButton({ stackId, zIndex, data, onChange }: W
         stackId={stackId}
         zIndex={zIndex}
         initialQuery={currentTitle}
+        currentName={currentTitle}
         onApply={(result) => onChange(applyWikidataLookupResult(data, result))}
       />
     </>

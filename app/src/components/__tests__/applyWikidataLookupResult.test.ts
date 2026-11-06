@@ -36,3 +36,33 @@ describe("applyWikidataLookupResult", () => {
     expect(data.alt_names).toEqual([{ _class: "PlaceName", value: "Munchen", lang: "en" }]);
   });
 });
+
+describe("applyWikidataLookupResult with replaceName", () => {
+  it("replaces an existing name and title, keeping the old name as an alternative", () => {
+    const data = applyWikidataLookupResult(
+      {
+        title: "Munchen",
+        name: { _class: "PlaceName", value: "Munchen", lang: "" },
+      },
+      { ...result, replaceName: true }
+    );
+    expect(data.title).toBe("München, Bayern, Deutschland");
+    expect(data.name).toEqual({ _class: "PlaceName", value: "München", lang: "de" });
+    expect(data.alt_names).toEqual([
+      { _class: "PlaceName", value: "Munchen", lang: "" },
+      { _class: "PlaceName", value: "Munich", lang: "en" },
+    ]);
+  });
+
+  it("doesn't duplicate an old name already among the alternatives", () => {
+    const data = applyWikidataLookupResult(
+      {
+        title: "Munich",
+        name: { _class: "PlaceName", value: "Munich", lang: "en" },
+        alt_names: [{ _class: "PlaceName", value: "Munich", lang: "en" }],
+      },
+      { ...result, replaceName: true }
+    );
+    expect(data.alt_names).toEqual([{ _class: "PlaceName", value: "Munich", lang: "en" }]);
+  });
+});
