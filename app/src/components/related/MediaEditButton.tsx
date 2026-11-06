@@ -92,18 +92,27 @@ export function MediaEditButton({ detail, onSaved }: { detail: ObjectDetail; onS
             <TextInput
               label={t("Description")}
               value={(data.desc as string | undefined) ?? ""}
-              onChange={(e) => setData((prev) => ({ ...prev, desc: e.currentTarget.value }))}
+              onChange={(e) => {
+                // Read the value now: the updater runs later, after React
+                // has nulled the synthetic event's currentTarget.
+                const desc = e.currentTarget.value;
+                setData((prev) => ({ ...prev, desc }));
+              }}
             />
             <DateInput
               id={`${detail.handle}-media-date`}
               label={t("Date")}
+              description={t("For a photo, the date it was taken.")}
               value={(data.date as GrampsDate | undefined) ?? null}
               onChange={(date) => setData((prev) => ({ ...prev, date }))}
             />
             <Switch
               label={t("Private")}
               checked={Boolean(data.private)}
-              onChange={(e) => setData((prev) => ({ ...prev, private: e.currentTarget.checked }))}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked;
+                setData((prev) => ({ ...prev, private: checked }));
+              }}
             />
             {error && (
               <Alert color="red" title={t("Could not save")}>

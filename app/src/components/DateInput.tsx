@@ -26,6 +26,8 @@ import { supportsLunarCalendars } from "../store/serverCapabilities";
 
 interface DateInputProps {
   label: string;
+  /** Optional hint under the label, like a Mantine input's `description`. */
+  description?: string;
   /** Unique per mounted instance -- becomes the nested "More…" dialog's
    * stackId, same convention as EventPlaceField's own `id` prop (its
    * PlaceEditDialog is the other nested-Modal precedent). `label` alone
@@ -271,7 +273,7 @@ function DatePartRow({ part, onChange, nativePickerEnabled, invalid, lunar }: Da
  *   day fields (a second row for range/span), plus the always-available
  *   "Text comment" annotation field -- for anything the quick parser can't
  *   express or the user prefers not to type. */
-export function DateInput({ label, id, value, onChange }: DateInputProps) {
+export function DateInput({ label, description, id, value, onChange }: DateInputProps) {
   const serverHasLunar = useServerHasLunarCalendars();
   const modifier = value?.modifier ?? Modifier.NONE;
   const quality = value?.quality ?? Quality.NONE;
@@ -367,6 +369,7 @@ export function DateInput({ label, id, value, onChange }: DateInputProps) {
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
+      {description && <Text size="xs" c="dimmed">{description}</Text>}
 
       <QuickEntryField
         label={label}
