@@ -17,6 +17,7 @@ import { ResearcherDialog } from "./ResearcherDialog";
 import { AboutDialog } from "./AboutDialog";
 import { DocumentationDialog } from "./DocumentationDialog";
 import { formatHash } from "../hash";
+import { getHomePersonHandle } from "../store/homePersonPreference";
 import { DISCUSSION_FORUM_URL } from "../config";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
@@ -243,6 +244,13 @@ function goTo(viewKey: string) {
   window.location.hash = formatHash({ viewKey, handle: null });
 }
 
+function goToHomePersonGraphs() {
+  const handle = getHomePersonHandle();
+  window.location.hash = handle
+    ? formatHash({ viewKey: "tree", subject: { type: "person", handle } })
+    : formatHash({ viewKey: "tree", handle: null });
+}
+
 /** Export -> Media…: unlike the Family Tree export, there's no format or
  * option to pick -- one archive, every Media file the caller may see -- so
  * this dispatches straight from the menu instead of opening a dialog first.
@@ -452,21 +460,25 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
         <AppMenu
           label={t("View")}
           items={[
-            { label: "Map", onClick: () => goTo("map") },
-            { label: "Timeline", onClick: () => goTo("timeline") },
-            { label: "Graphs", onClick: () => goTo("tree") },
-            // Not a plot like the three above -- a query box over the
-            // server's own full-text index (SearchView.tsx), across every
-            // object type at once, not the per-view local-cache search
-            // boxes each table's own FilterBar already has.
-            { label: "Search all", onClick: () => goTo("search"), separatorBefore: true },
+            // A query box over the server's own full-text index
+            // (SearchView.tsx), across every object type at once, not the
+            // per-view local-cache search boxes each table's own FilterBar
+            // already has.
+            { label: "Search all", onClick: () => goTo("search") },
+            // The tree's shared Gramps bookmarks (BookmarksView.tsx).
+            { label: "Bookmarks", onClick: () => goTo("bookmarks") },
+            // Records this user opened, kept in the browser (VisitedView.tsx).
+            { label: "Visited", onClick: () => goTo("visited") },
             // The same server index as Search all, listed newest change
             // first instead of by a query (ChangedView.tsx).
             { label: "Change Log", onClick: () => goTo("changed") },
-            // Records this user opened, kept in the browser (VisitedView.tsx).
-            { label: "Visited", onClick: () => goTo("visited") },
-            // The tree's shared Gramps bookmarks (BookmarksView.tsx).
-            { label: "Bookmarks", onClick: () => goTo("bookmarks") },
+            // "all": unscoped, unlike a record's own Map/Timeline buttons
+            // (VisualButtons.tsx), which open these on just that record.
+            { label: "Map all", onClick: () => goTo("map"), separatorBefore: true },
+            { label: "Timeline all", onClick: () => goTo("timeline") },
+            // A chart needs a root (TreeView.tsx), so this roots it on the
+            // home person; with none set, TreeView's own person picker.
+            { label: "Graphs, home person", onClick: goToHomePersonGraphs },
           ]}
         />
         {/* Per-tree maintenance actions, all ROLE_OWNER-level -- distinct
