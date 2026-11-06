@@ -162,7 +162,7 @@ function NewBlogPostButton() {
  * dropdown: a blank story has no person to attach to, only the person-scoped
  * generate flow creates one. Media has no create dialog (not in
  * EDITABLE_TYPES) -- a new one starts from a file, so its button opens the
- * file picker instead (store/addMedia.ts), same as MenuBar's "Add media…".
+ * file picker instead (store/addMedia.ts), same as MenuBar's "Add Media…".
  * Output has neither, so nothing renders for it. */
 export function AddButton({ view, draftStack }: { view: ViewConfig; draftStack?: UseDraftStack }) {
   if (view.key === "topics") return <NewTopicButton />;

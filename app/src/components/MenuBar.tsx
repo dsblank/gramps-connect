@@ -449,7 +449,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             })),
             // Media has no create dialog: a new one always starts from a
             // file, so this opens the file picker instead (store/addMedia.ts).
-            { label: t("Add media…"), perm: PERM_ADD_OBJ, onClick: pickAndAddMedia },
+            { label: t("Add Media…"), perm: PERM_ADD_OBJ, onClick: pickAndAddMedia },
           ]}
         />
         {/* None needs a permission: Map/Timeline read data the app already

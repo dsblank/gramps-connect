@@ -138,7 +138,7 @@ export function useMediaDrop(draftStack: UseDraftStack, activeKey: string): Medi
   useEffect(() => {
     // Every outcome above (draft/viewed/none) ends in uploadMediaFile, an
     // AddObject-only call -- same gate the Media list's "Add media" button
-    // (AddButton.tsx) and MenuBar's "Add media…" hide themselves behind. Skip wiring the listeners at all for a role that
+    // (AddButton.tsx) and MenuBar's "Add Media…" hide themselves behind. Skip wiring the listeners at all for a role that
     // lacks it, rather than showing the overlay for a drop that can only
     // 403: unlike a role change (which forces a reload, see auth.ts's
     // logout()/refreshTokenNow() docs), this never needs to re-evaluate
