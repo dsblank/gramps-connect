@@ -15,7 +15,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { formatDate, isLocaleRegistered, loadLocale, parseDate, resolveLocaleCode, type GrampsDate } from "@gramps-connect/gramps-date";
 import { getI18nSnapshot, subscribe as subscribeI18n } from "../i18n/i18n";
 import type { ViewStore } from "./viewStore";
-import { formatPlace, locationList, type PlaceRecord } from "./placeDisplay";
+import { PLACE_TYPE_VALUES, formatPlace, locationList, type PlaceNameJson, type PlaceRecord } from "./placeDisplay";
 import { getDisplaySettings, grampsFormatFor, loadDisplaySettings, subscribeDisplaySettings, type PlaceFormatDef } from "./displaySettings";
 
 // The Places ViewStore, handed in by registry.ts as it creates the stores
@@ -134,6 +134,40 @@ export function formatPlaceWith(handle: string, fmt: PlaceFormatDef): string | n
   }
   const places = getIndex(placeStore);
   return places ? formatPlace((h) => places.get(h), handle, fmt) : null;
+}
+
+/** The stored title for a place draft (unsaved edits included), in the
+ * active place format: its own name plus its enclosing places from the
+ * Places cache -- what automatic titles would show for it -- so a place
+ * reads the same with automatic titles off. Applies whether or not
+ * automatic titles are on (the stored title is what desktop shows when
+ * they're off). Falls back to the bare name while the Places cache has no
+ * complete hierarchy yet (see getIndex). */
+export function draftPlaceTitle(data: Record<string, unknown>): string {
+  const name = (data.name ?? null) as PlaceNameJson | null;
+  const bare = name?.value ?? "";
+  if (!bare.trim() || !placeStore) return bare;
+  requestPlaceLoad(placeStore);
+  const places = getIndex(placeStore);
+  if (!places) return bare;
+  const rawType = data.place_type as unknown;
+  const typeName = typeof rawType === "string" ? rawType : (rawType as { string?: string } | null)?.string ?? "";
+  const typeValue = typeof rawType === "object" && rawType && typeof (rawType as { value?: unknown }).value === "number"
+    ? (rawType as { value: number }).value
+    : Object.prototype.hasOwnProperty.call(PLACE_TYPE_VALUES, typeName) ? PLACE_TYPE_VALUES[typeName] : 0;
+  const draft: PlaceRecord = {
+    name,
+    altNames: (data.alt_names as PlaceNameJson[] | undefined) ?? [],
+    type: typeValue,
+    parents: ((data.placeref_list as { ref?: string; date?: PlaceRecord["parents"][number]["date"] }[] | undefined) ?? [])
+      .filter((r): r is { ref: string } => typeof r.ref === "string" && r.ref !== ""),
+  };
+  // A key no real handle can be, so the draft wins over the place's own
+  // (saved, possibly stale) cache entry.
+  const key = "\u0000draft";
+  const settings = getDisplaySettings();
+  const fmt = settings.place.formats[settings.place.active] ?? settings.place.formats[0];
+  return formatPlace((h) => (h === key ? draft : places.get(h)), key, fmt) ?? bare;
 }
 
 /** A good place to show formats on: the one with the deepest hierarchy,

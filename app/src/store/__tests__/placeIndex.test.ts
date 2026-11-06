@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ViewStore } from "../viewStore";
-import { attachDisplayStores, displayPlaceTitle, formatPlaceWith, samplePlaceHandle } from "../placeIndex";
+import { attachDisplayStores, displayPlaceTitle, draftPlaceTitle, formatPlaceWith, samplePlaceHandle } from "../placeIndex";
 
 vi.mock("../../auth/auth", () => ({
   getToken: vi.fn().mockResolvedValue("test-token"),
@@ -42,5 +42,43 @@ describe("loading the Places cache for display", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     samplePlaceHandle();
     expect(place.ensureLoaded).toHaveBeenCalledTimes(2);
+  });
+});
+
+/** A fully loaded Places cache holding `rows` (handle, name, parent). */
+function loadedStore(rows: [string, string, string | null][]) {
+  return {
+    getSnapshot: () => ({ loadedCount: rows.length, totalCount: rows.length, revision: 1, whereExpr: null, pickerExpr: null, status: "idle" }),
+    ensureLoaded: vi.fn().mockResolvedValue(undefined),
+    subscribe: () => () => {},
+    readColumns: () =>
+      rows.map(([handle, name, parent]) => [
+        handle, JSON.stringify({ value: name }), null, 0, parent ? JSON.stringify([{ ref: parent }]) : null,
+      ]),
+  } as unknown as ViewStore;
+}
+
+describe("draftPlaceTitle", () => {
+  it("formats an edited name with its enclosing places, not the cached name", () => {
+    attachDisplayStores({
+      place: loadedStore([
+        ["US", "United States", null],
+        ["IN", "Indiana", "US"],
+        ["MC", "Marion County", "IN"],
+        ["IND", "Indy", "MC"],
+      ]),
+      event: unloadedStore().store,
+    });
+    const title = draftPlaceTitle({
+      handle: "IND",
+      name: { _class: "PlaceName", value: "Indianapolis" },
+      place_type: "City",
+      placeref_list: [{ _class: "PlaceRef", ref: "MC" }],
+    });
+    expect(title).toBe("Indianapolis, Marion County, Indiana, United States");
+  });
+
+  it("is just the name when the place has no enclosing place", () => {
+    expect(draftPlaceTitle({ name: { value: "Somewhere" } })).toBe("Somewhere");
   });
 });

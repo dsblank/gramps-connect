@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { draftPlaceTitle } from "../store/placeIndex";
 import {
   Alert, Anchor, Button, Collapse, ColorInput, Group, Loader, Modal, NumberInput, Stack, Switch, Text, TextInput,
   Textarea,
@@ -530,7 +531,8 @@ export function ObjectEditDialog({
             value={value}
             onChange={(e) => {
               const v = e.currentTarget.value;
-              onChange({ title: v, name: { _class: "PlaceName", ...name, value: v } });
+              const nextName = { _class: "PlaceName", ...name, value: v };
+              onChange({ title: draftPlaceTitle({ ...draft.data, name: nextName }), name: nextName });
             }}
           />
         );

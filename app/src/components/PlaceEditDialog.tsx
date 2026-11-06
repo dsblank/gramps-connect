@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { draftPlaceTitle } from "../store/placeIndex";
 import { Button, Group, Modal, Stack, Switch, TextInput } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { UrlListField, type Url } from "./EmbeddedListFields";
@@ -75,7 +76,8 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           value={titleValue}
           onChange={(e) => {
             const v = e.currentTarget.value;
-            onChange({ title: v, name: { _class: "PlaceName", ...name, value: v } });
+            const nextName = { _class: "PlaceName", ...name, value: v };
+            onChange({ title: draftPlaceTitle({ ...data, name: nextName }), name: nextName });
           }}
           autoFocus
         />
