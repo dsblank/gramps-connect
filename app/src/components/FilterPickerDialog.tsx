@@ -1092,6 +1092,7 @@ function RuleGroupView({
   // normally by the buttons below from then on.
   const [addOpen, setAddOpen] = useState(() => group.children.length === 0);
   const { namespace, presets, mutate } = rest;
+  const hasPresets = presets.some((p) => p.namespace === namespace);
 
   return (
     <Stack
@@ -1121,8 +1122,10 @@ function RuleGroupView({
       </Group>
 
       <Stack gap={6} pl={12}>
-        {group.children.length === 0 && !addOpen && (
-          <Text size="xs" c="dimmed">{t("No rules yet -- add one below.")}</Text>
+        {group.children.length === 0 && !(addOpen && !hasPresets) && (
+          <Text size="xs" c="dimmed">
+            {addOpen ? t("No rules yet -- pick one to add:") : t("No rules yet -- add one below.")}
+          </Text>
         )}
         {group.children.map((child) => (
           <FilterTreeNodeView key={child.id} node={child} {...rest} />
@@ -1285,6 +1288,25 @@ function PresetSearchList({
   }, [filtered, search]);
   const noMatches = bySearch.length === 0;
 
+  // Nothing to pick at all (no built-in rules for this namespace and no
+  // Custom Rules yet): a search box over an empty list just looks
+  // broken, so say why and point at the Custom Rules button instead.
+  if (filtered.length === 0) {
+    return (
+      <Group
+        gap="xs"
+        wrap="nowrap"
+        p="xs"
+        style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: "var(--mantine-radius-sm)" }}
+      >
+        <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+          {t("There are no rules for this list yet. Use the Custom Rules button above to write your own.")}
+        </Text>
+        <CloseButton size="sm" onClick={onCancel} aria-label={t("Close")} />
+      </Group>
+    );
+  }
+
   return (
     // onKeyDown + data-mantine-stop-propagation on the search field --
     // same pairing and reasoning as CustomRuleForm's own fields (see
@@ -1299,6 +1321,7 @@ function PresetSearchList({
       onKeyDown={(e) => { if (e.key === "Escape") onCancel(); }}
     >
       <Group gap="xs" wrap="nowrap">
+        <Text size="xs" fw={600}>{t("Add a rule")}</Text>
         <TextInput
           size="xs"
           style={{ flex: 1 }}
