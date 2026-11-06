@@ -1,0 +1,27 @@
+/* One paragraph per stored line (styledText.ts), so no gap between them:
+   a blank line is an empty paragraph, the way Gramps' own editor shows it. */
+.editor :global(.ProseMirror) {
+  min-height: var(--note-min-height, 240px);
+  white-space: pre-wrap;
+}
+
+.editor :global(.ProseMirror) p {
+  margin: 0;
+}
+
+.editor :global(.ProseMirror) a {
+  color: var(--mantine-color-anchor);
+  text-decoration: underline;
+  cursor: text;
+}
+
+.editor :global(.ProseMirror .ProseMirror-selectednode) {
+  outline: none;
+}
+
+/* Long-form writing (the blog dialog): the reading view's own type size. */
+.prose :global(.ProseMirror) {
+  font-size: 1.1rem;
+  line-height: 1.7;
+  padding: var(--mantine-spacing-lg) var(--mantine-spacing-xl);
+}

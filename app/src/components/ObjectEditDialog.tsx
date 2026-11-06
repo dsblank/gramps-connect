@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Alert, Anchor, Button, Collapse, ColorInput, Group, Loader, Modal, NumberInput, Stack, Switch, Text, TextInput,
-  Textarea,
 } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
@@ -18,6 +17,8 @@ import {
   AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
 } from "./EmbeddedListFields";
 import { StoryEditor } from "./story/StoryEditor";
+import { NoteEditor } from "./notes/NoteEditor";
+import type { StyledText } from "../store/styledText";
 import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { CoordinateFields } from "./CoordinateFields";
 import { PlaceTitleFields } from "./PlaceTitleFields";
@@ -580,18 +581,20 @@ export function ObjectEditDialog({
           />
         );
       case "styledText": {
-        const text = (draft.data[f.key] ?? {}) as Record<string, unknown>;
-        const value = (text.string as string | undefined) ?? "";
+        // Rich text: the editor reads and writes the whole StyledText
+        // (string *and* formatting tags), so formatting made in Gramps
+        // desktop stays on the right characters when the text is edited.
+        const text = (draft.data[f.key] ?? null) as StyledText | null;
         return (
-          <Textarea
-            key={f.key}
-            label={t(f.label)}
-            autosize
-            minRows={12}
-            maxRows={30}
-            value={value}
-            onChange={(e) => onChange({ [f.key]: { _class: "StyledText", ...text, string: e.currentTarget.value } })}
-          />
+          <Stack key={f.key} gap={4}>
+            <Text size="sm" fw={500}>{t(f.label)}</Text>
+            <NoteEditor
+              value={text}
+              onChange={(next) => onChange({ [f.key]: { ...(text ?? {}), ...next } })}
+              minHeight={260}
+              maxHeight="55vh"
+            />
+          </Stack>
         );
       }
       case "storyEditor": {

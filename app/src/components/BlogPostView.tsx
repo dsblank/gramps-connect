@@ -8,7 +8,7 @@
 // (a handle it just created, nothing fetched yet) -- can open the same
 // component the same way; same self-contained-on-open shape as
 // CompareModal.tsx.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Anchor, Box, Group, Image, Loader, Modal, ScrollArea, SimpleGrid, Stack, Text } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchObjectExtended, zipRefs, type ObjectDetail } from "../store/objectDetail";
@@ -18,6 +18,7 @@ import { BLOG_VIEW, formatChange, formatChangeTitle } from "../store/views";
 import { MediaThumbnail } from "./related/MediaThumbnail";
 import { NoteText } from "./related/NoteText";
 import type { OnNavigate } from "./related/types";
+import type { StyledText } from "../store/styledText";
 import { t } from "../i18n/i18n";
 
 interface MediaTarget {
@@ -69,10 +70,54 @@ function HeroImage({ handle, mime, rect }: { handle: string; mime?: string; rect
   );
 }
 
-function noteTextOf(detail: ObjectDetail): { string: string } | null {
-  const notes = (detail.extended?.notes as { text?: { string?: string } }[] | undefined) ?? [];
+function noteTextOf(detail: ObjectDetail): StyledText | null {
+  const notes = (detail.extended?.notes as { text?: StyledText }[] | undefined) ?? [];
   const text = notes[0]?.text;
-  return text?.string ? { string: text.string } : null;
+  return text?.string ? text : null;
+}
+
+export interface BlogArticleMedia {
+  handle: string;
+  mime?: string;
+  rect?: number[];
+}
+
+/** The article itself -- byline, lead image, text, gallery -- shared by the
+ * reading view below and the new-post dialog's Preview (AddButton.tsx),
+ * so a preview looks exactly like the published post. */
+export function BlogArticle({ author, change, media, note, onNavigate, footer }: {
+  author?: string;
+  change?: number;
+  media: BlogArticleMedia[];
+  note: StyledText | null;
+  onNavigate: OnNavigate;
+  footer?: ReactNode;
+}) {
+  const [hero, ...rest] = media;
+  return (
+    <Stack gap="md">
+      <Group gap="xs" c="dimmed">
+        {author && <Text>{author}</Text>}
+        {typeof change === "number" && (
+          <Text title={formatChangeTitle(change)}>{formatChange(change)}</Text>
+        )}
+      </Group>
+      {hero && <HeroImage handle={hero.handle} mime={hero.mime} rect={hero.rect} />}
+      <Box style={{ fontSize: "1.1rem", lineHeight: 1.7 }}>
+        {note?.string ? <NoteText text={note} onNavigate={onNavigate} /> : (
+          <Text c="dimmed" fs="italic">{t("This post has no content yet.")}</Text>
+        )}
+      </Box>
+      {rest.length > 0 && (
+        <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
+          {rest.map((m) => (
+            <MediaThumbnail key={m.handle} handle={m.handle} mime={m.mime} rect={m.rect} size={140} zoomable />
+          ))}
+        </SimpleGrid>
+      )}
+      {footer}
+    </Stack>
+  );
 }
 
 export function BlogPostView({ handle, opened, onClose, onNavigate }: {
@@ -103,7 +148,6 @@ export function BlogPostView({ handle, opened, onClose, onNavigate }: {
   }, [handle, opened]);
 
   const mediaRows = detail ? zipRefs<MediaTarget>(detail.media_list, detail.extended?.media) : [];
-  const [hero, ...rest] = mediaRows;
   const note = detail ? noteTextOf(detail) : null;
 
   // Close before navigating: in the Blog view onNavigate only previews into
@@ -125,32 +169,18 @@ export function BlogPostView({ handle, opened, onClose, onNavigate }: {
             </Group>
           )}
           {detail && (
-            <Stack gap="md">
-              <Group gap="xs" c="dimmed">
-                {typeof detail.author === "string" && detail.author && <Text>{detail.author}</Text>}
-                {typeof detail.change === "number" && (
-                  <Text title={formatChangeTitle(detail.change)}>{formatChange(detail.change)}</Text>
-                )}
-              </Group>
-              {hero && (
-                <HeroImage handle={hero.ref.ref} mime={hero.target?.mime} rect={hero.ref.rect} />
-              )}
-              <Box style={{ fontSize: "1.1rem", lineHeight: 1.7 }}>
-                {note ? <NoteText text={note} onNavigate={navigate} /> : (
-                  <Text c="dimmed" fs="italic">{t("This post has no content yet.")}</Text>
-                )}
-              </Box>
-              {rest.length > 0 && (
-                <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
-                  {rest.map(({ ref, target }) => (
-                    <MediaThumbnail key={ref.ref} handle={ref.ref} mime={target?.mime} rect={ref.rect} size={140} zoomable />
-                  ))}
-                </SimpleGrid>
-              )}
-              <Anchor component="button" type="button" onClick={() => navigate("source", detail.handle)}>
-                {t("Show source details")}
-              </Anchor>
-            </Stack>
+            <BlogArticle
+              author={typeof detail.author === "string" ? detail.author : undefined}
+              change={typeof detail.change === "number" ? detail.change : undefined}
+              media={mediaRows.map(({ ref, target }) => ({ handle: ref.ref, mime: target?.mime, rect: ref.rect }))}
+              note={note}
+              onNavigate={navigate}
+              footer={
+                <Anchor component="button" type="button" onClick={() => navigate("source", detail.handle)}>
+                  {t("Show source details")}
+                </Anchor>
+              }
+            />
           )}
         </Box>
       </ScrollArea.Autosize>

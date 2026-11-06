@@ -8,6 +8,7 @@
 import { createHandle, createObjects } from "./objectsApi";
 import { getOrCreateTagHandle } from "./jobsApi";
 import { getViewStore } from "./registry";
+import type { StyledText } from "./styledText";
 
 /** Same literal as BLOG_VIEW's own baseFilter in views.ts (`any(t.name ==
  * 'Blog' for t in tags)`) -- kept a plain duplicated string rather than a
@@ -22,12 +23,14 @@ const BLOG_TAG_NAME = "Blog";
  * helper promoteJob() uses for its own report/export tags), so the very
  * first post in a fresh tree still works. `content` is optional -- a
  * title-only post (no Note, no note_list) is a valid Source same as
- * gramps-web's own blank-content case. */
+ * gramps-web's own blank-content case. `content` is a Gramps StyledText,
+ * formatting and inline images included (NoteEditor.tsx). */
 export async function createBlogPost(
   token: string,
   title: string,
   author: string,
-  content: string
+  content: StyledText,
+  mediaHandles: string[] = []
 ): Promise<string> {
   const tagHandle = await getOrCreateTagHandle(token, BLOG_TAG_NAME);
   const sourceHandle = createHandle();
@@ -38,14 +41,19 @@ export async function createBlogPost(
     author,
     tag_list: [tagHandle],
   };
+  // The first one is the post's lead image (BlogPostView.tsx), the rest a
+  // gallery under the text -- gramps-web's own layout for the same list.
+  if (mediaHandles.length) {
+    source.media_list = mediaHandles.map((ref) => ({ _class: "MediaRef", ref }));
+  }
   const objects: Record<string, unknown>[] = [source];
-  if (content.trim()) {
+  if (content.string.trim()) {
     const noteHandle = createHandle();
     source.note_list = [noteHandle];
     objects.push({
       _class: "Note",
       handle: noteHandle,
-      text: { string: content },
+      text: { _class: "StyledText", string: content.string, tags: content.tags ?? [] },
       tag_list: [tagHandle],
     });
   }

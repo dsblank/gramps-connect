@@ -304,7 +304,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
         </Group>
         {isSelf ? (
           <Box p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: "var(--mantine-radius-md)" }}>
-            {text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}
+            {text.string ? <NoteText text={text} onNavigate={onNavigate} preformatted={detail.format === 1} /> : "(empty note)"}
           </Box>
         ) : (
           // A plain div, not component="button" -- NoteText's embedded
@@ -321,7 +321,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") navigateToSelf?.(); }}
             style={{ cursor: "pointer" }}
           >
-            {text.string ? <NoteText text={text} onNavigate={onNavigate} /> : "(empty note)"}
+            {text.string ? <NoteText text={text} onNavigate={onNavigate} preformatted={detail.format === 1} /> : "(empty note)"}
           </Text>
         )}
       </div>
