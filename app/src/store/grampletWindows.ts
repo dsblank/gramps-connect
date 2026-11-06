@@ -7,6 +7,7 @@
 // stacking order, which are running (for the leave-page warning), and
 // which idle workers to release to bound memory.
 import { dock, undock } from "./bottomDock";
+import { raiseWindow, removeWindow } from "./windowStack";
 import { grampletKind } from "../pyodidePoc/grampletManifest";
 import type { Gramplet } from "../pyodidePoc/types";
 
@@ -47,8 +48,11 @@ export function grampletDockId(grampletId: string): string {
   return `gramplet:${grampletId}`;
 }
 
+/** On top of the other Gramplet windows, and of every floating window
+ * (store/windowStack.ts, which decides the actual z-index). */
 function raise(grampletId: string): void {
   zOrder = [...zOrder.filter((id) => id !== grampletId), grampletId];
+  raiseWindow(grampletDockId(grampletId));
 }
 
 /** Opens `gramplet`'s window, or focuses (and un-minimizes) it if it's
@@ -96,6 +100,7 @@ export function closeGrampletWindow(grampletId: string): void {
   if (next.length === windows.length) return;
   windows = next;
   zOrder = zOrder.filter((id) => id !== grampletId);
+  removeWindow(grampletDockId(grampletId));
   undock(grampletDockId(grampletId));
   running.delete(grampletId);
   forgetWorker(grampletId);
@@ -120,7 +125,10 @@ export function setGrampletWindowMinimized(grampletId: string, minimized: boolea
 
 /** Brings a window to the front (on any pointer-down inside it). */
 export function focusGrampletWindow(grampletId: string): void {
-  if (zOrder[zOrder.length - 1] === grampletId || !zOrder.includes(grampletId)) return;
+  if (!zOrder.includes(grampletId)) return;
+  // Top among Gramplets can still be under the External Search window.
+  raiseWindow(grampletDockId(grampletId));
+  if (zOrder[zOrder.length - 1] === grampletId) return;
   raise(grampletId);
   notify();
 }
@@ -129,7 +137,8 @@ export function getGrampletWindows(): GrampletWindowEntry[] {
   return windows;
 }
 
-/** Stacking position, 0 = bottom-most. */
+/** Stacking position among Gramplet windows, 0 = bottom-most (the
+ * z-index itself comes from the shared store/windowStack.ts). */
 export function getGrampletWindowZOrder(): string[] {
   return zOrder;
 }

@@ -59,6 +59,7 @@ import { useMediaDrop } from "./hooks/useMediaDrop";
 import { MediaDropOverlay } from "./components/MediaDropOverlay";
 import { PyodidePocPanel } from "./pyodidePoc/PyodidePocPanel";
 import { GrampletWindows } from "./pyodidePoc/GrampletWindows";
+import { ExternalSearchWindow } from "./components/related/ExternalSearchWindow";
 import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 
@@ -692,6 +693,9 @@ function AuthenticatedApp() {
       {/* (Window) Gramplets from the Gramplets menu -- same reason; they
           also keep running in the background while you navigate. */}
       <GrampletWindows />
+      {/* A person's External Search links -- same reason: it stays up
+          beside their records while the links open in other tabs. */}
+      <ExternalSearchWindow />
       {/* Single shared modal answering every confirmDialog() call across
           the app -- see ConfirmDialogHost.tsx's own doc comment. */}
       <ConfirmDialogHost />

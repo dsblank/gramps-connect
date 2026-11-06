@@ -8,20 +8,22 @@
 // store/grampletWindows.ts only holds what windows share (open/minimized/
 // stacking/running).
 //
-// Stays mounted while minimized -- only hidden, with a chip in the bottom
-// dock standing in for it -- so a run carries on in the background and
-// the rendered result (including any st.* widget's half-typed input) is
-// still there when it's restored.
+// The window itself (drag, resize, minimize to the bottom dock) is the
+// shared components/FloatingWindow.tsx. It stays mounted while minimized,
+// so a run carries on in the background and the rendered result
+// (including any st.* widget's half-typed input) is still there when it's
+// restored.
 //
 // A Gramplet with Allow data changes gets Dry run and Run buttons (see
 // GRAMPLET_WRITES_PLAN.md): opening it does a dry run; Run saves each group
 // of changes as the code closes it (commit-changes messages from the
 // worker, saved by grampletCommit.ts), and Undo takes back everything the
 // current result saved.
-import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Alert, Badge, Box, Button, Group, Loader, Paper, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Alert, Badge, Button, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { CircleGlyphButton } from "../components/CircleGlyphButton";
+import { FloatingWindow } from "../components/FloatingWindow";
 import { t } from "../i18n/i18n";
 import { confirmDialog } from "../store/confirmDialog";
 import { getHomePersonHandle } from "../store/homePersonPreference";
@@ -41,65 +43,10 @@ import { answerTokenRequest } from "./workerToken";
 // GrampletEditDialog opener, so a window that's never edited never loads it.
 const GrampletEditDialog = lazy(() => import("./GrampletEditDialog").then((m) => ({ default: m.GrampletEditDialog })));
 
-const DEFAULT_WIDTH = 560;
-const DEFAULT_HEIGHT = 480;
-const MIN_WIDTH = 320;
-const MIN_HEIGHT = 200;
-/** How far each further window is offset from the previous one when no
- * position of its own was remembered. */
-const CASCADE_STEP = 28;
-
-interface Geometry {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
 // Per Gramplet, per browser -- the same localStorage convention as the
 // View Gramplet panel's own height (PyodidePocPanel.tsx).
 function geometryStorageKey(grampletId: string): string {
   return `gramps-connect:grampletWindowGeometry:${grampletId}`;
-}
-
-/** Keeps at least the title bar on screen, after a browser resize or a
- * position remembered from a bigger screen. */
-function clampGeometry(g: Geometry): Geometry {
-  const width = Math.max(MIN_WIDTH, Math.min(g.width, window.innerWidth - 16));
-  const height = Math.max(MIN_HEIGHT, Math.min(g.height, window.innerHeight - 16));
-  return {
-    width,
-    height,
-    left: Math.max(8 - width + 120, Math.min(g.left, window.innerWidth - 120)),
-    top: Math.max(8, Math.min(g.top, window.innerHeight - 40)),
-  };
-}
-
-function initialGeometry(grampletId: string, cascadeIndex: number): Geometry {
-  try {
-    const raw = localStorage.getItem(geometryStorageKey(grampletId));
-    if (raw) {
-      const g = JSON.parse(raw) as Geometry;
-      if ([g.left, g.top, g.width, g.height].every(Number.isFinite)) return clampGeometry(g);
-    }
-  } catch {
-    // Unreadable/unavailable storage -- fall through to the default.
-  }
-  const offset = cascadeIndex * CASCADE_STEP;
-  return clampGeometry({
-    left: window.innerWidth - DEFAULT_WIDTH - 24 - offset,
-    top: window.innerHeight - DEFAULT_HEIGHT - 72 - offset,
-    width: DEFAULT_WIDTH,
-    height: DEFAULT_HEIGHT,
-  });
-}
-
-function storeGeometry(grampletId: string, g: Geometry): void {
-  try {
-    localStorage.setItem(geometryStorageKey(grampletId), JSON.stringify(g));
-  } catch {
-    // Not worth surfacing -- the window just opens at its default next time.
-  }
 }
 
 interface RunProgress {
@@ -127,8 +74,6 @@ export function GrampletWindow({
   const [response, setResponse] = useState<GrampletOutputResponse | null>(null);
   const [progress, setProgress] = useState<RunProgress | null>(null);
   const [stopped, setStopped] = useState(false);
-  const [geometry, setGeometry] = useState<Geometry>(() => initialGeometry(gramplet.id, cascadeIndex));
-  const [maximized, setMaximized] = useState(false);
   const [editing, setEditing] = useState(false);
   // What the current result's real run saved, for Undo -- and Undo's own
   // progress. Only ever non-empty for a Gramplet with Allow data changes.
@@ -147,7 +92,6 @@ export function GrampletWindow({
   const savedForRunRef = useRef<{ runId: string; groups: CommittedGroup[] }>({ runId: "", groups: [] });
   const minimizedRef = useRef(minimized);
   minimizedRef.current = minimized;
-  const paperRef = useRef<HTMLDivElement | null>(null);
 
   const running = runStatus === "queued" || runStatus === "loading";
 
@@ -337,160 +281,49 @@ export function GrampletWindow({
     closeGrampletWindow(gramplet.id);
   }
 
-  // Dragging by the title bar. Pointer capture keeps the drag going even
-  // when the pointer outruns the window.
-  const dragRef = useRef<{ pointerX: number; pointerY: number; left: number; top: number } | null>(null);
-  function onTitlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    if (maximized || e.button !== 0 || (e.target as HTMLElement).closest("button, [role=button]")) return;
-    dragRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: geometry.left, top: geometry.top };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-  function onTitlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current;
-    if (!drag) return;
-    setGeometry((g) =>
-      clampGeometry({ ...g, left: drag.left + e.clientX - drag.pointerX, top: drag.top + e.clientY - drag.pointerY })
-    );
-  }
-  function onTitlePointerUp() {
-    if (!dragRef.current) return;
-    dragRef.current = null;
-    setGeometry((g) => {
-      storeGeometry(gramplet.id, g);
-      return g;
-    });
-  }
-
-  // The browser's own resize handle (CSS `resize: both`) changes the
-  // element's size directly; this mirrors that back into state (so the next
-  // render doesn't snap it back) and remembers it.
-  useEffect(() => {
-    const el = paperRef.current;
-    if (!el || maximized || minimized) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const observer = new ResizeObserver(() => {
-      const width = el.offsetWidth;
-      const height = el.offsetHeight;
-      setGeometry((g) => {
-        if (Math.abs(g.width - width) < 1 && Math.abs(g.height - height) < 1) return g;
-        const next = { ...g, width, height };
-        if (timer !== null) clearTimeout(timer);
-        timer = setTimeout(() => storeGeometry(gramplet.id, next), 300);
-        return next;
-      });
-    });
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      if (timer !== null) clearTimeout(timer);
-    };
-  }, [gramplet.id, maximized, minimized]);
-
   const percent = progress && progress.total ? Math.min(100, (progress.done / progress.total) * 100) : null;
 
   const statusGlyph = running ? null : stopped ? t("Stopped") : runStatus === "done" ? "✓" : runStatus === "error" ? "⚠" : null;
 
   return (
     <>
-      {minimized && (
-        <Paper
-          withBorder
-          shadow="md"
-          radius="sm"
-          style={{ position: "fixed", bottom: 0, right: chipRight, width: GRAMPLET_CHIP_WIDTH, zIndex }}
-        >
-          <Group gap={6} wrap="nowrap" px="sm" py={6} style={{ background: "var(--mantine-color-default-hover)" }}>
-            <UnstyledButton
-              onClick={() => setGrampletWindowMinimized(gramplet.id, false)}
-              style={{ minWidth: 0, flex: 1 }}
-              title={t("Show")}
-            >
-              <Group gap={6} wrap="nowrap">
-                <Text fw={600} size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
-                  {gramplet.label}
-                </Text>
-                {running &&
-                  (percent !== null ? <Text size="xs">{Math.floor(percent)}%</Text> : <Loader size={12} />)}
-                {statusGlyph && (
-                  <Text size="xs" c={runStatus === "error" ? "red" : "dimmed"}>
-                    {statusGlyph}
-                  </Text>
-                )}
-              </Group>
-            </UnstyledButton>
-            <CircleGlyphButton glyph="▴" label={t("Show")} onClick={() => setGrampletWindowMinimized(gramplet.id, false)} size={18} />
-            <CircleGlyphButton glyph="×" label={t("Close")} onClick={() => void handleClose()} size={18} />
-          </Group>
-        </Paper>
-      )}
-      <Paper
-        ref={paperRef}
-        withBorder
-        shadow="lg"
-        radius="sm"
-        onPointerDownCapture={() => focusGrampletWindow(gramplet.id)}
-        style={{
-          position: "fixed",
-          zIndex,
-          display: minimized ? "none" : "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          ...(maximized
-            ? { left: "3vw", top: "3vh", width: "94vw", height: "94vh" }
-            : {
-                left: geometry.left,
-                top: geometry.top,
-                width: geometry.width,
-                height: geometry.height,
-                resize: "both",
-                minWidth: MIN_WIDTH,
-                minHeight: MIN_HEIGHT,
-              }),
-        }}
-      >
-        <Group
-          gap={6}
-          wrap="nowrap"
-          justify="space-between"
-          px="sm"
-          py={6}
-          onPointerDown={onTitlePointerDown}
-          onPointerMove={onTitlePointerMove}
-          onPointerUp={onTitlePointerUp}
-          onPointerCancel={onTitlePointerUp}
-          onDoubleClick={() => setMaximized((m) => !m)}
-          style={{
-            flex: "none",
-            cursor: maximized ? undefined : "move",
-            userSelect: "none",
-            touchAction: "none",
-            background: "var(--mantine-color-default-hover)",
-            borderBottom: "1px solid var(--mantine-color-default-border)",
-          }}
-        >
-          <Text fw={600} size="sm" truncate style={{ minWidth: 0, flex: 1 }}>
-            {gramplet.label}
-          </Text>
-          {allowChanges && lastRequestRef.current?.dryRun === false && runStatus !== "idle" && (
+      <FloatingWindow
+        storageKey={geometryStorageKey(gramplet.id)}
+        title={gramplet.label}
+        zIndex={zIndex}
+        minimized={minimized}
+        chipRight={chipRight}
+        chipWidth={GRAMPLET_CHIP_WIDTH}
+        cascadeIndex={cascadeIndex}
+        onFocus={() => focusGrampletWindow(gramplet.id)}
+        onMinimize={(m) => setGrampletWindowMinimized(gramplet.id, m)}
+        onClose={() => void handleClose()}
+        chipStatus={
+          <>
+            {running && (percent !== null ? <Text size="xs">{Math.floor(percent)}%</Text> : <Loader size={12} />)}
+            {statusGlyph && (
+              <Text size="xs" c={runStatus === "error" ? "red" : "dimmed"}>
+                {statusGlyph}
+              </Text>
+            )}
+          </>
+        }
+        titleExtra={
+          allowChanges &&
+          lastRequestRef.current?.dryRun === false &&
+          runStatus !== "idle" && (
             <Badge size="xs" color="red" variant="filled" style={{ flex: "none" }}>
               {t("Saving changes")}
             </Badge>
-          )}
-          <Group gap={2} wrap="nowrap">
-            {canAuthorGramplets() && gramplet.handle && (
-              <CircleGlyphButton glyph="✎" label={t("Edit Gramplet")} onClick={() => setEditing(true)} size={18} />
-            )}
-            <CircleGlyphButton glyph="▾" label={t("Minimize")} onClick={() => setGrampletWindowMinimized(gramplet.id, true)} size={18} />
-            <CircleGlyphButton
-              glyph={maximized ? "⤡" : "⤢"}
-              label={maximized ? t("Restore size") : t("Maximize")}
-              onClick={() => setMaximized((m) => !m)}
-              size={18}
-            />
-            <CircleGlyphButton glyph="×" label={t("Close")} onClick={() => void handleClose()} size={18} />
-          </Group>
-        </Group>
-        <Box p="sm" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          )
+        }
+        headerButtons={
+          canAuthorGramplets() &&
+          gramplet.handle && (
+            <CircleGlyphButton glyph="✎" label={t("Edit Gramplet")} onClick={() => setEditing(true)} size={18} />
+          )
+        }
+      >
           <Stack gap="sm">
             {allowChanges && (
               <Group gap="xs" wrap="nowrap">
@@ -566,8 +399,7 @@ export function GrampletWindow({
               <GrampletResultView status={runStatus} response={response} onWidgetEvent={handleWidgetEvent} />
             )}
           </Stack>
-        </Box>
-      </Paper>
+      </FloatingWindow>
       {/* Saving restarts this window with the saved version (a fresh mount
           -- see restartGrampletWindow()), which unmounts this dialog too. */}
       {editing && gramplet.handle && (
