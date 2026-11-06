@@ -25,6 +25,7 @@ import {
   type WikiSection,
 } from "../store/wikiSearch";
 import { getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
+import classes from "./DocumentationDialog.module.css";
 
 interface DocumentationDialogProps {
   opened: boolean;
@@ -73,6 +74,7 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
   // opened from a search result and dropped once the reader moves on.
   const [highlight, setHighlight] = useState<string | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!opened) return;
@@ -181,6 +183,27 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
     if (pageRef.current) highlightWikiMatches(pageRef.current, highlight ?? "", contentLang);
   }, [highlight, contentHtml, contentLang, showResults, loading, error]);
 
+  // Marks the sidebar's link to the page on screen, however it was reached
+  // (search result, a link inside a page, Back). Only a link to the page
+  // itself counts, not one to a section of it; a page the sidebar doesn't
+  // list just leaves nothing marked. Scrolled into view for a sidebar
+  // taller than the dialog.
+  useEffect(() => {
+    const root = sidebarRef.current;
+    if (!root) return;
+    let current: Element | null = null;
+    for (const link of root.querySelectorAll("a[data-wiki-page]")) {
+      const isCurrent = !current && link.getAttribute("data-wiki-page") === page && !link.hasAttribute("data-wiki-anchor");
+      if (isCurrent) {
+        current = link;
+        link.setAttribute("aria-current", "page");
+      } else {
+        link.removeAttribute("aria-current");
+      }
+    }
+    current?.scrollIntoView({ block: "nearest" });
+  }, [page, sidebarHtml]);
+
   // Runs after the new page's HTML is in the DOM. Translated pages carry the
   // English heading slugs as explicit <a id> anchors (see
   // scripts/sync-wiki-translations.py), so the same anchor works in every
@@ -226,7 +249,7 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
             />
             {sidebar && (
               <TypographyStylesProvider p={0}>
-                <div dangerouslySetInnerHTML={{ __html: sidebarHtml }} />
+                <div ref={sidebarRef} className={classes.sidebar} dangerouslySetInnerHTML={{ __html: sidebarHtml }} />
               </TypographyStylesProvider>
             )}
           </ScrollArea>

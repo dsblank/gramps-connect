@@ -1,0 +1,13 @@
+/* The sidebar link for the page being shown (DocumentationDialog marks it
+   with aria-current="page"), so a jump from search, a link inside a page,
+   or Back still shows where in the wiki you are. */
+.sidebar a[aria-current="page"] {
+  display: block;
+  margin-inline: calc(-1 * var(--mantine-spacing-xs));
+  padding-inline: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-primary-color-light);
+  color: var(--mantine-primary-color-light-color);
+  font-weight: 600;
+  text-decoration: none;
+}
