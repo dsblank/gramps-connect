@@ -1,21 +1,17 @@
 import { useState } from "react";
 import { Alert, Button } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { confirmDialog } from "../../store/confirmDialog";
 import { deleteMedia, deleteNote, FILE_NAME_ATTRIBUTE, findJobReportNotes } from "../../store/jobsApi";
-import { clickDownloadLink } from "../../store/downloadFile";
-import { notifyBrowser } from "../../store/browserNotifications";
-import { fetchAuthedBlobUrl } from "../../store/authedFetch";
+import { downloadMediaFile, mediaDownloadName } from "../../store/mediaDownload";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { zipHandles } from "./sections/shared";
 import { t } from "../../i18n/i18n";
 
 /** Download + "Delete this report/export?" flow for an Output row (plan
- * §5) -- gramps-connect has no generic per-object download affordance
- * elsewhere (a Media object's file is only ever shown as a thumbnail, see
- * MediaThumbnail.tsx), so this is scoped to RelatedPanel's `view.key ===
- * "generated"` branch rather than added to every type. Report rows get the
+ * §5). Ordinary Media rows get a plain MediaDownloadButton.tsx instead;
+ * this one exists separately for the keep-or-discard prompt that follows
+ * a generated item's download. Report rows get the
  * same delete-confirmation flow export rows already had -- a conscious
  * decision (discussion #4, F4), not an oversight left over from before
  * this offered delete at all: both are equally regenerable from the tree
@@ -43,50 +39,16 @@ export function GeneratedItemActions({ detail }: { detail: ObjectDetail }) {
   async function handleDownload() {
     setError(null);
     try {
+      // Shared with the Media pane's own Download (store/mediaDownload.ts):
+      // fetched into a same-origin blob so the `download` attribute can
+      // name the file, with the token in a header rather than the URL.
+      // `fileName` is passed so no extra metadata lookup is needed -- this
+      // row's detail is already loaded.
+      await downloadMediaFile(detail.handle, {
+        fileName: mediaDownloadName(detail),
+        title: isExport ? t("Export downloaded") : t("Report downloaded"),
+      });
       const token = await getToken();
-      // The `download` attribute (the only way to give a downloaded file a
-      // name other than the server's own) only works on same-origin URLs,
-      // which the API isn't in any deployment where it's a separate host
-      // (see config.ts) -- so the file is always fetched into a blob first,
-      // whose object URL *is* same-origin. Discussion #4's "tokens in
-      // image URLs" note: this also means the access token never needs to
-      // ride in the URL at all (the previous no-recorded-name branch used
-      // to build one with `?jwt=`), same fetchAuthedBlobUrl() every other
-      // single-item (not list/gallery) call site uses. `path` is the raw
-      // Media object's own stored filename (checksum-derived) -- the same
-      // name a recorded-name-less download already fell back to before,
-      // just read directly instead of leaving it for the server's
-      // Content-Disposition to imply. Exports of a large tree are the
-      // biggest thing through here, and tens of MB is well within what a
-      // blob handles.
-      const objectUrl = await fetchAuthedBlobUrl(`/api/media/${encodeURIComponent(detail.handle)}/file`, token);
-      try {
-        // clickDownloadLink() only sets the `download` attribute when given
-        // a name -- without one at all, a blob: URL's own <a> would
-        // *navigate* to it instead of downloading, since there's no
-        // Content-Disposition on a locally-built blob to fall back on the
-        // way the old `?download=true` URL relied on. `detail.handle` as
-        // the last resort matches the delete-confirmation text's own
-        // fallback just below.
-        const downloadName = fileName ?? (detail.path as string | undefined) ?? detail.handle;
-        clickDownloadLink(objectUrl, downloadName);
-        // clickDownloadLink() hands off to the browser/OS's own download
-        // machinery (a native Save-As dialog in the standalone desktop
-        // build, see launcher.py's on_download_starting) -- the page gets
-        // no callback either way, so this can't confirm the save actually
-        // completed. Still worth an explicit toast: on desktop that native
-        // dialog can appear behind the window or get missed entirely, and
-        // the delete-confirmation dialog right below would otherwise be
-        // the only feedback the click did anything at all.
-        const title = isExport ? t("Export downloaded") : t("Report downloaded");
-        const message = `${downloadName} — ${t("saved to your downloads.")}`;
-        notifications.show({ color: "green", title, message });
-        notifyBrowser(title, message);
-      } finally {
-        // Safari needs the URL to outlive the click; a task turn is
-        // enough, and the blob is freed either way.
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-      }
 
       if (
         hasPermissions("DeleteObject") &&

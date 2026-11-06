@@ -4,6 +4,8 @@ import type { ObjectDetail } from "../../store/objectDetail";
 import { previewKindForMime } from "./mediaPreviewKind";
 import { MediaPreviewDialog } from "./MediaPreviewDialog";
 import { ViewButton } from "./ViewButton";
+import { MediaDownloadButton } from "./MediaDownloadButton";
+import { mediaDownloadName } from "../../store/mediaDownload";
 import { t } from "../../i18n/i18n";
 
 /** A Media/Output row's own "view it in the browser" button, for every
@@ -18,17 +20,27 @@ import { t } from "../../i18n/i18n";
  * a different way, right now"), not History/Topic's muted gray -- viewing
  * the file itself is exactly that, not a secondary/muted action, so this
  * deliberately leaves ViewButton's `color` unset. */
-export function MediaViewButton({ detail }: { detail: ObjectDetail }) {
+export function MediaViewButton({ detail, withDownload = false }: { detail: ObjectDetail; withDownload?: boolean }) {
   const [opened, setOpened] = useState(false);
   const kind = previewKindForMime(detail.mime as string | undefined);
-  if (!kind) return null;
+  if (!kind && !withDownload) return null;
   return (
     <>
+      {/* withDownload (Media rows, not Output -- see MediaDownloadButton.tsx)
+          puts Download on this same row, so View and Download sit together
+          and a non-previewable file still gets its Download. */}
       <Group gap="xs">
-        <ViewButton label={t("View")} onClick={() => setOpened(true)} />
+        {kind && <ViewButton label={t("View")} onClick={() => setOpened(true)} />}
+        {withDownload && <MediaDownloadButton detail={detail} />}
       </Group>
-      {opened && (
-        <MediaPreviewDialog opened onClose={() => setOpened(false)} handle={detail.handle} kind={kind} />
+      {opened && kind && (
+        <MediaPreviewDialog
+          opened
+          onClose={() => setOpened(false)}
+          handle={detail.handle}
+          kind={kind}
+          fileName={mediaDownloadName(detail)}
+        />
       )}
     </>
   );

@@ -19,6 +19,8 @@ interface ViewButtonProps {
    * current state -- without a second row or a competing accent color loud
    * enough to read as a distinct control family. */
   color?: string;
+  /** Spinner + disabled while an onClick's async work runs (Download). */
+  loading?: boolean;
 }
 
 /** Shared size="xs" variant="light" styling for every "look at this record
@@ -34,7 +36,7 @@ interface ViewButtonProps {
  * Tinted rather than the header icons' bare treatment -- these sit in the
  * body's own reading order, where an outline button reads as disabled next
  * to real text. */
-export function ViewButton({ label, hint, href, onClick, color }: ViewButtonProps) {
+export function ViewButton({ label, hint, href, onClick, color, loading }: ViewButtonProps) {
   // useComputedColorScheme, not CSS light-dark() -- ChatBubble.tsx's own
   // "gray"-text contrast fix found light-dark() doesn't track this app's
   // manual scheme toggle, so read the resolved scheme reactively instead.
@@ -48,7 +50,7 @@ export function ViewButton({ label, hint, href, onClick, color }: ViewButtonProp
       {label}
     </Button>
   ) : (
-    <Button size="xs" variant="light" onClick={onClick} color={color} style={style}>
+    <Button size="xs" variant="light" onClick={onClick} color={color} style={style} loading={loading}>
       {label}
     </Button>
   );

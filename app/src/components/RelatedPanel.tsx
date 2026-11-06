@@ -589,7 +589,9 @@ export function RelatedPanel({
           Discussion's used to sit down past DetailFields, grouped with its
           link-management controls instead). */}
       <VisualButtons view={view} detail={detail} />
-      {(view.key === "media" || view.key === "generated") && <MediaViewButton detail={detail} />}
+      {(view.key === "media" || view.key === "generated") && (
+        <MediaViewButton detail={detail} withDownload={view.key === "media"} />
+      )}
       {view.key === "topics" && (
         <Group gap="xs">
           <ViewButton label={t("View")} onClick={() => openTopicWindow(detail.handle)} />

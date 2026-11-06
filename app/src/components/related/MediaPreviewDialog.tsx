@@ -4,6 +4,7 @@ import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { t } from "../../i18n/i18n";
 import type { PreviewKind } from "./mediaPreviewKind";
+import { FullscreenDownloadButton } from "./FullscreenDownloadButton";
 
 function filePath(handle: string): string {
   return `/api/media/${encodeURIComponent(handle)}/file`;
@@ -26,13 +27,19 @@ function filePath(handle: string): string {
  * GEDCOM, KML/XML, ...) shows as monospace source. Same fullScreen +
  * no-Modal.Stack presentation ImageLightbox.tsx uses for images, for the
  * same reason (this is the only thing on screen while it's open). */
-export function MediaPreviewDialog({ opened, onClose, handle, kind }: {
+export function MediaPreviewDialog({ opened, onClose, handle, kind, fileName }: {
   opened: boolean;
   onClose: () => void;
   handle: string;
   kind: PreviewKind;
+  /** Save-as name for the corner Download; looked up from the handle when
+   * absent (see store/mediaDownload.ts). */
+  fileName?: string;
 }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  // The fetched file's blob URL for every kind, including text ones that
+  // only render `text` -- what the corner Download saves.
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +52,7 @@ export function MediaPreviewDialog({ opened, onClose, handle, kind }: {
     let objectUrl: string | null = null;
     setError(null);
     setBlobUrl(null);
+    setFileUrl(null);
     setText(null);
     (async () => {
       try {
@@ -55,6 +63,7 @@ export function MediaPreviewDialog({ opened, onClose, handle, kind }: {
           return;
         }
         objectUrl = url;
+        setFileUrl(url);
         if (kind === "video" || kind === "audio" || kind === "pdf" || kind === "svg") {
           setBlobUrl(url);
           return;
@@ -145,6 +154,7 @@ export function MediaPreviewDialog({ opened, onClose, handle, kind }: {
             </Box>
           </ScrollArea>
         )}
+        <FullscreenDownloadButton handle={handle} blobUrl={fileUrl} fileName={fileName} />
         <ActionIcon
           variant="filled"
           color="dark"

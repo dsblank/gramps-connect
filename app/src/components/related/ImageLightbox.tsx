@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { ActionIcon, Box, Loader, Modal } from "@mantine/core";
+import { FullscreenDownloadButton } from "./FullscreenDownloadButton";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { fetchObjectExtended } from "../../store/objectDetail";
@@ -417,6 +418,7 @@ export function ImageLightbox({ opened, onClose, handle }: {
           </>
         )}
 
+        <FullscreenDownloadButton handle={handle} blobUrl={src} />
         <ActionIcon
           variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={t("Close")}
           // Stops the pointerdown here, same as the region boxes above --
