@@ -6,7 +6,7 @@ import { fetchPlainObject } from "../../store/objectsApi";
 import { mergeObjects, mergeTags, mergeMessageFor } from "../../store/mergeApi";
 import { PERSON_VIEW } from "../../store/views";
 import type { ViewConfig } from "../../store/views";
-import { summaryLine } from "./summary";
+import { summaryLine, withGrampsId } from "./summary";
 import { t } from "../../i18n/i18n";
 
 /** One role (father or mother) where the two families being merged
@@ -206,7 +206,13 @@ export function MergeDialog({
     }
   }
 
-  const labels = objs ? ([summaryLine(view.key, objs[0]), summaryLine(view.key, objs[1])] as const) : null;
+  // Places show their stored `title` as-is, not the display-settings
+  // title built from the enclosing hierarchy: two duplicates usually
+  // generate the same hierarchical title, so only the stored text tells
+  // them apart (same reason the Places list's Title column uses it).
+  const mergeLabel = (obj: any): string =>
+    view.key === "place" && obj?.title ? withGrampsId(obj.gramps_id, obj.title) : summaryLine(view.key, obj);
+  const labels = objs ? ([mergeLabel(objs[0]), mergeLabel(objs[1])] as const) : null;
   const pickableConflicts = conflicts.filter((c) => forcedSide(c) === null);
 
   return (
