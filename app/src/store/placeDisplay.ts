@@ -39,7 +39,7 @@ const NUMBER_TYPE = 20;
 
 // -- Date.match_exact, on sortvals (gen/lib/date.py) --
 
-function isEmptyDate(date: GrampsDate | null | undefined): boolean {
+export function isEmptyDate(date: GrampsDate | null | undefined): boolean {
   if (!date) return true;
   if (date.modifier === Modifier.TEXTONLY) return !date.text;
   return date.dateval.slice(0, 3).every((v) => v === 0) && (date.dateval.length <= 4 || date.dateval.slice(4, 7).every((v) => v === 0));

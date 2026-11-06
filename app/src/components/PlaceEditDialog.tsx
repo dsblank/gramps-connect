@@ -42,7 +42,7 @@ interface PlaceEditDialogProps {
  * (WikidataPlaceLookupDialog.tsx) -- there's no field here to see that
  * directly, same as the top-level dialog; ParentPlacesSection.tsx
  * (RelatedPanel) is the only place enclosing-place hierarchy is ever
- * displayed, and only once this place is actually saved. */
+ * displayed or hand-edited, and only once this place is actually saved. */
 export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone, isNew = false }: PlaceEditDialogProps) {
   const name = (data.name ?? {}) as Record<string, unknown>;
   const titleValue = (name.value as string | undefined) ?? (data.title as string | undefined) ?? "";

@@ -190,10 +190,10 @@ Partially editable, by type:
   RelatedPanel's own sections. path/mime/checksum stay server-derived from
   the upload, as expected.
 - **Person / Family** — LDS ordinances: fully read-only, no edit/add/detach.
-- **Place** — enclosing/parent hierarchy (`placeref_list`) can now be set,
-  but only indirectly via Wikidata lookup's Apply (`PlaceEditDialog.tsx`);
-  `ParentPlacesSection.tsx` (RelatedPanel) only displays it, read-only —
-  still no manual add/remove/edit UI for a place's own enclosing places.
+- **Place** — enclosing hierarchy (`placeref_list`) is editable by hand in
+  `ParentPlacesSection.tsx` (add / insert-between / remove / reorder /
+  PlaceRef date; writes in `store/placeHierarchy.ts`) as well as via
+  Wikidata lookup. PlaceRef notes/citations aren't editable yet.
   Also still missing: **alternate names** (add/edit/remove — a Place's
   `alt_names` list is displayed read-only in RelatedPanel but has no editor;
   each entry is its own `PlaceName` with its own `value`/`date`/`lang`, e.g.

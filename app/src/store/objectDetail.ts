@@ -35,6 +35,9 @@ export interface RefMeta {
   media_type?: string;
   /** MediaRef only: crop rectangle [left, top, right, bottom] as percentages. */
   rect?: number[];
+  /** PlaceRef only: when the place was inside the enclosing one (a
+   * GrampsDate; absent or empty = always). */
+  date?: unknown;
 }
 
 export type RawRef = RefMeta & { ref: string };

@@ -4,7 +4,10 @@
 // private flag or a frel/mrel/role/rel badge renders identically no matter
 // which section put it there.
 import { Badge, Group, Text, Tooltip } from "@mantine/core";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
 import type { RefMeta } from "../../store/objectDetail";
+import { isEmptyDate } from "../../store/placeDisplay";
+import { displayDate } from "./summary";
 import { t } from "../../i18n/i18n";
 
 function PrivateBadge({ refMeta }: { refMeta?: RefMeta }) {
@@ -35,6 +38,10 @@ function RelationBadge({ refMeta }: { refMeta?: RefMeta }) {
   if (refMeta.role && refMeta.role !== "Primary") parts.push(refMeta.role);
   if (refMeta.rel) parts.push(refMeta.rel);
   if (refMeta.call_number) parts.push(`call #${refMeta.call_number}`);
+  if (refMeta.date && !isEmptyDate(refMeta.date as GrampsDate)) {
+    const text = displayDate(refMeta.date);
+    if (text) parts.push(text);
+  }
   if (parts.length === 0) return null;
   return (
     <Badge size="sm" variant="light" color="gray">
