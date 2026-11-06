@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ViewStore } from "../viewStore";
-import { attachDisplayStores, displayPlaceTitle, draftPlaceTitle, formatPlaceWith, samplePlaceHandle } from "../placeIndex";
+import { attachDisplayStores, displayPlaceTitle, draftPlaceTitle, formatPlaceWith, placeTitleFollowsName, samplePlaceHandle } from "../placeIndex";
 
 vi.mock("../../auth/auth", () => ({
   getToken: vi.fn().mockResolvedValue("test-token"),
@@ -59,6 +59,14 @@ function loadedStore(rows: [string, string, string | null][]) {
 }
 
 describe("draftPlaceTitle", () => {
+  // First: once a complete index has been built the module keeps serving
+  // it (see getIndex), so this has to run before the tests below.
+  it("is null, not a cut-short title, before the hierarchy has loaded", () => {
+    attachDisplayStores({ place: unloadedStore().store, event: unloadedStore().store });
+    expect(draftPlaceTitle({ name: { value: "Indianapolis" }, placeref_list: [{ ref: "MC" }] })).toBeNull();
+    expect(draftPlaceTitle({ name: { value: "Somewhere" } })).toBe("Somewhere");
+  });
+
   it("formats an edited name with its enclosing places, not the cached name", () => {
     attachDisplayStores({
       place: loadedStore([
@@ -81,4 +89,12 @@ describe("draftPlaceTitle", () => {
   it("is just the name when the place has no enclosing place", () => {
     expect(draftPlaceTitle({ name: { value: "Somewhere" } })).toBe("Somewhere");
   });
+  it("tells whether a title still follows the name or was hand-edited", () => {
+    const place = { name: { value: "Indy" }, placeref_list: [{ ref: "MC" }] };
+    expect(placeTitleFollowsName({ ...place, title: "" })).toBe(true);
+    expect(placeTitleFollowsName({ ...place, title: "Indy" })).toBe(true);
+    expect(placeTitleFollowsName({ ...place, title: "Indy, Marion County, Indiana, United States" })).toBe(true);
+    expect(placeTitleFollowsName({ ...place, title: "Grandma's town" })).toBe(false);
+  });
+
 });

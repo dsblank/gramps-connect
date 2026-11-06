@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { draftPlaceTitle } from "../store/placeIndex";
 import {
   Alert, Anchor, Button, Collapse, ColorInput, Group, Loader, Modal, NumberInput, Stack, Switch, Text, TextInput,
   Textarea,
@@ -21,6 +20,7 @@ import {
 import { StoryEditor } from "./story/StoryEditor";
 import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { CoordinateFields } from "./CoordinateFields";
+import { PlaceTitleFields } from "./PlaceTitleFields";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -521,22 +521,9 @@ export function ObjectEditDialog({
             onChange={(date) => onChange({ [f.key]: date })}
           />
         );
-      case "placeName": {
-        const name = (draft.data.name ?? {}) as Record<string, unknown>;
-        const value = (name.value as string | undefined) ?? (draft.data.title as string | undefined) ?? "";
-        return (
-          <TextInput
-            key="placeName"
-            label={t(f.label)}
-            value={value}
-            onChange={(e) => {
-              const v = e.currentTarget.value;
-              const nextName = { _class: "PlaceName", ...name, value: v };
-              onChange({ title: draftPlaceTitle({ ...draft.data, name: nextName }), name: nextName });
-            }}
-          />
-        );
-      }
+      case "placeName":
+        // Name plus the stored Title (with Rebuild) -- see PlaceTitleFields.
+        return <PlaceTitleFields key="placeName" data={draft.data} onChange={onChange} />;
       case "placeNameDate": {
         const name = (draft.data.name ?? {}) as Record<string, unknown>;
         const value = (name.date as GrampsDate | undefined) ?? null;

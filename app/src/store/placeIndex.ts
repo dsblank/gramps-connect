@@ -141,15 +141,18 @@ export function formatPlaceWith(handle: string, fmt: PlaceFormatDef): string | n
  * Places cache -- what automatic titles would show for it -- so a place
  * reads the same with automatic titles off. Applies whether or not
  * automatic titles are on (the stored title is what desktop shows when
- * they're off). Falls back to the bare name while the Places cache has no
- * complete hierarchy yet (see getIndex). */
-export function draftPlaceTitle(data: Record<string, unknown>): string {
+ * they're off). Null when the place has enclosing places but the Places
+ * cache has no complete hierarchy yet (see getIndex) -- a title built then
+ * would be cut short, so callers leave the title alone instead. */
+export function draftPlaceTitle(data: Record<string, unknown>): string | null {
   const name = (data.name ?? null) as PlaceNameJson | null;
   const bare = name?.value ?? "";
-  if (!bare.trim() || !placeStore) return bare;
+  const refs = (data.placeref_list as { ref?: string }[] | undefined) ?? [];
+  if (!bare.trim() || !refs.some((r) => r.ref)) return bare;
+  if (!placeStore) return null;
   requestPlaceLoad(placeStore);
   const places = getIndex(placeStore);
-  if (!places) return bare;
+  if (!places) return null;
   const rawType = data.place_type as unknown;
   const typeName = typeof rawType === "string" ? rawType : (rawType as { string?: string } | null)?.string ?? "";
   const typeValue = typeof rawType === "object" && rawType && typeof (rawType as { value?: unknown }).value === "number"
@@ -159,7 +162,7 @@ export function draftPlaceTitle(data: Record<string, unknown>): string {
     name,
     altNames: (data.alt_names as PlaceNameJson[] | undefined) ?? [],
     type: typeValue,
-    parents: ((data.placeref_list as { ref?: string; date?: PlaceRecord["parents"][number]["date"] }[] | undefined) ?? [])
+    parents: (refs as { ref?: string; date?: PlaceRecord["parents"][number]["date"] }[])
       .filter((r): r is { ref: string } => typeof r.ref === "string" && r.ref !== ""),
   };
   // A key no real handle can be, so the draft wins over the place's own
@@ -168,6 +171,16 @@ export function draftPlaceTitle(data: Record<string, unknown>): string {
   const settings = getDisplaySettings();
   const fmt = settings.place.formats[settings.place.active] ?? settings.place.formats[0];
   return formatPlace((h) => (h === key ? draft : places.get(h)), key, fmt) ?? bare;
+}
+
+/** Whether a place's stored title is still "following" its name -- blank,
+ * the bare name, or what draftPlaceTitle builds -- rather than hand-edited.
+ * Typing a new name only rebuilds a following title, so a custom one isn't
+ * overwritten. */
+export function placeTitleFollowsName(data: Record<string, unknown>): boolean {
+  const title = ((data.title as string | undefined) ?? "").trim();
+  const name = (((data.name ?? {}) as { value?: string }).value ?? "").trim();
+  return title === "" || title === name || title === (draftPlaceTitle(data) ?? "").trim();
 }
 
 /** A good place to show formats on: the one with the deepest hierarchy,

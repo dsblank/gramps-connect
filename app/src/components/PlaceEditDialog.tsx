@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { draftPlaceTitle } from "../store/placeIndex";
 import { Button, Group, Modal, Stack, Switch, TextInput } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { UrlListField, type Url } from "./EmbeddedListFields";
 import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { DateInput } from "./DateInput";
 import { CoordinateFields } from "./CoordinateFields";
+import { PlaceTitleFields } from "./PlaceTitleFields";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
@@ -71,16 +71,7 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
       ) : (
       <Stack gap="md">
         {!isNew && <WikidataPlaceLookupButton stackId={`${stackId}-wikidata`} data={data} onChange={onChange} />}
-        <TextInput
-          label={t("Name")}
-          value={titleValue}
-          onChange={(e) => {
-            const v = e.currentTarget.value;
-            const nextName = { _class: "PlaceName", ...name, value: v };
-            onChange({ title: draftPlaceTitle({ ...data, name: nextName }), name: nextName });
-          }}
-          autoFocus
-        />
+        <PlaceTitleFields data={data} onChange={onChange} autoFocus />
         <TextInput
           label={t("Type")}
           placeholder={TYPE_HINT}
