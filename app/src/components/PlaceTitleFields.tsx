@@ -38,8 +38,11 @@ export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFields
   // title can be undone by picking this one again.
   const [ownTitle, setOwnTitle] = useState(title);
 
-  const showChoice = rebuilt !== null && ownTitle.trim() !== "" && ownTitle !== rebuilt;
-  const choice = title === rebuilt ? "built" : "own";
+  // Whenever the two differ -- a blank own title included (the Places list
+  // then falls back to the bare name), so a place saved without a title is
+  // offered the built one too.
+  const showChoice = rebuilt !== null && ownTitle.trim() !== rebuilt.trim();
+  const choice = title.trim() === (rebuilt ?? "").trim() ? "built" : "own";
 
   return (
     <>
@@ -88,7 +91,8 @@ export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFields
                 value="own"
                 label={
                   <Text size="xs" span>
-                    <Text size="xs" c="dimmed" span>{t("Your title:")}</Text> {ownTitle}
+                    <Text size="xs" c="dimmed" span>{t("Your title:")}</Text>{" "}
+                    {ownTitle.trim() ? ownTitle : <Text size="xs" c="dimmed" fs="italic" span>{t("(none — the list shows the name)")}</Text>}
                   </Text>
                 }
               />
