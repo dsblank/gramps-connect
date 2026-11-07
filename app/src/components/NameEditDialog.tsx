@@ -273,8 +273,8 @@ export function NameEditDialog({
               label={t("Group as")}
               description={`${t("Treats spelling variants as one family: with Smyth grouped as Smith, searching the People list for Smith also finds the Smyths.")} ${
                 treeGroup
-                  ? `${t("Everyone named")} ${primarySurname} ${t("is grouped as")} ${treeGroup}. ${t("Leave blank to keep that.")}`
-                  : t("Leave blank to group by primary surname.")
+                  ? `${t("Everyone named")} ${primarySurname} ${t("is grouped as")} ${treeGroup}. ${t("Leave empty to keep that.")}`
+                  : t("Leave empty to group by primary surname.")
               }`}
               placeholder={treeGroup ?? primarySurname}
               value={(data.group_as as string | undefined) ?? ""}
