@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Group, Modal, Radio, Stack, Text } from "@mantine/core";
+import { Anchor, Box, Button, Group, Modal, Radio, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken, hasPermissions } from "../../../auth/auth";
@@ -8,14 +8,15 @@ import { zipRefs, type RawRef } from "../../../store/objectDetail";
 import {
   addEnclosingPlace, insertEnclosingLevel, moveEnclosingPlace, removeEnclosingPlace, setEnclosingPlaceDate,
 } from "../../../store/placeHierarchy";
-import type { QueryItem } from "../../../store/api";
+import { fetchPage, type QueryItem } from "../../../store/api";
 import { PLACE_VIEW } from "../../../store/views";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { DateInput } from "../../DateInput";
 import { RecordPicker } from "../../RecordPicker";
 import { pickerResultLabel } from "../../RefPickerField";
 import { summaryLine } from "../summary";
-import { SectionShell, RefRow } from "./shared";
+import { SectionShell, RefRow, LINK_STYLE } from "./shared";
+import type { OnNavigate } from "../types";
 import type { SectionProps } from "../types";
 import { t } from "../../../i18n/i18n";
 
@@ -69,6 +70,8 @@ export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionPr
   }
 
   return (
+    <>
+    <PlaceHierarchyTree detail={detail} onNavigate={onNavigate} />
     <SectionShell
       label={t("Enclosing places")}
       action={canEdit && (
@@ -139,6 +142,125 @@ export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionPr
           }}
         />
       )}
+    </SectionShell>
+    </>
+  );
+}
+
+/** One entry of gramps-web-api's place profile `parent_places` -- the
+ * whole chain up to a top-level place, nearest first, built server-side by
+ * following each level's *first* placeref (resources/util.py's
+ * get_place_profile_for_object). It already comes with every place detail
+ * fetch (profile=all), so showing it costs no extra request. */
+/** Each level's elbow starts TREE_INSET px in from the start of the level
+ * above's name and reaches TREE_ELBOW px across, ending a few px before
+ * this level's own name -- the per-level indent is just their sum. */
+const TREE_INSET = 23;
+const TREE_ELBOW = 10;
+const TREE_INDENT = TREE_INSET + TREE_ELBOW + 3;
+const TREE_ROW_GAP = 2;
+
+type ProfilePlace = { gramps_id?: string; name?: string; type?: string };
+
+/** Read-only, indented view of the full enclosing hierarchy (top-level
+ * place first, this place last), so a deep chain can be checked at a
+ * glance and climbed one click per level. Only shown when the chain is
+ * more than one level deep -- a single level would just repeat the
+ * editable list below it. Profile entries carry a gramps_id but no handle,
+ * so a click past the first level looks the handle up then (one tiny
+ * query, only when actually clicked). */
+function PlaceHierarchyTree({ detail, onNavigate }: { detail: SectionProps["detail"]; onNavigate: OnNavigate }) {
+  const chain = ((detail.profile?.parent_places as ProfilePlace[] | undefined) ?? []);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  if (chain.length < 2) return null;
+  const firstParentHandle = (detail.placeref_list as RawRef[] | undefined)?.[0]?.ref;
+  const topDown = [...chain].reverse();
+  const self = detail.profile as ProfilePlace | undefined;
+
+  async function open(entry: ProfilePlace, nearestIndex: number) {
+    if (nearestIndex === 0 && firstParentHandle) {
+      onNavigate("place", firstParentHandle);
+      return;
+    }
+    if (!entry.gramps_id || busyId) return;
+    setBusyId(entry.gramps_id);
+    try {
+      const { page } = await fetchPage(
+        PLACE_VIEW, await getToken(), null, false, `gramps_id == ${JSON.stringify(entry.gramps_id)}`,
+        PLACE_VIEW.orderBy, 1, []
+      );
+      const handle = page.items[0]?.handle;
+      if (handle) onNavigate("place", handle);
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: t("Couldn't open place"),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const rows = [
+    ...topDown.map((entry, i) => ({ entry, nearestIndex: chain.length - 1 - i })),
+    { entry: { gramps_id: detail.gramps_id as string | undefined, name: self?.name, type: self?.type }, nearestIndex: -1 },
+  ];
+
+  return (
+    <SectionShell label={t("Place hierarchy")}>
+      <Stack gap={TREE_ROW_GAP}>
+        {rows.map(({ entry, nearestIndex }, depth) => (
+          <Group
+            key={`${depth}-${entry.gramps_id}`}
+            gap={6}
+            wrap="nowrap"
+            style={{ position: "relative", paddingLeft: depth * TREE_INDENT }}
+          >
+            {depth > 0 && (
+              // A CSS-drawn elbow instead of a box-drawing glyph (whose
+              // size/baseline varies by font): it starts inset under the
+              // parent's name, reaching up through the row gap so
+              // consecutive levels join into one line, and turns into this
+              // row's vertical middle.
+              <Box
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  left: (depth - 1) * TREE_INDENT + TREE_INSET,
+                  top: -TREE_ROW_GAP,
+                  width: TREE_ELBOW,
+                  height: `calc(50% + ${TREE_ROW_GAP}px)`,
+                  borderLeft: "1px solid var(--mantine-color-dimmed)",
+                  borderBottom: "1px solid var(--mantine-color-dimmed)",
+                  borderBottomLeftRadius: 4,
+                }}
+              />
+            )}
+            {nearestIndex < 0 ? (
+              <Text size="md" fw={700}>{entry.name || entry.gramps_id}</Text>
+            ) : (
+              <Anchor
+                component="button"
+                type="button"
+                size="md"
+                underline="hover"
+                style={LINK_STYLE}
+                disabled={busyId != null}
+                onClick={() => open(entry, nearestIndex)}
+              >
+                {entry.name || entry.gramps_id}
+              </Anchor>
+            )}
+            {entry.type && <Text size="xs" c="dimmed">{entry.type}</Text>}
+          </Group>
+        ))}
+      </Stack>
+      <Box>
+        <Text size="xs" c="dimmed">
+          {t("Follows the first enclosing place at each level.")}
+        </Text>
+      </Box>
     </SectionShell>
   );
 }
