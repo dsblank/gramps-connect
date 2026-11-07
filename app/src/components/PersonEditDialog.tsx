@@ -152,6 +152,9 @@ interface PersonEditDialogProps {
   stack: DraftEntry[];
   onChange: (patch: Record<string, unknown>) => void;
   onSetExtraObjects: (extra: { create: Record<string, unknown>[]; update: DraftEntry["extraUpdate"] }) => void;
+  /** A tree-wide surname grouping the name editor asked for, kept on the
+   * draft until Save (see DraftEntry.nameGroups); `group` undefined drops it. */
+  onSetNameGroup: (surname: string, group: string | null | undefined) => void;
   /** Spawns a nested "new" draft for a list field (openDraft with
    * `openedFrom` set to that field) -- returns the new draft's handle
    * synchronously, same as FamilyEditDialog's onOpenPersonDraft. */
@@ -184,7 +187,7 @@ type EventRefLike = { _class?: string; ref: string; role?: unknown };
  * back to being pure read-only display for a Person -- see those sections'
  * own `type === "person"` gate. */
 export function PersonEditDialog({
-  draft, opened, stack, onChange, onSetExtraObjects, onOpenDraft, onOpenEditDraft, onShowDraft, onCloseDraft,
+  draft, opened, stack, onChange, onSetExtraObjects, onSetNameGroup, onOpenDraft, onOpenEditDraft, onShowDraft, onCloseDraft,
   onCancel, primaryLabel, onPrimary, saving, error,
 }: PersonEditDialogProps) {
   const [showDetails, setShowDetails] = useState(false);
@@ -893,6 +896,8 @@ export function PersonEditDialog({
         title={t("Primary Name")}
         data={name}
         onChange={patchPrimaryName}
+        pendingNameGroups={draft.nameGroups ?? {}}
+        onNameGroup={onSetNameGroup}
         onDone={() => setPrimaryNameOpen(false)}
       />
       {everAltIds.map((id, everIdx) => {
@@ -905,6 +910,8 @@ export function PersonEditDialog({
             opened={idx >= 0 && openAltIds.includes(id)}
             title={`Alternate Name ${idx >= 0 ? idx + 1 : everIdx + 1}`}
             data={data ?? {}}
+            pendingNameGroups={draft.nameGroups ?? {}}
+            onNameGroup={onSetNameGroup}
             onChange={(patch) => {
               if (idx < 0) return;
               onChange({

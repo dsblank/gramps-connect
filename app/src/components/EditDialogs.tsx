@@ -55,7 +55,7 @@ interface EditDialogsProps {
  * convention every other dialog here follows. */
 export function EditDialogs({ draftStack }: EditDialogsProps) {
   const {
-    stack, openHandles, openDraft, openEditDraft, showDraft, hideDraft, updateDraft, setExtraObjects, closeDraft,
+    stack, openHandles, openDraft, openEditDraft, showDraft, hideDraft, updateDraft, setExtraObjects, setPendingNameGroup, closeDraft,
     saveAll, saving, error,
   } = draftStack;
 
@@ -81,6 +81,7 @@ export function EditDialogs({ draftStack }: EditDialogsProps) {
               stack={stack}
               onChange={(patch) => updateDraft(handle, patch)}
               onSetExtraObjects={(extra) => setExtraObjects(handle, extra)}
+              onSetNameGroup={(surname, group) => setPendingNameGroup(handle, surname, group)}
               onOpenDraft={(type, field) => openDraft(type, { handle, field })}
               onOpenEditDraft={(type, targetHandle, field) => openEditDraft(type, targetHandle, { handle, field })}
               onShowDraft={showDraft}

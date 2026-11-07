@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { Anchor, Button, Card, Checkbox, Collapse, Group, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { DateInput } from "./DateInput";
 import { ListShell } from "./EmbeddedListFields";
 import { t } from "../i18n/i18n";
 import { hasPermissions } from "../auth/auth";
-import { getNameGroup, loadNameGroups, setNameGroup } from "../store/nameGroups";
+import { getNameGroup, loadNameGroups } from "../store/nameGroups";
 
 // NameType (gramps/gen/lib/nametype.py) -- plain English strings, same
 // convention as FamilyEditDialog's REL_TYPE_OPTIONS: gramps-web-api's
@@ -50,6 +49,12 @@ interface NameEditDialogProps {
   /** Only set for an alternate name -- the primary name can't be removed,
    * only edited (a Person always has exactly one primary_name). */
   onRemove?: () => void;
+  /** Tree-wide surname groupings waiting for the person's Save (the
+   * draft's DraftEntry.nameGroups): surname -> group, null to ungroup. */
+  pendingNameGroups: Record<string, string | null>;
+  /** Records one (`group` undefined: forgets it) -- applied on Save, so
+   * cancelling the person edit discards it. */
+  onNameGroup: (surname: string, group: string | null | undefined) => void;
 }
 
 /** Full editor for one Name struct (Person.primary_name, or one entry of
@@ -64,13 +69,13 @@ interface NameEditDialogProps {
  * (toggling only `opened`), the same ModalStack-registry reason
  * draftStack.ts's DraftEntry.active doc comment explains for its own
  * never-remove-only-deactivate stack. */
-export function NameEditDialog({ stackId, opened, title, data, onChange, onDone, onRemove }: NameEditDialogProps) {
+export function NameEditDialog({
+  stackId, opened, title, data, onChange, onDone, onRemove, pendingNameGroups, onNameGroup,
+}: NameEditDialogProps) {
   const [showSorting, setShowSorting] = useState(false);
-  // "Group everyone named X as Y" -- desktop's "Group all" answer, applied
-  // on Done (see handleDone).
+  // "Group everyone named X as Y" -- desktop's "Group all" answer, recorded
+  // on Done (see handleDone) and written when the person is saved.
   const [groupAll, setGroupAll] = useState(false);
-  const [confirmUngroup, setConfirmUngroup] = useState(false);
-  const [groupBusy, setGroupBusy] = useState(false);
   // Re-render once the tree-wide surname groups are known (nameGroups.ts),
   // e.g. when this opens before the People list has loaded them.
   const [, setGroupsVersion] = useState(0);
@@ -85,44 +90,33 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
   const date = (data.date as GrampsDate | undefined) ?? null;
   const primarySurname = ((surnameList.find((s) => s.primary) ?? surnameList[0])?.surname ?? "").trim();
   const groupAs = ((data.group_as as string | undefined) ?? "").trim();
-  const treeGroup = primarySurname ? getNameGroup(primarySurname) : null;
+  const pending = primarySurname !== "" && primarySurname in pendingNameGroups;
+  const savedGroup = primarySurname ? getNameGroup(primarySurname) : null;
+  // What the surname's tree-wide group will be once the person is saved.
+  const treeGroup = pending ? pendingNameGroups[primarySurname] : savedGroup;
   const canGroupAll = hasPermissions("EditNameGroup") && primarySurname !== "";
   const offerGroupAll = canGroupAll && groupAs !== "" && groupAs !== primarySurname && groupAs !== treeGroup;
 
   /** Desktop's EditName.save() grouping rules, simplified: a Group as that
-   * just repeats the surname is cleared, and "Group all" writes the
-   * tree-wide mapping instead of this name's own Group as. The mapping is
-   * written right away -- like desktop, before the person itself is saved. */
-  async function handleDone() {
+   * just repeats the surname is cleared, and "Group all" records the
+   * tree-wide grouping instead of this name's own Group as. Unlike desktop,
+   * which writes that grouping as the name editor closes, it waits for the
+   * person's Save -- cancelling the edit discards it. */
+  function handleDone() {
     if (offerGroupAll && groupAll) {
-      setGroupBusy(true);
-      try {
-        await setNameGroup(primarySurname, groupAs);
-      } catch (err: any) {
-        notifications.show({ color: "red", message: err.message ?? String(err) });
-        return;
-      } finally {
-        setGroupBusy(false);
-      }
+      onNameGroup(primarySurname, groupAs);
       onChange({ group_as: "" });
     } else if (groupAs !== "" && groupAs === primarySurname) {
       onChange({ group_as: "" });
     }
     setGroupAll(false);
-    setConfirmUngroup(false);
     onDone();
   }
 
-  async function handleUngroup() {
-    setGroupBusy(true);
-    try {
-      await setNameGroup(primarySurname, null);
-      setConfirmUngroup(false);
-    } catch (err: any) {
-      notifications.show({ color: "red", message: err.message ?? String(err) });
-    } finally {
-      setGroupBusy(false);
-    }
+  /** Undoes a pending change, else asks (on Save) to ungroup a saved one. */
+  function toggleUngroup() {
+    if (pending) onNameGroup(primarySurname, undefined);
+    else onNameGroup(primarySurname, null);
   }
 
   return (
@@ -267,48 +261,27 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
             {offerGroupAll && (
               <Checkbox
                 label={`${t("Group everyone named")} ${primarySurname} ${t("as")} ${groupAs}`}
-                description={t("Applies to the whole tree when you press Done, not just this name.")}
+                description={t("Applies to the whole tree when you save this person, not just this name.")}
                 checked={groupAll}
                 onChange={(e) => setGroupAll(e.currentTarget.checked)}
               />
             )}
-            {canGroupAll && treeGroup && !confirmUngroup && (
-              <Group>
-                <Button variant="default" size="xs" onClick={() => setConfirmUngroup(true)}>
-                  {`${t("Stop grouping everyone named")} ${primarySurname} ${t("as")} ${treeGroup}…`}
-                </Button>
-              </Group>
-            )}
-            {canGroupAll && treeGroup && confirmUngroup && (
+            {canGroupAll && (pending || savedGroup) && (
               <Group gap="xs">
-                <Text size="sm">
-                  {`${t("Everyone named")} ${primarySurname} ${t("will no longer be grouped as")} ${treeGroup}.`}
-                </Text>
-                <Button size="xs" color="red" loading={groupBusy} onClick={handleUngroup}>
-                  {t("Stop grouping")}
-                </Button>
-                <Button size="xs" variant="default" onClick={() => setConfirmUngroup(false)}>
-                  {t("Cancel")}
+                {pending && (
+                  <Text size="sm" c="dimmed">
+                    {treeGroup
+                      ? `${t("When you save, everyone named")} ${primarySurname} ${t("will be grouped as")} ${treeGroup}.`
+                      : `${t("When you save, everyone named")} ${primarySurname} ${t("will no longer be grouped as")} ${savedGroup}.`}
+                  </Text>
+                )}
+                <Button size="xs" variant="default" onClick={toggleUngroup}>
+                  {pending
+                    ? t("Undo")
+                    : `${t("Stop grouping everyone named")} ${primarySurname} ${t("as")} ${savedGroup}`}
                 </Button>
               </Group>
             )}
-            <Select
-              label={t("Sort as")}
-              description={t("Used by Gramps desktop. Gramps Connect sorts everyone by the tree's name format.")}
-              data={FORMAT_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
-              value={String((data.sort_as as number | undefined) ?? 0)}
-              onChange={(next) => onChange({ sort_as: Number(next ?? 0) })}
-              allowDeselect={false}
-              comboboxProps={{ withinPortal: true }}
-            />
-            <Select
-              label={t("Display as")}
-              data={FORMAT_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
-              value={String((data.display_as as number | undefined) ?? 0)}
-              onChange={(next) => onChange({ display_as: Number(next ?? 0) })}
-              allowDeselect={false}
-              comboboxProps={{ withinPortal: true }}
-            />
           </Stack>
         </Collapse>
 
@@ -320,7 +293,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
           ) : (
             <div />
           )}
-          <Button onClick={handleDone} loading={groupBusy}>{t("Done")}</Button>
+          <Button onClick={handleDone}>{t("Done")}</Button>
         </Group>
       </Stack>
     </Modal>

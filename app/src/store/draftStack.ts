@@ -14,7 +14,9 @@
 // open, same as every existing dialog's useState (see MenuBar.tsx).
 import { useState } from "react";
 import { getToken } from "../auth/auth";
+import { notifications } from "@mantine/notifications";
 import { getViewStore } from "./registry";
+import { setNameGroup } from "./nameGroups";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "./objectsApi";
 import {
   CITATION_VIEW, EVENT_VIEW, FAMILY_VIEW, NOTE_VIEW, PERSON_VIEW, PLACE_VIEW, REPOSITORY_VIEW, SOURCE_VIEW,
@@ -140,6 +142,13 @@ export interface DraftEntry {
    * initial fetchPlainObject (the date/place merge builds a new object at
    * `data` instead). saveAll()'s conflict check reads it the same way. */
   extraUpdate: { type: DraftType; handle: string; data: Record<string, unknown>; originalData: Record<string, unknown> }[];
+  /** Tree-wide surname groupings this draft's name editor asked for
+   * (NameEditDialog's "Group everyone named ..." / "Stop grouping"):
+   * surname -> group, or null to ungroup. Written by saveAll() only after
+   * the objects themselves saved, so cancelling the edit discards them --
+   * they aren't transactions, so nothing could undo them afterwards. Set
+   * via setPendingNameGroup(). */
+  nameGroups?: Record<string, string | null>;
   /** Bumped every time openEditDraft (re)initializes this handle's entry --
    * lets a dialog component (which stays mounted, same `key={handle}`,
    * across a Cancel + re-Edit of the same object, per EditDialogs.tsx's
@@ -273,6 +282,9 @@ export interface UseDraftStack {
     handle: string,
     extra: { create: Record<string, unknown>[]; update: DraftEntry["extraUpdate"] }
   ) => void;
+  /** Records (or, with `group` undefined, forgets) a pending tree-wide
+   * surname grouping on a draft -- see DraftEntry.nameGroups. */
+  setPendingNameGroup: (handle: string, surname: string, group: string | null | undefined) => void;
   /** Discards a draft and, recursively, every draft opened from it (marks
    * them inactive and hides them); if it was itself a "new" draft opened
    * from a parent field, also clears that field back out -- there's nothing
@@ -339,7 +351,7 @@ export function useDraftStack(): UseDraftStack {
       const next = [...prev];
       next[idx] = {
         ...next[idx], type, mode: "edit", status: "loading", data: {}, openedFrom, active: true,
-        extraCreate: [], extraUpdate: [], session: next[idx].session + 1,
+        extraCreate: [], extraUpdate: [], nameGroups: undefined, session: next[idx].session + 1,
       };
       return next;
     });
@@ -378,6 +390,18 @@ export function useDraftStack(): UseDraftStack {
   ) {
     setStack((prev) =>
       prev.map((d) => (d.handle === handle ? { ...d, extraCreate: extra.create, extraUpdate: extra.update } : d))
+    );
+  }
+
+  function setPendingNameGroup(handle: string, surname: string, group: string | null | undefined) {
+    setStack((prev) =>
+      prev.map((d) => {
+        if (d.handle !== handle) return d;
+        const nameGroups = { ...d.nameGroups };
+        if (group === undefined) delete nameGroups[surname];
+        else nameGroups[surname] = group;
+        return { ...d, nameGroups };
+      })
     );
   }
 
@@ -480,6 +504,22 @@ export function useDraftStack(): UseDraftStack {
         for (const upd of draft.extraUpdate) touchedTypes.add(upd.type);
       }
       for (const type of touchedTypes) getViewStore(type).requeryDebounced();
+      // Last, once every object is saved: a grouping is tree-wide and not
+      // a transaction, so it must not land for an edit that then failed.
+      // A failure here doesn't fail the save -- the objects are already
+      // written, and re-saving would only trip the conflict check above.
+      for (const draft of [...newDrafts, ...editDrafts]) {
+        for (const [surname, group] of Object.entries(draft.nameGroups ?? {})) {
+          try {
+            await setNameGroup(surname, group);
+          } catch (err: any) {
+            notifications.show({
+              color: "red",
+              message: `Saved, but couldn't change the grouping of ${surname}: ${err.message ?? String(err)}`,
+            });
+          }
+        }
+      }
       const saved = [...newDrafts, ...editDrafts].map((d) => ({
         type: d.type, mode: d.mode, handle: d.handle, data: d.data,
       }));
@@ -495,7 +535,7 @@ export function useDraftStack(): UseDraftStack {
   }
 
   return {
-    stack, openHandles, openDraft, openEditDraft, showDraft, hideDraft, updateDraft, setExtraObjects, closeDraft,
-    saveAll, saving, error,
+    stack, openHandles, openDraft, openEditDraft, showDraft, hideDraft, updateDraft, setExtraObjects,
+    setPendingNameGroup, closeDraft, saveAll, saving, error,
   };
 }
