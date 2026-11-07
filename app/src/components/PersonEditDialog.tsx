@@ -553,7 +553,7 @@ export function PersonEditDialog({
   /** Same "preserve every other field" merge as patchName, but for whatever
    * key(s) the "More name details…" dialog (NameEditDialog) touches --
    * title/suffix/call/nick/famnick/type/private/date/surname_list/
-   * group_as/sort_as/display_as -- rather than one hand-listed key at a
+   * group_as/display_as -- rather than one hand-listed key at a
    * time. */
   function patchPrimaryName(patch: Record<string, unknown>) {
     onChange({ primary_name: { _class: "Name", ...name, ...patch } });

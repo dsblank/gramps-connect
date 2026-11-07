@@ -6,6 +6,7 @@ import { ListShell } from "./EmbeddedListFields";
 import { t } from "../i18n/i18n";
 import { hasPermissions } from "../auth/auth";
 import { getNameGroup, loadNameGroupMappings, useNameGroupsVersion } from "../store/nameGroups";
+import { BUILTIN_NAME_FORMATS, getLoadedCustomNameFormats } from "../store/displaySettings";
 
 // NameType (gramps/gen/lib/nametype.py) -- plain English strings, same
 // convention as FamilyEditDialog's REL_TYPE_OPTIONS: gramps-web-api's
@@ -18,16 +19,6 @@ const NAME_TYPE_OPTIONS = ["Birth Name", "Married Name", "Also Known As", "Unkno
 const ORIGIN_TYPE_OPTIONS = [
   "", "Inherited", "Given", "Taken", "Patronymic", "Matronymic", "Feudal", "Pseudonym",
   "Patrilineal", "Matrilineal", "Occupation", "Location",
-];
-
-// Name.{DEF,LNFN,FNLN,FN,LNFNP} (gramps/gen/lib/name.py) -- sort_as/
-// display_as are plain integers on the wire, not GrampsType structs.
-const FORMAT_OPTIONS = [
-  { value: "0", label: "Default" },
-  { value: "1", label: "Surname, Given" },
-  { value: "2", label: "Given Surname" },
-  { value: "4", label: "Given only" },
-  { value: "5", label: "Primary surname, connector, rest" },
 ];
 
 export interface Surname {
@@ -72,7 +63,7 @@ interface NameEditDialogProps {
 export function NameEditDialog({
   stackId, opened, title, data, onChange, onDone, onRemove, pendingNameGroups, onNameGroup,
 }: NameEditDialogProps) {
-  const [showSorting, setShowSorting] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   // "Group everyone named X as Y" -- desktop's "Group all" answer, recorded
   // on Done (see handleDone) and written when the person is saved.
   const [groupAll, setGroupAll] = useState(false);
@@ -93,6 +84,31 @@ export function NameEditDialog({
   const treeGroup = pending ? pendingNameGroups[primarySurname] : savedGroup;
   const canGroupAll = hasPermissions("EditNameGroup") && primarySurname !== "";
   const offerGroupAll = canGroupAll && groupAs !== "" && groupAs !== primarySurname && groupAs !== treeGroup;
+  const displayAs = (data.display_as as number | undefined) ?? 0;
+
+  // Start expanded when the name already overrides its display or is
+  // grouped, so those settings aren't hidden behind a collapsed link.
+  useEffect(() => {
+    if (opened) setShowMore(displayAs !== 0 || groupAs !== "" || treeGroup != null);
+    // Only on open: the user's own expand/collapse wins after that.
+  }, [opened]);
+
+  // Display as: a name format number (Name.display_as) -- the built-ins, or
+  // the tree's custom formats by negative number (nameFormatFor()). A
+  // value matching neither (e.g. a since-deleted custom format) stays
+  // listed so the Select doesn't show blank.
+  const displayOptions = [
+    ...BUILTIN_NAME_FORMATS.map((opt) => ({
+      value: String(opt.number),
+      label: opt.number === 0 ? t("Default (the tree's name format)") : t(opt.name),
+    })),
+    ...getLoadedCustomNameFormats()
+      .filter((opt) => opt.usable && opt.active)
+      .map((opt) => ({ value: String(opt.number), label: opt.name })),
+  ];
+  if (!displayOptions.some((opt) => opt.value === String(displayAs))) {
+    displayOptions.push({ value: String(displayAs), label: `${t("Unknown format")} (${displayAs})` });
+  }
 
   /** Desktop's EditName.save() grouping rules, simplified: a Group as that
    * just repeats the surname is cleared, and "Group all" records the
@@ -239,11 +255,26 @@ export function NameEditDialog({
 
         <DateInput id={`${stackId}-date`} label={t("Date")} value={date} onChange={(next) => onChange({ date: next })} />
 
-        <Anchor component="button" type="button" size="sm" onClick={() => setShowSorting((v) => !v)}>
-          {showSorting ? "▾" : "▸"} Sorting & display
+        <Anchor component="button" type="button" size="sm" onClick={() => setShowMore((v) => !v)}>
+          {showMore ? "▾" : "▸"} {t("Display & surname group")}
         </Anchor>
-        <Collapse in={showSorting}>
+        <Collapse in={showMore}>
           <Stack gap="md">
+            <Select
+              label={t("Display as")}
+              description={t("How this one name is written throughout the app. Default follows the tree's name format in Preferences.")}
+              data={displayOptions}
+              value={String(displayAs)}
+              onChange={(next) => onChange({ display_as: Number(next ?? 0) })}
+              allowDeselect={false}
+              comboboxProps={{ withinPortal: true }}
+            />
+            <Stack gap={4}>
+              <Text size="sm" fw={500}>{t("Surname group")}</Text>
+              <Text size="xs" c="dimmed">
+                {t("Treats spelling variants as one family: with Smyth grouped as Smith, searching the People list for Smith also finds the Smyths.")}
+              </Text>
+            </Stack>
             <TextInput
               label={t("Group as")}
               description={
