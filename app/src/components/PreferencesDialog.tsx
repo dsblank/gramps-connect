@@ -4,6 +4,7 @@ import {
   SegmentedControl,
   Select,
   Stack,
+  Switch,
   Tabs,
   Text,
   useComputedColorScheme,
@@ -12,6 +13,11 @@ import {
 import { DisplaySettingsPanel } from "./DisplaySettingsPanel";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { fetchLanguages } from "../store/translationsApi";
+import {
+  disableBrowserNotifications,
+  enableBrowserNotifications,
+  isBrowserNotificationsEnabled,
+} from "../store/browserNotifications";
 
 const ENGLISH_OPTION = { value: "en", label: "English" };
 
@@ -91,6 +97,29 @@ function ColorSchemeToggle() {
   );
 }
 
+/** Toggle for the opt-in browser Notification side-channel -- separate from
+ * Mantine's own in-app toast (always on), this is the "also notify me even
+ * if this tab isn't focused" escalation, and browsers require it to be
+ * requested from a real click. */
+function BrowserNotificationsToggle() {
+  const [enabled, setEnabled] = useState(isBrowserNotificationsEnabled);
+  return (
+    <Switch
+      label={t("Desktop notifications")}
+      description={t("Also show alerts (new messages, finished reports and downloads) as notifications from your computer, while Gramps Connect is open in a tab.")}
+      checked={enabled}
+      onChange={async (e) => {
+        if (e.currentTarget.checked) {
+          setEnabled(await enableBrowserNotifications());
+        } else {
+          disableBrowserNotifications();
+          setEnabled(false);
+        }
+      }}
+    />
+  );
+}
+
 interface PreferencesDialogProps {
   opened: boolean;
   onClose: () => void;
@@ -98,8 +127,8 @@ interface PreferencesDialogProps {
 
 /** Edit > Preferences' counterpart, first in UserMenu.tsx for every user.
  * Two tabs, because the two halves are saved in very different places:
- * - General: this browser's own choices (light/dark, language), kept in
- *   localStorage and applied immediately -- no Save.
+ * - General: this browser's own choices (light/dark, language, desktop
+ *   notifications), kept in localStorage and applied immediately -- no Save.
  * - Family tree: DisplaySettingsPanel.tsx, the tree-wide settings stored in
  *   /api/trees/-/config. Everyone can read them (they shape everything the
  *   app shows); only EditTree (Owner/Admin) can change them -- the panel
@@ -119,6 +148,7 @@ export function PreferencesDialog({ opened, onClose }: PreferencesDialogProps) {
             </Text>
             <ColorSchemeToggle />
             <LanguagePicker />
+            <BrowserNotificationsToggle />
           </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="tree" pt="sm">

@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { Avatar, Menu, Stack, Switch } from "@mantine/core";
+import { Avatar, Menu } from "@mantine/core";
 import { getApiKey, getCurrentUsername, hasPermissions, logout } from "../auth/auth";
 import { openHandoffWindow } from "../auth/windowHandoff";
 import { ProfileDialog } from "./ProfileDialog";
@@ -8,43 +8,13 @@ import { AdministrationDialog } from "./AdministrationDialog";
 import { OwnerAdministrationDialog } from "./OwnerAdministrationDialog";
 import { PreferencesDialog } from "./PreferencesDialog";
 import { t } from "../i18n/i18n";
-import {
-  disableBrowserNotifications,
-  enableBrowserNotifications,
-  isBrowserNotificationsEnabled,
-} from "../store/browserNotifications";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
 import { colorForUsername, initialsFor } from "../store/userAvatar";
 
-/** Toggle for the opt-in browser Notification side-channel -- separate from
- * Mantine's own in-app toast (always on), this is the "also notify me even
- * if this tab isn't focused" escalation, and browsers require it to be
- * requested from a real click. */
-function BrowserNotificationsToggle() {
-  const [enabled, setEnabled] = useState(isBrowserNotificationsEnabled);
-  return (
-    <Switch
-      size="xs"
-      label={t("Desktop notifications")}
-      checked={enabled}
-      onChange={async (e) => {
-        if (e.currentTarget.checked) {
-          setEnabled(await enableBrowserNotifications());
-        } else {
-          disableBrowserNotifications();
-          setEnabled(false);
-        }
-      }}
-    />
-  );
-}
-
 /** Far-right account menu -- holds everything that isn't a family-tree
  * action: Preferences (first, for everyone: light/dark, language and the
- * tree's display settings -- PreferencesDialog.tsx), the desktop
- * notifications toggle, account dialogs, and sign-out. A plain row rather
- * than Menu.Item for the toggle, since Mantine only closes the dropdown on
- * Menu.Item clicks -- flipping a Switch shouldn't dismiss the menu. */
+ * desktop notifications and the tree's display settings --
+ * PreferencesDialog.tsx), account dialogs, and sign-out. */
 export function UserMenu() {
   const username = getCurrentUsername();
   // Re-renders once the own user's full name resolves (userDirectory.ts's
@@ -84,9 +54,6 @@ export function UserMenu() {
         <Menu.Dropdown>
           {username && <Menu.Label>{username}</Menu.Label>}
           <Menu.Item onClick={() => setPreferencesOpened(true)}>{t("Preferences")}</Menu.Item>
-          <Stack gap="sm" px="sm" py={4}>
-            <BrowserNotificationsToggle />
-          </Stack>
           <Menu.Divider />
           {hasPermissions("EditOwnUser") && (
             <Menu.Item onClick={() => setProfileOpened(true)}>{t("Profile")}</Menu.Item>
