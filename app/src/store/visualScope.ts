@@ -102,7 +102,7 @@ export function resolveScope(subject: VisualSubject, data: VisualData): Resolved
 function resolvePerson(subject: VisualSubject, data: VisualData): ResolvedScope | null {
   const row = getViewStore("person").readRowByHandle(subject.handle, [
     "primary_name", "event_refs",
-  ]);
+  ], { unfiltered: true });
   if (!row) return null;
   const [name, eventRefs] = row as [string | null, string | null];
   const eventHandles = new Set(parseHandleList(eventRefs));
@@ -129,7 +129,7 @@ function resolvePerson(subject: VisualSubject, data: VisualData): ResolvedScope 
 function resolveFamily(subject: VisualSubject, data: VisualData): ResolvedScope | null {
   const row = getViewStore("family").readRowByHandle(subject.handle, [
     "father_name", "mother_name", "event_refs", "father_handle", "mother_handle",
-  ]);
+  ], { unfiltered: true });
   if (!row) return null;
   const [fatherJson, motherJson, eventRefs, fatherHandle, motherHandle] = row as [
     string | null, string | null, string | null, string | null, string | null,
@@ -148,7 +148,7 @@ function resolveFamily(subject: VisualSubject, data: VisualData): ResolvedScope 
     [fatherHandle, formatDisplayName(fatherJson)], [motherHandle, formatDisplayName(motherJson)],
   ] as const) {
     if (!parent) continue;
-    const parentRow = personStore.readRowByHandle(parent, ["event_refs"]);
+    const parentRow = personStore.readRowByHandle(parent, ["event_refs"], { unfiltered: true });
     if (!parentRow) continue;
     for (const handle of parseHandleList(parentRow[0] as string | null)) {
       eventHandles.add(handle);
@@ -172,7 +172,7 @@ function resolveFamily(subject: VisualSubject, data: VisualData): ResolvedScope 
  * this as a locate-in-context rather than a filter (one dot and one marker
  * say nothing on their own) -- see their DEFAULT_MODE tables. */
 function resolveEvent(subject: VisualSubject, data: VisualData): ResolvedScope | null {
-  const row = getViewStore("event").readRowByHandle(subject.handle, ["event_type", "place_title"]);
+  const row = getViewStore("event").readRowByHandle(subject.handle, ["event_type", "place_title"], { unfiltered: true });
   if (!row) return null;
   const [typeJson, placeTitle] = row as [string | null, string | null];
   const eventHandles = new Set([subject.handle]);
@@ -192,7 +192,7 @@ function resolveEvent(subject: VisualSubject, data: VisualData): ResolvedScope |
  * the most specific place it knows, so a county's own event list is
  * typically empty while the towns inside it carry everything. */
 function resolvePlace(subject: VisualSubject, data: VisualData): ResolvedScope | null {
-  const row = getViewStore("place").readRowByHandle(subject.handle, ["title"]);
+  const row = getViewStore("place").readRowByHandle(subject.handle, ["title"], { unfiltered: true });
   if (!row) return null;
 
   const placeHandles = new Set<string>([subject.handle]);

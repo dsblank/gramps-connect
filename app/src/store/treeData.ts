@@ -8,7 +8,8 @@
 // /api/people/ loads every person in the tree before filtering (104s on
 // 100k people), while ?handles= looks up just the ones named.
 import { API_BASE } from "../config";
-import { parseErrorMessage } from "./api";
+import { fetchByHandle, parseErrorMessage } from "./api";
+import { getToken } from "../auth/auth";
 import { getViewStore } from "./registry";
 import { mediaThumbnailUrl } from "./mediaCrop";
 import type { VisualSubject } from "../hash";
@@ -778,9 +779,25 @@ export interface TreeRoot {
   label: string;
 }
 
+/** One record's columns, in the cache's stored form: from the view's
+ * cache (the whole tree's copy, whatever its list is filtered to), else
+ * from the server -- a cache still filling in may not have it yet. Null
+ * only when the record doesn't exist. */
+async function readOrFetchRow(viewKey: string, handle: string, columnKeys: string[]): Promise<unknown[] | null> {
+  const store = getViewStore(viewKey);
+  await store.ensureLoaded();
+  const row = store.readRowByHandle(handle, columnKeys, { unfiltered: true });
+  if (row) return row;
+  const item = await fetchByHandle(store.view, await getToken(), handle);
+  if (!item) return null;
+  return columnKeys.map((key) => {
+    const column = store.view.columns.find((c) => c.key === key);
+    return column?.toSql ? column.toSql(item[key], item) : item[key] ?? null;
+  });
+}
+
 async function personRoot(handle: string): Promise<TreeRoot | null> {
-  await getViewStore("person").ensureLoaded();
-  const row = getViewStore("person").readRowByHandle(handle, ["gramps_id", "primary_name"]);
+  const row = await readOrFetchRow("person", handle, ["gramps_id", "primary_name"]);
   if (!row) return null;
   const [grampsId, name] = row as [string | null, string | null];
   if (!grampsId) return null;
@@ -790,7 +807,7 @@ async function personRoot(handle: string): Promise<TreeRoot | null> {
 /** The tree's root person for a routed VisualSubject: the person themselves,
  * or -- for a family -- the father (else the mother). Reads the same
  * low-level pieces store/visualScope.ts's resolveFamily/resolvePerson do
- * (getViewStore + readRowByHandle, after ensureLoaded()), not
+ * (readRowByHandle, via readOrFetchRow), not
  * useVisualScope itself -- that hook resolves event/place handles for
  * Map/Timeline, the wrong shape for a root person. Null when the subject
  * can't be resolved: a stale/still-syncing handle, or a family with
@@ -799,8 +816,7 @@ export async function resolveTreeRoot(subject: VisualSubject | null): Promise<Tr
   if (!subject) return null;
   if (subject.type === "person") return personRoot(subject.handle);
   if (subject.type === "family") {
-    await getViewStore("family").ensureLoaded();
-    const row = getViewStore("family").readRowByHandle(subject.handle, ["father_handle", "mother_handle"]);
+    const row = await readOrFetchRow("family", subject.handle, ["father_handle", "mother_handle"]);
     if (!row) return null;
     const [fatherHandle, motherHandle] = row as [string | null, string | null];
     const rootHandle = fatherHandle || motherHandle;

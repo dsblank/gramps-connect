@@ -1344,3 +1344,43 @@ describe("ViewStore.whenFullyLoaded", () => {
     expect(store.getSnapshot().loadedCount).toBe(1);
   });
 });
+
+describe("ViewStore unfiltered reads", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  const page = (items: ReturnType<typeof tagRow>[], totalCount = items.length) => ({
+    page: { items, next_after: null }, totalCount,
+  });
+
+  it("keeps the whole tree readable while the list is filtered, and drops the copy when cleared", async () => {
+    const store = await loadedStore([tagRow("H1"), tagRow("H2"), tagRow("H3")]);
+
+    vi.mocked(fetchPage).mockResolvedValueOnce(page([tagRow("H2", { name: "Edited" })]));
+    await store.runQuery('name == "x"', false);
+
+    // The list itself: only the match.
+    expect(store.readRowByHandle("H1", ["name"])).toBeNull();
+    // The whole tree: everything, with the filtered page's fresher copy.
+    expect(store.readRowByHandle("H1", ["name"], { unfiltered: true })).toEqual(["Chores"]);
+    expect(store.readRowByHandle("H2", ["name"], { unfiltered: true })).toEqual(["Edited"]);
+    expect(store.readColumns(["handle"], { unfiltered: true })).toHaveLength(3);
+    expect(store.unfilteredCounts()).toEqual({ loaded: 3, total: 3 });
+
+    // A second filter keeps the same whole-tree copy.
+    vi.mocked(fetchPage).mockResolvedValueOnce(page([tagRow("H3")]));
+    await store.runQuery('name == "y"', false);
+    expect(store.readColumns(["handle"], { unfiltered: true })).toHaveLength(3);
+
+    // A delete made here while filtered leaves both.
+    store.removeDeleted(["H1"]);
+    expect(store.readRowByHandle("H1", ["name"], { unfiltered: true })).toBeNull();
+
+    vi.mocked(fetchPage).mockResolvedValueOnce(page([tagRow("H2"), tagRow("H3")]));
+    await store.runQuery(null, false);
+    expect(store.unfilteredCounts()).toEqual({ loaded: 2, total: 2 });
+    expect(store.readColumns(["handle"], { unfiltered: true })).toHaveLength(2);
+  });
+});

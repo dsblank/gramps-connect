@@ -11,13 +11,15 @@
 // lines are SVG, drawn underneath.
 import { Paper, Text, UnstyledButton, useComputedColorScheme } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getToken } from "../auth/auth";
 import { GENDER_LABEL, genderAccent } from "../charts/genderColors";
 import { t } from "../i18n/i18n";
 import { formatDisplayDate } from "../store/placeIndex";
 import { getViewStore } from "../store/registry";
 import type { PathNode, RelationshipPath } from "../store/relationshipPath";
-import { displayName } from "../store/views";
+import { fetchPage } from "../store/api";
+import { displayName, PERSON_VIEW } from "../store/views";
 import { ObjectMenu } from "./ObjectCellButton";
 
 const CARD_W = 188;
@@ -50,26 +52,86 @@ function yearOf(date: GrampsDate | null): string {
   return date.modifier === 3 ? `${t("c.")}${year}` : String(year);
 }
 
+const INFO_COLUMNS = ["primary_name", "birth_date", "death_date"];
+
+function toInfo(row: unknown[]): PersonInfo {
+  return { name: displayName(row[0]), birth: parseDate(row[1]), death: parseDate(row[2]) };
+}
+
+/** The same three columns for people the People cache doesn't hold, from
+ * the server, in the cache's own stored form (each column's toSql) so
+ * toInfo() reads both alike. The cache holds only what the People list
+ * shows -- while that list is filtered, everyone on the path outside the
+ * filter is missing from it. */
+async function fetchInfo(handles: string[]): Promise<Map<string, PersonInfo>> {
+  const columns = PERSON_VIEW.columns.filter((c) => INFO_COLUMNS.includes(c.key));
+  const where = `handle in [${handles.map((h) => `'${h}'`).join(", ")}]`;
+  const { page } = await fetchPage(PERSON_VIEW, await getToken(), null, false, where, PERSON_VIEW.orderBy, handles.length, columns);
+  const found = new Map<string, PersonInfo>();
+  for (const item of page.items) {
+    const row = INFO_COLUMNS.map((key) => {
+      const column = columns.find((c) => c.key === key)!;
+      return column.toSql ? column.toSql(item[key], item) : item[key];
+    });
+    found.set(item.handle, toInfo(row));
+  }
+  return found;
+}
+
+/** Name and dates for each card. Read from the People cache first (it
+ * follows edits and costs no request), re-read whenever that cache
+ * changes -- a filter applied or cleared, a live-sync update -- and for
+ * anyone it doesn't hold, fetched once from the server. */
 function usePeople(handles: string[]): Map<string, PersonInfo> {
   const [people, setPeople] = useState(new Map<string, PersonInfo>());
+  const fetched = useRef(new Map<string, PersonInfo>());
+  const requested = useRef(new Set<string>());
+  const store = getViewStore("person");
+  const revision = useSyncExternalStore(store.subscribe, () => store.getSnapshot().revision);
   const key = handles.join(",");
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const store = getViewStore("person");
       await store.ensureLoaded();
-      const next = new Map<string, PersonInfo>();
-      for (const handle of key.split(",")) {
-        const row = store.readRowByHandle(handle, ["primary_name", "birth_date", "death_date"]);
-        if (row) next.set(handle, { name: displayName(row[0]), birth: parseDate(row[1]), death: parseDate(row[2]) });
+      if (cancelled) return;
+      const wanted = key ? key.split(",") : [];
+      const read = () => {
+        const next = new Map<string, PersonInfo>();
+        for (const handle of wanted) {
+          const row = store.readRowByHandle(handle, INFO_COLUMNS, { unfiltered: true });
+          const info = row ? toInfo(row) : fetched.current.get(handle);
+          if (info) next.set(handle, info);
+        }
+        return next;
+      };
+      const local = read();
+      setPeople((prev) => (sameInfo(prev, local) ? prev : local));
+      const missing = wanted.filter((h) => !local.has(h) && !requested.current.has(h));
+      if (missing.length === 0) return;
+      for (const h of missing) requested.current.add(h);
+      try {
+        for (const [h, info] of await fetchInfo(missing)) fetched.current.set(h, info);
+      } catch {
+        // Left as "(unknown)"; a later change to the cache retries.
+        for (const h of missing) requested.current.delete(h);
+        return;
       }
-      if (!cancelled) setPeople(next);
+      if (!cancelled) setPeople(read());
     })();
     return () => {
       cancelled = true;
     };
-  }, [key]);
+  }, [key, revision, store]);
   return people;
+}
+
+function sameInfo(a: Map<string, PersonInfo>, b: Map<string, PersonInfo>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [h, info] of b) {
+    const other = a.get(h);
+    if (!other || other.name !== info.name || JSON.stringify(other.birth) !== JSON.stringify(info.birth) || JSON.stringify(other.death) !== JSON.stringify(info.death)) return false;
+  }
+  return true;
 }
 
 type CardKind = "end" | "top" | "mid";

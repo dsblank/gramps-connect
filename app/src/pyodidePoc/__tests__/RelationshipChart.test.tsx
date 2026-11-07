@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen } from "../../testUtils/renderWithProviders";
 import type { RelationshipPath } from "../../store/relationshipPath";
@@ -11,11 +12,40 @@ const ROWS: Record<string, unknown[]> = {
   H: [JSON.stringify({ first_name: "Hal", surname_list: [{ surname: "Home" }] }), JSON.stringify({ dateval: [0, 0, 1971, false], modifier: 0 }), null],
   X: [JSON.stringify({ first_name: "Xena", surname_list: [{ surname: "Cousin" }] }), null, null],
 };
-vi.mock("../../store/registry", () => ({
-  getViewStore: () => ({
+// A stable store, like the real registry's: a filter applied or cleared
+// on the People list replaces what's cached and bumps `revision`.
+const store = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  const s = {
+    revision: 0,
     ensureLoaded: async () => {},
-    readRowByHandle: (handle: string) => ROWS[handle] ?? null,
-  }),
+    readRowByHandle: (handle: string): unknown[] | null => null,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSnapshot: () => ({ revision: s.revision }),
+    bump: () => {
+      s.revision++;
+      for (const l of listeners) l();
+    },
+  };
+  return s;
+});
+store.readRowByHandle = (handle: string) => ROWS[handle] ?? null;
+vi.mock("../../store/registry", () => ({ getViewStore: () => store }));
+
+// What the server has for people the cache doesn't: raw query items, not
+// yet in the cache's JSON-text form.
+const SERVER: Record<string, Record<string, unknown>> = {
+  GM: { handle: "GM", primary_name: { first_name: "Gwen", surname_list: [{ surname: "Grand" }] }, birth_date: null, death_date: null },
+};
+const fetchPage = vi.hoisted(() => vi.fn());
+vi.mock("../../store/api", () => ({ fetchPage }));
+vi.mock("../../auth/auth", () => ({ getToken: async () => "token" }));
+fetchPage.mockImplementation(async (_view: unknown, _token: string, _after: unknown, _count: boolean, where: string) => ({
+  page: { items: Object.values(SERVER).filter((item) => where.includes(`'${item.handle}'`)), next_after: null },
+  totalCount: null,
 }));
 
 const node = (handle: string, relationship_string = "", gender = 2) => ({ handle, relationship_string, gender });
@@ -141,7 +171,23 @@ describe("relationship_chart block", () => {
     expect(screen.getByText("1971–")).toBeTruthy();
     expect(screen.getByText("Home person")).toBeTruthy();
     expect(screen.getByText("first cousin once removed")).toBeTruthy();
-    // Not in the cache (yet): a placeholder, not a blank card.
+    // Not in the cache (a filtered People list) but on the server.
+    expect(await screen.findByText("Grand, Gwen")).toBeTruthy();
+    // Nowhere at all: a placeholder, not a blank card.
     expect(screen.getAllByText("(unknown)").length).toBeGreaterThan(0);
+  });
+
+  it("re-reads the cache when it changes, without the path changing", async () => {
+    renderWithProviders(
+      <GrampletResultView
+        status="done"
+        response={{ type: "blocks", runId: "r2", blocks: [{ type: "relationship-chart", path: COUSIN, startLabel: null }] }}
+      />
+    );
+    expect(await screen.findByText("Home, Hal")).toBeTruthy();
+    ROWS.A = [JSON.stringify({ first_name: "Ann", surname_list: [{ surname: "Mother" }] }), null, null];
+    act(() => store.bump());
+    expect(await screen.findByText("Mother, Ann")).toBeTruthy();
+    delete ROWS.A;
   });
 });

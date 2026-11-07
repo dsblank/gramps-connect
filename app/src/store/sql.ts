@@ -40,6 +40,13 @@ export function updateSql(view: ViewConfig): string {
   return `UPDATE ${view.key} SET ${setClause} WHERE handle = ?;`;
 }
 
+/** insertSql(), but replacing a row already there with the same handle --
+ * for ViewStore's kept unfiltered copy, which a filtered page can name
+ * rows of in either state. */
+export function upsertSql(view: ViewConfig): string {
+  return insertSql(view).replace(/^INSERT INTO/, "INSERT OR REPLACE INTO");
+}
+
 /** Maps a query-result item's raw values into the ordered value list a
  * prepared insert statement expects, applying each column's toSql
  * converter where present. */

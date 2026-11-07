@@ -14,7 +14,7 @@ import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage } from "./api";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } from "./cacheMeta";
-import { createTableSql, insertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
+import { createTableSql, insertSql, upsertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
 import type { OrderBy, ViewConfig } from "./views";
 import type { TreeChangeNotification } from "./historyPoll";
 import { getHomePersonHandle } from "./homePersonPreference";
@@ -122,6 +122,19 @@ export class ViewStore {
   readonly view: ViewConfig;
   private getSql: () => Promise<SqlJsStatic>;
   private db: Database | null = null;
+  /** While the list is filtered (whereExpr or pickerExpr), the unfiltered
+   * db it showed just before -- for readers that need the whole tree
+   * whatever the list shows (the Map and Timeline, charts, a Gramplet's
+   * relationship chart): see the `unfiltered` option on readColumns() and
+   * readRowByHandle(). Null while unfiltered (`db` is that copy then).
+   * Live sync is suspended for a filtered list (useLiveSync.ts), so this
+   * goes no staler than the list itself; every page a filtered query
+   * fetches is copied in too (mirrorToUnfiltered), so an edit made here
+   * while filtered still shows, and removeDeleted() drops rows from both.
+   * Clearing the filter refetches from the server and closes it. */
+  private unfilteredDb: Database | null = null;
+  /** The unfiltered result's totalCount when unfilteredDb was kept. */
+  private unfilteredTotal = 0;
   private loadedCount = 0;
   private totalCount = 0;
   private whereExpr: string | null = null;
@@ -765,10 +778,11 @@ export class ViewStore {
    * date), but keeps the two reads consistent. Returns only what's cached:
    * against a partially filled view this is the loaded prefix, not the
    * whole tree -- callers watch loadedCount to know. */
-  readColumns(columnKeys: string[]): unknown[][] {
-    if (!this.db) return [];
+  readColumns(columnKeys: string[], { unfiltered = false }: { unfiltered?: boolean } = {}): unknown[][] {
+    const db = this.readDb(unfiltered);
+    if (!db) return [];
     this.assertCachedColumns(columnKeys);
-    const res = this.db.exec(
+    const res = db.exec(
       `SELECT ${columnKeys.join(", ")} FROM ${this.view.key} ORDER BY rowid;`
     );
     return res[0]?.values ?? [];
@@ -786,10 +800,11 @@ export class ViewStore {
    * PRIMARY KEY (see sql.ts's createTableSql), so this is an index lookup
    * instead. Same column-name guard, for the same reason: the names are
    * spliced into the statement. */
-  readRowByHandle(handle: string, columnKeys: string[]): unknown[] | null {
-    if (!this.db) return null;
+  readRowByHandle(handle: string, columnKeys: string[], { unfiltered = false }: { unfiltered?: boolean } = {}): unknown[] | null {
+    const db = this.readDb(unfiltered);
+    if (!db) return null;
     this.assertCachedColumns(columnKeys);
-    const res = this.db.exec(
+    const res = db.exec(
       `SELECT ${columnKeys.join(", ")} FROM ${this.view.key} WHERE handle = ?;`,
       [handle]
     );
@@ -814,6 +829,21 @@ export class ViewStore {
       items.set(handle, { ...Object.fromEntries(keys.map((key, i) => [key, row[i]])), handle });
     }
     return items;
+  }
+
+  /** Rows cached and in total for the whole tree, filtered list or not --
+   * what an `unfiltered` reader should report (the Map's "N of M places"),
+   * not the filtered list's own loadedCount/totalCount. */
+  unfilteredCounts(): { loaded: number; total: number } {
+    if (!this.unfilteredDb) return { loaded: this.loadedCount, total: this.totalCount };
+    const loaded = Number(this.unfilteredDb.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0]?.values[0]?.[0] ?? 0);
+    return { loaded, total: Math.max(loaded, this.unfilteredTotal) };
+  }
+
+  /** The db a reader asked for: the list's own rows, or with `unfiltered`
+   * the whole tree's even while the list is filtered (unfilteredDb). */
+  private readDb(unfiltered: boolean): Database | null {
+    return unfiltered ? this.unfilteredDb ?? this.db : this.db;
   }
 
   /** Shared guard for the whole-row readers above: the column names are
@@ -1077,6 +1107,7 @@ export class ViewStore {
     }
 
     const newTotalCount = first.totalCount ?? 0;
+    const newIsUnfiltered = whereExpr === null && newPickerExpr === null;
     this.insertPage(newDb, stmt, first.page.items);
     let loadedSoFar = first.page.items.length;
     after = first.page.next_after;
@@ -1095,8 +1126,21 @@ export class ViewStore {
       // eventually exhausting the wasm heap and surfacing as an unrelated
       // "memory access out of bounds" from some later, innocent exec().
       const previousDb = this.db;
+      const wasUnfiltered = this.whereExpr === null && this.pickerExpr === null;
       this.db = newDb;
-      previousDb?.close();
+      if (newIsUnfiltered) {
+        this.unfilteredDb?.close();
+        this.unfilteredDb = null;
+        previousDb?.close();
+      } else if (wasUnfiltered && previousDb && !this.unfilteredDb) {
+        // Filtering starts: keep the whole-tree copy (see unfilteredDb).
+        // If its background fill was still walking, that fill stops here
+        // and the copy stays the prefix it had reached.
+        this.unfilteredDb = previousDb;
+        this.unfilteredTotal = this.totalCount;
+      } else {
+        previousDb?.close();
+      }
       this.totalCount = newTotalCount;
       this.whereExpr = whereExpr;
       this.pickerExpr = newPickerExpr;
@@ -1128,6 +1172,7 @@ export class ViewStore {
       swapIn();
       this.emit();
     }
+    if (!newIsUnfiltered) this.mirrorToUnfiltered(first.page.items);
 
     this.backgroundFillActive = true;
     // Throttles the emit() below to at most once every 150ms while pages
@@ -1160,6 +1205,7 @@ export class ViewStore {
           return;
         }
         this.insertPage(newDb, stmt, page.items);
+        if (!newIsUnfiltered) this.mirrorToUnfiltered(page.items);
         loadedSoFar += page.items.length;
         after = page.next_after;
         if (swapped) {
@@ -1394,6 +1440,19 @@ export class ViewStore {
       });
   }
 
+  /** Copies a filtered query's rows into unfilteredDb (see there), fresh
+   * from the server, replacing the older copy of each. */
+  private mirrorToUnfiltered(items: Parameters<typeof toRowValues>[1][]): void {
+    const db = this.unfilteredDb;
+    if (!db || items.length === 0) return;
+    const stmt = db.prepare(upsertSql(this.view));
+    try {
+      this.insertPage(db, stmt, items);
+    } finally {
+      stmt.free();
+    }
+  }
+
   private insertPage(db: Database, stmt: ReturnType<Database["prepare"]>, items: Parameters<typeof toRowValues>[1][]) {
     db.run("BEGIN TRANSACTION;");
     for (const item of items) {
@@ -1484,6 +1543,12 @@ export class ViewStore {
    * to pick up whatever else the delete changed. */
   removeDeleted(handles: string[]): void {
     if (!this.db || handles.length === 0) return;
+    if (this.unfilteredDb) {
+      const db = this.unfilteredDb;
+      const del = db.prepare(`DELETE FROM ${this.view.key} WHERE handle = ?;`);
+      for (const handle of handles) del.run([handle]);
+      del.free();
+    }
     let removed = 0;
     this.db.run("BEGIN TRANSACTION;");
     const stmt = this.db.prepare(`DELETE FROM ${this.view.key} WHERE handle = ?;`);

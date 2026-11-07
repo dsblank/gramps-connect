@@ -246,8 +246,11 @@ export function readVisualData(): VisualData {
   const placeStore = getViewStore("place");
   const eventStore = getViewStore("event");
   const mediaStore = getViewStore("media");
-  const placeSnapshot = placeStore.getSnapshot();
-  const eventSnapshot = eventStore.getSnapshot();
+  // The whole tree whatever the Places/Events/Media lists are filtered to
+  // (ViewStore's `unfiltered` reads): the Map and Timeline always show
+  // everything.
+  const placeCounts = placeStore.unfilteredCounts();
+  const eventCounts = eventStore.unfilteredCounts();
 
   // The overlays among every cached Media object (mapOverlays.ts: a
   // GeoJSON file with the overlay tag), for turning a place's media_refs
@@ -255,7 +258,7 @@ export function readVisualData(): VisualData {
   // has loaded so far, same "first prefix, then whatever a background fill
   // adds" honesty as the places/events read below.
   const overlayHandles = new Set<string>();
-  for (const row of mediaStore.readColumns(["handle", "mime", "is_map_overlay"])) {
+  for (const row of mediaStore.readColumns(["handle", "mime", "is_map_overlay"], { unfiltered: true })) {
     const [handle, mime, isOverlay] = row as [string, string | null, number | null];
     if (mime === GEOJSON_MIME && Number(isOverlay) > 0) overlayHandles.add(handle);
   }
@@ -272,7 +275,7 @@ export function readVisualData(): VisualData {
 
   for (const row of eventStore.readColumns([
     "handle", "gramps_id", "event_type", "description", "place_title", "place", "date",
-  ])) {
+  ], { unfiltered: true })) {
     const [handle, grampsId, typeJson, description, placeTitle, placeHandle, dateJson] = row as [
       string, string | null, string | null, string | null, string | null, string | null, string | null,
     ];
@@ -316,7 +319,8 @@ export function readVisualData(): VisualData {
   const pendingKmlPlaces: PendingKmlPlace[] = [];
   const childPlaces = new Map<string, string[]>();
   for (const row of placeStore.readColumns(
-    ["handle", "gramps_id", "title", "lat", "long", "enclosed_by", "media_refs", "name"]
+    ["handle", "gramps_id", "title", "lat", "long", "enclosed_by", "media_refs", "name"],
+    { unfiltered: true },
   )) {
     const [handle, grampsId, title, latText, longText, enclosedBy, mediaRefs, nameJson] = row as [
       string, string | null, string | null, string | null, string | null, string | null, string | null, string | null,
@@ -371,10 +375,10 @@ export function readVisualData(): VisualData {
     eventsByPlace,
     eventsByHandle,
     childPlaces,
-    placesCached: placeSnapshot.loadedCount,
-    placesTotal: placeSnapshot.totalCount,
-    eventsCached: eventSnapshot.loadedCount,
-    eventsTotal: eventSnapshot.totalCount,
+    placesCached: placeCounts.loaded,
+    placesTotal: placeCounts.total,
+    eventsCached: eventCounts.loaded,
+    eventsTotal: eventCounts.total,
   };
 }
 
