@@ -8,10 +8,12 @@
 import type { ObjectDetail } from "../../store/objectDetail";
 import { displayConfidence } from "../../store/views";
 import { displayDate } from "./summary";
-import { formatDisplayName, type RawName } from "../../store/nameDisplay";
+import { formatDisplayName, nameFormatFor, type RawName } from "../../store/nameDisplay";
+import { t } from "../../i18n/i18n";
 
 interface Name extends RawName {
   type?: string;
+  date?: unknown;
 }
 
 function formatName(name: Name): string {
@@ -24,8 +26,51 @@ export interface DetailField {
   value: (detail: ObjectDetail) => string;
 }
 
+/** Whether the primary name's display format (nameFormatFor) already shows
+ * one of these codes -- case-insensitively, since %N is just %n upper-cased. */
+function formatShows(name: Name, ...codes: string[]): boolean {
+  const format = nameFormatFor(name).toLowerCase();
+  return codes.some((code) => format.includes(`%${code}`));
+}
+
+/** A part of the person's primary name, shown only when the title above
+ * (the name in its display format) leaves it out -- so a nickname, call
+ * name, title etc. entered in the name editor is visible somewhere without
+ * repeating what the title already says. %x ("common": nickname, else call
+ * name) counts as showing whichever of the two it picks. */
+function primaryNamePart(
+  label: string,
+  key: "title" | "suffix" | "call" | "nick" | "famnick",
+  codes: string[],
+): DetailField {
+  return {
+    label,
+    value: (d) => {
+      const name = (d.primary_name as Name | undefined) ?? {};
+      const value = name[key]?.trim() ?? "";
+      if (!value || formatShows(name, ...codes)) return "";
+      if (formatShows(name, "x") && (key === "nick" || (key === "call" && !name.nick))) return "";
+      return value;
+    },
+  };
+}
+
 export const DETAIL_FIELDS: Record<string, DetailField[]> = {
   person: [
+    primaryNamePart("Title", "title", ["t"]),
+    primaryNamePart("Suffix", "suffix", ["s"]),
+    primaryNamePart("Call name", "call", ["c"]),
+    primaryNamePart("Nickname", "nick", ["n"]),
+    primaryNamePart("Family nickname", "famnick", ["g"]),
+    {
+      // Birth Name is the usual case and goes unsaid, as in the name editor.
+      label: "Name type",
+      value: (d) => {
+        const type = (d.primary_name as Name | undefined)?.type ?? "";
+        return type && type !== "Birth Name" ? t(type) : "";
+      },
+    },
+    { label: "Name date", value: (d) => displayDate((d.primary_name as Name | undefined)?.date) },
     {
       label: "Also known as",
       value: (d) => (((d.alternate_names as Name[] | undefined) ?? []).map(formatName).filter(Boolean).join("; ")),
