@@ -32,15 +32,12 @@ worth every commit).
   aged out after 5 minutes) — it can't see who's only reading, since
   gramps-web-api has no session/heartbeat/presence concept at all. A real
   presence layer is still open work, not just this approximation.
-- **Auth/permissions**: `app/` has a minimal login form (real credentials,
-  no hardcoding) but no refresh-token rotation or expiry handling yet.
-  gramps-web's own `Auth` class (`~/gramps/gramps-web/src/api.js`) is the
-  reference to build against. (Being addressed at the `gramps-web-api`
-  level, not `app/`.)
 - **Merge/conflict UX** for genuinely concurrent edits to the same object —
-  open design question, not yet resolved. (Not the same thing as
-  duplicate-record merging, which is fully shipped — see "Editing gaps"
-  below.)
+  open design question, not yet resolved. Today a save is blocked with an
+  error if the record changed on the server since the dialog opened, so
+  nothing is overwritten, but the edit has to be redone. Low priority: two
+  people editing the same record at once is rare. (Not the same thing as
+  duplicate-record merging, which is fully shipped.)
 - Full object-model UI redesign, design system, search-as-navigation — not
   scoped yet.
 - **Generations graph (`FamilyGraphView.tsx`) descendant-subtree placement**:
@@ -73,21 +70,9 @@ fields) — ranked roughly by value, most first:
   Y-DNA/lineage view, and chromosome browser (`GrampsjsViewDnaMatches`,
   `GrampsjsViewYDna`, `ChromosomeBrowser.js`). Entirely unexposed in this
   app today — a large, mostly self-contained feature area, not a small add.
-- **Relationship-path chart** — "how are these two specific people
-  related" (shortest path between them), distinct from `TreeView.tsx`'s
-  existing ancestor/descendant tree. `gramps-web`'s
-  `GrampsjsViewRelationshipChart`/`charts/RelationshipChart.js` is the
-  reference.
 - **Photo face-detection / OCR** — `/media/<handle>/face_detection` and
   `/media/<handle>/ocr` are real server-side capabilities with no UI at
   all; would be a differentiating feature for the Media view.
-- **Bookmarks** — `/bookmarks/` is a ready-built per-type bookmark list,
-  unused. Simpler and faster to ship than "add recently visited items"
-  (below), which it's adjacent to but not a replacement for.
-- **Anniversaries / upcoming dates** — `/anniversaries.ics` gives an iCal
-  feed of upcoming birthdays/anniversaries for free; `gramps-web`'s
-  `GrampsjsViewAnniversaries` is the equivalent view. `HomeView.tsx`'s
-  stats only cover *recently* changed, not *upcoming* dates.
 - **Stale-search-index nudge** — `search.sifts.semantic_index_stale` is
   fetched but `ReindexDialog.tsx` only checks the boolean
   `server.semantic_search` flag to decide whether to show a reindex
@@ -96,10 +81,6 @@ fields) — ranked roughly by value, most first:
 - **Research Tasks** — `gramps-web` has a to-do-list feature built as a
   specialized Source subtype with task notes (`GrampsjsViewTask(s)`/
   `NewTask`). No equivalent here beyond plain code comments.
-- **Personal API tokens** — `/users/-/access-tokens/<scope>/` is unused;
-  relevant if bot/script integrations in the `scripts/echo_bot.py` style
-  are a direction worth leaning into (auth without sharing a real user's
-  password).
 
 - **Service worker for app-shell caching**: `app/` registers none today, so
   every tab load/reload is a hard dependency on the network being up at that
@@ -134,11 +115,10 @@ fields) — ranked roughly by value, most first:
 - Allow more types of addons: tools, reports.
 - Ability to generate PDF forms (add PDF importer).
 - Move under gramps-project — would this enable translations?
-- Add recently visited items.
-- Add history of changes per object (once available in gramps-web-api).
-- **KML overlay → source image back-reference**: a KML GroundOverlay embeds
+- **Map overlay → source image back-reference**: an overlay file embeds
   the source image's handle as an app-internal `media-handle:<handle>` fake
-  URL (`kmlWrite.ts`/`kmlMedia.ts`) — one-directional and invisible at the
+  URL (`packages/story/src/mapEdit/mapFile.ts`'s `MEDIA_HANDLE_PREFIX`,
+  read back by `app/src/store/kmlMedia.ts`) — one-directional and invisible at the
   Gramps level. It won't show up in a backlink/"referenced by" query, and
   desktop Gramps' remove-unused-objects tool won't know the two are
   related; if the image is later detached from whatever else references it
@@ -198,13 +178,6 @@ Partially editable, by type:
   (`PlaceAltNamesField.tsx`: value/lang/date per entry); the map overlay
   feature's date gating still only reads the *primary* name's date.
   Also still missing: historical locations, code.
-- **Note** — missing: text formatting/links (plain text only), format
-  (Flowed/Formatted).
+- **Note** — the note's format (Flowed/Formatted) is shown but can't be
+  changed. Text formatting and links are editable.
 
-Cross-cutting:
-- GrampsType fields are free text, not dropdowns (Family's relationship
-  type, and Attribute/Url's own `type`, are the exceptions with a real
-  dropdown) — functionally editable, just no autocomplete/validation
-  against the known list. The fix is sitting unused: gramps-web-api's
-  `/types/` endpoint (custom + default type lists) is never called from
-  `app/` anywhere.
