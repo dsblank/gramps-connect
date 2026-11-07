@@ -9,6 +9,7 @@ import { DeleteAllDialog } from "./DeleteAllDialog";
 import { ManageTreesDialog } from "./ManageTreesDialog";
 import { ReportDialog } from "./ReportDialog";
 import { ReindexDialog } from "./ReindexDialog";
+import { PlaceLanguageRepairDialog } from "./PlaceLanguageRepairDialog";
 import { ConfirmTaskDialog } from "./ConfirmTaskDialog";
 import { RestoreBackupDialog } from "./RestoreBackupDialog";
 import { checkRepairDatabase, upgradeSchema } from "../store/toolsApi";
@@ -315,6 +316,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const [grampletOpened, setGrampletOpened] = useState(false);
   const [grampletStoreOpened, setGrampletStoreOpened] = useState(false);
   const [reindexOpened, setReindexOpened] = useState(false);
+  const [placeLanguageRepairOpened, setPlaceLanguageRepairOpened] = useState(false);
   const [checkRepairOpened, setCheckRepairOpened] = useState(false);
   const [upgradeSchemaOpened, setUpgradeSchemaOpened] = useState(false);
   const [restoreOpened, setRestoreOpened] = useState(false);
@@ -516,6 +518,11 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               onClick: () => setUpgradeSchemaOpened(true),
             },
             {
+              label: "Fix Place Name Languages…",
+              perm: PERM_EDIT_OBJ,
+              onClick: () => setPlaceLanguageRepairOpened(true),
+            },
+            {
               label: "Delete items…",
               perm: PERM_DEL_OBJ_BATCH,
               onClick: () => setDeleteAllOpened(true),
@@ -615,6 +622,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
       <ExportDialog opened={exportOpened} onClose={() => setExportOpened(false)} />
       <DeleteAllDialog opened={deleteAllOpened} onClose={() => setDeleteAllOpened(false)} />
       <ReindexDialog opened={reindexOpened} onClose={() => setReindexOpened(false)} />
+      <PlaceLanguageRepairDialog opened={placeLanguageRepairOpened} onClose={() => setPlaceLanguageRepairOpened(false)} />
       <ConfirmTaskDialog
         opened={checkRepairOpened}
         onClose={() => setCheckRepairOpened(false)}

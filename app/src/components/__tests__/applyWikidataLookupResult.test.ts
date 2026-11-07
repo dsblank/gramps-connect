@@ -47,9 +47,12 @@ describe("applyWikidataLookupResult with replaceName", () => {
       { ...result, replaceName: true }
     );
     expect(data.title).toBe("München, Bayern, Deutschland");
-    expect(data.name).toEqual({ _class: "PlaceName", value: "München", lang: "de" });
+    // The old name's language, so it isn't outranked in titles by the old
+    // name it displaced; Wikidata's label stays on in its own language.
+    expect(data.name).toEqual({ _class: "PlaceName", value: "München", lang: "" });
     expect(data.alt_names).toEqual([
       { _class: "PlaceName", value: "Munchen", lang: "" },
+      { _class: "PlaceName", value: "München", lang: "de" },
       { _class: "PlaceName", value: "Munich", lang: "en" },
     ]);
   });
@@ -63,6 +66,10 @@ describe("applyWikidataLookupResult with replaceName", () => {
       },
       { ...result, replaceName: true }
     );
-    expect(data.alt_names).toEqual([{ _class: "PlaceName", value: "Munich", lang: "en" }]);
+    expect(data.name).toEqual({ _class: "PlaceName", value: "München", lang: "en" });
+    expect(data.alt_names).toEqual([
+      { _class: "PlaceName", value: "Munich", lang: "en" },
+      { _class: "PlaceName", value: "München", lang: "de" },
+    ]);
   });
 });

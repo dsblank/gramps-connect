@@ -857,10 +857,24 @@ export function applyWikidataLookupResult(
   if (result.replaceName && oldValue && oldValue !== result.label && !existingAltNames.some((n) => n.value === oldValue)) {
     existingAltNames = [...existingAltNames, { _class: "PlaceName", ...name }];
   }
+  // A replacing name takes the replaced one's language (usually blank), not
+  // Wikidata's: the old name stays on as an alternative in that language,
+  // and a title picks the first name in the place format's language
+  // (placeDisplay.ts nameAt, as Gramps does) -- a new "en" name behind an
+  // old "" one would leave titles showing the old name. Wikidata's label
+  // is kept in its own language as an alternative instead.
+  const replacing = Boolean(result.replaceName) && oldValue !== "";
+  const newNameLang = replacing ? ((name.lang as string | undefined) ?? "") : result.labelLang;
   // A language the place already has a name in keeps it.
-  const primaryLang = setName ? result.labelLang : name.lang;
+  const primaryLang = setName ? newNameLang : name.lang;
   const namedLangs = new Set([primaryLang, ...existingAltNames.map((n) => n.lang)].map((l) => (l as string | undefined) ?? ""));
-  const newAltNames = result.altNames.filter((l) => !namedLangs.has(l.lang)).map(placeName);
+  const wikidataLabels = replacing ? [{ value: result.label, lang: result.labelLang }, ...result.altNames] : result.altNames;
+  const newAltNames: Record<string, unknown>[] = [];
+  for (const l of wikidataLabels) {
+    if (namedLangs.has(l.lang)) continue;
+    namedLangs.add(l.lang);
+    newAltNames.push(placeName(l));
+  }
   const altNamesChanged = newAltNames.length > 0 || existingAltNames !== data.alt_names;
   return {
     // Only filled in when there's no title yet -- the common case this
@@ -875,7 +889,7 @@ export function applyWikidataLookupResult(
     ...(setName
       ? {
           title: result.hierarchyTitle,
-          name: { _class: "PlaceName", ...name, value: result.label, lang: result.labelLang },
+          name: { _class: "PlaceName", ...name, value: result.label, lang: newNameLang },
         }
       : {}),
     alt_names: altNamesChanged ? [...existingAltNames, ...newAltNames] : data.alt_names,

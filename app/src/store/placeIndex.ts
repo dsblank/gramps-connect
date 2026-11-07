@@ -34,7 +34,15 @@ export function attachDisplayStores(stores: { place: ViewStore; event: ViewStore
   for (const fn of pendingAttach.splice(0)) fn();
 }
 
-let index: { revision: number; loadedCount: number; places: Map<string, PlaceRecord> } | null = null;
+let index: {
+  revision: number;
+  loadedCount: number;
+  places: Map<string, PlaceRecord>;
+  /** Stored title (or name, when blank -- see views.ts) and Gramps ID,
+   * for whole-tree tools like placeLanguageRepair.ts. */
+  titles: Map<string, string>;
+  grampsIds: Map<string, string>;
+} | null = null;
 // handle + date sortval -> formatted title; dropped whenever the index or
 // the settings change, so it never outlives what it was computed from.
 let titleCache = new Map<string, string | null>();
@@ -64,8 +72,13 @@ function getIndex(store: ViewStore): Map<string, PlaceRecord> | null {
     snapshot.whereExpr === null && snapshot.pickerExpr === null;
   if (!complete) return index?.places ?? null;
   const places = new Map<string, PlaceRecord>();
-  for (const row of store.readColumns(["handle", "name", "alt_names", "place_type", "placerefs"])) {
-    const [handle, name, altNames, placeType, placerefs] = row as [string, string | null, string | null, number | null, string | null];
+  const titles = new Map<string, string>();
+  const grampsIds = new Map<string, string>();
+  for (const row of store.readColumns(["handle", "name", "alt_names", "place_type", "placerefs", "title", "gramps_id"])) {
+    const [handle, name, altNames, placeType, placerefs, title, grampsId] =
+      row as [string, string | null, string | null, number | null, string | null, string | null, string | null];
+    titles.set(handle, title ?? "");
+    grampsIds.set(handle, grampsId ?? "");
     places.set(handle, {
       name: parseJson(name),
       altNames: parseJson(altNames) ?? [],
@@ -73,9 +86,20 @@ function getIndex(store: ViewStore): Map<string, PlaceRecord> | null {
       parents: parseJson(placerefs) ?? [],
     });
   }
-  index = { revision: snapshot.revision, loadedCount: snapshot.loadedCount, places };
+  index = { revision: snapshot.revision, loadedCount: snapshot.loadedCount, places, titles, grampsIds };
   titleCache = new Map();
   return places;
+}
+
+/** The whole complete Places index (see getIndex), with stored titles and
+ * Gramps IDs, or null while there's none yet (starting a load if needed). */
+export function completePlaceIndex(): {
+  places: Map<string, PlaceRecord>;
+  titles: Map<string, string>;
+  grampsIds: Map<string, string>;
+} | null {
+  if (!placeIndexOrNull() || !index) return null;
+  return { places: index.places, titles: index.titles, grampsIds: index.grampsIds };
 }
 
 /** Starts loading the Places cache, once, if nothing has loaded it yet.
