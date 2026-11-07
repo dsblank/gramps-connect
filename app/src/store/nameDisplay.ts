@@ -4,9 +4,11 @@
 // the app shows goes through formatDisplayName() so the tree's name format
 // (displaySettings.ts) applies everywhere -- list cells, pickers, summaries
 // -- and changing it needs no refetch, the same as dates and places
-// (placeIndex.ts). Server-formatted names (a profile's name_display) are
-// asked for in the same format: nameFormatParam().
-import { DEFAULT_NAME_FORMAT, getDisplaySettings } from "./displaySettings";
+// (placeIndex.ts). A name's own "Display as" (display_as) overrides the
+// tree's format for that name, as desktop's NameDisplay.display_name does.
+// Server-formatted names (a profile's name_display) are asked for in the
+// tree's format: nameFormatParam() -- the server ignores display_as then.
+import { BUILTIN_NAME_FORMATS, DEFAULT_NAME_FORMAT, getDisplaySettings, getLoadedCustomNameFormats } from "./displaySettings";
 
 interface RawSurname {
   surname?: string;
@@ -26,6 +28,9 @@ export interface RawName {
   call?: string;
   nick?: string;
   famnick?: string;
+  /** Name.DEF/LNFN/... (0 = the tree's format), or a custom format's
+   * negative number. */
+  display_as?: number;
 }
 
 const ORIGIN_PATRONYMIC = 5;
@@ -141,12 +146,26 @@ export function displayNameFormat(): string {
   return getDisplaySettings().name.format || DEFAULT_NAME_FORMAT;
 }
 
-/** A Name struct in the tree's name format; "" for no name at all. Accepts
- * the JSON-serialized string a local-cache column stores, too. */
+/** The format `name` is shown in: its own display_as when that names an
+ * active built-in or (loaded, usable) custom format, else the tree's --
+ * NameDisplay._is_format_valid's fallback to Default. */
+export function nameFormatFor(name: RawName): string {
+  const num = name.display_as ?? 0;
+  if (num) {
+    const builtin = BUILTIN_NAME_FORMATS.find((opt) => opt.number === num);
+    if (builtin?.format) return builtin.format;
+    const custom = getLoadedCustomNameFormats().find((opt) => opt.number === num);
+    if (custom?.usable && custom.active) return custom.format;
+  }
+  return displayNameFormat();
+}
+
+/** A Name struct in its display format (nameFormatFor); "" for no name at
+ * all. Accepts the JSON-serialized string a local-cache column stores, too. */
 export function formatDisplayName(name: RawName | string | null | undefined): string {
   if (!name) return "";
   const parsed = typeof name === "string" ? (JSON.parse(name) as RawName) : name;
-  return formatName(parsed, displayNameFormat());
+  return formatName(parsed, nameFormatFor(parsed));
 }
 
 /** gramps-web-api's `name_format` query arg, so names the server formats

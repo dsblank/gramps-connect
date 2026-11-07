@@ -304,6 +304,9 @@ export interface CustomNameFormat extends NameFormatOption {
   /** False when the converted string still isn't something gramps-web-api
    * accepts (translated keywords, "!" verbatim-punctuation prefix, ...). */
   usable: boolean;
+  /** Desktop's "active" flag: an inactive format is treated as Default when
+   * a name's display_as points at it, as NameDisplay._is_format_valid does. */
+  active: boolean;
 }
 
 /** GET /api/name-formats/ -- the tree's custom name formats only (see
@@ -312,16 +315,19 @@ export async function fetchCustomNameFormats(): Promise<CustomNameFormat[]> {
   const token = await getToken();
   const res = await apiFetch(`${API_BASE}/api/name-formats/`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(await parseErrorMessage(res));
-  const body = (await res.json()) as { number: number; name: string; format: string }[];
-  return body.map(({ number, name, format }) => {
+  const body = (await res.json()) as { number: number; name: string; format: string; active?: boolean }[];
+  return body.map(({ number, name, format, active }) => {
     const converted = nameKeywordsToCodes(format);
-    return { number, name, format: converted, original: format, usable: isValidNameFormat(converted) };
+    return { number, name, format: converted, original: format, usable: isValidNameFormat(converted), active: active !== false };
   });
 }
 
 // -- Store --
 
 let snapshot: DisplaySettings = DEFAULT_DISPLAY_SETTINGS;
+// The tree's custom name formats, loaded alongside the settings: a name's
+// own "Display as" (Name.display_as) can point at one by its negative number.
+let customNameFormats: CustomNameFormat[] = [];
 let loadPromise: Promise<DisplaySettings> | null = null;
 const listeners = new Set<() => void>();
 
@@ -339,6 +345,12 @@ export function getDisplaySettings(): DisplaySettings {
   return snapshot;
 }
 
+/** The tree's custom name formats as of the last loadDisplaySettings();
+ * empty until then, or when the tree has none (the usual case). */
+export function getLoadedCustomNameFormats(): CustomNameFormat[] {
+  return customNameFormats;
+}
+
 /** Loads once per page; later calls share the first one's promise. A failed
  * load (offline, older server without /trees/-/config) keeps the defaults
  * and is retried on the next call. */
@@ -346,7 +358,13 @@ export function loadDisplaySettings(): Promise<DisplaySettings> {
   if (!loadPromise) {
     loadPromise = (async () => {
       const token = await getToken();
-      const settings = normalizeDisplaySettings((await fetchTreeConfig(token)).display);
+      // Custom formats are optional -- a failure just leaves the built-ins.
+      const [config, custom] = await Promise.all([
+        fetchTreeConfig(token),
+        fetchCustomNameFormats().catch(() => [] as CustomNameFormat[]),
+      ]);
+      const settings = normalizeDisplaySettings(config.display);
+      customNameFormats = custom;
       setSnapshot(settings);
       return settings;
     })();

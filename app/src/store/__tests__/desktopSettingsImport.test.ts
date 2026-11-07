@@ -157,7 +157,7 @@ describe("buildImportItems / applyImport", () => {
 
   it("resolves a negative name format against the tree's custom formats", () => {
     const ini = parseGrampsIni("[preferences]\nname-format=-1\n");
-    const custom: CustomNameFormat[] = [{ number: -1, name: "Mine", format: "%L, %f", original: "SURNAME, given", usable: true }];
+    const custom: CustomNameFormat[] = [{ number: -1, name: "Mine", format: "%L, %f", original: "SURNAME, given", usable: true, active: true }];
     const ok = buildImportItems(input({ ini, customNameFormats: custom }));
     expect(applyImport(DEFAULT_DISPLAY_SETTINGS, ok, new Set(["name"])).name.format).toBe("%L, %f");
     const missing = buildImportItems(input({ ini, customNameFormats: [] }));
