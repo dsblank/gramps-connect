@@ -2,13 +2,17 @@
 // top-level Place editor) and PlaceEditDialog.tsx (the nested one).
 //
 // The stored title is what the Places list shows and what its search
-// matches, so it's an editable field of its own, with a Rebuild button that
-// writes it in the active place format from the name plus the enclosing
-// places (draftPlaceTitle). Typing a name rebuilds the title too, but only
-// while the title is still "following" the name (placeTitleFollowsName) --
-// a hand-edited title is left alone.
-import { useSyncExternalStore } from "react";
-import { Button, TextInput } from "@mantine/core";
+// matches, so it's an editable field of its own. When the title the user
+// has (typed, or the one the place came with) differs from what the active
+// place format builds from the name plus the enclosing places
+// (draftPlaceTitle), a two-option choice under the field shows both texts
+// and picks between them. Picking is reversible -- the user's own title is
+// remembered in `ownTitle`, so choosing the built one can be switched back.
+// Typing a name rebuilds the title too, but only while the title is still
+// "following" the name (placeTitleFollowsName) -- a hand-edited title is
+// left alone.
+import { useState, useSyncExternalStore } from "react";
+import { Radio, Stack, Text, TextInput } from "@mantine/core";
 import { draftPlaceTitle, placeTitleFollowsName } from "../store/placeIndex";
 import { getViewStore } from "../store/registry";
 import { t } from "../i18n/i18n";
@@ -20,7 +24,7 @@ interface PlaceTitleFieldsProps {
 }
 
 export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFieldsProps) {
-  // Re-render as the Places cache loads, so Rebuild enables once the
+  // Re-render as the Places cache loads, so the choice appears once the
   // enclosing places' names are known.
   const placeStore = getViewStore("place");
   useSyncExternalStore(placeStore.subscribe, placeStore.getSnapshot);
@@ -29,6 +33,13 @@ export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFields
   const nameValue = (name.value as string | undefined) ?? "";
   const title = (data.title as string | undefined) ?? "";
   const rebuilt = draftPlaceTitle(data);
+  // The user's own title: what the place came with, or what was last typed
+  // into the Title field. Kept apart from `title` so picking the built
+  // title can be undone by picking this one again.
+  const [ownTitle, setOwnTitle] = useState(title);
+
+  const showChoice = rebuilt !== null && ownTitle.trim() !== "" && ownTitle !== rebuilt;
+  const choice = title === rebuilt ? "built" : "own";
 
   return (
     <>
@@ -43,31 +54,57 @@ export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFields
           if (placeTitleFollowsName(data)) {
             const nextTitle = draftPlaceTitle({ ...data, name: nextName });
             // Hierarchy not loaded yet: a title that was just the bare name
-            // stays the bare name; a full one is left for Rebuild.
+            // stays the bare name; a full one is left alone.
             if (nextTitle !== null) patch.title = nextTitle;
             else if (title.trim() === "" || title.trim() === nameValue.trim()) patch.title = v;
+          }
+          // An own title that was itself only following the name follows
+          // along, so no stale choice is offered; a hand-written one stays.
+          if (typeof patch.title === "string" && placeTitleFollowsName({ ...data, title: ownTitle })) {
+            setOwnTitle(patch.title);
           }
           onChange(patch);
         }}
       />
-      <TextInput
-        label={t("Title")}
-        description={t("Shown in the Places list, and matched by its search")}
-        value={title}
-        onChange={(e) => onChange({ title: e.currentTarget.value })}
-        rightSectionWidth={80}
-        rightSection={
-          <Button
-            size="compact-xs"
-            variant="default"
-            disabled={rebuilt === null || rebuilt === title}
-            title={rebuilt === null ? t("Loading places…") : rebuilt}
-            onClick={() => rebuilt !== null && onChange({ title: rebuilt })}
+      <Stack gap={6}>
+        <TextInput
+          label={t("Title")}
+          description={t("Shown in the Places list, and matched by its search")}
+          value={title}
+          onChange={(e) => {
+            const v = e.currentTarget.value;
+            setOwnTitle(v);
+            onChange({ title: v });
+          }}
+        />
+        {showChoice && (
+          <Radio.Group
+            value={choice}
+            onChange={(v) => onChange({ title: v === "built" ? rebuilt : ownTitle })}
           >
-            {t("Rebuild")}
-          </Button>
-        }
-      />
+            <Stack gap={4}>
+              <Radio
+                size="xs"
+                value="own"
+                label={
+                  <Text size="xs" span>
+                    <Text size="xs" c="dimmed" span>{t("Your title:")}</Text> {ownTitle}
+                  </Text>
+                }
+              />
+              <Radio
+                size="xs"
+                value="built"
+                label={
+                  <Text size="xs" span>
+                    <Text size="xs" c="dimmed" span>{t("From the name and enclosing places:")}</Text> {rebuilt}
+                  </Text>
+                }
+              />
+            </Stack>
+          </Radio.Group>
+        )}
+      </Stack>
     </>
   );
 }

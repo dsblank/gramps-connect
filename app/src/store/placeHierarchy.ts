@@ -16,8 +16,8 @@
 // or what the active place format builds) gets it rebuilt for the new
 // hierarchy in the same PUT, the same rule typing a new name already
 // follows in PlaceTitleFields.tsx. A hand-edited title is left alone.
-// Places *below* the edited one keep their stored titles (the Rebuild
-// button in their own editor is the fix-up path); automatic titles, when
+// Places *below* the edited one keep their stored titles (the title choice
+// in their own editor is the fix-up path); automatic titles, when
 // on, pick the change up everywhere as soon as the Places cache requeries.
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { fetchPlainObject, updateObject } from "./objectsApi";

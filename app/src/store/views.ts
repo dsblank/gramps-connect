@@ -537,7 +537,7 @@ export const PLACE_VIEW: ViewConfig = {
       key: "title", label: "Title", select: "title", sqlType: "TEXT", sortBy: "name.value", secondarySort: "title",
       // The stored title, not the automatic one: it's what this view's
       // search matches (simpleSearch above), so a match always shows why it
-      // matched. A place editor's Rebuild button brings it up to date.
+      // matched. A place editor's title choice brings it up to date.
       toSql: (title, item) => placeTitleOrName(title, item, "name"),
     },
     { key: "lat", label: "Lat", select: "lat", sqlType: "TEXT" },

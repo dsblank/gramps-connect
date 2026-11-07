@@ -523,7 +523,7 @@ export function ObjectEditDialog({
           />
         );
       case "placeName":
-        // Name plus the stored Title (with Rebuild) -- see PlaceTitleFields.
+        // Name plus the stored Title (with its own/built choice) -- see PlaceTitleFields.
         return <PlaceTitleFields key="placeName" data={draft.data} onChange={onChange} />;
       case "placeNameDate": {
         const name = (draft.data.name ?? {}) as Record<string, unknown>;
