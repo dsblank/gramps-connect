@@ -5,7 +5,7 @@
 // call lives in store/wikidataApi.ts; this component adds the dedup lookup
 // (an existing Place already carrying a given QID, via the urls-field
 // query_lang trick verified in the plan) and the actual create/patch step.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage } from "../store/api";
@@ -13,7 +13,7 @@ import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import {
-  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, searchWikidata,
+  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, rankWikidataResults, searchWikidata,
   type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
 import { createOverlay, findOverlayTagHandle, isOverlay } from "../store/mapOverlays";
@@ -291,6 +291,12 @@ export function WikidataPlaceLookupDialog({
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<WikidataSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  // Where "More results" continues from (null: Wikidata has no more), and
+  // the term those results belong to, so a page that lands after the query
+  // changed is dropped instead of mixed into the new results.
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const searchedTerm = useRef("");
   const [phase, setPhase] = useState<Phase>({ name: "search" });
   // Default on (see the plan's geoshape follow-up: most people adding a
   // place from Wikidata will want its outline too) -- applies to every
@@ -322,6 +328,9 @@ export function WikidataPlaceLookupDialog({
   useEffect(() => {
     if (!opened || phase.name !== "search") return;
     const term = query.trim();
+    searchedTerm.current = term;
+    setNextOffset(null);
+    setLoadingMore(false);
     if (term.length < MIN_SEARCH_LENGTH) {
       setResults([]);
       return;
@@ -330,8 +339,10 @@ export function WikidataPlaceLookupDialog({
     const controller = new AbortController();
     setSearching(true);
     searchWikidata(term, controller.signal, placeNameLanguages()[0])
-      .then((hits) => {
-        if (!cancelled) setResults(hits);
+      .then((page) => {
+        if (cancelled) return;
+        setResults(rankWikidataResults(page.results, term));
+        setNextOffset(page.nextOffset);
       })
       .catch(() => {
         if (!cancelled) setResults([]);
@@ -554,6 +565,29 @@ export function WikidataPlaceLookupDialog({
     }
   }
 
+  /** Fetches the next page and re-ranks it together with what's already
+   * shown, skipping any QID already listed. */
+  const handleMoreResults = () => {
+    const term = searchedTerm.current;
+    if (nextOffset == null || loadingMore) return;
+    setLoadingMore(true);
+    searchWikidata(term, undefined, placeNameLanguages()[0], nextOffset)
+      .then((page) => {
+        if (searchedTerm.current !== term) return;
+        setResults((prev) => {
+          const seen = new Set(prev.map((hit) => hit.qid));
+          return rankWikidataResults([...prev, ...page.results.filter((hit) => !seen.has(hit.qid))], term);
+        });
+        setNextOffset(page.nextOffset);
+      })
+      .catch(() => {
+        // Keep what's shown; the button stays so it can be retried.
+      })
+      .finally(() => {
+        if (searchedTerm.current === term) setLoadingMore(false);
+      });
+  };
+
   return (
     <Modal
       opened={opened}
@@ -594,6 +628,18 @@ export function WikidataPlaceLookupDialog({
                   ))}
                 </Stack>
               </ScrollArea.Autosize>
+            )}
+            {results.length > 0 && (
+              <Group justify="space-between" gap="xs">
+                <Text size="xs" c="dimmed">
+                  {t("%s matches, most relevant first").replace("%s", results.length.toLocaleString())}
+                </Text>
+                {nextOffset != null && (
+                  <Button size="xs" variant="subtle" onClick={handleMoreResults} loading={loadingMore}>
+                    {t("More results")}
+                  </Button>
+                )}
+              </Group>
             )}
             {results.length === 0 && !searching && query.trim().length >= MIN_SEARCH_LENGTH && (
               <Text size="xs" c="dimmed">{t("No matches")}</Text>

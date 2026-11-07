@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchWikidataChain, fetchWikidataGeoshape, searchWikidata } from "../wikidataApi";
+import { fetchWikidataChain, fetchWikidataGeoshape, rankWikidataResults, searchWikidata } from "../wikidataApi";
 
 function mockFetchSequence(responses: unknown[]) {
   let call = 0;
@@ -23,6 +23,15 @@ describe("searchWikidata", () => {
     expect(url.searchParams.get("language")).toBe("en");
     expect(url.searchParams.get("format")).toBe("json");
     expect(url.searchParams.get("origin")).toBe("*");
+    expect(url.searchParams.get("limit")).toBe("50");
+    expect(url.searchParams.has("continue")).toBe(false);
+  });
+
+  it("pages with continue and reports the next offset", async () => {
+    const fetchMock = mockFetchSequence([{ search: [], "search-continue": 100 }, { search: [] }]);
+    expect((await searchWikidata("Hamilton", undefined, "en", 50)).nextOffset).toBe(100);
+    expect(new URL(fetchMock.mock.calls[0][0] as string).searchParams.get("continue")).toBe("50");
+    expect((await searchWikidata("Hamilton")).nextOffset).toBeNull();
   });
 
   it("searches in the given language, Wikidata-coded", async () => {
@@ -38,20 +47,59 @@ describe("searchWikidata", () => {
       {
         search: [
           { id: "Q6346", label: "Indianapolis", description: "capital city of Indiana" },
-          { id: "Q123", label: "Something" },
+          { id: "Q123", label: "Something", match: { type: "alias", text: "Indy" } },
         ],
       },
     ]);
-    const results = await searchWikidata("Indianapolis");
+    const { results } = await searchWikidata("Indianapolis");
     expect(results).toEqual([
-      { qid: "Q6346", label: "Indianapolis", description: "capital city of Indiana" },
-      { qid: "Q123", label: "Something", description: null },
+      { qid: "Q6346", label: "Indianapolis", description: "capital city of Indiana", matchedAlias: null },
+      { qid: "Q123", label: "Something", description: null, matchedAlias: "Indy" },
     ]);
   });
 
   it("throws on a non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500 }) as unknown as Response));
     await expect(searchWikidata("x")).rejects.toThrow("Wikidata search failed (500)");
+  });
+});
+
+describe("rankWikidataResults", () => {
+  const hit = (qid: string, label: string, description: string | null, matchedAlias: string | null = null) =>
+    ({ qid, label, description, matchedAlias });
+
+  it("puts places named exactly as searched first, non-places last", () => {
+    // Wikidata's own order for "Hamilton City", 2026-11-07.
+    const ranked = rankWikidataResults([
+      hit("Q200028", "Hamilton", "largest city in New Zealand's Waikato region", "Hamilton City"),
+      hit("Q32215385", "Hamilton City", "territorial authority district of New Zealand"),
+      hit("Q1573469", "Hamilton City", "census designated place in Glenn County, California, United States"),
+      hit("Q49432801", "Miners Delight Mine", "mine in Fremont County, Wyoming, United States of America", "Hamilton City"),
+      hit("Q5644769", "Hamilton City Council", "governing body of Hamilton, Ontario"),
+    ], "Hamilton City");
+    expect(ranked.map((h) => h.qid)).toEqual(["Q200028", "Q32215385", "Q1573469", "Q49432801", "Q5644769"]);
+  });
+
+  it("boosts descriptions mentioning extra words from the search", () => {
+    const ranked = rankWikidataResults([
+      hit("Q1", "Hamilton", "city in Ontario, Canada"),
+      hit("Q2", "Hamilton", "town in Indiana, United States"),
+      hit("Q3", "Hamilton", "family name"),
+    ], "Hamilton");
+    expect(ranked.map((h) => h.qid)).toEqual(["Q1", "Q2", "Q3"]);
+    const narrowed = rankWikidataResults([
+      hit("Q1", "Hamilton", "city in Ontario, Canada"),
+      hit("Q2", "Hamilton", "town in Indiana, United States", "Hamilton, Indiana"),
+    ], "Hamilton, Indiana");
+    expect(narrowed.map((h) => h.qid)).toEqual(["Q2", "Q1"]);
+  });
+
+  it("does not take a mine in a county for a county", () => {
+    const ranked = rankWikidataResults([
+      hit("Q1", "Fremont", "mine in Fremont County, Wyoming"),
+      hit("Q2", "Fremont", "county in Wyoming, United States"),
+    ], "Fremont");
+    expect(ranked.map((h) => h.qid)).toEqual(["Q2", "Q1"]);
   });
 });
 

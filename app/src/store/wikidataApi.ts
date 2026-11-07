@@ -41,7 +41,21 @@ export interface WikidataSearchResult {
    * what makes picking the right result out of same-named candidates easy
    * without an extra query. Null for the rare hit with none. */
   description: string | null;
+  /** The alias the search matched on, when it matched one rather than the
+   * label (e.g. "Hamilton, Indiana" for the town labelled "Hamilton"); null
+   * for a label match. Used by rankWikidataResults. */
+  matchedAlias: string | null;
 }
+
+/** One page of searchWikidata's results. */
+export interface WikidataSearchPage {
+  results: WikidataSearchResult[];
+  /** Offset to pass back for the next page; null when there are no more. */
+  nextOffset: number | null;
+}
+
+/** wbsearchentities' own per-request maximum for anonymous callers. */
+export const WIKIDATA_SEARCH_PAGE_SIZE = 50;
 
 /** A label as a Gramps PlaceName wants it: `lang` is the code the tree's
  * place formats ask for ("de", "pt_BR"), not Wikidata's own ("pt-br"), so
@@ -165,12 +179,16 @@ export function geoshapeColorFor(placeType: string | null, qid: string): string 
   return hslToHex(hue, saturation, lightness);
 }
 
-/** name -> candidate QIDs, via Wikidata's own search endpoint (no API key). */
+/** name -> candidate QIDs, via Wikidata's own search endpoint (no API key).
+ * It matches the start of labels and aliases only, never descriptions, in
+ * Wikidata's own order; `offset` pages past the first
+ * WIKIDATA_SEARCH_PAGE_SIZE results (see WikidataSearchPage.nextOffset). */
 export async function searchWikidata(
   term: string,
   signal?: AbortSignal,
-  language = "en"
-): Promise<WikidataSearchResult[]> {
+  language = "en",
+  offset = 0
+): Promise<WikidataSearchPage> {
   const code = wikidataCodesFor(language)[0] ?? "en";
   const params = new URLSearchParams({
     action: "wbsearchentities",
@@ -178,19 +196,92 @@ export async function searchWikidata(
     language: code,
     uselang: code,
     format: "json",
-    limit: "5",
+    limit: String(WIKIDATA_SEARCH_PAGE_SIZE),
     origin: "*", // required for CORS on api.php's anonymous GET (Special:EntityData needs no such param -- see fetchEntity)
   });
+  if (offset > 0) params.set("continue", String(offset));
   const res = await fetch(`${WIKIDATA_API}?${params}`, { signal });
   if (!res.ok) {
     throw new Error(`Wikidata search failed (${res.status})`);
   }
-  const data = (await res.json()) as { search?: { id: string; label?: string; description?: string }[] };
-  return (data.search ?? []).map((hit) => ({
-    qid: hit.id,
-    label: hit.label ?? hit.id,
-    description: hit.description ?? null,
-  }));
+  const data = (await res.json()) as {
+    search?: {
+      id: string;
+      label?: string;
+      description?: string;
+      match?: { type?: string; text?: string };
+    }[];
+    "search-continue"?: number;
+  };
+  return {
+    results: (data.search ?? []).map((hit) => ({
+      qid: hit.id,
+      label: hit.label ?? hit.id,
+      description: hit.description ?? null,
+      matchedAlias: hit.match?.type === "alias" ? hit.match.text ?? null : null,
+    })),
+    nextOffset: typeof data["search-continue"] === "number" ? data["search-continue"] : null,
+  };
+}
+
+// Head nouns of descriptions Wikidata gives places ("town in Indiana",
+// "census designated place in Glenn County", "largest city in ..."). English
+// only: in other languages nothing gets this boost, which just leaves
+// Wikidata's own order in charge.
+const PLACE_HEAD_WORDS = new RegExp(
+  "\\b(" + [
+    "city", "town", "village", "hamlet", "township", "borough", "county", "parish",
+    "municipality", "commune", "settlement", "community", "neighbou?rhood", "suburb",
+    "census[- ]designated place", "populated place", "district", "state", "province", "region",
+    "country", "capital", "county seat", "department", "canton", "prefecture",
+    "oblast", "shire", "island", "locality", "quarter", "ward", "metropolis",
+    "seat", "colony", "territory", "kingdom", "duchy", "principality",
+  ].join("|") + ")s?\\b",
+  "i"
+);
+
+/** "town in Indiana, United States" -> "town": the part of a description
+ * before its first in/of/on/near or comma, which is what the thing *is*
+ * ("mine in Fremont County" is a mine, not a county). */
+function descriptionHead(description: string): string {
+  return description.split(/\s(?:in|of|on|near|at|within)\s|,/i)[0];
+}
+
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+/** How relevant a search hit is as a *place* for `term`; higher is better. */
+export function wikidataRelevance(hit: WikidataSearchResult, term: string): number {
+  const query = normalize(term);
+  const label = normalize(hit.label);
+  const alias = hit.matchedAlias ? normalize(hit.matchedAlias) : null;
+  let score = 0;
+  if (label === query) score += 40;
+  else if (alias === query) score += 30;
+  else if (label.startsWith(query)) score += 10;
+  if (hit.description) {
+    if (PLACE_HEAD_WORDS.test(descriptionHead(hit.description))) score += 25;
+    // Words typed beyond the place's own name ("Hamilton Indiana") that
+    // the description mentions.
+    const description = normalize(hit.description);
+    const labelWords = new Set(label.split(" "));
+    for (const word of query.split(" ")) {
+      if (word.length > 1 && !labelWords.has(word) && description.split(" ").includes(word)) score += 15;
+    }
+  } else {
+    score -= 5;
+  }
+  return score;
+}
+
+/** `results` most relevant first (see wikidataRelevance), keeping
+ * Wikidata's own order among equally relevant hits. */
+export function rankWikidataResults(results: WikidataSearchResult[], term: string): WikidataSearchResult[] {
+  return results
+    .map((hit, index) => ({ hit, index, score: wikidataRelevance(hit, term) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ hit }) => hit);
 }
 
 interface WikidataSnak {
