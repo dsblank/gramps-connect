@@ -31,8 +31,15 @@ APP_NAME = "gramps-connect-desktop"
 TREE_NAME = "gramps-connect-desktop"
 ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"
+# Defaults for --host/--port; main() overwrites these from the CLI flags
+# before anything else reads them.
 HOST = "127.0.0.1"
 PORT = 5050
+
+# Bind addresses meaning "every interface" -- not something a browser can
+# navigate to (Windows refuses to connect to 0.0.0.0 at all), so local
+# connections go to loopback instead, see local_host().
+_WILDCARD_HOSTS = ("0.0.0.0", "::", "")
 
 
 def resource_path(*parts: str) -> str:
@@ -165,7 +172,59 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "unconditionally, see main()'s own doc comment on why)."
         ),
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=PORT,
+        help=f"Port to listen on (default {PORT}).",
+    )
+    parser.add_argument(
+        "--host",
+        default=HOST,
+        help=(
+            f"Address to listen on (default {HOST}, this computer only). "
+            "Use 0.0.0.0 to also accept connections from other machines "
+            "on your network -- change the admin password first."
+        ),
+    )
+    args = parser.parse_args(argv)
+    if not 1 <= args.port <= 65535:
+        parser.error(f"--port must be between 1 and 65535, not {args.port}")
+    return args
+
+
+def _family(host: str) -> int:
+    return socket.AF_INET6 if ":" in host else socket.AF_INET
+
+
+def local_host() -> str:
+    """Address this machine itself uses to reach the server (the webview,
+    browser tab, and wait_for_server()'s readiness probe) -- HOST, unless
+    that's a wildcard bind address, which isn't connectable everywhere."""
+    if HOST in _WILDCARD_HOSTS:
+        return "::1" if HOST == "::" else "127.0.0.1"
+    return HOST
+
+
+def local_url() -> str:
+    host = local_host()
+    return f"http://[{host}]:{PORT}" if ":" in host else f"http://{host}:{PORT}"
+
+
+def is_loopback(host: str) -> bool:
+    return host in ("localhost", "::1") or host.startswith("127.")
+
+
+def lan_address() -> str | None:
+    """Best guess at this machine's LAN IP, for the "reachable from other
+    machines at ..." hint. A UDP connect() sends no packets; it only makes
+    the OS pick the outgoing interface, whose address is what we want."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.connect(("192.0.2.1", 80))  # TEST-NET-1, never routed
+            return sock.getsockname()[0]
+        except OSError:
+            return None
 
 
 def check_port_available() -> None:
@@ -183,14 +242,15 @@ def check_port_available() -> None:
     that thread starts, catches the conflict immediately and explains it
     up front instead.
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    with socket.socket(_family(HOST), socket.SOCK_STREAM) as sock:
         try:
             sock.bind((HOST, PORT))
         except OSError as exc:
             raise RuntimeError(
-                f"Port {PORT} is already in use -- is another copy of "
-                f"{APP_NAME} (or something else) already running? Stop "
-                "it, then try again."
+                f"Can't listen on {HOST}:{PORT} ({exc.strerror or exc}) -- "
+                f"is another copy of {APP_NAME} (or something else) already "
+                "using that port? Stop it, or pick another with --port, "
+                "then try again."
             ) from exc
 
 
@@ -212,8 +272,9 @@ def wait_for_server(server_thread: Thread, timeout: float = 30.0) -> None:
                 "Server thread exited before it started listening -- see "
                 "the traceback above (or the terminal, if run from one)."
             )
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            if sock.connect_ex((HOST, PORT)) == 0:
+        host = local_host()
+        with socket.socket(_family(host), socket.SOCK_STREAM) as sock:
+            if sock.connect_ex((host, PORT)) == 0:
                 return
         time.sleep(0.05)
     raise RuntimeError(f"Server did not start within {timeout}s on {HOST}:{PORT}")
@@ -459,7 +520,9 @@ def ensure_setup(app) -> None:
 
 
 def main() -> None:
+    global HOST, PORT
     args = parse_args()
+    HOST, PORT = args.host, args.port
     # Used only to word the console message below -- ensure_setup() itself
     # always runs and is safe to repeat, see its own docstring.
     first_run = not os.path.isfile(data_path("users.sqlite"))
@@ -509,8 +572,17 @@ def main() -> None:
     )
     server_thread.start()
     wait_for_server(server_thread)
-    print(f"Gramps Connect Desktop running at http://{HOST}:{PORT}")
+    print(f"Gramps Connect Desktop running at {local_url()}")
     print(f"Log in as {ADMIN_USER} / {ADMIN_PASSWORD}")
+    if not is_loopback(HOST):
+        lan = lan_address() if HOST in _WILDCARD_HOSTS else HOST
+        if lan:
+            print(f"Other machines on your network can connect at http://{lan}:{PORT}")
+        print(
+            "WARNING: listening beyond this computer -- anyone who can reach "
+            f"it can log in, so change the {ADMIN_USER} password (your user menu "
+            "-> Profile) if you haven't already."
+        )
 
     # --browser is an opt-in escape hatch for the native window on
     # macOS/Windows -- e.g. a tester who prefers their browser's
@@ -532,7 +604,7 @@ def main() -> None:
         # deliberately, on any platform.
         reason = "Linux" if sys.platform.startswith("linux") else "--browser was given"
         print(f"{reason}: opening in your default browser instead of a native window ...")
-        webbrowser.open(f"http://{HOST}:{PORT}")
+        webbrowser.open(local_url())
         print("Press Control+C to quit")
         wait_for_shutdown(server_thread)
         return
@@ -548,7 +620,7 @@ def main() -> None:
     # remaining backends (each just wires up its own native save dialog).
     webview.settings["ALLOW_DOWNLOADS"] = True
 
-    webview.create_window(APP_NAME, f"http://{HOST}:{PORT}")
+    webview.create_window(APP_NAME, local_url())
     try:
         # webview.start() resolves the platform backend (WKWebView on
         # macOS, WebView2 on Windows) before showing anything -- it raises
@@ -579,7 +651,7 @@ def main() -> None:
         # Anything here means no working native window either way, so fall
         # back the same way rather than crashing.
         print(f"Native webview backend unavailable ({exc}) -- opening in your browser instead.")
-        webbrowser.open(f"http://{HOST}:{PORT}")
+        webbrowser.open(local_url())
         print("Press Control+C to quit")
         wait_for_shutdown(server_thread)
 

@@ -185,3 +185,44 @@ def test_check_port_available_raises_when_port_is_taken(monkeypatch):
         monkeypatch.setattr(launcher, "PORT", taken_port)
         with pytest.raises(RuntimeError, match=str(taken_port)):
             check_port_available()
+
+
+def test_parse_args_host_and_port_defaults():
+    args = parse_args([])
+    assert (args.host, args.port) == ("127.0.0.1", 5050)
+
+
+def test_parse_args_host_and_port_flags():
+    args = parse_args(["--host", "0.0.0.0", "--port", "8080"])
+    assert (args.host, args.port) == ("0.0.0.0", 8080)
+
+
+@pytest.mark.parametrize("bad", ["0", "70000", "abc"])
+def test_parse_args_rejects_bad_port(bad):
+    with pytest.raises(SystemExit):
+        parse_args(["--port", bad])
+
+
+@pytest.mark.parametrize(
+    "host, expected",
+    [
+        ("127.0.0.1", "http://127.0.0.1:8080"),
+        ("0.0.0.0", "http://127.0.0.1:8080"),
+        ("::", "http://[::1]:8080"),
+        ("192.168.1.5", "http://192.168.1.5:8080"),
+    ],
+)
+def test_local_url_never_points_at_a_wildcard(monkeypatch, host, expected):
+    monkeypatch.setattr(launcher, "HOST", host)
+    monkeypatch.setattr(launcher, "PORT", 8080)
+    assert launcher.local_url() == expected
+
+
+def test_check_port_available_on_wildcard_host(monkeypatch):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("0.0.0.0", 0))
+        free_port = probe.getsockname()[1]
+
+    monkeypatch.setattr(launcher, "HOST", "0.0.0.0")
+    monkeypatch.setattr(launcher, "PORT", free_port)
+    check_port_available()

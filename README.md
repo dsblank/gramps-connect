@@ -235,6 +235,27 @@ something looks wrong:
 ./gramps-connect-desktop --browser
 ```
 
+### Choosing the port, or reaching it from another computer
+
+By default the app listens on `127.0.0.1:5050`, so only the computer it's
+running on can open it. `--port` picks a different port, for example
+when something else already uses 5050:
+
+```bash
+./gramps-connect-desktop --port 8080
+```
+
+`--host 0.0.0.0` also accepts connections from other machines on your
+network, for example to run it on your main PC and use it from a laptop in
+another room. The terminal then prints the address to open on the other
+machine, such as `http://192.168.1.20:5050`. Your firewall may need to
+allow that port.
+
+Anyone who can reach that address can log in, so change the `admin`
+password first (user menu → **Profile**). Only do this on a network you
+trust. The connection is plain HTTP, and a laptop on public Wi-Fi isn't a
+safe place for it. To share a tree properly, see [Deploying](#deploying).
+
 ## Troubleshooting
 
 - **Windows SmartScreen ("Windows protected your PC")** — expected, since
@@ -258,14 +279,15 @@ something looks wrong:
   section above).
 - **No window or browser tab appears on any platform** — the app always
   tries to open one automatically once its server is up; if that somehow
-  fails, open `http://127.0.0.1:5050` yourself. If nothing is listening
+  fails, open `http://127.0.0.1:5050` yourself (or the port you passed with `--port`). If nothing is listening
   there either, something crashed before reaching that point — check the
   terminal output (Windows: run `gramps-connect-desktop.exe` from a `cmd`/
   PowerShell window instead of double-clicking, so you can see it) for an
   error, and consider opening an issue with that output.
 - **The app won't start / port already in use** — only one instance can run
-  at a time (it's hardcoded to `127.0.0.1:5050`). Close any other running
-  copy, or anything else using port 5050, and try again.
+  per port (`5050` unless you passed `--port`). Close any other running
+  copy, or anything else using that port, and try again, or start this one
+  on another port with `--port`.
 - **A browser tab opens instead of a native window** — the app always
   tries a native window first and falls back automatically if it can't:
   WebView2 on Windows (present by default on Windows 10/11) or WKWebView
