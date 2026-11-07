@@ -1,5 +1,6 @@
 import { Card, Group, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { SelectOrEnter } from "./SelectOrEnter";
+import { GrampsTypeInput } from "./GrampsTypeInput";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { t } from "../i18n/i18n";
 
@@ -59,33 +60,43 @@ export function ListShell<T>({ label, addLabel, items, onChange, makeNew, render
 }
 
 export interface Attribute {
-  _class?: "Attribute";
+  _class?: "Attribute" | "SrcAttribute";
   type?: string;
   value?: string;
   private?: boolean;
 }
 
+export type AttributeOwner = "person" | "family" | "event" | "media" | "source" | "citation";
+
 interface AttributeListFieldProps {
+  /** Whose attributes these are: picks the type suggestions, and Source/
+   * Citation hold SrcAttributes rather than Attributes (Gramps' schema). */
+  owner: AttributeOwner;
   items: Attribute[];
   onChange: (items: Attribute[]) => void;
 }
 
 /** Person/Family/Event/Source/Citation's attribute_list. */
-export function AttributeListField({ items, onChange }: AttributeListFieldProps) {
+export function AttributeListField({ owner, items, onChange }: AttributeListFieldProps) {
+  const src = owner === "source" || owner === "citation";
   return (
     <ListShell
       label={t("Attributes")}
       addLabel="Add attribute"
       items={items}
       onChange={onChange}
-      makeNew={(): Attribute => ({ _class: "Attribute", type: "", value: "" })}
+      makeNew={(): Attribute => ({ _class: src ? "SrcAttribute" : "Attribute", type: "", value: "" })}
       renderRow={(attr, onPatch) => (
         <Group gap="xs" wrap="nowrap">
-          <TextInput
-            placeholder={TYPE_HINT}
+          {/* Built-ins: one list for Attribute, another for SrcAttribute;
+              custom types are tracked per owner (see CustomTypeKind). */}
+          <GrampsTypeInput
+            kind={src ? "source_attribute_types" : "attribute_types"}
+            customKind={src ? "source_attribute_types" : `${owner as "person" | "family" | "event" | "media"}_attribute_types`}
             aria-label={t("Attribute type")}
+            placeholder={t("Type")}
             value={attr.type ?? ""}
-            onChange={(e) => onPatch({ type: e.currentTarget.value })}
+            onChange={(v) => onPatch({ type: v })}
             style={{ flex: 1 }}
           />
           <TextInput

@@ -553,6 +553,7 @@ export function FamilyEditDialog({
               onChange={(e) => onChange({ private: e.currentTarget.checked })}
             />
             <AttributeListField
+              owner="family"
               items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
               onChange={(items) => onChange({ attribute_list: items })}
             />

@@ -753,6 +753,7 @@ export function PersonEditDialog({
             </Stack>
 
             <AttributeListField
+              owner="person"
               items={(draft.data.attribute_list as Attribute[] | undefined) ?? []}
               onChange={(items) => onChange({ attribute_list: items })}
             />

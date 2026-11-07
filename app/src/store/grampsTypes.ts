@@ -12,9 +12,19 @@ import { getToken } from "../auth/auth";
 import { API_BASE } from "../config";
 import { apiFetch } from "./apiFetch";
 
-export type GrampsTypeKind = "place_types" | "event_types" | "note_types" | "repository_types";
+/** A /api/types/default/ list. */
+export type GrampsTypeKind =
+  | "place_types" | "event_types" | "note_types" | "repository_types"
+  | "attribute_types" | "source_attribute_types";
 
-type TypeLists = Partial<Record<GrampsTypeKind, string[]>>;
+/** A /api/types/custom/ list: the same names, except attributes, whose
+ * custom types are kept per record kind ("person_attribute_types", ...)
+ * while their built-ins are one shared "attribute_types" list. */
+export type CustomTypeKind =
+  | Exclude<GrampsTypeKind, "attribute_types">
+  | "person_attribute_types" | "family_attribute_types" | "event_attribute_types" | "media_attribute_types";
+
+type TypeLists = Partial<Record<string, string[]>>;
 
 const CUSTOM_MAX_AGE_MS = 30_000;
 
@@ -58,8 +68,9 @@ export interface TypeOptions {
 const EMPTY: TypeOptions = { builtIn: [], custom: [] };
 
 /** The suggestions for one kind of type; empty until they've loaded (or if
- * they can't be -- the field still takes any text). */
-export function useGrampsTypeOptions(kind: GrampsTypeKind): TypeOptions {
+ * they can't be -- the field still takes any text). `customKind` defaults
+ * to `kind` (see CustomTypeKind for when it differs). */
+export function useGrampsTypeOptions(kind: GrampsTypeKind, customKind: CustomTypeKind = kind as CustomTypeKind): TypeOptions {
   const [options, setOptions] = useState<TypeOptions>(EMPTY);
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +80,7 @@ export function useGrampsTypeOptions(kind: GrampsTypeKind): TypeOptions {
       const all = dl[kind] ?? [];
       const builtIn = [...all.filter((n) => n !== "Unknown"), ...all.filter((n) => n === "Unknown")];
       const known = new Set(builtIn.map((n) => n.toLowerCase()));
-      const customNames = [...new Set(cl[kind] ?? [])]
+      const customNames = [...new Set(cl[customKind] ?? [])]
         .filter((n) => n.trim() !== "" && !known.has(n.toLowerCase()))
         .sort((a, b) => a.localeCompare(b));
       setOptions({ builtIn, custom: customNames });
@@ -77,7 +88,7 @@ export function useGrampsTypeOptions(kind: GrampsTypeKind): TypeOptions {
     return () => {
       cancelled = true;
     };
-  }, [kind]);
+  }, [kind, customKind]);
   return options;
 }
 

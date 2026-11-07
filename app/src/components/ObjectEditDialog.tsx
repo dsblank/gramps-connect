@@ -14,7 +14,7 @@ import {
 } from "./RefPickerField";
 import { withGrampsId } from "./related/summary";
 import {
-  AttributeListField, AddressListField, UrlListField, type Attribute, type Address, type Url,
+  AttributeListField, AddressListField, UrlListField, type Attribute, type AttributeOwner, type Address, type Url,
 } from "./EmbeddedListFields";
 import { StoryEditor } from "./story/StoryEditor";
 import { NoteEditor } from "./notes/NoteEditor";
@@ -62,7 +62,7 @@ type FieldSpec =
        * with no create/edit dialog of its own to nest. */
       nestedType?: DraftType;
     }
-  | { kind: "attributeList"; key: string; label: string }
+  | { kind: "attributeList"; key: string; label: string; owner: AttributeOwner }
   | { kind: "addressList"; key: string; label: string }
   | { kind: "urlList"; key: string; label: string }
   | { kind: "placeAltNames" }
@@ -144,7 +144,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "date", key: "date", label: "Date" },
       { kind: "reference", key: "place", label: "Place", refView: PLACE_VIEW, refField: "title", nestedType: "place" },
       { kind: "switch", key: "private", label: "Private" },
-      { kind: "attributeList", key: "attribute_list", label: "Attributes" },
+      { kind: "attributeList", key: "attribute_list", label: "Attributes", owner: "event" },
       CITATIONS_FIELD, NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
     ],
   },
@@ -172,7 +172,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "pubinfo", label: "Publication info" },
       { kind: "text", key: "abbrev", label: "Abbreviation" },
       { kind: "switch", key: "private", label: "Private" },
-      { kind: "attributeList", key: "attribute_list", label: "Attributes" },
+      { kind: "attributeList", key: "attribute_list", label: "Attributes", owner: "source" },
       // No CITATIONS_FIELD -- a Source has no citation_list of its own
       // (see components/related/config.ts's own comment on why: citations
       // point *at* a source, not the other way around).
@@ -207,7 +207,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "date", key: "date", label: "Date" },
       { kind: "number", key: "confidence", label: "Confidence", min: 0, max: 4 },
       { kind: "switch", key: "private", label: "Private" },
-      { kind: "attributeList", key: "attribute_list", label: "Attributes" },
+      { kind: "attributeList", key: "attribute_list", label: "Attributes", owner: "citation" },
       // No CITATIONS_FIELD -- a citation doesn't cite another citation.
       NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
     ],
@@ -672,6 +672,7 @@ export function ObjectEditDialog({
         return (
           <AttributeListField
             key={f.key}
+            owner={f.owner}
             items={(draft.data[f.key] as Attribute[] | undefined) ?? []}
             onChange={(items) => onChange({ [f.key]: items })}
           />
