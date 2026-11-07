@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { ActionIcon, Box, Loader, Modal, Tooltip } from "@mantine/core";
+import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
+import type { ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 import { FullscreenDownloadButton } from "./FullscreenDownloadButton";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
@@ -10,21 +11,15 @@ import { formatHash } from "../../hash";
 import { personName, summaryLine } from "./summary";
 import { t } from "../../i18n/i18n";
 
-const MIN_SCALE = 1;
 const MAX_SCALE = 8;
 const DOUBLE_CLICK_SCALE = 2.5;
-/** One wheel notch, same fixed-factor approach TimelineChart.tsx's own wheel
- * zoom uses -- WheelEvent.deltaY's *magnitude* isn't comparable across
- * browsers (Firefox reports deltaMode LINE with deltaY ~3 per notch, Chrome
- * reports deltaMode PIXEL with deltaY ~100+), so scaling zoom by raw deltaY
- * (as an earlier version of this file did) made zooming imperceptibly slow
- * on line-mode browsers. Using only deltaY's sign keeps every browser's
- * "one notch" feeling the same. */
-const WHEEL_FACTOR = 1.2;
-/** One click of the corner zoom buttons (or a +/- key press) -- bigger
- * than a wheel notch, since a click is a deliberate step rather than one
- * tick of a continuous scroll. */
+/** One click of the corner zoom buttons (or a +/- key press), as a
+ * multiplier -- the library's own zoomIn()/zoomOut() step is an absolute
+ * scale increment, which feels slow once already zoomed in. */
 const BUTTON_FACTOR = 1.5;
+/** Class on the region boxes, excluded from the library's panning so a
+ * click on one always lands as a click. */
+const REGION_CLASS = "lightbox-region";
 
 /** The raw stored file, not a thumbnail -- same /file endpoint
  * MapItemEditorDialog.tsx uses for map overlays. One image at a time (this
@@ -35,10 +30,6 @@ const BUTTON_FACTOR = 1.5;
  * images at once and stay on the simpler `?jwt=` query-param approach. */
 function filePath(handle: string): string {
   return `/api/media/${encodeURIComponent(handle)}/file`;
-}
-
-function distance(a: { x: number; y: number }, b: { x: number; y: number }): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 interface Region {
@@ -93,38 +84,27 @@ function extractRegions(detail: { extended?: Record<string, unknown> } | null, h
  * jump to -- every reference at once, from wherever the photo happens to
  * be opened.
  *
- * Zoom/pan is hand-rolled (wheel + pinch + drag) rather than pulling in a
- * pan-zoom dependency -- there's no such library in this repo yet, and
- * CompareModal.tsx already hand-rolls its own pointer-driven divider drag,
- * so this follows the same house style rather than introducing a new one. */
+ * Zoom/pan (wheel, pinch, drag, double-click, bounds) is react-zoom-pan-pinch
+ * rather than hand-rolled. The image is CSS-fitted to the screen (scale 1 =
+ * fitted) and the content box shrink-wraps it, so the library's bounds are
+ * the photo's own edges (centerOnInit/centerZoomedOut center it, including
+ * once the image loads late). The region overlays are positioned by percent
+ * inside that same box, so they ride along on the one transform with no
+ * measuring. */
 export function ImageLightbox({ opened, onClose, handle }: {
   opened: boolean;
   onClose: () => void;
   handle: string;
 }) {
   const [src, setSrc] = useState<string | null>(null);
-  const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
-  // Mirrors `transform` for the native (non-React) wheel listener below,
-  // which is attached once and can't just close over each render's own
-  // `transform` the way a React event handler would.
-  const transformRef = useRef(transform);
-  transformRef.current = transform;
   const [regions, setRegions] = useState<Region[]>([]);
-  // The image's own on-screen box at scale=1 (px, measured off the real
-  // <img> once it loads) -- lets the region overlay below share the exact
-  // box the browser gave the image via its own max-width/max-height:100%
-  // fit-to-frame sizing, rather than reimplementing that fit arithmetic
-  // (or fighting CSS percentage resolution inside an absolutely
-  // positioned, already-transformed parent) just to size a sibling div.
-  const [displaySize, setDisplaySize] = useState<{ w: number; h: number } | null>(null);
+  const [scale, setScale] = useState(1);
+  const zoomRef = useRef<ReactZoomPanPinchContentRef>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  // Pointers currently down, keyed by pointerId -- 1 means panning (once
-  // zoomed in), 2 means pinch-zooming; a third simultaneous touch is
-  // ignored rather than tracked, there's nothing more to do with it.
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const panStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
-  const pinchStart = useRef<{ dist: number; scale: number; cx: number; cy: number } | null>(null);
+  const imgBoxRef = useRef<HTMLDivElement>(null);
+  // Where the last press started, so the click that ends a drag (pan) isn't
+  // mistaken for a click on the background.
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
 
   // Fetches fresh (not cached across opens) and revokes its own blob URL on
   // close/handle-change/unmount -- the object URL is only ever meant to
@@ -151,19 +131,8 @@ export function ImageLightbox({ opened, onClose, handle }: {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       setSrc(null);
+      setScale(1);
     };
-  }, [opened, handle]);
-
-  // Reset pan/zoom whenever a (re)opened lightbox targets a given image, so
-  // reopening -- or promoting to a different photo while it's open -- never
-  // starts already zoomed in from a previous view. displaySize resets too,
-  // so a stale (previous image's) size can't briefly mis-position the new
-  // one's region overlay before the fresh <img> loads.
-  useEffect(() => {
-    if (opened) {
-      setTransform({ scale: 1, x: 0, y: 0 });
-      setDisplaySize(null);
-    }
   }, [opened, handle]);
 
   // Every MediaRef with a crop rect pointing at this media object --
@@ -192,151 +161,41 @@ export function ImageLightbox({ opened, onClose, handle }: {
     };
   }, [opened, handle]);
 
-  // The img's current box divided by the current zoom scale -- recovers
-  // the *base* (scale=1) size regardless of how zoomed in the user
-  // currently is, so this doubles as both the initial on-load measurement
-  // (scale is always 1 then -- the reset effect above already set it for
-  // this (opened, handle) pair before the fresh <img> could load) and the
-  // window-resize remeasurement below (where the user may well be zoomed
-  // in already, and the frame's own max-width/max-height:100% fit changed
-  // under it).
-  function measureDisplaySize() {
-    const box = imgRef.current?.getBoundingClientRect();
-    if (!box || !box.width || !box.height) return;
-    const scale = transformRef.current.scale || 1;
-    setDisplaySize({ w: box.width / scale, h: box.height / scale });
-  }
-
-  // Keeps the region overlay's box in sync with the image's own -- the
-  // browser reflows the <img> itself automatically on resize (its
-  // max-width/max-height:100% is relative to the frame), but displaySize
-  // is plain JS state that only a remeasure can update.
-  useEffect(() => {
-    if (!opened) return;
-    window.addEventListener("resize", measureDisplaySize);
-    return () => window.removeEventListener("resize", measureDisplaySize);
-  }, [opened]);
-
-  function clampScale(s: number): number {
-    return Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
-  }
-
-  // Zooms toward a client-coordinate point (cursor position, pinch
-  // midpoint, ...) rather than the image center, so the spot the user is
-  // pointing at stays under the pointer as the scale changes.
-  function zoomAt(clientX: number, clientY: number, nextScale: number) {
-    const frame = frameRef.current;
-    if (!frame) return;
-    const rect = frame.getBoundingClientRect();
-    const px = clientX - rect.left - rect.width / 2;
-    const py = clientY - rect.top - rect.height / 2;
-    setTransform((t) => {
-      const s = clampScale(nextScale);
-      if (s === MIN_SCALE) return { scale: 1, x: 0, y: 0 };
-      const ratio = s / t.scale;
-      return { scale: s, x: px - (px - t.x) * ratio, y: py - (py - t.y) * ratio };
-    });
-  }
-
-  // The corner buttons and +/-/0 keys zoom toward the frame's center (where
-  // zoomAt's px/py come out 0), there being no pointer position to aim at.
+  // Buttons and keys zoom toward the screen's center, multiplicatively.
   function zoomCentered(factor: number) {
+    const z = zoomRef.current;
     const rect = frameRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, transformRef.current.scale * factor);
+    if (!z || !rect) return;
+    const next = Math.min(MAX_SCALE, Math.max(1, z.state.scale * factor));
+    if (next === 1) z.resetTransform(200);
+    else z.zoomToPoint(next, rect.left + rect.width / 2, rect.top + rect.height / 2, 200);
   }
 
+  // The library's own keyboard support only listens on its wrapper (which
+  // would need focus first), so +/-/0 and arrows are wired at window level.
   useEffect(() => {
     if (!opened) return;
     function handleKey(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const z = zoomRef.current;
+      if (!z) return;
       if (e.key === "+" || e.key === "=") zoomCentered(BUTTON_FACTOR);
       else if (e.key === "-" || e.key === "_") zoomCentered(1 / BUTTON_FACTOR);
-      else if (e.key === "0") setTransform({ scale: 1, x: 0, y: 0 });
+      else if (e.key === "0") z.resetTransform(200);
+      else if (e.key === "ArrowLeft") z.panBy(100, 0);
+      else if (e.key === "ArrowRight") z.panBy(-100, 0);
+      else if (e.key === "ArrowUp") z.panBy(0, 100);
+      else if (e.key === "ArrowDown") z.panBy(0, -100);
       else return;
       e.preventDefault();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- same as the
-    // wheel listener below: zoomCentered only reads refs.
   }, [opened]);
 
-  // React attaches its synthetic `wheel` listener as passive (perf default
-  // since React 17), so e.preventDefault() inside a plain onWheel prop
-  // throws "Unable to preventDefault inside passive event listener" and
-  // silently fails to stop the browser's own page-zoom/scroll -- attaching
-  // directly to the DOM node with { passive: false } is the fix, same
-  // reasoning React's own docs give for this exact case.
-  //
-  // Depends on `opened`, not `[]`: Mantine's Modal doesn't render its
-  // children into the DOM at all until `opened` is true (confirmed live --
-  // frameRef.current is null on this component's *first* mount, which
-  // happens as soon as its zoomable MediaThumbnail mounts, well before the
-  // user has actually clicked to open it), so a mount-once effect would
-  // see a null frame, bail, and never get another chance to attach.
-  useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) return;
-    function handleWheelNative(e: WheelEvent) {
-      e.preventDefault();
-      const factor = e.deltaY > 0 ? 1 / WHEEL_FACTOR : WHEEL_FACTOR;
-      zoomAt(e.clientX, e.clientY, transformRef.current.scale * factor);
-    }
-    frame.addEventListener("wheel", handleWheelNative, { passive: false });
-    return () => frame.removeEventListener("wheel", handleWheelNative);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- zoomAt reads
-    // frameRef/transformRef fresh and updates via setTransform's functional
-    // form, so it has no stale-closure dependency beyond `opened` itself.
-  }, [opened]);
-
-  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.current.size === 1) {
-      panStart.current = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y };
-    } else if (pointers.current.size === 2) {
-      panStart.current = null;
-      const [p1, p2] = [...pointers.current.values()];
-      pinchStart.current = { dist: distance(p1, p2), scale: transform.scale, cx: (p1.x + p2.x) / 2, cy: (p1.y + p2.y) / 2 };
-    }
-  }
-
-  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
-    if (!pointers.current.has(e.pointerId)) return;
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-    if (pointers.current.size === 2 && pinchStart.current) {
-      const [p1, p2] = [...pointers.current.values()];
-      const nextScale = pinchStart.current.scale * (distance(p1, p2) / pinchStart.current.dist);
-      zoomAt(pinchStart.current.cx, pinchStart.current.cy, nextScale);
-      return;
-    }
-
-    if (pointers.current.size === 1 && panStart.current && transform.scale > 1) {
-      const start = panStart.current;
-      setTransform((t) => ({ ...t, x: start.tx + (e.clientX - start.x), y: start.ty + (e.clientY - start.y) }));
-    }
-  }
-
-  function handlePointerUp(e: ReactPointerEvent<HTMLDivElement>) {
-    e.currentTarget.releasePointerCapture(e.pointerId);
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) pinchStart.current = null;
-    if (pointers.current.size === 1) {
-      const [p] = [...pointers.current.values()];
-      panStart.current = { x: p.x, y: p.y, tx: transform.x, ty: transform.y };
-    } else {
-      panStart.current = null;
-    }
-  }
-
-  function handleDoubleClick(e: ReactMouseEvent<HTMLDivElement>) {
-    if (transform.scale > 1) {
-      setTransform({ scale: 1, x: 0, y: 0 });
-    } else {
-      zoomAt(e.clientX, e.clientY, DOUBLE_CLICK_SCALE);
-    }
+  function goToRegion(r: Region) {
+    window.location.hash = formatHash({ viewKey: r.type, handle: r.handle });
+    onClose();
   }
 
   return (
@@ -349,109 +208,107 @@ export function ImageLightbox({ opened, onClose, handle }: {
     >
       <Box
         ref={frameRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onDoubleClick={handleDoubleClick}
-        style={{
-          position: "relative", width: "100%", height: "100%", overflow: "hidden",
-          touchAction: "none", cursor: transform.scale > 1 ? "grab" : "default",
+        onPointerDownCapture={(e) => { pressAt.current = { x: e.clientX, y: e.clientY }; }}
+        onClick={(e) => {
+          // The Modal is portaled, but React still bubbles its events up the
+          // *component* tree -- into the thumbnail and whatever clickable
+          // row/tile holds it -- so a click in here must stop at the frame.
+          e.stopPropagation();
+          // A plain click (not the end of a drag) on the black around the
+          // photo closes, like most lightboxes; a click on the photo itself,
+          // or on a corner button, doesn't.
+          const start = pressAt.current;
+          if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
+          if ((e.target as HTMLElement).closest("button")) return;
+          const box = imgBoxRef.current?.getBoundingClientRect();
+          if (box && e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) return;
+          onClose();
         }}
+        style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}
       >
         {!src ? (
           <Loader color="white" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} />
         ) : (
-          <>
-            <img
-              ref={imgRef}
-              src={src}
-              alt=""
-              draggable={false}
-              onLoad={measureDisplaySize}
-              style={{
-                position: "absolute", top: "50%", left: "50%", maxWidth: "100%", maxHeight: "100%",
-                transform: `translate(-50%, -50%) translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-                transition: pointers.current.size > 0 ? "none" : "transform 0.15s ease-out",
-                userSelect: "none",
-              }}
-            />
-            {/* A sibling, not a child of the <img> above -- same center +
-                pan/zoom transform, but an explicit pixel box (displaySize)
-                rather than the img's own percentage-based sizing, so each
-                region's percent-of-image position lands in the right
-                place regardless of how the img itself was sized. Tracking
-                the same transform string is what makes this "redraw" as
-                the user zooms/pans -- it's really just along for the ride
-                on a CSS transform, not recomputed per frame. */}
-            {displaySize && regions.length > 0 && (
-              <div
-                style={{
-                  position: "absolute", top: "50%", left: "50%",
-                  width: displaySize.w, height: displaySize.h,
-                  transform: `translate(-50%, -50%) translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
-                  transition: pointers.current.size > 0 ? "none" : "transform 0.15s ease-out",
-                  pointerEvents: "none",
-                }}
+          <TransformWrapper
+            ref={zoomRef}
+            key={src}
+            minScale={1}
+            maxScale={MAX_SCALE}
+            centerOnInit
+            centerZoomedOut
+            panning={{ excluded: [REGION_CLASS] }}
+            doubleClick={{ disabled: true }}
+            onTransform={(_ref, state) => setScale(state.scale)}
+          >
+            {(controls) => (
+              <TransformComponent
+                wrapperStyle={{ width: "100%", height: "100%" }}
               >
-                {regions.map((r) => (
-                  <div
-                    key={`${r.type}-${r.handle}`}
-                    role="button"
-                    tabIndex={0}
-                    // The frame beneath calls setPointerCapture(e.pointerId)
-                    // on itself from *its own* onPointerDown -- since that's
-                    // a bubbling listener, a pointerdown that started here
-                    // would otherwise still reach it and hijack the pointer
-                    // (and with it, the click that's about to follow) away
-                    // from this box entirely. Stopped at both pointerdown
-                    // and click so neither the capture nor the frame's own
-                    // pan-gesture bookkeeping ever sees this interaction.
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.location.hash = formatHash({ viewKey: r.type, handle: r.handle });
-                      onClose();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.stopPropagation();
-                      window.location.hash = formatHash({ viewKey: r.type, handle: r.handle });
-                      onClose();
-                    }}
-                    style={{
-                      position: "absolute",
-                      left: `${r.rect[0]}%`, top: `${r.rect[1]}%`,
-                      width: `${r.rect[2] - r.rect[0]}%`, height: `${r.rect[3] - r.rect[1]}%`,
-                      border: "2px solid rgba(255, 255, 255, 0.85)",
-                      boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.6)",
-                      pointerEvents: "auto",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span
+                <div
+                  ref={imgBoxRef}
+                  // Double-click toggles between fitted and a zoom on the
+                  // clicked spot (the library's own "toggle" mode only
+                  // steps out, it doesn't snap back to fitted).
+                  onDoubleClick={(e) => {
+                    if (controls.state.scale > 1) controls.resetTransform(200);
+                    else controls.zoomToPoint(DOUBLE_CLICK_SCALE, e.clientX, e.clientY, 200);
+                  }}
+                  style={{ position: "relative", lineHeight: 0, cursor: scale > 1 ? "grab" : "default" }}
+                >
+                  <img
+                    src={src}
+                    alt=""
+                    draggable={false}
+                    style={{ display: "block", maxWidth: "100vw", maxHeight: "100vh", userSelect: "none" }}
+                  />
+                  {regions.map((r) => (
+                    <div
+                      key={`${r.type}-${r.handle}`}
+                      className={REGION_CLASS}
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        goToRegion(r);
+                      }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.stopPropagation();
+                        goToRegion(r);
+                      }}
                       style={{
-                        position: "absolute", top: "100%", left: 0, marginTop: 4,
-                        background: "rgba(0, 0, 0, 0.65)", color: "#fff",
-                        fontSize: 12, lineHeight: 1.4, padding: "1px 5px", borderRadius: 3,
-                        whiteSpace: "nowrap",
+                        position: "absolute",
+                        left: `${r.rect[0]}%`, top: `${r.rect[1]}%`,
+                        width: `${r.rect[2] - r.rect[0]}%`, height: `${r.rect[3] - r.rect[1]}%`,
+                        border: "2px solid rgba(255, 255, 255, 0.85)",
+                        boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.6)",
+                        cursor: "pointer",
                       }}
                     >
-                      {r.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                      <span
+                        className={REGION_CLASS}
+                        style={{
+                          position: "absolute", top: "100%", left: 0, marginTop: 4,
+                          background: "rgba(0, 0, 0, 0.65)", color: "#fff",
+                          fontSize: 12, lineHeight: 1.4, padding: "1px 5px", borderRadius: 3,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </TransformComponent>
             )}
-          </>
+          </TransformWrapper>
         )}
 
-        {/* Left of Download (right: 60) and styled like it; the same
-            stopPropagation as the ✕ below keeps the frame's pointer
-            capture from swallowing the click. */}
+        {/* Left of Download (right: 60), styled like it. */}
         {([
-          { label: t("Zoom out"), factor: 1 / BUTTON_FACTOR, right: 148, disabled: transform.scale <= MIN_SCALE, glyph: "M5 12h14" },
-          { label: t("Zoom in"), factor: BUTTON_FACTOR, right: 104, disabled: transform.scale >= MAX_SCALE, glyph: "M5 12h14M12 5v14" },
+          { label: t("Zoom out"), factor: 1 / BUTTON_FACTOR, right: 148, disabled: scale <= 1.001, glyph: "M5 12h14" },
+          { label: t("Zoom in"), factor: BUTTON_FACTOR, right: 104, disabled: scale >= MAX_SCALE - 0.001, glyph: "M5 12h14M12 5v14" },
         ]).map((b) => (
           <Tooltip key={b.label} label={b.label} withArrow position="bottom">
             <ActionIcon
@@ -459,8 +316,6 @@ export function ImageLightbox({ opened, onClose, handle }: {
               onClick={() => zoomCentered(b.factor)}
               disabled={!src || b.disabled}
               aria-label={b.label}
-              onPointerDown={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
               style={{ position: "absolute", top: 16, right: b.right, zIndex: 3 }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -472,12 +327,6 @@ export function ImageLightbox({ opened, onClose, handle }: {
         <FullscreenDownloadButton handle={handle} blobUrl={src} />
         <ActionIcon
           variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={t("Close")}
-          // Stops the pointerdown here, same as the region boxes above --
-          // otherwise it bubbles to the frame's onPointerDown, which
-          // setPointerCapture()s itself for this pointerId, and a captured
-          // pointer's click event gets retargeted to the capturing element
-          // instead of firing on this button.
-          onPointerDown={(e) => e.stopPropagation()}
           style={{ position: "absolute", top: 16, right: 16, zIndex: 3 }}
         >
           ✕
