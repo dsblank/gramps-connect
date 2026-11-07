@@ -269,19 +269,13 @@ export function NameEditDialog({
               allowDeselect={false}
               comboboxProps={{ withinPortal: true }}
             />
-            <Stack gap={4}>
-              <Text size="sm" fw={500}>{t("Surname group")}</Text>
-              <Text size="xs" c="dimmed">
-                {t("Treats spelling variants as one family: with Smyth grouped as Smith, searching the People list for Smith also finds the Smyths.")}
-              </Text>
-            </Stack>
             <TextInput
               label={t("Group as")}
-              description={
+              description={`${t("Treats spelling variants as one family: with Smyth grouped as Smith, searching the People list for Smith also finds the Smyths.")} ${
                 treeGroup
                   ? `${t("Everyone named")} ${primarySurname} ${t("is grouped as")} ${treeGroup}. ${t("Leave blank to keep that.")}`
-                  : t("Leave blank to group by primary surname. Searching for the group also finds this name.")
-              }
+                  : t("Leave blank to group by primary surname.")
+              }`}
               placeholder={treeGroup ?? primarySurname}
               value={(data.group_as as string | undefined) ?? ""}
               onChange={(e) => onChange({ group_as: e.currentTarget.value })}
