@@ -22,6 +22,8 @@ import type { StyledText } from "../store/styledText";
 import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { CoordinateFields } from "./CoordinateFields";
 import { PlaceTitleFields } from "./PlaceTitleFields";
+import { GrampsTypeInput } from "./GrampsTypeInput";
+import type { GrampsTypeKind } from "../store/grampsTypes";
 import { PlaceAltNamesField, type PlaceNameItem } from "./PlaceAltNamesField";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
@@ -29,6 +31,7 @@ import { t } from "../i18n/i18n";
 
 type FieldSpec =
   | { kind: "text"; key: string; label: string; placeholder?: string }
+  | { kind: "grampsType"; key: string; label: string; typeKind: GrampsTypeKind }
   | { kind: "number"; key: string; label: string; min?: number; max?: number }
   | { kind: "switch"; key: string; label: string }
   | { kind: "color"; key: string; label: string }
@@ -80,8 +83,6 @@ type FieldSpec =
        * nested draft (see MediaListField.tsx's own doc comment for why). */
       kind: "mediaList"; key: string; label: string;
     };
-
-const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 
 // One entry per type ObjectEditDialog handles -- Person/Family have their
 // own bespoke dialogs (PersonEditDialog.tsx/FamilyEditDialog.tsx) and are
@@ -136,7 +137,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
   event: {
     quick: [
       GRAMPS_ID_FIELD,
-      { kind: "text", key: "type", label: "Type", placeholder: TYPE_HINT },
+      { kind: "grampsType", key: "type", label: "Type", typeKind: "event_types" },
       { kind: "text", key: "description", label: "Description" },
     ],
     details: [
@@ -151,7 +152,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     quick: [GRAMPS_ID_FIELD, { kind: "placeName", label: "Name" }],
     details: [
       { kind: "wikidataLookup" },
-      { kind: "text", key: "place_type", label: "Type", placeholder: TYPE_HINT },
+      { kind: "grampsType", key: "place_type", label: "Type", typeKind: "place_types" },
       { kind: "placeNameDate", label: "Date" },
       { kind: "placeNameLang", label: "Language" },
       { kind: "placeAltNames" },
@@ -182,7 +183,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     quick: [
       GRAMPS_ID_FIELD,
       { kind: "text", key: "name", label: "Name" },
-      { kind: "text", key: "type", label: "Type", placeholder: TYPE_HINT },
+      { kind: "grampsType", key: "type", label: "Type", typeKind: "repository_types" },
     ],
     details: [
       { kind: "switch", key: "private", label: "Private" },
@@ -214,7 +215,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
   note: {
     quick: [GRAMPS_ID_FIELD, { kind: "styledText", key: "text", label: "Text" }],
     details: [
-      { kind: "text", key: "type", label: "Type", placeholder: TYPE_HINT },
+      { kind: "grampsType", key: "type", label: "Type", typeKind: "note_types" },
       { kind: "switch", key: "private", label: "Private" },
       // A Note only ever carries tag_list -- no citation_list/note_list/
       // media_list of its own.
@@ -483,6 +484,16 @@ export function ObjectEditDialog({
             placeholder={f.placeholder}
             value={(draft.data[f.key] as string | undefined) ?? ""}
             onChange={(e) => onChange({ [f.key]: e.currentTarget.value })}
+          />
+        );
+      case "grampsType":
+        return (
+          <GrampsTypeInput
+            key={f.key}
+            kind={f.typeKind}
+            label={t(f.label)}
+            value={(draft.data[f.key] as string | undefined) ?? ""}
+            onChange={(v) => onChange({ [f.key]: v })}
           />
         );
       case "number":

@@ -21,8 +21,7 @@ import { fetchOverlaySource } from "../store/kmlMedia";
 import { getDisplaySettings } from "../store/displaySettings";
 import { PLACE_TYPE_VALUES, formatPlace, type PlaceRecord } from "../store/placeDisplay";
 import { getI18nSnapshot, t } from "../i18n/i18n";
-
-const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
+import { GrampsTypeInput } from "./GrampsTypeInput";
 
 // Below this length, Wikidata's search endpoint mostly returns noise --
 // same reasoning as RecordPicker's own local-cache search, just applied to
@@ -788,12 +787,12 @@ export function WikidataPlaceLookupDialog({
                       )}
                     </Stack>
                   </Stack>
-                  <TextInput
+                  <GrampsTypeInput
+                    kind="place_types"
                     size="xs"
-                    placeholder={TYPE_HINT}
                     value={row.typeOverride}
                     disabled={row.skip || (!row.isLeaf && Boolean(effectiveHandle(row)))}
-                    onChange={(e) => updateRow(i, { typeOverride: e.currentTarget.value })}
+                    onChange={(v) => updateRow(i, { typeOverride: v })}
                     style={{ width: 160 }}
                   />
                 </Group>

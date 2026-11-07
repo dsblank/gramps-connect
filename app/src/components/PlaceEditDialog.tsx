@@ -6,10 +6,9 @@ import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookup
 import { DateInput } from "./DateInput";
 import { CoordinateFields } from "./CoordinateFields";
 import { PlaceTitleFields } from "./PlaceTitleFields";
+import { GrampsTypeInput } from "./GrampsTypeInput";
 import { PlaceAltNamesField, type PlaceNameItem } from "./PlaceAltNamesField";
 import { t } from "../i18n/i18n";
-
-const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 
 interface PlaceEditDialogProps {
   stackId: string;
@@ -73,11 +72,11 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
       <Stack gap="md">
         {!isNew && <WikidataPlaceLookupButton stackId={`${stackId}-wikidata`} data={data} onChange={onChange} />}
         <PlaceTitleFields data={data} onChange={onChange} autoFocus />
-        <TextInput
+        <GrampsTypeInput
+          kind="place_types"
           label={t("Type")}
-          placeholder={TYPE_HINT}
           value={(data.place_type as string | undefined) ?? ""}
-          onChange={(e) => onChange({ place_type: e.currentTarget.value })}
+          onChange={(v) => onChange({ place_type: v })}
         />
         <DateInput
           id={`${stackId}-name-date`}
