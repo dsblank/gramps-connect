@@ -14,6 +14,7 @@ import { getViewStore } from "./store/registry";
 import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
 import { getAuthSnapshot, getCurrentUsername, getToken, subscribe as subscribeAuth } from "./auth/auth";
 import { loadDisplaySettings } from "./store/displaySettings";
+import { loadNameGroups } from "./store/nameGroups";
 import { dateLocaleCode } from "./store/placeIndex";
 import { isHandoffCandidate, tryHandoffLogin } from "./auth/windowHandoff";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "./i18n/i18n";
@@ -430,9 +431,17 @@ function AuthenticatedApp() {
   // at all -- see homeStats.ts.
   useEffect(() => {
     if (isStorelessKey(activeKey)) return;
-    getViewStore(activeKey).ensureLoaded().catch((err) => {
-      console.error(`[${activeKey}] failed to load`, err);
-    });
+    getViewStore(activeKey)
+      .ensureLoaded()
+      .then(() => {
+        // Person search follows surname grouping (nameGroups.ts), from
+        // lookups loaded in the background once the list itself is up --
+        // a full scan on the server, so not ahead of the first page.
+        if (activeKey === "person") loadNameGroups().catch(() => {});
+      })
+      .catch((err) => {
+        console.error(`[${activeKey}] failed to load`, err);
+      });
   }, [activeKey]);
 
   // Server-driven catch-up sweep for reports/exports whose dispatching tab

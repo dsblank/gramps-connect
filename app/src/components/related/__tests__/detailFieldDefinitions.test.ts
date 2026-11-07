@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { resetNameGroupsForTest } from "../../../store/nameGroups";
 import { DETAIL_FIELDS } from "../detailFieldDefinitions";
 import type { ObjectDetail } from "../../../store/objectDetail";
 
@@ -36,5 +37,16 @@ describe("person detail fields", () => {
 
   it("shows a non-birth name type", () => {
     expect(personFields({ ...base, type: "Married Name" })).toEqual({ "Name type": "Married Name" });
+  });
+});
+
+describe("person detail fields: Grouped as", () => {
+  afterEach(() => resetNameGroupsForTest());
+
+  it("shows the name's own Group as, or the surname's tree-wide group, unless it's just the surname", () => {
+    expect(personFields({ ...base, group_as: "Smyth" })).toEqual({ "Grouped as": "Smyth" });
+    expect(personFields({ ...base, group_as: "Smith" })).toEqual({});
+    resetNameGroupsForTest({ mappings: [["Smith", "Smyth"]] });
+    expect(personFields(base)).toEqual({ "Grouped as": "Smyth" });
   });
 });

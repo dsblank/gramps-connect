@@ -10,10 +10,12 @@ import { displayConfidence } from "../../store/views";
 import { displayDate } from "./summary";
 import { formatDisplayName, nameFormatFor, type RawName } from "../../store/nameDisplay";
 import { t } from "../../i18n/i18n";
+import { getNameGroup } from "../../store/nameGroups";
 
 interface Name extends RawName {
   type?: string;
   date?: unknown;
+  group_as?: string;
 }
 
 function formatName(name: Name): string {
@@ -71,6 +73,20 @@ export const DETAIL_FIELDS: Record<string, DetailField[]> = {
       },
     },
     { label: "Name date", value: (d) => displayDate((d.primary_name as Name | undefined)?.date) },
+    {
+      // The surname group (nameGroups.ts) when it isn't just the surname:
+      // the name's own Group as, else the tree-wide mapping. The mapping
+      // only shows once it has loaded (with the People list, or the name
+      // editor) -- the name's own Group as always does.
+      label: "Grouped as",
+      value: (d) => {
+        const name = (d.primary_name as Name | undefined) ?? {};
+        const list = name.surname_list ?? [];
+        const surname = ((list.find((s) => s.primary) ?? list[0])?.surname ?? "").trim();
+        const group = name.group_as?.trim() || (surname ? getNameGroup(surname) : null) || "";
+        return group && group !== surname ? group : "";
+      },
+    },
     {
       label: "Also known as",
       value: (d) => (((d.alternate_names as Name[] | undefined) ?? []).map(formatName).filter(Boolean).join("; ")),

@@ -1,9 +1,12 @@
-import { useState } from "react";
-import { Anchor, Button, Card, Collapse, Group, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { useEffect, useState } from "react";
+import { Anchor, Button, Card, Checkbox, Collapse, Group, Modal, Select, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { DateInput } from "./DateInput";
 import { ListShell } from "./EmbeddedListFields";
 import { t } from "../i18n/i18n";
+import { hasPermissions } from "../auth/auth";
+import { getNameGroup, loadNameGroups, setNameGroup } from "../store/nameGroups";
 
 // NameType (gramps/gen/lib/nametype.py) -- plain English strings, same
 // convention as FamilyEditDialog's REL_TYPE_OPTIONS: gramps-web-api's
@@ -63,12 +66,67 @@ interface NameEditDialogProps {
  * never-remove-only-deactivate stack. */
 export function NameEditDialog({ stackId, opened, title, data, onChange, onDone, onRemove }: NameEditDialogProps) {
   const [showSorting, setShowSorting] = useState(false);
+  // "Group everyone named X as Y" -- desktop's "Group all" answer, applied
+  // on Done (see handleDone).
+  const [groupAll, setGroupAll] = useState(false);
+  const [confirmUngroup, setConfirmUngroup] = useState(false);
+  const [groupBusy, setGroupBusy] = useState(false);
+  // Re-render once the tree-wide surname groups are known (nameGroups.ts),
+  // e.g. when this opens before the People list has loaded them.
+  const [, setGroupsVersion] = useState(0);
+  useEffect(() => {
+    if (!opened) return;
+    loadNameGroups()
+      .then(() => setGroupsVersion((v) => v + 1))
+      .catch(() => {});
+  }, [opened]);
 
   const surnameList = (data.surname_list as Surname[] | undefined) ?? [];
   const date = (data.date as GrampsDate | undefined) ?? null;
+  const primarySurname = ((surnameList.find((s) => s.primary) ?? surnameList[0])?.surname ?? "").trim();
+  const groupAs = ((data.group_as as string | undefined) ?? "").trim();
+  const treeGroup = primarySurname ? getNameGroup(primarySurname) : null;
+  const canGroupAll = hasPermissions("EditNameGroup") && primarySurname !== "";
+  const offerGroupAll = canGroupAll && groupAs !== "" && groupAs !== primarySurname && groupAs !== treeGroup;
+
+  /** Desktop's EditName.save() grouping rules, simplified: a Group as that
+   * just repeats the surname is cleared, and "Group all" writes the
+   * tree-wide mapping instead of this name's own Group as. The mapping is
+   * written right away -- like desktop, before the person itself is saved. */
+  async function handleDone() {
+    if (offerGroupAll && groupAll) {
+      setGroupBusy(true);
+      try {
+        await setNameGroup(primarySurname, groupAs);
+      } catch (err: any) {
+        notifications.show({ color: "red", message: err.message ?? String(err) });
+        return;
+      } finally {
+        setGroupBusy(false);
+      }
+      onChange({ group_as: "" });
+    } else if (groupAs !== "" && groupAs === primarySurname) {
+      onChange({ group_as: "" });
+    }
+    setGroupAll(false);
+    setConfirmUngroup(false);
+    onDone();
+  }
+
+  async function handleUngroup() {
+    setGroupBusy(true);
+    try {
+      await setNameGroup(primarySurname, null);
+      setConfirmUngroup(false);
+    } catch (err: any) {
+      notifications.show({ color: "red", message: err.message ?? String(err) });
+    } finally {
+      setGroupBusy(false);
+    }
+  }
 
   return (
-    <Modal opened={opened} onClose={onDone} title={title} size="xl" stackId={stackId}>
+    <Modal opened={opened} onClose={handleDone} title={title} size="xl" stackId={stackId}>
       <Stack gap="md">
         <Group grow>
           <TextInput
@@ -197,10 +255,43 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
           <Stack gap="md">
             <TextInput
               label={t("Group as")}
-              description={t("Leave blank to group by primary surname")}
+              description={
+                treeGroup
+                  ? `${t("Everyone named")} ${primarySurname} ${t("is grouped as")} ${treeGroup}. ${t("Leave blank to keep that.")}`
+                  : t("Leave blank to group by primary surname. Searching for the group also finds this name.")
+              }
+              placeholder={treeGroup ?? primarySurname}
               value={(data.group_as as string | undefined) ?? ""}
               onChange={(e) => onChange({ group_as: e.currentTarget.value })}
             />
+            {offerGroupAll && (
+              <Checkbox
+                label={`${t("Group everyone named")} ${primarySurname} ${t("as")} ${groupAs}`}
+                description={t("Applies to the whole tree when you press Done, not just this name.")}
+                checked={groupAll}
+                onChange={(e) => setGroupAll(e.currentTarget.checked)}
+              />
+            )}
+            {canGroupAll && treeGroup && !confirmUngroup && (
+              <Group>
+                <Button variant="default" size="xs" onClick={() => setConfirmUngroup(true)}>
+                  {`${t("Stop grouping everyone named")} ${primarySurname} ${t("as")} ${treeGroup}…`}
+                </Button>
+              </Group>
+            )}
+            {canGroupAll && treeGroup && confirmUngroup && (
+              <Group gap="xs">
+                <Text size="sm">
+                  {`${t("Everyone named")} ${primarySurname} ${t("will no longer be grouped as")} ${treeGroup}.`}
+                </Text>
+                <Button size="xs" color="red" loading={groupBusy} onClick={handleUngroup}>
+                  {t("Stop grouping")}
+                </Button>
+                <Button size="xs" variant="default" onClick={() => setConfirmUngroup(false)}>
+                  {t("Cancel")}
+                </Button>
+              </Group>
+            )}
             <Select
               label={t("Sort as")}
               description={t("Used by Gramps desktop. Gramps Connect sorts everyone by the tree's name format.")}
@@ -229,7 +320,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
           ) : (
             <div />
           )}
-          <Button onClick={onDone}>{t("Done")}</Button>
+          <Button onClick={handleDone} loading={groupBusy}>{t("Done")}</Button>
         </Group>
       </Stack>
     </Modal>

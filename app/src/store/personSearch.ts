@@ -1,3 +1,5 @@
+import { groupSearchClauses } from "./nameGroups";
+
 /** Fields checked for each word of a person search query. */
 const SEARCH_FIELDS = ["given_name", "surname", "gramps_id"];
 
@@ -17,7 +19,12 @@ const SEARCH_FIELDS = ["given_name", "surname", "gramps_id"];
  * a binary-collated index; Postgres's index is composite and this data's
  * skew makes a sequential scan cheaper anyway) -- so prefix vs. infix cost
  * was within noise either way, and prefix-only was pure recall loss ("ith"
- * no longer finding "Smith") for no measured speed benefit. */
+ * no longer finding "Smith") for no measured speed benefit.
+ *
+ * Each word also matches a person whose surname *group* contains it --
+ * a Smyth grouped as Smith, tree-wide or by that name's own Group as --
+ * via nameGroups.ts's groupSearchClauses() (indexed `in [...]` lists, not
+ * a path search). */
 export function buildPersonSearchExpr(query: string): string | null {
   const trimmed = query.replace(/,/g, " ").trim();
   if (trimmed.length < 2) return null;
@@ -29,6 +36,6 @@ export function buildPersonSearchExpr(query: string): string | null {
   if (words.length === 0) return null;
 
   return words
-    .map((word) => `(${SEARCH_FIELDS.map((field) => `like(${field}, '%${word}%')`).join(" or ")})`)
+    .map((word) => `(${[...SEARCH_FIELDS.map((field) => `like(${field}, '%${word}%')`), ...groupSearchClauses(word)].join(" or ")})`)
     .join(" and ");
 }
