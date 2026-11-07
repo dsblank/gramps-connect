@@ -130,7 +130,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // mode's "Show lifespan" checkbox above. Drops each card's avatar,
   // shows dates beside the name instead of below it, and lists a sibling
   // group vertically instead of side by side (FamilyGraphView.tsx).
-  const [familyCompact, setFamilyCompact] = useState(false);
+  const [familyCompact, setFamilyCompact] = useState(true);
 
   // See store/treeExpandPreference.ts -- persisted across sessions, not
   // reset on a new root/subject the way selection/expansion state below is,
