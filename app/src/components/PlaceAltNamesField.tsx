@@ -7,7 +7,7 @@
 // Which name a place title uses is placeDisplay.ts's nameAt: the primary
 // name first, then these in order -- the first valid at the date whose
 // language matches the place format's.
-import { Group, Stack, TextInput } from "@mantine/core";
+import { Card, Group, Stack, TextInput } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { ListShell } from "./EmbeddedListFields";
 import { DateInput } from "./DateInput";
@@ -36,32 +36,36 @@ export function PlaceAltNamesField({ idPrefix, items, onChange }: PlaceAltNamesF
       onChange={onChange}
       makeNew={(): PlaceNameItem => ({ _class: "PlaceName", value: "", lang: "" })}
       renderRow={(item, onPatch) => (
-        <Stack gap={4}>
-          <Group gap="xs" wrap="nowrap">
-            <TextInput
-              placeholder={t("Name")}
-              aria-label={t("Alternate name")}
-              value={item.value ?? ""}
-              onChange={(e) => onPatch({ value: e.currentTarget.value })}
-              style={{ flex: 1 }}
+        // Bordered like AddressListField's rows, so each date reads as
+        // belonging to the name above it.
+        <Card withBorder padding="xs">
+          <Stack gap={4}>
+            <Group gap="xs" wrap="nowrap">
+              <TextInput
+                placeholder={t("Name")}
+                aria-label={t("Alternate name")}
+                value={item.value ?? ""}
+                onChange={(e) => onPatch({ value: e.currentTarget.value })}
+                style={{ flex: 1 }}
+              />
+              <TextInput
+                placeholder={t("Language")}
+                aria-label={t("Alternate name language")}
+                title={t("e.g. en, fr, la")}
+                value={item.lang ?? ""}
+                onChange={(e) => onPatch({ lang: e.currentTarget.value })}
+                w={90}
+              />
+            </Group>
+            <DateInput
+              id={`${idPrefix}-${items.indexOf(item)}`}
+              label={t("Date")}
+              description={t("When this name applied (optional)")}
+              value={item.date ?? null}
+              onChange={(date) => onPatch({ date: date ?? undefined })}
             />
-            <TextInput
-              placeholder={t("Language")}
-              aria-label={t("Alternate name language")}
-              title={t("e.g. en, fr, la")}
-              value={item.lang ?? ""}
-              onChange={(e) => onPatch({ lang: e.currentTarget.value })}
-              w={90}
-            />
-          </Group>
-          <DateInput
-            id={`${idPrefix}-${items.indexOf(item)}`}
-            label={t("Date")}
-            description={t("When this name applied (optional)")}
-            value={item.date ?? null}
-            onChange={(date) => onPatch({ date: date ?? undefined })}
-          />
-        </Stack>
+          </Stack>
+        </Card>
       )}
     />
   );
