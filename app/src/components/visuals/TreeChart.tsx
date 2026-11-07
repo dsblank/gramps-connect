@@ -36,6 +36,9 @@ interface TreeChartProps {
    * apart from an automatic reveal -- see this file's own `justExpanded`
    * below for why only the former re-centers the view. */
   onExpand: (label: string, handle: string, direction: "ancestor" | "descendant", source: "click" | "auto") => void;
+  /** Fired for a "−" marker (a box currently showing children, drawn by
+   * charts/treeChart.ts) -- folds that one branch back down to a "+". */
+  onCollapse: (label: string, direction: "ancestor" | "descendant") => void;
   /** `${direction}:${handle}` keys currently in flight, mirrored from
    * TreeView's own guard -- shows a small loading state on that marker
    * instead of one a reveal/click would just re-trigger. */
@@ -71,8 +74,8 @@ export interface TreeChartHandle {
  * Mantine token -- same reason MapCanvas itself re-renders its markers on
  * `dark` (see its own `seriesColor(dark)`). */
 export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function TreeChart({
-  ancestorTree, descendantTree, selectedHandle, onSelectPerson, token, onExpand, expandingKeys, autoExpandEnabled,
-  expandCenterHandle,
+  ancestorTree, descendantTree, selectedHandle, onSelectPerson, token, onExpand, onCollapse, expandingKeys,
+  autoExpandEnabled, expandCenterHandle,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => ({
@@ -136,6 +139,7 @@ export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function Tr
       token,
       expandingKeys,
       onExpand,
+      onCollapse,
       centerHandle,
       centerOnSelect: centerHandle !== null,
     });
@@ -187,7 +191,7 @@ export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function Tr
     return () => io.disconnect();
   }, [
     ancestorTree, descendantTree, size.width, size.height, selectedHandle, onSelectPerson, dark, token, onExpand,
-    expandingKeys, autoExpandEnabled, expandCenterHandle, displayVersion,
+    onCollapse, expandingKeys, autoExpandEnabled, expandCenterHandle, displayVersion,
   ]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;

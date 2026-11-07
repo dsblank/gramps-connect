@@ -35,6 +35,7 @@ import { personThumbnailUrl, type TreeNode } from "../store/treeData";
 import { retryApiImageOnError } from "../store/apiImage";
 import { lifeEventDate } from "../store/lifeEventDates";
 import { GENDER_LABEL, genderAccent } from "./genderColors";
+import { t } from "../i18n/i18n";
 
 const BOX_WIDTH = 190;
 const BOX_HEIGHT = 90;
@@ -103,6 +104,9 @@ interface CoreOptions {
    * TreeView.tsx only re-centers the view on the former, since re-centering
    * on an automatic reveal would fight the pan that just caused it. */
   onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant", source: "click" | "auto") => void;
+  /** Clicking a "−" marker (drawn on any box currently showing children in
+   * that half's direction) folds that one branch back down to a "+". */
+  onCollapse?: (label: string, direction: "ancestor" | "descendant") => void;
   /** The node to pan/animate the view onto, independent of `selectedHandle`
    * (which only controls the ring) -- renderTreeChart sets this to whichever
    * node just became relevant: a fresh selection, or (TreeView.tsx) the
@@ -127,7 +131,7 @@ function treeChartCore(
   svgParent: Selection<SVGGElement, undefined, null, undefined>,
   data: TreeNode,
   orientation: "LTR" | "RTL",
-  { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, centerHandle }: CoreOptions,
+  { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, onCollapse, centerHandle }: CoreOptions,
 ): [number, number, number, number, number, { x: number; y: number } | null] {
   const root: HierarchyPointNode<TreeNode> = d3tree<TreeNode>()
     .nodeSize([BOX_HEIGHT + GAP_Y, BOX_WIDTH + GAP_X])
@@ -357,7 +361,14 @@ function treeChartCore(
   const outward = (n: number) => (orientation === "LTR" ? n : -n);
   const markerCenter = outward(4 + MARKER_R);
 
-  const withMarker = withPerson.filter((d) => !!d.data.hasMore);
+  // A box gets a marker when it's either a boundary ("+", hasMore) or is
+  // currently showing children in this half's direction ("−", collapses
+  // that branch back down to a "+" -- TreeView's own collapseNode, which
+  // keeps the already-fetched data so a re-expand is instant).
+  const isCollapsible = (d: HierarchyPointNode<TreeNode>) => !!d.data.children && d.data.children.length > 0;
+  const withMarker = withPerson.filter((d) => !!d.data.hasMore || (!!onCollapse && isCollapsible(d)));
+  const isExpanding = (d: HierarchyPointNode<TreeNode>) =>
+    !!d.data.hasMore && !!expandingKeys?.has(`${direction}:${d.data.person!.handle}`);
 
   // data-export-exclude: interactive chrome, not chart -- left out of an
   // image export (store/chartExport/prepareSvg.ts).
@@ -366,15 +377,18 @@ function treeChartCore(
     .attr("data-export-exclude", "")
     .attr("transform", `translate(${outwardX},0)`);
 
-  // The IntersectionObserver target *and* the click target: sized to scale
-  // with overall zoom the same way the box itself does (TreeChart.tsx's own
-  // MIN_AUTOEXPAND_MARKER_PX throttle relies on that) and much bigger than
-  // the visible dot so it's an easy click target too, not just a precise
-  // one. `stopPropagation` keeps a click here from also firing the parent
-  // node `<g>`'s own click-to-select handler it sits inside of.
+  // The click target (and, for "+" only, the IntersectionObserver target --
+  // `data-tree-expand` is what TreeChart.tsx's reveal observer looks for, so
+  // a "−" never auto-fires): sized to scale with overall zoom the same way
+  // the box itself does (TreeChart.tsx's own MIN_AUTOEXPAND_MARKER_PX
+  // throttle relies on that) and much bigger than the visible dot so it's
+  // an easy click target too, not just a precise one. `stopPropagation`
+  // keeps a click here from also firing the parent node `<g>`'s own
+  // click-to-select handler it sits inside of.
   marker
     .append("rect")
-    .attr("data-tree-expand", "true")
+    .attr("data-tree-expand", (d) => (d.data.hasMore ? "true" : null))
+    .attr("data-tree-collapse", (d) => (d.data.hasMore ? null : "true"))
     .attr("data-handle", (d) => d.data.person!.handle)
     .attr("data-direction", direction)
     .attr("data-label", (d) => d.data.id!)
@@ -386,24 +400,36 @@ function treeChartCore(
     .style("cursor", "pointer")
     .on("click", (event, d) => {
       event.stopPropagation();
-      if (d.data.person) onExpand?.(d.data.id!, d.data.person.handle, direction, "click");
-    });
+      if (!d.data.person) return;
+      if (d.data.hasMore) onExpand?.(d.data.id!, d.data.person.handle, direction, "click");
+      else onCollapse?.(d.data.id!, direction);
+    })
+    .append("title")
+    .text((d) =>
+      d.data.hasMore
+        ? direction === "ancestor" ? t("Show more ancestors") : t("Show more descendants")
+        : direction === "ancestor" ? t("Collapse ancestors") : t("Collapse descendants"),
+    );
 
-  // Purely decorative -- a small dot most of the time, a dimmed "…" while
-  // TreeView's own per-node lazy-expand has this handle's next generation
-  // in flight, so the user has some sense of *why* a box they're panning
-  // toward just grew children (or what a click here is about to do).
-  // `pointer-events: none` so only the hit-rect above handles the click.
+  // Purely decorative -- "+" on a boundary, "−" on an expanded branch, a
+  // dimmed "…" while TreeView's own per-node lazy-expand has this handle's
+  // next generation in flight, so the user has some sense of *why* a box
+  // they're panning toward just grew children (or what a click here is
+  // about to do). The "−" is drawn outlined rather than filled so the
+  // two read apart at a glance. `pointer-events: none` so only the
+  // hit-rect above handles the click.
   marker
     .append("circle")
     .attr("cx", markerCenter)
     .attr("r", MARKER_R)
     .attr("fill", (d) =>
-      expandingKeys?.has(`${direction}:${d.data.person!.handle}`)
+      isExpanding(d)
         ? "var(--mantine-color-dimmed)"
-        : "var(--mantine-primary-color-filled)",
+        : d.data.hasMore
+          ? "var(--mantine-primary-color-filled)"
+          : "var(--mantine-color-body)",
     )
-    .attr("stroke", "var(--mantine-color-body)")
+    .attr("stroke", (d) => (d.data.hasMore ? "var(--mantine-color-body)" : "var(--mantine-primary-color-filled)"))
     .attr("stroke-width", 2)
     .style("pointer-events", "none");
 
@@ -412,11 +438,11 @@ function treeChartCore(
     .attr("x", markerCenter)
     .attr("text-anchor", "middle")
     .attr("dominant-baseline", "central")
-    .attr("fill", "white")
+    .attr("fill", (d) => (d.data.hasMore ? "white" : "var(--mantine-primary-color-filled)"))
     .attr("font-size", 13)
     .attr("font-weight", 700)
     .style("pointer-events", "none")
-    .text((d) => (expandingKeys?.has(`${direction}:${d.data.person!.handle}`) ? "…" : "+"));
+    .text((d) => (isExpanding(d) ? "…" : d.data.hasMore ? "+" : "−"));
 
   return [xOffset, yOffset, width, height, rootX, centerPos];
 }
@@ -447,6 +473,8 @@ export interface TreeChartOptions {
   expandingKeys?: Set<string>;
   /** See CoreOptions' own doc comment -- threaded straight through. */
   onExpand?: (label: string, handle: string, direction: "ancestor" | "descendant", source: "click" | "auto") => void;
+  /** See CoreOptions' own doc comment -- threaded straight through. */
+  onCollapse?: (label: string, direction: "ancestor" | "descendant") => void;
   /** See CoreOptions' own doc comment -- threaded straight through. Usually
    * equal to `selectedHandle` (components/visuals/TreeChart.tsx sets it to
    * that on a fresh selection), but set to the just-expanded node's handle
@@ -470,7 +498,7 @@ export function renderTreeChart(
   descendantTree: TreeNode | null,
   {
     bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand,
-    centerHandle, centerOnSelect,
+    onCollapse, centerHandle, centerOnSelect,
   }: TreeChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 13);
@@ -512,7 +540,7 @@ export function renderTreeChart(
   // unlike treeChartCore's own return value) -- null if there's no
   // `centerHandle`, or it isn't in either currently-loaded half.
   let centerAbsPos: { x: number; y: number } | null = null;
-  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, centerHandle };
+  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, onCollapse, centerHandle };
 
   if (descendantTree) {
     const chartD = chartContent.append("g");

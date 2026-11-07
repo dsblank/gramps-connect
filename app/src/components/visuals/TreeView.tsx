@@ -63,17 +63,6 @@ const SHOW_MANUAL_EXPAND_TOGGLE = false;
  * click is one pixel-precise gesture doing double duty as "tell me about
  * this" for a glance and "take me there" for a commit would make the more
  * common one (skimming the tree) accidentally leave it constantly. */
-/** Every node in `tree` whose person is `handle` and that's currently
- * showing children -- whether those children came from base-depth
- * auto-expansion or a manual "+" -- i.e. everywhere "collapse" has
- * something to revert back to a "+". A person can legitimately appear more
- * than once (remarriage, cousin marriage), so this collapses all of them
- * rather than guessing which one the user meant. */
-function collectExpandableLabelsForHandle(node: TreeNode, handle: string, acc: string[]) {
-  if (node.id && node.person?.handle === handle && node.children && node.children.length > 0) acc.push(node.id);
-  node.children?.forEach((child) => collectExpandableLabelsForHandle(child, handle, acc));
-}
-
 /** Every node across the whole tree with real further ancestors not yet
  * fetched (TreeNode.hasMore) -- fan mode's own "Increase depth" button
  * fires an expand for all of these at once, rather than a marker per
@@ -147,7 +136,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const [expandedAncestor, setExpandedAncestor] = useState<Set<string>>(new Set());
   const [expandedDescendant, setExpandedDescendant] = useState<Set<string>>(new Set());
   // The reverse of the above: labels forced back to a "+" by the
-  // "Collapse ancestors"/"Collapse descendants" buttons, overriding even
+  // "−" markers on the box chart (collapseNode below), overriding even
   // base-depth auto-expansion -- see treeData.ts's ancestorNode/
   // descendantNode. A later re-expand of that exact label (click or
   // auto-reveal) wins over a stale collapse, so these never need to be
@@ -656,47 +645,29 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // at all, just hides the deepest currently-shown generation -- a later
   // "Increase depth" click re-reveals it instantly (the fetch-skipping
   // branch above), same "nothing is lost, it's just folded back down" deal
-  // as box mode's own collapseAncestors/collapseDescendants.
+  // as box mode's own "−" markers.
   function decreaseFanDepth() {
     setFanDisplayDepth((d) => Math.max(MIN_FAN_DISPLAY_DEPTH, d - 1));
   }
 
-  function collapseDescendants(handle: string) {
-    if (!trees) return;
-    const labels: string[] = [];
-    collectExpandableLabelsForHandle(trees.descendantTree, handle, labels);
-    if (labels.length === 0) return;
-    // Both sides: drop from `expanded` (it would otherwise override the
-    // collapse) and add to `collapsed` (forces the "+" even within base
-    // depth) -- see treeData.ts's descendantNode.
-    setExpandedDescendant((prev) => {
+  // A box's own "−" marker (charts/treeChart.ts): folds that one branch
+  // back down to a "+". Both sides: drop the label from `expanded` (it would
+  // otherwise override the collapse) and add it to `collapsed` (forces the
+  // "+" even within base depth) -- see treeData.ts's ancestorNode/
+  // descendantNode. Nothing is dropped from `data`, so a re-expand is
+  // instant, no re-fetch. Per-occurrence (by label), not per-person: a
+  // person shown twice (pedigree collapse) only folds where clicked.
+  const collapseNode = useCallback((label: string, direction: "ancestor" | "descendant") => {
+    const setExpanded = direction === "ancestor" ? setExpandedAncestor : setExpandedDescendant;
+    const setCollapsed = direction === "ancestor" ? setCollapsedAncestor : setCollapsedDescendant;
+    setExpanded((prev) => {
+      if (!prev.has(label)) return prev;
       const next = new Set(prev);
-      labels.forEach((l) => next.delete(l));
+      next.delete(label);
       return next;
     });
-    setCollapsedDescendant((prev) => {
-      const next = new Set(prev);
-      labels.forEach((l) => next.add(l));
-      return next;
-    });
-  }
-
-  function collapseAncestors(handle: string) {
-    if (!trees) return;
-    const labels: string[] = [];
-    collectExpandableLabelsForHandle(trees.ancestorTree, handle, labels);
-    if (labels.length === 0) return;
-    setExpandedAncestor((prev) => {
-      const next = new Set(prev);
-      labels.forEach((l) => next.delete(l));
-      return next;
-    });
-    setCollapsedAncestor((prev) => {
-      const next = new Set(prev);
-      labels.forEach((l) => next.add(l));
-      return next;
-    });
-  }
+    setCollapsed((prev) => (prev.has(label) ? prev : new Set(prev).add(label)));
+  }, []);
 
   // The Family graph's own "-" markers: the reverse of expandFamilyUp/
   // expandNode(..., "descendant", ...) -- both just drop the key/label back
@@ -721,22 +692,6 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     });
     setCollapsedDescendant((prev) => (prev.has(label) ? prev : new Set(prev).add(label)));
   }, []);
-
-  // Whether the selected person actually has anything to collapse -- greys
-  // out the option when this node isn't currently showing any children in
-  // that direction (a true leaf, or already collapsed).
-  const canCollapseDescendants = useMemo(() => {
-    if (!trees || !selectedHandle) return false;
-    const labels: string[] = [];
-    collectExpandableLabelsForHandle(trees.descendantTree, selectedHandle, labels);
-    return labels.length > 0;
-  }, [trees, selectedHandle]);
-  const canCollapseAncestors = useMemo(() => {
-    if (!trees || !selectedHandle) return false;
-    const labels: string[] = [];
-    collectExpandableLabelsForHandle(trees.ancestorTree, selectedHandle, labels);
-    return labels.length > 0;
-  }, [trees, selectedHandle]);
 
   // "+ Increase depth" stays enabled whenever there's a next generation to
   // show, whether that's already fetched (fanDisplayDepth < fanActualMaxDepth,
@@ -891,7 +846,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           <Group justify="space-between" wrap="nowrap" gap="xs">
             <Text size="xs" c="dimmed">
               drag to pan · scroll to zoom · click a person for details ·{" "}
-              {manualExpandOnly ? "click + to reveal more" : "pan toward the edges to reveal more, or click +"}
+              {manualExpandOnly ? "click + to reveal more, − to fold back" : "pan toward the edges to reveal more, or click + (− folds back)"}
             </Text>
             <DownloadImageButton
               getSvg={() => treeChartRef.current?.getSvg() ?? null}
@@ -941,6 +896,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           onSelectPerson={setSelectedHandle}
           token={token}
           onExpand={expandNode}
+          onCollapse={collapseNode}
           expandingKeys={expandingKeys}
           autoExpandEnabled={!manualExpandOnly}
           expandCenterHandle={expandCenterHandle}
@@ -959,12 +915,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           // page/URL change here, which is also what makes the re-root
           // animation possible at all.
           onMakeRoot={() => (chartStyle === "family" ? focusFamilyOn(selectedPerson.handle) : makeRoot(selectedPerson.handle))}
-          onCollapseDescendants={() => collapseDescendants(selectedPerson.handle)}
-          onCollapseAncestors={() => collapseAncestors(selectedPerson.handle)}
           canMakeRoot={chartStyle === "family" ? selectedPerson.handle !== familyFocusHandle : selectedPerson.handle !== root?.handle}
-          showCollapseControls={chartStyle === "box"}
-          canCollapseDescendants={canCollapseDescendants}
-          canCollapseAncestors={canCollapseAncestors}
           showSpouseControl={chartStyle === "family"}
           onExpandSpouses={() => expandSpousesFor(selectedPerson)}
           canExpandSpouses={!expandedSpouses.has(selectedPerson.handle) && computeSpouseHandles(selectedPerson).length > 0}
@@ -980,15 +931,7 @@ interface PersonCardProps {
   onOpen: () => void;
   onClose: () => void;
   onMakeRoot: () => void;
-  onCollapseDescendants: () => void;
-  onCollapseAncestors: () => void;
   canMakeRoot: boolean;
-  /** False in fan mode -- it has no expand/collapse concept (charts/
-   * fanChart.ts's generation count is a fixed upfront pick, not a lazily
-   * revealed edge), so those two buttons would have nothing to do. */
-  showCollapseControls: boolean;
-  canCollapseDescendants: boolean;
-  canCollapseAncestors: boolean;
   /** Family tab only -- "Expand spouses" shows the selected person's own
    * spouse(s), each as their own sibling-group cluster, beside their card,
    * wherever it appears (see TreeView.tsx's own
@@ -1004,13 +947,12 @@ interface PersonCardProps {
  * TimelineView's EventCard/MapView's PlaceCard, because all three plots now
  * answer a click the same way. Bottom-left, clear of the status strip
  * below and the zoom controls a pointer might reach for at the right.
- * The three re-shape-this-view actions above "Open in People" are
+ * The re-shape-this-view actions above "Open in People" are
  * `variant="default"` (this app's secondary-button convention, see
  * DeleteButton.tsx/RefPickerField.tsx) precisely because they don't leave
  * the tree the way that filled button does. */
 function PersonCard({
-  person, onOpen, onClose, onMakeRoot, onCollapseDescendants, onCollapseAncestors,
-  canMakeRoot, showCollapseControls, canCollapseDescendants, canCollapseAncestors,
+  person, onOpen, onClose, onMakeRoot, canMakeRoot,
   showSpouseControl, onExpandSpouses, canExpandSpouses, expandingSpouses,
 }: PersonCardProps) {
   useDisplayFormatVersion();
@@ -1035,16 +977,6 @@ function PersonCard({
         <Button size="xs" fullWidth variant="default" onClick={onMakeRoot} disabled={!canMakeRoot}>
           {t("Make this person the root")}
         </Button>
-        {showCollapseControls && (
-          <>
-            <Button size="xs" fullWidth variant="default" onClick={onCollapseDescendants} disabled={!canCollapseDescendants}>
-              {t("Collapse descendants")}
-            </Button>
-            <Button size="xs" fullWidth variant="default" onClick={onCollapseAncestors} disabled={!canCollapseAncestors}>
-              {t("Collapse ancestors")}
-            </Button>
-          </>
-        )}
         {showSpouseControl && (
           <Button size="xs" fullWidth variant="default" onClick={onExpandSpouses} disabled={!canExpandSpouses} loading={expandingSpouses}>
             {t("Expand spouses")}
