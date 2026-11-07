@@ -191,20 +191,21 @@ function placeRecordFromJson(data: Record<string, unknown>): PlaceRecord {
 // Enclosing places fetched one at a time for a place editor's built title
 // when there's no complete index to read them from -- the Places table
 // holding a search's matches, or a background fill not done yet. Dropped
-// whenever the Places cache changes, so an edited ancestor is re-fetched.
+// each time a place editor opens (clearFetchedPlaces), so an ancestor edited
+// since is re-fetched -- not on the Places store's revision, which bumps on
+// every emit (selection, status, each fill page): clearing on that threw
+// the chain away mid-fetch, over and over, while the table was busy.
 let fetchedPlaces = new Map<string, PlaceRecord>();
 // Ones whose fetch failed (deleted, or not readable): not asked for again,
 // and the title is built without them.
 let unfetchablePlaces = new Set<string>();
-let fetchedForRevision = -1;
+
+export function clearFetchedPlaces(): void {
+  fetchedPlaces = new Map();
+  unfetchablePlaces = new Set();
+}
 
 function draftLookup(data: Record<string, unknown>, places: Map<string, PlaceRecord> | null) {
-  const revision = placeStore?.getSnapshot().revision ?? -1;
-  if (revision !== fetchedForRevision) {
-    fetchedForRevision = revision;
-    fetchedPlaces = new Map();
-    unfetchablePlaces = new Set();
-  }
   const draft = placeRecordFromJson(data);
   return (h: string) => (h === DRAFT_KEY ? draft : places?.get(h) ?? fetchedPlaces.get(h));
 }

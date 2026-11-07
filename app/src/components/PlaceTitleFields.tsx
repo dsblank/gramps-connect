@@ -14,7 +14,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Radio, Stack, Text, TextInput } from "@mantine/core";
 import {
-  addFetchedPlace, draftPlaceTitle, missingEnclosingPlaces, placeTitleFollowsName, useDisplayFormatVersion,
+  addFetchedPlace, clearFetchedPlaces, draftPlaceTitle, missingEnclosingPlaces, placeTitleFollowsName, useDisplayFormatVersion,
 } from "../store/placeIndex";
 import { getViewStore } from "../store/registry";
 import { fetchPlainObject } from "../store/objectsApi";
@@ -31,6 +31,9 @@ interface PlaceTitleFieldsProps {
 export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFieldsProps) {
   // Re-render as the Places cache loads, so the choice appears once the
   // enclosing places' names are known.
+  // A fresh editor re-fetches any enclosing places it needs (they may have
+  // been edited since). Before the first render's lookups, not in an effect.
+  useState(clearFetchedPlaces);
   const placeStore = getViewStore("place");
   useSyncExternalStore(placeStore.subscribe, placeStore.getSnapshot);
   // ...and as enclosing places fetched below arrive.
@@ -41,6 +44,8 @@ export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFields
   // one by one. Each arrival re-renders, and the next level up (if any)
   // shows up as missing in turn.
   const missing = missingEnclosingPlaces(data).join(",");
+  // A result that lands after `missing` has moved on is still recorded --
+  // it's valid data, and dropping it could restart the chain.
   useEffect(() => {
     if (!missing) return;
     let cancelled = false;
@@ -54,7 +59,7 @@ export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFields
         } catch {
           // A deleted or unreadable ancestor: built without it.
         }
-        if (!cancelled) addFetchedPlace(handle, place);
+        addFetchedPlace(handle, place);
       }
     })();
     return () => {
