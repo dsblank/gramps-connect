@@ -47,13 +47,10 @@ const STREET_OPTIONS = [
   { value: "2", label: "Street Number" },
 ];
 
-/** Per-tree display settings editor -- the "Preferences" tab (named after
- * desktop's Edit > Preferences rather than "Display", since it's meant to
- * grow settings that affect saving too, e.g. ID prefixes) of both
- * AdministrationDialog.tsx (Admin) and OwnerAdministrationDialog.tsx
- * (Owner), the same way UserManagementPanel.tsx is shared between them.
- * Both roles have EditTree, which PUT /api/trees/-/config requires; the
- * read-only fallback is just defensive. Edits are local until Save, which
+/** Per-tree display settings editor -- PreferencesDialog.tsx's "Family
+ * tree" tab, open to every user. Only EditTree (Owner/Admin) can change
+ * them, which PUT /api/trees/-/config requires; everyone else sees the
+ * same controls read-only. Edits are local until Save, which
  * writes all three sections in one PUT (see displaySettings.ts). */
 export function DisplaySettingsPanel({ active }: { active: boolean }) {
   const [saved, setSaved] = useState<DisplaySettings | null>(null);
@@ -172,6 +169,7 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <Text size="sm" c="dimmed">
           {t("These settings apply to everyone using this tree in Gramps Connect. Reports, exports, and other text the server formats keep the server's own settings.")}
+          {!canEdit && ` ${t("Only the tree's owner can change them.")}`}
         </Text>
         {canEdit && (
           <Button variant="default" size="xs" style={{ flexShrink: 0 }} onClick={() => setImportOpened(true)}>
