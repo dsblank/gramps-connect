@@ -203,6 +203,7 @@ export function NameEditDialog({ stackId, opened, title, data, onChange, onDone,
             />
             <Select
               label={t("Sort as")}
+              description={t("Used by Gramps desktop. Gramps Connect sorts everyone by the tree's name format.")}
               data={FORMAT_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
               value={String((data.sort_as as number | undefined) ?? 0)}
               onChange={(next) => onChange({ sort_as: Number(next ?? 0) })}

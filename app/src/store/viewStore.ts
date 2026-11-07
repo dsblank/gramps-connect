@@ -15,7 +15,8 @@ import { fetchByHandle, fetchPage } from "./api";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } from "./cacheMeta";
 import { createTableSql, insertSql, upsertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
-import type { OrderBy, ViewConfig } from "./views";
+import { defaultOrderBy, type OrderBy, type ViewConfig } from "./views";
+import { loadDisplaySettings, subscribeDisplaySettings } from "./displaySettings";
 import type { TreeChangeNotification } from "./historyPoll";
 import { getHomePersonHandle } from "./homePersonPreference";
 
@@ -141,8 +142,9 @@ export class ViewStore {
   /** See ViewSnapshot.pickerExpr's doc comment. */
   private pickerExpr: string | null = null;
   /** Current sort actually sent to the server -- defaults to the view's
-   * static default, changed only via setSort(). Kept separate from
-   * view.orderBy (which stays the immutable default to fall back to) so
+   * default (defaultOrderBy(): People's follows the tree's name format, see
+   * onDefaultOrderChange()), changed otherwise only via setSort(). Kept
+   * separate from the view's own default (the one to fall back to) so
    * each view's sort choice is independent per-instance state, same
    * treatment as whereExpr. An array (fetchPage's order_by is technically
    * a list) but this app only ever sorts by one column, so index 0 is the
@@ -202,8 +204,39 @@ export class ViewStore {
   constructor(view: ViewConfig, getSql: () => Promise<SqlJsStatic>) {
     this.view = view;
     this.getSql = getSql;
-    this.orderBy = view.orderBy;
-    this.snapshot = { ...EMPTY_SNAPSHOT_BASE, orderBy: view.orderBy[0] };
+    this.orderBy = defaultOrderBy(view);
+    this.snapshot = { ...EMPTY_SNAPSHOT_BASE, orderBy: this.orderBy[0] };
+    this.lastDefaultOrder = JSON.stringify(this.orderBy);
+    if (view.defaultOrderBy) subscribeDisplaySettings(() => this.onDefaultOrderChange());
+  }
+
+  /** JSON of the default order as of the last check -- see
+   * onDefaultOrderChange(). */
+  private lastDefaultOrder: string;
+
+  private isDefaultOrder(): boolean {
+    return JSON.stringify(this.orderBy) === JSON.stringify(defaultOrderBy(this.view));
+  }
+
+  /** Display settings changed (loaded, or saved in Preferences): if that
+   * moved a settings-driven default sort (People's name format) and the
+   * user is still on the old default -- not a column they clicked -- re-sort
+   * by the new one, keeping the selection. */
+  private onDefaultOrderChange(): void {
+    const next = defaultOrderBy(this.view);
+    const nextJson = JSON.stringify(next);
+    if (nextJson === this.lastDefaultOrder) return;
+    const wasDefault = JSON.stringify(this.orderBy) === this.lastDefaultOrder;
+    this.lastDefaultOrder = nextJson;
+    if (!wasDefault) return;
+    this.orderBy = next;
+    if (this.db) {
+      this.runQueryPreservingSelection(this.whereExpr).catch((err) => {
+        console.error(`[${this.view.label}] re-sort after a name format change failed`, err);
+      });
+    } else {
+      this.emit();
+    }
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -654,7 +687,16 @@ export class ViewStore {
       const sqlType = columnFor(column)?.sqlType;
       return sqlType === "INTEGER" ? String(value) : JSON.stringify(String(value ?? ""));
     };
-    const valueFor = (column: string) => (column === "handle" ? item.handle : item[columnFor(column)?.key ?? column]);
+    const valueFor = (column: string) => {
+      if (column === "handle") return item.handle;
+      const cached = columnFor(column);
+      if (cached) return item[cached.key];
+      // A path no column caches on its own (People's name-format keys,
+      // e.g. "primary_name.nick"): walk it inside the column that selects
+      // its first segment whole -- `primary_name`'s JSON here.
+      const [first, ...rest] = column.split(".");
+      return rest.reduce<unknown>((value, segment) => (value as Record<string, unknown> | null | undefined)?.[segment], item[first]);
+    };
     // Standard multi-key "before" decomposition: item is before a row if,
     // for some key index i, they're tied on every earlier key and item is
     // strictly before on key i. Bug this replaced: comparing only the
@@ -865,6 +907,15 @@ export class ViewStore {
    * the caller just reads the current snapshot/rows. */
   async ensureLoaded(): Promise<void> {
     if (this.db) return;
+    // A settings-driven default order (People's name format) has to be
+    // known before the cache is checked or built: the cache is stamped
+    // with the order its rows are in (cacheMeta.ts's schemaSignature).
+    // A failed settings load leaves the defaults, as everywhere else.
+    if (this.view.defaultOrderBy) {
+      await loadDisplaySettings().catch(() => {});
+      if (this.db) return;
+      this.onDefaultOrderChange();
+    }
 
     const cached = await loadFromOpfs(this.view.opfsFilename);
     if (cached) {
@@ -899,7 +950,7 @@ export class ViewStore {
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
         this.whereExpr = null;
         this.pickerExpr = null;
-        this.orderBy = this.view.orderBy;
+        this.orderBy = defaultOrderBy(this.view);
         this.status = "ready";
         this.applyDefaultSelection();
         this.emit();
@@ -1360,8 +1411,13 @@ export class ViewStore {
     // along at the same direction as the column just clicked -- so
     // reversing "Surname" also reverses the given-name tiebreak, rather
     // than leaving ties in a fixed order while everything else flips.
+    // A column with runtime `sortKeys` (People's Name, by name format)
+    // sorts by all of them, every one at the clicked direction.
+    const keys = this.view.columns.find((c) => c.sortKeys?.()[0] === column)?.sortKeys?.();
     const secondary = this.view.columns.find((c) => (c.sortBy ?? c.select) === column)?.secondarySort;
-    this.orderBy = secondary ? [{ column, direction }, { column: secondary, direction }] : [{ column, direction }];
+    this.orderBy = keys
+      ? keys.map((key) => ({ column: key, direction }))
+      : secondary ? [{ column, direction }, { column: secondary, direction }] : [{ column, direction }];
     return this.runQueryPreservingSelection(this.whereExpr);
   }
 
@@ -1583,7 +1639,10 @@ export class ViewStore {
    * (short, fixed delay) so a burst of same-tick patches writes OPFS once,
    * not once per row. */
   persistLiveState(cursor: number): void {
-    if (!this.db || this.whereExpr !== null || this.pickerExpr !== null) return;
+    // Also skipped under a sort the user clicked: the cache is stamped as
+    // being in the default order (schemaSignature), so rows in any other
+    // order would reload silently mis-sorted.
+    if (!this.db || this.whereExpr !== null || this.pickerExpr !== null || !this.isDefaultOrder()) return;
     if (this.persistLiveTimer) clearTimeout(this.persistLiveTimer);
     this.persistLiveTimer = setTimeout(() => {
       this.persistLiveTimer = null;

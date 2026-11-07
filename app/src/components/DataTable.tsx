@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
 import { getViewStore } from "../store/registry";
-import { visibleColumns, type ViewConfig } from "../store/views";
+import { headerSortColumn, visibleColumns, type ViewConfig } from "../store/views";
 import { useDisplayFormatVersion } from "../store/placeIndex";
 import { t } from "../i18n/i18n";
 import classes from "./DataTable.module.css";
@@ -263,10 +263,10 @@ export function DataTable({ view }: DataTableProps) {
       <div ref={headerRef} className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: rowWidth }}>
         {columns.map(({ column: col }, index) => {
           // A flat column sorts by itself; a json_path-backed one only when
-          // it names what to sort by (`sortBy`, a cached GOQL path -- see
+          // it names what to sort by (`sortKeys`/`sortBy` -- see
           // ViewConfig.orderBy for why each such path is opted into
           // individually rather than by default).
-          const sortColumn = col.sortBy ?? (typeof col.select === "string" ? col.select : null);
+          const sortColumn = headerSortColumn(col);
           const activeSort = snapshot.orderBy;
           const isSorted = sortColumn !== null && activeSort.column === sortColumn;
           return (

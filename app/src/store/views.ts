@@ -8,7 +8,7 @@
 import { createElement, type ReactNode } from "react";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
-import { formatDisplayName, type RawName } from "./nameDisplay";
+import { displayNameSortKeys, formatDisplayName, type RawName } from "./nameDisplay";
 import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
@@ -79,6 +79,18 @@ export interface ColumnConfig {
    * column, which can't be sorted server-side at all -- see
    * ViewConfig.orderBy's doc comment). */
   secondarySort?: string;
+  /** What clicking this column's header sorts by when that depends on
+   * runtime settings -- every key, most significant first, all at the
+   * clicked direction. Takes precedence over `sortBy`/`secondarySort`.
+   * Person's Name column: the tree's name format decides whether surname
+   * or given name comes first (nameSortKeys()). */
+  sortKeys?: () => string[];
+}
+
+/** The column a header click sorts by first (null: not sortable) -- what
+ * DataTable compares against the active sort to draw the arrow. */
+export function headerSortColumn(column: ColumnConfig): string | null {
+  return column.sortKeys?.()[0] ?? column.sortBy ?? (typeof column.select === "string" ? column.select : null);
 }
 
 /** The columns DataTable actually renders, each paired with its index into
@@ -95,6 +107,16 @@ export function visibleColumns(view: ViewConfig): { column: ColumnConfig; index:
 export interface OrderBy {
   column: string;
   direction: "asc" | "desc";
+}
+
+/** A view's default sort: its `defaultOrderBy()` if it has one, else its
+ * static `orderBy`. */
+export function defaultOrderBy(view: ViewConfig): OrderBy[] {
+  return view.defaultOrderBy?.() ?? view.orderBy;
+}
+
+function ascending(columns: string[]): OrderBy[] {
+  return columns.map((column) => ({ column, direction: "asc" }));
 }
 
 export interface ViewConfig {
@@ -141,6 +163,12 @@ export interface ViewConfig {
    * birth.date.sortval over 101k people ~4.2 s/page, vs 0.3 s for
    * surname). */
   orderBy: OrderBy[];
+  /** Overrides `orderBy` as the default sort when it depends on runtime
+   * settings -- read through defaultOrderBy(), never directly. Person's:
+   * the tree's name format (nameSortKeys()). Display settings must be
+   * loaded before the first fetch (ViewStore.ensureLoaded() waits for
+   * them), or the cache gets built in the wrong order. */
+  defaultOrderBy?: () => OrderBy[];
   opfsFilename: string;
   columns: ColumnConfig[];
   wherePlaceholder: string;
@@ -321,6 +349,10 @@ export const PERSON_VIEW: ViewConfig = {
   // on every later click -- without it, the default sort left same-surname
   // rows in server-insertion order instead of alphabetized by given name.
   orderBy: [{ column: "surname", direction: "asc" }, { column: "given_name", direction: "asc" }],
+  // The real default: the name format's own order, e.g. given name first
+  // for "Given Surname" -- the static orderBy above is its shape for the
+  // default "Surname, Given" format.
+  defaultOrderBy: () => ascending(displayNameSortKeys()),
   opfsFilename: "app-cache-person.sqlite",
   wherePlaceholder: 'e.g. gender == 1 and surname == "Ancestor"',
   simpleSearch: {
@@ -329,12 +361,12 @@ export const PERSON_VIEW: ViewConfig = {
   },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
-    // In the tree's name format. Sorts the way desktop's People view does
-    // whatever the format: surname, then given name (the hidden columns
-    // below), which is also all the server can sort people by.
+    // In the tree's name format, and sorted by it: its name parts in the
+    // order it writes them (nameSortKeys()), as desktop's People view sorts
+    // by the formatted name -- "Given" sorts by given name, then surname.
     {
       key: "primary_name", label: "Name", select: { json_path: ["primary_name"] }, sqlType: "TEXT",
-      sortBy: "surname", secondarySort: "given_name", toSql: toSqlJson, toDisplay: displayName,
+      sortKeys: displayNameSortKeys, toSql: toSqlJson, toDisplay: displayName,
     },
     // Hidden: the sort keys behind Name, and what person searches and
     // pickers match on.

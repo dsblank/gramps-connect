@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDisplayName, formatName, type RawName } from "../nameDisplay";
+import { formatDisplayName, formatName, nameSortKeys, type RawName } from "../nameDisplay";
 // Expected values are Gramps' own output for each name and format: see the
 // fixture's _source.
 import fixture from "./nameDisplay.fixture.json";
@@ -46,5 +46,25 @@ describe("formatDisplayName honors a name's own display_as", () => {
 
   it("accepts the JSON string a cache column stores", () => {
     expect(formatDisplayName(JSON.stringify({ ...name, display_as: 2 }))).toBe("John Smith Jr.");
+  });
+});
+
+describe("nameSortKeys", () => {
+  it("sorts the built-in formats by their own name order", () => {
+    expect(nameSortKeys("%l, %f %s")).toEqual(["surname", "given_name"]);
+    expect(nameSortKeys("%f %l %s")).toEqual(["given_name", "surname"]);
+    expect(nameSortKeys("%f")).toEqual(["given_name", "surname"]);
+    expect(nameSortKeys("%1m %2m %o, %f %1y %s %0m")).toEqual(["surname", "given_name"]);
+  });
+
+  it("uses a path key only when the format leads with a part that has no column", () => {
+    expect(nameSortKeys('%n "%f" %l')).toEqual(["primary_name.nick", "given_name", "surname"]);
+    expect(nameSortKeys("%t %f %l")).toEqual(["primary_name.title", "given_name", "surname"]);
+    expect(nameSortKeys("%f (%n) %l")).toEqual(["given_name", "surname"]);
+  });
+
+  it("treats upper-case codes like lower-case ones and ignores %%", () => {
+    expect(nameSortKeys("%L, %f")).toEqual(["surname", "given_name"]);
+    expect(nameSortKeys("%%l %f")).toEqual(["given_name", "surname"]);
   });
 });

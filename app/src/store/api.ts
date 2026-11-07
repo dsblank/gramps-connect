@@ -134,7 +134,10 @@ export async function fetchPage(
   after: string | null,
   wantCount: boolean,
   whereExpr: string | null,
-  orderBy: OrderBy[] = view.orderBy,
+  // views.ts's defaultOrderBy(), inlined: importing views.ts here would
+  // close an import cycle (displaySettings -> api -> views -> placeIndex
+  // -> displaySettings).
+  orderBy: OrderBy[] = view.defaultOrderBy?.() ?? view.orderBy,
   // Overridable for callers that only want the X-Total-Count header (see
   // ViewStore.globalRankOfItem(), a count-only "rows before this one"
   // query) and don't care about `items` itself -- the server still requires

@@ -173,3 +173,48 @@ export function formatDisplayName(name: RawName | string | null | undefined): st
 export function nameFormatParam(): string {
   return `name_format=${encodeURIComponent(displayNameFormat())}`;
 }
+
+// Sort keys for a name format. Only the two indexed flat columns sort
+// cheaply: every JSON path key, even a trailing tiebreak, costs a full scan
+// per page (100k Postgres fixture: 0.16 s for surname+given_name, 0.86 s
+// with primary_name.suffix appended; SQLite 0.09 s vs 0.32 s).
+const SURNAME_CODES = new Set(["l", "m", "1m", "q"]);
+const GIVEN_CODES = new Set(["f", "i", "x"]);
+const PATH_CODES: Record<string, string> = {
+  t: "primary_name.title",
+  c: "primary_name.call",
+  n: "primary_name.nick",
+  g: "primary_name.famnick",
+  s: "primary_name.suffix",
+};
+
+/** The People list's order_by keys for name format `format`: its name
+ * parts in the order the format writes them, so "Given" sorts by given
+ * name and "Surname, Given" by surname -- as Gramps desktop sorts by the
+ * formatted name. Surname codes map to the indexed `surname` column, given
+ * name codes (and initials, and %x's usual given-name fallback) to
+ * `given_name`. A part with no column (nickname, title, ...) becomes a JSON
+ * path key only when the format leads with it, ahead of both columns --
+ * the one case where it decides the order rather than breaking rare ties.
+ * Whichever column the format leaves out is appended as the tiebreak. */
+export function nameSortKeys(format: string): string[] {
+  const keys: string[] = [];
+  const add = (key: string) => {
+    if (!keys.includes(key)) keys.push(key);
+  };
+  for (const match of format.replace(/%%/g, "").matchAll(/%([0-2][mMyY]|[a-zA-Z])/g)) {
+    const code = match[1].toLowerCase();
+    if (SURNAME_CODES.has(code)) add("surname");
+    else if (GIVEN_CODES.has(code)) add("given_name");
+    else if (PATH_CODES[code] && !keys.includes("surname") && !keys.includes("given_name")) add(PATH_CODES[code]);
+    if (keys.includes("surname") && keys.includes("given_name")) break;
+  }
+  add("surname");
+  add("given_name");
+  return keys;
+}
+
+/** nameSortKeys() for the tree's name format (displaySettings.ts). */
+export function displayNameSortKeys(): string[] {
+  return nameSortKeys(displayNameFormat());
+}

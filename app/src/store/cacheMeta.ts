@@ -106,7 +106,10 @@ export function schemaSignature(view: ViewConfig): string {
     JSON.stringify({
       endpoint: view.endpoint,
       baseFilter: view.baseFilter ?? null,
-      orderBy: view.orderBy,
+      // The *default* order, which the cached rows are in -- for People it
+      // follows the tree's name format, so changing the format reads as a
+      // schema change and the next load refetches in the new order.
+      orderBy: view.defaultOrderBy?.() ?? view.orderBy, // views.ts defaultOrderBy(), inlined like api.ts's
       columns: view.columns.map((c) => [c.key, c.select, c.sqlType, String(c.toSql ?? "")]),
     })
   );
