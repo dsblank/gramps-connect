@@ -11,6 +11,20 @@ export function isBrowserNotificationsEnabled(): boolean {
   return localStorage.getItem(STORAGE_KEY) === "true";
 }
 
+/** Why notifications can't be shown here, or null if they can (or the
+ * browser will still ask): "insecure" -- the page isn't https:// or
+ * localhost, where browsers withhold the API; "unsupported" -- no
+ * Notification API at all; "denied" -- blocked for this site, which no
+ * click can undo (only the browser's site settings can). */
+export type NotificationBlocker = "insecure" | "unsupported" | "denied";
+
+export function browserNotificationsBlocker(): NotificationBlocker | null {
+  if (window.isSecureContext === false) return "insecure";
+  if (!("Notification" in window)) return "unsupported";
+  if (Notification.permission === "denied") return "denied";
+  return null;
+}
+
 /** Requests permission -- call only from a real click handler, since
  * Notification.requestPermission() silently no-ops outside a user gesture
  * in most browsers. Persists the opt-in only if granted; returns the

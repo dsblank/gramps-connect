@@ -2,6 +2,7 @@ import { Group, Stack, Text } from "@mantine/core";
 import { DETAIL_FIELDS } from "./detailFieldDefinitions";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { t } from "../../i18n/i18n";
+import { useNameGroupsVersion } from "../../store/nameGroups";
 
 /** Renders whichever of DETAIL_FIELDS' flat facts this type has and this
  * particular record actually has a value for -- always visible (not
@@ -9,6 +10,9 @@ import { t } from "../../i18n/i18n";
  * record itself, same prominence as its ID, not a list of references to
  * browse. Renders nothing at all if every field is empty. */
 export function DetailFields({ type, detail }: { type: string; detail: ObjectDetail }) {
+  // A person's "Grouped as" reads the tree's surname groups (nameGroups.ts),
+  // which can load or change after this renders.
+  useNameGroupsVersion();
   const fields = DETAIL_FIELDS[type] ?? [];
   const rows = fields.map((f) => ({ label: f.label, value: f.value(detail) })).filter((r) => r.value);
   if (rows.length === 0) return null;

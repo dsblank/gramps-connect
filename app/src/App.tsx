@@ -14,7 +14,7 @@ import { getViewStore } from "./store/registry";
 import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
 import { getAuthSnapshot, getCurrentUsername, getToken, subscribe as subscribeAuth } from "./auth/auth";
 import { loadDisplaySettings } from "./store/displaySettings";
-import { loadNameGroups } from "./store/nameGroups";
+import { loadNameGroupMappings, watchNameGroupMappings } from "./store/nameGroups";
 import { dateLocaleCode } from "./store/placeIndex";
 import { isHandoffCandidate, tryHandoffLogin } from "./auth/windowHandoff";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "./i18n/i18n";
@@ -248,6 +248,13 @@ function AuthenticatedApp() {
   useEffect(() => {
     loadDisplaySettings().catch(() => {});
   }, []);
+  // The tree's surname groups (nameGroups.ts) -- one small request, so up
+  // front: person search, pickers and a person's "Grouped as" all use them.
+  // Refetched when the tab regains focus, since live sync can't see them.
+  useEffect(() => {
+    loadNameGroupMappings().catch(() => {});
+    return watchNameGroupMappings();
+  }, []);
   // Start loading the interface language's date strings right away (they
   // load on demand; dates show in English until they land).
   useEffect(() => {
@@ -431,17 +438,9 @@ function AuthenticatedApp() {
   // at all -- see homeStats.ts.
   useEffect(() => {
     if (isStorelessKey(activeKey)) return;
-    getViewStore(activeKey)
-      .ensureLoaded()
-      .then(() => {
-        // Person search follows surname grouping (nameGroups.ts), from
-        // lookups loaded in the background once the list itself is up --
-        // a full scan on the server, so not ahead of the first page.
-        if (activeKey === "person") loadNameGroups().catch(() => {});
-      })
-      .catch((err) => {
-        console.error(`[${activeKey}] failed to load`, err);
-      });
+    getViewStore(activeKey).ensureLoaded().catch((err) => {
+      console.error(`[${activeKey}] failed to load`, err);
+    });
   }, [activeKey]);
 
   // Server-driven catch-up sweep for reports/exports whose dispatching tab

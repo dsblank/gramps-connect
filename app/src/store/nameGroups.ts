@@ -8,15 +8,23 @@
 // Neither can go into the search's where_expr as a path: nothing indexes
 // inside a record, so `like(primary_name.group_as, ...)` made every person
 // search ~7x slower (100k Postgres fixture: 0.22 s -> 1.64 s; SQLite 0.15
-// s -> 0.63 s). Instead both are looked up once -- the mappings (GET
-// /api/name-groups/, a short list) and the few names that set Group as
-// themselves (one query) -- and a search adds what matches as indexed
-// `surname in [...]` / `handle in [...]` clauses.
+// s -> 0.63 s). Instead both are looked up and a search adds what matches
+// as indexed `surname in [...]` / `handle in [...]` clauses. The two
+// lookups cost very differently, so they load separately:
 //
-// Kept current by live sync (treeChangeBus.ts): a changed person's own
-// Group as is re-read by handle, a deleted one dropped. Mappings aren't in
-// the transaction history, so only this tab's own writes (setNameGroup)
-// refresh them; another user's new mapping shows up after a reload.
+// - The mappings (GET /api/name-groups/) are a short list: loaded at
+//   startup (App.tsx), and refetched whenever the tab regains focus or a
+//   name editor opens -- they aren't in the transaction history, so live
+//   sync never hears about another user's new grouping.
+// - The names with their own Group as take a full scan (100k fixtures: 2.4
+//   s on Postgres, 0.35 s on SQLite), so they load on the first person
+//   search, and stay current from live sync (treeChangeBus.ts): a changed
+//   person's Group as is re-read by handle, a deleted one dropped.
+//
+// Either one landing or changing bumps a version (useNameGroupsVersion) so
+// a search already showing re-runs with it -- otherwise a search typed
+// before the scan finished would silently miss grouped names.
+import { useSyncExternalStore } from "react";
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { parseErrorMessage } from "./api";
@@ -25,11 +33,12 @@ import { subscribeTreeChange } from "./treeChangeBus";
 
 /** More names than this with their own Group as (a full page -- the
  * server's limit is 1000): give up on the handle list and search the path
- * directly -- slow, but correct. Measured on the 100k fixtures, the
- * one-time lookup costs 2.4 s on Postgres and 0.35 s on SQLite (a full
- * scan, no count -- `count` would scan again); the `in [...]` clauses it
- * feeds cost nothing measurable per search. */
+ * directly -- slow, but correct. The `in [...]` clauses the list feeds
+ * cost nothing measurable per search. */
 const MAX_GROUP_AS_HANDLES = 1000;
+
+/** At most one focus-driven mappings refetch per this long. */
+const FOCUS_REFRESH_MS = 30_000;
 
 /** surname -> group, for surnames with a tree-wide mapping. */
 let mappings = new Map<string, string>();
@@ -37,8 +46,29 @@ let mappings = new Map<string, string>();
 let groupAs = new Map<string, string>();
 /** Too many names set their own Group as to list them (see above). */
 let groupAsOverflow = false;
-let loadPromise: Promise<void> | null = null;
-let unsubscribe: (() => void) | null = null;
+let mappingsPromise: Promise<void> | null = null;
+let mappingsLoadedAt = 0;
+let groupAsPromise: Promise<void> | null = null;
+let unsubscribeLive: (() => void) | null = null;
+
+let version = 0;
+const listeners = new Set<() => void>();
+
+function bump() {
+  version += 1;
+  for (const listener of listeners) listener();
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Changes whenever the lookups load or change -- for a search that should
+ * re-run with them (FilterBar.tsx, RecordPicker.tsx). */
+export function useNameGroupsVersion(): number {
+  return useSyncExternalStore(subscribe, () => version);
+}
 
 async function fetchJson(path: string, init?: RequestInit): Promise<Response> {
   const token = await getToken();
@@ -57,6 +87,10 @@ async function fetchMappings(): Promise<Map<string, string>> {
   return new Map(body.filter((m) => m.group && m.group !== m.surname).map((m) => [m.surname, m.group]));
 }
 
+function sameMap(a: Map<string, string>, b: Map<string, string>): boolean {
+  return a.size === b.size && [...a].every(([key, value]) => b.get(key) === value);
+}
+
 async function queryGroupAs(whereExpr: string, limit: number): Promise<[string, string][]> {
   const res = await fetchJson("/api/people/query/", {
     method: "POST",
@@ -70,34 +104,72 @@ async function queryGroupAs(whereExpr: string, limit: number): Promise<[string, 
 async function refreshPerson(handle: string): Promise<void> {
   const rows = await queryGroupAs(`handle == ${JSON.stringify(handle)}`, 1);
   const value = rows[0]?.[1] ?? "";
+  if ((groupAs.get(handle) ?? "") === value) return;
   if (value) groupAs.set(handle, value);
   else groupAs.delete(handle);
+  bump();
 }
 
-/** Loads both lookups once per page (later calls share the first one's
- * promise; a failure is retried on the next call). Person search works
- * without them -- it just doesn't follow grouping until they arrive. */
-export function loadNameGroups(): Promise<void> {
-  if (!loadPromise) {
-    loadPromise = (async () => {
-      const [nextMappings, rows] = await Promise.all([
-        fetchMappings(),
-        queryGroupAs('primary_name.group_as != ""', MAX_GROUP_AS_HANDLES),
-      ]);
-      mappings = nextMappings;
-      groupAs = new Map(rows.filter(([, value]) => value));
-      groupAsOverflow = rows.length >= MAX_GROUP_AS_HANDLES;
-      unsubscribe ??= subscribeTreeChange((notification) => {
-        if (notification.table !== "person" || groupAsOverflow) return;
-        if (notification.op === "DELETE") groupAs.delete(notification.handle);
-        else refreshPerson(notification.handle).catch(() => {});
-      });
+/** The tree-wide mappings: fetched once, or again with `force` (a name
+ * editor opening, the tab regaining focus). Concurrent calls share one
+ * request; a failure keeps what was there and is retried next time. */
+export function loadNameGroupMappings(force = false): Promise<void> {
+  if (!mappingsPromise || force) {
+    const promise = (async () => {
+      const next = await fetchMappings();
+      mappingsLoadedAt = Date.now();
+      if (sameMap(next, mappings)) return;
+      mappings = next;
+      bump();
     })();
-    loadPromise.catch(() => {
-      loadPromise = null;
+    mappingsPromise = promise;
+    promise.catch(() => {
+      if (mappingsPromise === promise) mappingsPromise = null;
     });
   }
-  return loadPromise;
+  return mappingsPromise;
+}
+
+/** The names with their own Group as: loaded once, on the first person
+ * search (personSearch.ts), then kept current from live sync. */
+export function loadGroupAsIndex(): Promise<void> {
+  if (!groupAsPromise) {
+    groupAsPromise = (async () => {
+      const rows = await queryGroupAs('primary_name.group_as != ""', MAX_GROUP_AS_HANDLES);
+      groupAs = new Map(rows.filter(([, value]) => value));
+      groupAsOverflow = rows.length >= MAX_GROUP_AS_HANDLES;
+      unsubscribeLive ??= subscribeTreeChange((notification) => {
+        if (notification.table !== "person" || groupAsOverflow) return;
+        if (notification.op === "DELETE") {
+          if (groupAs.delete(notification.handle)) bump();
+        } else {
+          refreshPerson(notification.handle).catch(() => {});
+        }
+      });
+      bump();
+    })();
+    groupAsPromise.catch(() => {
+      groupAsPromise = null;
+    });
+  }
+  return groupAsPromise;
+}
+
+/** Refetches the mappings when the tab comes back into focus (at most
+ * every FOCUS_REFRESH_MS) -- another user's grouping can't reach us any
+ * other way. Returns a cleanup function; mounted once by App.tsx. */
+export function watchNameGroupMappings(): () => void {
+  function onVisible() {
+    if (document.visibilityState !== "visible") return;
+    if (Date.now() - mappingsLoadedAt < FOCUS_REFRESH_MS) return;
+    loadNameGroupMappings(true).catch(() => {});
+  }
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("focus", onVisible);
+  return () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("focus", onVisible);
+  };
 }
 
 /** The tree-wide group for `surname`, or null if it has none. */
@@ -109,17 +181,20 @@ export function getNameGroup(surname: string): string | null {
  * all"), or, with `group` null, ungroups them -- written as a mapping of
  * the surname to itself, since gramps-web-api can only set a mapping, not
  * delete one. Needs EditNameGroup (Editor and up). Not a transaction: it
- * can't be undone from history, as in Gramps desktop. */
+ * can't be undone from history, which is why draftStack.ts only calls it
+ * once the person's own save has succeeded. */
 export async function setNameGroup(surname: string, group: string | null): Promise<void> {
   const target = group || surname;
   await fetchJson(`/api/name-groups/${encodeURIComponent(surname)}/${encodeURIComponent(target)}`, { method: "POST" });
   if (target === surname) mappings.delete(surname);
   else mappings.set(surname, target);
+  bump();
 }
 
 /** Extra where_expr alternatives for one search word: people whose group
  * (see above) contains `word`, case-insensitively like the search's own
- * `like()`. Empty when nothing matches or the lookups aren't loaded yet. */
+ * `like()`. Empty when nothing matches or the lookups haven't loaded yet --
+ * useNameGroupsVersion() changes when they do. */
 export function groupSearchClauses(word: string): string[] {
   const needle = word.toLowerCase();
   const clauses: string[] = [];
@@ -134,10 +209,12 @@ export function groupSearchClauses(word: string): string[] {
   return clauses;
 }
 
-/** Test-only: forget everything loaded. */
+/** Test-only: replace what's loaded, and mark both lookups as loaded so
+ * nothing tries to fetch. */
 export function resetNameGroupsForTest(next?: { mappings?: [string, string][]; groupAs?: [string, string][]; overflow?: boolean }): void {
   mappings = new Map(next?.mappings ?? []);
   groupAs = new Map(next?.groupAs ?? []);
   groupAsOverflow = next?.overflow ?? false;
-  loadPromise = null;
+  mappingsPromise = Promise.resolve();
+  groupAsPromise = Promise.resolve();
 }

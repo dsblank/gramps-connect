@@ -1,4 +1,4 @@
-import { groupSearchClauses } from "./nameGroups";
+import { groupSearchClauses, loadGroupAsIndex } from "./nameGroups";
 
 /** Fields checked for each word of a person search query. */
 const SEARCH_FIELDS = ["given_name", "surname", "gramps_id"];
@@ -28,6 +28,10 @@ const SEARCH_FIELDS = ["given_name", "surname", "gramps_id"];
 export function buildPersonSearchExpr(query: string): string | null {
   const trimmed = query.replace(/,/g, " ").trim();
   if (trimmed.length < 2) return null;
+  // The names with their own Group as take a full scan to look up, so
+  // only once someone actually searches; a search already showing re-runs
+  // when they land (useNameGroupsVersion).
+  loadGroupAsIndex().catch(() => {});
 
   const words = trimmed
     .split(/\s+/)

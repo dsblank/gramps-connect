@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Card, Divider, Group, Loader, NavLink, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
+import { useNameGroupsVersion } from "../store/nameGroups";
 import type { ViewConfig } from "../store/views";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { withGrampsId } from "./related/summary";
@@ -89,6 +90,7 @@ export function RecordPicker({
   extraCreateAction,
 }: RecordPickerProps) {
   const [query, setQuery] = useState("");
+  const nameGroupsVersion = useNameGroupsVersion();
   const [results, setResults] = useState<QueryItem[]>([]);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -111,7 +113,10 @@ export function RecordPicker({
     setSelectedHandle(null);
     (async () => {
       const token = await getToken();
-      const { page, totalCount: count } = await fetchPage(view, token, null, true, whereExpr, view.orderBy, RESULT_LIMIT);
+      // The view's default order -- for People, the tree's name format
+      // (views.ts defaultOrderBy), not the static surname-first `orderBy`.
+      const orderBy = view.defaultOrderBy?.() ?? view.orderBy;
+      const { page, totalCount: count } = await fetchPage(view, token, null, true, whereExpr, orderBy, RESULT_LIMIT);
       if (!cancelled) {
         setResults(page.items);
         setTotalCount(count);
@@ -129,7 +134,9 @@ export function RecordPicker({
     return () => {
       cancelled = true;
     };
-  }, [query, view, searchField, buildExpr]);
+    // nameGroupsVersion: person search folds in surname groups
+    // (nameGroups.ts), which can land after the first search ran.
+  }, [query, view, searchField, buildExpr, nameGroupsVersion]);
 
   const selectedItem = results.find((item) => item.handle === selectedHandle) ?? null;
 

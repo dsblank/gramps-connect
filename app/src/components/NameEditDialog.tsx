@@ -5,7 +5,7 @@ import { DateInput } from "./DateInput";
 import { ListShell } from "./EmbeddedListFields";
 import { t } from "../i18n/i18n";
 import { hasPermissions } from "../auth/auth";
-import { getNameGroup, loadNameGroups } from "../store/nameGroups";
+import { getNameGroup, loadNameGroupMappings, useNameGroupsVersion } from "../store/nameGroups";
 
 // NameType (gramps/gen/lib/nametype.py) -- plain English strings, same
 // convention as FamilyEditDialog's REL_TYPE_OPTIONS: gramps-web-api's
@@ -76,14 +76,11 @@ export function NameEditDialog({
   // "Group everyone named X as Y" -- desktop's "Group all" answer, recorded
   // on Done (see handleDone) and written when the person is saved.
   const [groupAll, setGroupAll] = useState(false);
-  // Re-render once the tree-wide surname groups are known (nameGroups.ts),
-  // e.g. when this opens before the People list has loaded them.
-  const [, setGroupsVersion] = useState(0);
+  // The tree-wide surname groups (nameGroups.ts), refetched on open so a
+  // grouping someone else just made shows here; re-renders when they land.
+  useNameGroupsVersion();
   useEffect(() => {
-    if (!opened) return;
-    loadNameGroups()
-      .then(() => setGroupsVersion((v) => v + 1))
-      .catch(() => {});
+    if (opened) loadNameGroupMappings(true).catch(() => {});
   }, [opened]);
 
   const surnameList = (data.surname_list as Surname[] | undefined) ?? [];

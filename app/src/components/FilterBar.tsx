@@ -4,6 +4,7 @@ import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import { getSearchHelp } from "../store/searchHelp";
 import { getSearchState, setSearchState } from "../store/searchState";
+import { useNameGroupsVersion } from "../store/nameGroups";
 import { InfoButton } from "./InfoButton";
 import { SearchHelpDialog } from "./SearchHelpDialog";
 import type { ViewConfig } from "../store/views";
@@ -135,6 +136,22 @@ export function FilterBar({ view }: FilterBarProps) {
       setApplying(false);
     }
   }
+
+  // A plain-text search that's already applied is re-built when the surname
+  // groups load or change (nameGroups.ts) -- person search folds them in,
+  // and they can land after the search ran (the first search is what
+  // starts loading some of them). Only when the box still matches what's
+  // applied (!dirty), and only if the rebuilt expression actually differs,
+  // so every other view (whose buildExpr ignores groups) never re-runs.
+  const nameGroupsVersion = useNameGroupsVersion();
+  useEffect(() => {
+    if (!view.simpleSearch || useGoql || dirty || snapshot.whereExpr === null || applying) return;
+    const rebuilt = view.simpleSearch.buildExpr(input);
+    if (rebuilt !== null && rebuilt !== snapshot.whereExpr) apply(rebuilt);
+    // Deliberately keyed on the groups version alone: the other inputs
+    // changing is the ordinary submit path's job.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nameGroupsVersion]);
 
   // Plain-text mode translates through simpleSearch.buildExpr (null for
   // too-short input clears the filter, same as an empty box); GOQL mode

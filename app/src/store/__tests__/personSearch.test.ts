@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { resetNameGroupsForTest } from "../nameGroups";
 import { buildPersonSearchExpr } from "../personSearch";
 
 describe("buildPersonSearchExpr", () => {
+  // No surname groups loaded, and nothing to fetch (see nameGroups.test.ts).
+  beforeEach(() => resetNameGroupsForTest());
+
   it("returns null for empty or 1-character input", () => {
     expect(buildPersonSearchExpr("")).toBeNull();
     expect(buildPersonSearchExpr(" a ")).toBeNull();

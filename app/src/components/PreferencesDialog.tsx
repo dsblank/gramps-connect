@@ -7,17 +7,24 @@ import {
   Switch,
   Tabs,
   Text,
-  useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
 import { DisplaySettingsPanel } from "./DisplaySettingsPanel";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { fetchLanguages } from "../store/translationsApi";
 import {
+  browserNotificationsBlocker,
   disableBrowserNotifications,
   enableBrowserNotifications,
   isBrowserNotificationsEnabled,
+  type NotificationBlocker,
 } from "../store/browserNotifications";
+
+const BLOCKER_MESSAGES: Record<NotificationBlocker, string> = {
+  insecure: "Not available here: browsers only allow notifications on a secure (https://) connection.",
+  unsupported: "This browser doesn't support notifications.",
+  denied: "Your browser has blocked notifications for this site. Allow them in the browser's site settings, then turn this on again.",
+};
 
 const ENGLISH_OPTION = { value: "en", label: "English" };
 
@@ -78,21 +85,27 @@ function LanguagePicker() {
   );
 }
 
+/** Light, Dark, or Auto -- following the computer's own setting (the
+ * app's default, main.tsx's defaultColorScheme="auto"). Mantine keeps the
+ * choice in localStorage. */
 function ColorSchemeToggle() {
-  const { setColorScheme } = useMantineColorScheme();
-  const computed = useComputedColorScheme("light");
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>{t("Appearance")}</Text>
       <SegmentedControl
-        w={260}
-        value={computed}
-        onChange={(value) => setColorScheme(value as "light" | "dark")}
+        w={300}
+        value={colorScheme}
+        onChange={(value) => setColorScheme(value as "light" | "dark" | "auto")}
         data={[
           { label: t("Light"), value: "light" },
           { label: t("Dark"), value: "dark" },
+          { label: t("Auto"), value: "auto" },
         ]}
       />
+      {colorScheme === "auto" && (
+        <Text size="xs" c="dimmed">{t("Follows your computer's light or dark setting.")}</Text>
+      )}
     </Stack>
   );
 }
@@ -102,21 +115,35 @@ function ColorSchemeToggle() {
  * if this tab isn't focused" escalation, and browsers require it to be
  * requested from a real click. */
 function BrowserNotificationsToggle() {
-  const [enabled, setEnabled] = useState(isBrowserNotificationsEnabled);
+  // Read fresh on open: the browser's own permission can change behind our
+  // back (blocked in site settings), which would leave a stored "on" that
+  // silently does nothing -- shown as off, with the reason, instead.
+  const [blocker, setBlocker] = useState(browserNotificationsBlocker);
+  const [enabled, setEnabled] = useState(() => isBrowserNotificationsEnabled() && browserNotificationsBlocker() === null);
   return (
-    <Switch
-      label={t("Desktop notifications")}
-      description={t("Also show alerts (new messages, finished reports and downloads) as notifications from your computer, while Gramps Connect is open in a tab.")}
-      checked={enabled}
-      onChange={async (e) => {
-        if (e.currentTarget.checked) {
-          setEnabled(await enableBrowserNotifications());
-        } else {
-          disableBrowserNotifications();
-          setEnabled(false);
-        }
-      }}
-    />
+    <Stack gap={4}>
+      <Switch
+        label={t("Desktop notifications")}
+        description={t("Also show alerts (new messages, finished reports and downloads) as notifications from your computer, while Gramps Connect is open in a tab.")}
+        checked={enabled}
+        disabled={blocker === "insecure" || blocker === "unsupported"}
+        onChange={async (e) => {
+          if (e.currentTarget.checked) {
+            const granted = await enableBrowserNotifications();
+            setEnabled(granted);
+            setBlocker(granted ? null : browserNotificationsBlocker() ?? "denied");
+          } else {
+            disableBrowserNotifications();
+            setEnabled(false);
+          }
+        }}
+      />
+      {blocker && (
+        <Text size="xs" c="orange">
+          {t(BLOCKER_MESSAGES[blocker])}
+        </Text>
+      )}
+    </Stack>
   );
 }
 
