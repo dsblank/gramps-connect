@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
-  Anchor, Autocomplete, Button, Checkbox, CloseButton, Collapse, Divider, Group, Modal, NumberInput, ScrollArea, Select,
+  Anchor, Button, Checkbox, CloseButton, Collapse, Divider, Group, Modal, NumberInput, ScrollArea, Select,
   SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip,
 } from "@mantine/core";
+import { SelectOrEnter } from "./SelectOrEnter";
 import {
   gqlFilterPresets, type GqlFilterCategory, type GqlFilterNamespace, type GqlFilterParam, type GqlFilterPreset,
   type GqlPresetParam,
@@ -1281,7 +1282,7 @@ function ParamInput({ param, value, onChange }: {
         .map(([name]) => name);
       const isStandard = names.includes(value);
       return (
-        <Autocomplete
+        <SelectOrEnter
           size="xs"
           w={170}
           placeholder={t(param.label)}

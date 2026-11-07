@@ -1,4 +1,5 @@
-import { Autocomplete, Card, Group, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { Card, Group, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { SelectOrEnter } from "./SelectOrEnter";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { t } from "../i18n/i18n";
 
@@ -233,7 +234,7 @@ export function UrlListField({ items, onChange }: UrlListFieldProps) {
               onChange={(e) => onPatch({ desc: e.currentTarget.value })}
               style={{ flex: 1 }}
             />
-            <Autocomplete
+            <SelectOrEnter
               placeholder={TYPE_HINT}
               aria-label={t("Url type")}
               data={URL_TYPE_OPTIONS}

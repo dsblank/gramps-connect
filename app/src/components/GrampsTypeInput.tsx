@@ -3,7 +3,8 @@
 // or type a new custom one. Leaving the field snaps a case-only variant
 // ("county") to the existing spelling ("County"), so it can't become a
 // near-duplicate custom type. See store/grampsTypes.ts for the lists.
-import { Autocomplete, type ComboboxItem, type ComboboxItemGroup, type MantineSize, type OptionsFilter } from "@mantine/core";
+import { type ComboboxItem, type ComboboxItemGroup, type MantineSize, type OptionsFilter } from "@mantine/core";
+import { SelectOrEnter } from "./SelectOrEnter";
 import { canonicalTypeName, useGrampsTypeOptions, type GrampsTypeKind } from "../store/grampsTypes";
 import { t } from "../i18n/i18n";
 
@@ -36,7 +37,7 @@ export function GrampsTypeInput({ kind, label, value, onChange, size, disabled, 
     ...(options.custom.length ? [{ group: t("Used in this tree"), items: options.custom }] : []),
   ];
   return (
-    <Autocomplete
+    <SelectOrEnter
       label={label}
       aria-label={label ? undefined : t("Type")}
       placeholder={t("Choose, or type your own…")}
