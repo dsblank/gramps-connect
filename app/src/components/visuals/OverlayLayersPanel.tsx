@@ -19,6 +19,8 @@ import type { MapPlace } from "../../store/visualData";
 import {
   fetchAllKmlImageOverlays, fetchAllKmlLines, fetchAllKmlRegions, type KmlImageOverlay, type KmlLine, type KmlRegion,
 } from "../../store/kmlMedia";
+import { fetchObjectsByHandle } from "../../store/objectsByHandle";
+import { getToken } from "../../auth/auth";
 import { overlayDateVisible } from "./mapStyles";
 import { t } from "../../i18n/i18n";
 
@@ -90,6 +92,36 @@ function untitled(kind: RowKind): string {
   return t("Untitled line");
 }
 
+/** Map file handle -> its Media description ("Indiana 1817"). Best-effort:
+ * a failed fetch just means unnamed rows stay "Untitled". */
+async function fetchFileDescs(handles: string[]): Promise<Map<string, string>> {
+  try {
+    const records = await fetchObjectsByHandle(await getToken(), "media", handles);
+    return new Map([...records].map(([handle, media]) => [handle, String(media.desc ?? "").trim()]));
+  } catch {
+    return new Map();
+  }
+}
+
+/** A feature with no name of its own (an uploaded file's features often
+ * carry none) is labelled with its file's Media description, which is what
+ * the overlay is called everywhere else in the app. Several unnamed rows from
+ * the same file get "(1)", "(2)"... so they stay tellable apart. */
+function nameFromFileDesc(rows: OverlayRow[], descs: Map<string, string>): OverlayRow[] {
+  const unnamedPerFile = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.name) unnamedPerFile.set(row.kmlHandle, (unnamedPerFile.get(row.kmlHandle) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  return rows.map((row) => {
+    const desc = descs.get(row.kmlHandle);
+    if (row.name || !desc) return row;
+    const n = (seen.get(row.kmlHandle) ?? 0) + 1;
+    seen.set(row.kmlHandle, n);
+    return { ...row, name: (unnamedPerFile.get(row.kmlHandle) ?? 0) > 1 ? `${desc} (${n})` : desc };
+  });
+}
+
 interface OverlayLayersPanelProps {
   /** Same set MapView passes to MapCanvas -- the panel only ever lists
    * items actually visible (or hidden-by-date) on the map right now. */
@@ -135,14 +167,15 @@ export function OverlayLayersPanel({
     );
     Promise.all([
       fetchAllKmlImageOverlays(handles), fetchAllKmlRegions(handles), fetchAllKmlLines(handles),
-    ]).then(([overlays, regions, lines]) => {
+      fetchFileDescs(handles),
+    ]).then(([overlays, regions, lines, descs]) => {
       if (cancelled) return;
       const titleOf = (kmlHandle: string) => placeByKmlHandle.get(kmlHandle)?.title ?? "";
       const imageRows = overlays.map((o) => imageToRow(o, titleOf(o.kmlHandle)));
       const regionRows = regions.map((r) => regionToRow(r, titleOf(r.kmlHandle)));
       const lineRows = lines.map((l) => lineToRow(l, titleOf(l.kmlHandle)));
       imageRows.sort((a, b) => a.order - b.order);
-      setRows([...imageRows, ...regionRows, ...lineRows]);
+      setRows(nameFromFileDesc([...imageRows, ...regionRows, ...lineRows], descs));
     });
     return () => {
       cancelled = true;
