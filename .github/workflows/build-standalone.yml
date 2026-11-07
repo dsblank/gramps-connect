@@ -612,7 +612,7 @@ jobs:
           gh release create "v$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
             --title "gramps-connect-desktop v$VERSION" \
-            --prerelease \
+            --latest \
             --target main \
             --notes-file notes.md \
             artifacts/gramps-connect-desktop-windows.zip \
