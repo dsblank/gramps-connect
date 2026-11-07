@@ -4,6 +4,7 @@ import { FileButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { createHandle } from "../store/objectsApi";
 import { uploadMediaFile } from "../store/jobsApi";
+import { prepareImageUploads } from "../store/imageResize";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { RecordPicker } from "./RecordPicker";
 import { withGrampsId } from "./related/summary";
@@ -489,8 +490,10 @@ export function MediaListField({ label, refs, labels, onAddExisting, onAdded, on
     setUploading(true);
     setError(null);
     try {
+      const prepared = await prepareImageUploads([file]);
+      if (!prepared) return;
       const token = await getToken();
-      const handle = await uploadMediaFile(token, file);
+      const handle = await uploadMediaFile(token, prepared[0]);
       onAdded(handle, file.name);
     } catch (err: any) {
       setError(err.message ?? String(err));

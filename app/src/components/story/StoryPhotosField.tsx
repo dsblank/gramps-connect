@@ -7,6 +7,7 @@ import { ActionIcon, Box, Button, FileButton, Group, Loader, Stack, Text, Toolti
 import { getToken } from "../../auth/auth";
 import type { QueryItem } from "../../store/api";
 import { uploadMediaFile } from "../../store/jobsApi";
+import { prepareImageUploads } from "../../store/imageResize";
 import { MEDIA_VIEW } from "../../store/views";
 import { pickerResultLabel } from "../RefPickerField";
 import { RecordPicker } from "../RecordPicker";
@@ -58,8 +59,10 @@ export function StoryPhotosField({ photos, info, onChange, onAdd, onPicked }: {
     setError(null);
     const handles: string[] = [];
     try {
+      const prepared = await prepareImageUploads(files);
+      if (!prepared) return;
       const token = await getToken();
-      for (const file of files) handles.push(await uploadMediaFile(token, file));
+      for (const file of prepared) handles.push(await uploadMediaFile(token, file));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

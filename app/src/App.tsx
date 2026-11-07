@@ -51,6 +51,7 @@ import { fetchServerState } from "./store/cacheMeta";
 import { classifyRemoteNoteChange } from "./store/topicInvite";
 import { FloatingTopicWindows } from "./components/FloatingTopicWindows";
 import { ConfirmDialogHost } from "./components/ConfirmDialogHost";
+import { LargeImageDialogHost } from "./components/LargeImageDialogHost";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
@@ -699,6 +700,7 @@ function AuthenticatedApp() {
       {/* Single shared modal answering every confirmDialog() call across
           the app -- see ConfirmDialogHost.tsx's own doc comment. */}
       <ConfirmDialogHost />
+      <LargeImageDialogHost />
     </>
   );
 }

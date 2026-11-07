@@ -4,16 +4,20 @@
 import { notifications } from "@mantine/notifications";
 import { getToken } from "../auth/auth";
 import { uploadMediaFile } from "./jobsApi";
+import { prepareImageUploads } from "./imageResize";
 import { getViewStore } from "./registry";
 import { t } from "../i18n/i18n";
 
 /** Uploads each file as a new Media object, one at a time, returning the
- * handles of those that succeeded. A failed file gets its own red toast and
- * doesn't stop the rest. */
+ * handles of those that succeeded. Large images are first offered a resize
+ * (imageResize.ts); cancelling that uploads nothing. A failed file gets its
+ * own red toast and doesn't stop the rest. */
 export async function uploadMediaFiles(files: File[]): Promise<string[]> {
+  const prepared = await prepareImageUploads(files);
+  if (!prepared) return [];
   const token = await getToken();
   const uploaded: string[] = [];
-  for (const file of files) {
+  for (const file of prepared) {
     try {
       uploaded.push(await uploadMediaFile(token, file));
     } catch (err: any) {

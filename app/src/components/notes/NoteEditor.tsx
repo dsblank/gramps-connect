@@ -10,6 +10,7 @@ import { useEditor, type Editor } from "@tiptap/react";
 import "@mantine/tiptap/styles.css";
 import { getToken } from "../../auth/auth";
 import { uploadMediaFile } from "../../store/jobsApi";
+import { prepareImageUploads } from "../../store/imageResize";
 import {
   docToStyledText, recordLink, sameStyledText, styledTextToDoc, type StyledText,
 } from "../../store/styledText";
@@ -171,8 +172,10 @@ function PickerPanel({ editor, panel, onClose }: { editor: Editor; panel: Exclud
     setUploading(true);
     setError(null);
     try {
+      const prepared = await prepareImageUploads([file]);
+      if (!prepared) return;
       const token = await getToken();
-      const handle = await uploadMediaFile(token, file);
+      const handle = await uploadMediaFile(token, prepared[0]);
       editor.chain().focus().insertGrampsImage(handle).run();
       onClose();
     } catch (err: any) {
