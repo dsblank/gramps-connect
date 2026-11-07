@@ -18,6 +18,13 @@ function getSql(): Promise<SqlJsStatic> {
 const stores = new Map<string, ViewStore>(VIEWS.map((view) => [view.key, new ViewStore(view, getSql)]));
 attachDisplayStores({ place: stores.get("place")!, event: stores.get("event")! });
 
+// Dev only: a hot update that re-runs this module (an edit here, or in
+// anything it imports -- placeIndex.ts, views.ts, viewStore.ts...) would
+// create a second, empty set of stores and attach placeIndex.ts to them,
+// while the mounted app and live sync keep using the first set: automatic
+// place titles then stop following edits until a reload. Reload instead.
+if (import.meta.hot) import.meta.hot.accept(() => window.location.reload());
+
 // Grouped by ViewConfig.table (defaulting to `key`) rather than by `key`
 // itself -- more than one view can watch the same underlying object type
 // (e.g. "media" and "generated" both back onto Media), so a live-sync
