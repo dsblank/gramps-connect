@@ -224,6 +224,58 @@ export async function searchWikidata(
   };
 }
 
+/** The fallback for when searchWikidata finds no place: Wikidata's
+ * full-text search, which reads descriptions too ("Hamilton Indiana" finds
+ * the town described as "town in Indiana"), limited to items with
+ * coordinates (P625) so people, films and surnames never come back. Same
+ * page size and paging as searchWikidata, still one request per page. */
+export async function searchWikidataPlaces(
+  term: string,
+  signal?: AbortSignal,
+  language = "en",
+  offset = 0
+): Promise<WikidataSearchPage> {
+  const code = wikidataCodesFor(language)[0] ?? "en";
+  const params = new URLSearchParams({
+    action: "query",
+    generator: "search",
+    gsrsearch: `${term} haswbstatement:P625`,
+    gsrlimit: String(WIKIDATA_SEARCH_PAGE_SIZE),
+    prop: "entityterms",
+    wbetterms: "label|description",
+    wbetlanguage: code,
+    uselang: code,
+    format: "json",
+    origin: "*",
+  });
+  if (offset > 0) params.set("gsroffset", String(offset));
+  const res = await fetch(`${WIKIDATA_API}?${params}`, { signal });
+  if (!res.ok) {
+    throw new Error(`Wikidata search failed (${res.status})`);
+  }
+  const data = (await res.json()) as {
+    query?: {
+      pages?: Record<string, {
+        title: string;
+        index?: number;
+        entityterms?: { label?: string[]; description?: string[] };
+      }>;
+    };
+    continue?: { gsroffset?: number };
+  };
+  const pages = Object.values(data.query?.pages ?? {})
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  return {
+    results: pages.map((page) => ({
+      qid: page.title,
+      label: page.entityterms?.label?.[0] ?? page.title,
+      description: page.entityterms?.description?.[0] ?? null,
+      matchedAlias: null,
+    })),
+    nextOffset: typeof data.continue?.gsroffset === "number" ? data.continue.gsroffset : null,
+  };
+}
+
 // Head nouns of descriptions Wikidata gives places ("town in Indiana",
 // "census designated place in Glenn County", "largest city in ..."). English
 // only: in other languages nothing gets this boost, which just leaves
@@ -274,17 +326,19 @@ export function wikidataRelevance(hit: WikidataSearchResult, term: string): numb
   if (label === query) score += 40;
   else if (alias === query) score += 30;
   else if (label.startsWith(query)) score += 10;
-  if (hit.description) {
-    if (isLikelyPlace(hit)) score += 25;
-    // Words typed beyond the place's own name ("Hamilton Indiana") that
-    // the description mentions.
-    const description = normalize(hit.description);
-    const labelWords = new Set(label.split(" "));
-    for (const word of query.split(" ")) {
-      if (word.length > 1 && !labelWords.has(word) && description.split(" ").includes(word)) score += 15;
-    }
-  } else {
-    score -= 5;
+  // "Hamilton Indiana": the place's whole name, then words narrowing it down.
+  else if (query.startsWith(`${label} `)) score += 10;
+  if (hit.description && isLikelyPlace(hit)) score += 25;
+  if (!hit.description) score -= 5;
+  // Each word typed counts most in the name, less in the description, so
+  // "Hamilton Indiana" puts the town Hamilton above Wayne Township
+  // ("township in Hamilton County, Indiana").
+  const labelWords = new Set(label.split(" "));
+  const descriptionWords = new Set(hit.description ? normalize(hit.description).split(" ") : []);
+  for (const word of query.split(" ")) {
+    if (word.length < 2) continue;
+    if (labelWords.has(word)) score += 20;
+    else if (descriptionWords.has(word)) score += 12;
   }
   return score;
 }

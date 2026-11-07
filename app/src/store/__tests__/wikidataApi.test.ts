@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchWikidataChain, fetchWikidataGeoshape, isLikelyPlace, rankWikidataResults, searchWikidata } from "../wikidataApi";
+import { fetchWikidataChain, fetchWikidataGeoshape, isLikelyPlace, rankWikidataResults, searchWikidata, searchWikidataPlaces } from "../wikidataApi";
 
 function mockFetchSequence(responses: unknown[]) {
   let call = 0;
@@ -77,7 +77,7 @@ describe("rankWikidataResults", () => {
       hit("Q49432801", "Miners Delight Mine", "mine in Fremont County, Wyoming, United States of America", "Hamilton City"),
       hit("Q5644769", "Hamilton City Council", "governing body of Hamilton, Ontario"),
     ], "Hamilton City");
-    expect(ranked.map((h) => h.qid)).toEqual(["Q200028", "Q32215385", "Q1573469", "Q49432801", "Q5644769"]);
+    expect(ranked.map((h) => h.qid)).toEqual(["Q32215385", "Q1573469", "Q200028", "Q5644769", "Q49432801"]);
   });
 
   it("boosts descriptions mentioning extra words from the search", () => {
@@ -290,5 +290,37 @@ describe("isLikelyPlace", () => {
     expect(isLikelyPlace(hit("British racing driver"))).toBe(false);
     expect(isLikelyPlace(hit("mine in Fremont County, Wyoming"))).toBe(false);
     expect(isLikelyPlace(hit(null))).toBeNull();
+  });
+});
+
+describe("searchWikidataPlaces", () => {
+  it("full-text searches places only, mapping entityterms in search order", async () => {
+    const fetchMock = mockFetchSequence([{
+      continue: { gsroffset: 50, continue: "gsroffset||" },
+      query: { pages: {
+        "2": { title: "Q2161311", index: 2, entityterms: { label: ["Hamilton"], description: ["town in Indiana, United States"] } },
+        "1": { title: "Q506151", index: 1, entityterms: { label: ["Hamilton County"], description: ["county in Indiana, United States"] } },
+      } },
+    }]);
+    const page = await searchWikidataPlaces("Hamilton Indiana", undefined, "en", 50);
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.searchParams.get("gsrsearch")).toBe("Hamilton Indiana haswbstatement:P625");
+    expect(url.searchParams.get("gsrlimit")).toBe("50");
+    expect(url.searchParams.get("gsroffset")).toBe("50");
+    expect(url.searchParams.get("origin")).toBe("*");
+    expect(page.results.map((h) => h.qid)).toEqual(["Q506151", "Q2161311"]);
+    expect(page.results[1]).toEqual({ qid: "Q2161311", label: "Hamilton", description: "town in Indiana, United States", matchedAlias: null });
+    expect(page.nextOffset).toBe(50);
+  });
+
+  it("ranks the named place above places merely inside it", () => {
+    // What the fallback returned for "Hamilton Indiana", 2026-11-07.
+    const hit = (qid: string, label: string, description: string) => ({ qid, label, description, matchedAlias: null });
+    const ranked = rankWikidataResults([
+      hit("Q506151", "Hamilton County", "county in Indiana, United States"),
+      hit("Q2161311", "Hamilton", "town in Indiana, United States"),
+      hit("Q5654405", "Wayne Township", "township in Hamilton County, Indiana"),
+    ], "Hamilton Indiana");
+    expect(ranked.map((h) => h.qid)).toEqual(["Q2161311", "Q506151", "Q5654405"]);
   });
 });

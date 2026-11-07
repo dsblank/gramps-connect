@@ -13,7 +13,7 @@ import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import {
-  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, isLikelyPlace, rankWikidataResults, searchWikidata,
+  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, isLikelyPlace, rankWikidataResults, searchWikidata, searchWikidataPlaces,
   type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
 import { createOverlay, findOverlayTagHandle, isOverlay } from "../store/mapOverlays";
@@ -29,6 +29,11 @@ const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
 // an external round trip instead of a free local query, so it's worth
 // guarding here specifically.
 const MIN_SEARCH_LENGTH = 2;
+
+// Wait this long after the last keystroke before searching, so typing
+// "Hamilton Indiana" is one Wikidata search (plus at most one fallback),
+// not one per letter.
+const SEARCH_DEBOUNCE_MS = 350;
 
 /** One level of the walked chain, root-first (reverse of
  * fetchWikidataChain's own leaf-first order -- see the plan's "ancestors
@@ -300,6 +305,10 @@ export function WikidataPlaceLookupDialog({
   // Non-place matches (people, films, surnames) are hidden unless asked
   // for; reset with every new search.
   const [showNonPlaces, setShowNonPlaces] = useState(false);
+  // True when the results came from the full-text fallback
+  // (searchWikidataPlaces) because no name started with the query; "More
+  // results" then pages that search instead.
+  const [fullText, setFullText] = useState(false);
   const [phase, setPhase] = useState<Phase>({ name: "search" });
   // Default on (see the plan's geoshape follow-up: most people adding a
   // place from Wikidata will want its outline too) -- applies to every
@@ -333,6 +342,7 @@ export function WikidataPlaceLookupDialog({
     const term = query.trim();
     searchedTerm.current = term;
     setShowNonPlaces(false);
+    setFullText(false);
     setNextOffset(null);
     setLoadingMore(false);
     if (term.length < MIN_SEARCH_LENGTH) {
@@ -342,20 +352,42 @@ export function WikidataPlaceLookupDialog({
     let cancelled = false;
     const controller = new AbortController();
     setSearching(true);
-    searchWikidata(term, controller.signal, placeNameLanguages()[0])
-      .then((page) => {
-        if (cancelled) return;
-        setResults(rankWikidataResults(page.results, term));
-        setNextOffset(page.nextOffset);
-      })
-      .catch(() => {
-        if (!cancelled) setResults([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSearching(false);
-      });
+    const language = placeNameLanguages()[0];
+    const search = async () => {
+      const page = await searchWikidata(term, controller.signal, language);
+      // Nothing that's a place starts with what was typed (e.g. "Hamilton
+      // Indiana", where only "Hamilton, Indiana" is a name): search
+      // descriptions too, places only. A Q-number never needs this.
+      // Outside English, descriptions can't be judged (see isLikelyPlace), so
+      // only an empty result falls back.
+      const english = language.toLowerCase().startsWith("en");
+      const anyPlace = english
+        ? page.results.some((hit) => isLikelyPlace(hit) !== false)
+        : page.results.length > 0;
+      if (!anyPlace && !/^Q\d+$/i.test(term)) {
+        const places = await searchWikidataPlaces(term, controller.signal, language);
+        if (places.results.length > 0) return { page: places, fullText: true };
+      }
+      return { page, fullText: false };
+    };
+    const timer = setTimeout(() => {
+      search()
+        .then(({ page, fullText }) => {
+          if (cancelled) return;
+          setResults(rankWikidataResults(page.results, term));
+          setNextOffset(page.nextOffset);
+          setFullText(fullText);
+        })
+        .catch(() => {
+          if (!cancelled) setResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, SEARCH_DEBOUNCE_MS);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       controller.abort();
     };
   }, [opened, query, phase.name]);
@@ -575,7 +607,7 @@ export function WikidataPlaceLookupDialog({
     const term = searchedTerm.current;
     if (nextOffset == null || loadingMore) return;
     setLoadingMore(true);
-    searchWikidata(term, undefined, placeNameLanguages()[0], nextOffset)
+    (fullText ? searchWikidataPlaces : searchWikidata)(term, undefined, placeNameLanguages()[0], nextOffset)
       .then((page) => {
         if (searchedTerm.current !== term) return;
         setResults((prev) => {
@@ -595,7 +627,9 @@ export function WikidataPlaceLookupDialog({
   // Only English descriptions can be told apart (see isLikelyPlace); in any
   // other search language nothing is hidden.
   const canHideNonPlaces = (placeNameLanguages()[0] ?? "en").toLowerCase().startsWith("en");
-  const shownResults = canHideNonPlaces && !showNonPlaces
+  // Full-text results are all places already (they have coordinates), even
+  // ones whose description doesn't read like it.
+  const shownResults = canHideNonPlaces && !showNonPlaces && !fullText
     ? results.filter((hit) => isLikelyPlace(hit) !== false)
     : results;
   const hiddenCount = results.length - shownResults.length;
@@ -620,6 +654,11 @@ export function WikidataPlaceLookupDialog({
               rightSection={searching ? <Loader size="xs" /> : null}
               data-autofocus
             />
+            {fullText && shownResults.length > 0 && (
+              <Text size="xs" c="dimmed">
+                {t("No place name starts with \u201c%s\u201d, so these are places whose name or description mention those words.").replace("%s", searchedTerm.current)}
+              </Text>
+            )}
             {shownResults.length > 0 && (
               <ScrollArea.Autosize mah={300} type="auto">
                 <Stack gap={4}>
