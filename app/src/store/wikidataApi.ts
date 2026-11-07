@@ -236,6 +236,12 @@ const PLACE_HEAD_WORDS = new RegExp(
     "country", "capital", "county seat", "department", "canton", "prefecture",
     "oblast", "shire", "island", "locality", "quarter", "ward", "metropolis",
     "seat", "colony", "territory", "kingdom", "duchy", "principality",
+    "area", "nation", "republic", "empire", "city-state", "townland", "barangay",
+    "voivodeship", "gmina", "comune", "arrondissement", "civil parish",
+    // Smaller places a Gramps tree records too (Farm, Building, Street).
+    "street", "road", "square", "farm", "building", "cemetery", "graveyard",
+    "church", "chapel", "cathedral", "abbey", "priory", "monastery", "castle",
+    "manor", "estate", "mansion", "plantation", "mill",
   ].join("|") + ")s?\\b",
   "i"
 );
@@ -251,6 +257,14 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
+/** Whether a hit's description says it's a place (true) or something else
+ * -- a person, film, surname... (false); null when it has no description to
+ * tell by. English descriptions only (see PLACE_HEAD_WORDS). */
+export function isLikelyPlace(hit: WikidataSearchResult): boolean | null {
+  if (!hit.description) return null;
+  return PLACE_HEAD_WORDS.test(descriptionHead(hit.description));
+}
+
 /** How relevant a search hit is as a *place* for `term`; higher is better. */
 export function wikidataRelevance(hit: WikidataSearchResult, term: string): number {
   const query = normalize(term);
@@ -261,7 +275,7 @@ export function wikidataRelevance(hit: WikidataSearchResult, term: string): numb
   else if (alias === query) score += 30;
   else if (label.startsWith(query)) score += 10;
   if (hit.description) {
-    if (PLACE_HEAD_WORDS.test(descriptionHead(hit.description))) score += 25;
+    if (isLikelyPlace(hit)) score += 25;
     // Words typed beyond the place's own name ("Hamilton Indiana") that
     // the description mentions.
     const description = normalize(hit.description);

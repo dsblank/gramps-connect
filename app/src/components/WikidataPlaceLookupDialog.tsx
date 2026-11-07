@@ -13,7 +13,7 @@ import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import {
-  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, rankWikidataResults, searchWikidata,
+  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, isLikelyPlace, rankWikidataResults, searchWikidata,
   type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
 import { createOverlay, findOverlayTagHandle, isOverlay } from "../store/mapOverlays";
@@ -297,6 +297,9 @@ export function WikidataPlaceLookupDialog({
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const searchedTerm = useRef("");
+  // Non-place matches (people, films, surnames) are hidden unless asked
+  // for; reset with every new search.
+  const [showNonPlaces, setShowNonPlaces] = useState(false);
   const [phase, setPhase] = useState<Phase>({ name: "search" });
   // Default on (see the plan's geoshape follow-up: most people adding a
   // place from Wikidata will want its outline too) -- applies to every
@@ -329,6 +332,7 @@ export function WikidataPlaceLookupDialog({
     if (!opened || phase.name !== "search") return;
     const term = query.trim();
     searchedTerm.current = term;
+    setShowNonPlaces(false);
     setNextOffset(null);
     setLoadingMore(false);
     if (term.length < MIN_SEARCH_LENGTH) {
@@ -588,6 +592,14 @@ export function WikidataPlaceLookupDialog({
       });
   };
 
+  // Only English descriptions can be told apart (see isLikelyPlace); in any
+  // other search language nothing is hidden.
+  const canHideNonPlaces = (placeNameLanguages()[0] ?? "en").toLowerCase().startsWith("en");
+  const shownResults = canHideNonPlaces && !showNonPlaces
+    ? results.filter((hit) => isLikelyPlace(hit) !== false)
+    : results;
+  const hiddenCount = results.length - shownResults.length;
+
   return (
     <Modal
       opened={opened}
@@ -608,10 +620,10 @@ export function WikidataPlaceLookupDialog({
               rightSection={searching ? <Loader size="xs" /> : null}
               data-autofocus
             />
-            {results.length > 0 && (
+            {shownResults.length > 0 && (
               <ScrollArea.Autosize mah={300} type="auto">
                 <Stack gap={4}>
-                  {results.map((hit) => (
+                  {shownResults.map((hit) => (
                     <Button
                       key={hit.qid}
                       variant="default"
@@ -631,9 +643,23 @@ export function WikidataPlaceLookupDialog({
             )}
             {results.length > 0 && (
               <Group justify="space-between" gap="xs">
-                <Text size="xs" c="dimmed">
-                  {t("%s matches, most relevant first").replace("%s", results.length.toLocaleString())}
-                </Text>
+                <Group gap={4}>
+                  <Text size="xs" c="dimmed">
+                    {shownResults.length === 0
+                      ? t("No places among %s matches").replace("%s", results.length.toLocaleString())
+                      : t("%s matches, most relevant first").replace("%s", shownResults.length.toLocaleString())}
+                  </Text>
+                  {hiddenCount > 0 && (
+                    <Button size="compact-xs" variant="subtle" onClick={() => setShowNonPlaces(true)}>
+                      {t("Show %s non-places").replace("%s", hiddenCount.toLocaleString())}
+                    </Button>
+                  )}
+                  {showNonPlaces && (
+                    <Button size="compact-xs" variant="subtle" onClick={() => setShowNonPlaces(false)}>
+                      {t("Hide non-places")}
+                    </Button>
+                  )}
+                </Group>
                 {nextOffset != null && (
                   <Button size="xs" variant="subtle" onClick={handleMoreResults} loading={loadingMore}>
                     {t("More results")}

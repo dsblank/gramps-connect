@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchWikidataChain, fetchWikidataGeoshape, rankWikidataResults, searchWikidata } from "../wikidataApi";
+import { fetchWikidataChain, fetchWikidataGeoshape, isLikelyPlace, rankWikidataResults, searchWikidata } from "../wikidataApi";
 
 function mockFetchSequence(responses: unknown[]) {
   let call = 0;
@@ -276,5 +276,19 @@ describe("fetchWikidataGeoshape", () => {
   it("returns [] when fetch itself rejects, without throwing", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("network down"); }));
     await expect(fetchWikidataGeoshape("Data:Alabama.map")).resolves.toEqual([]);
+  });
+});
+
+describe("isLikelyPlace", () => {
+  const hit = (description: string | null) => ({ qid: "Q1", label: "Hamilton", description, matchedAlias: null });
+  it("tells places from people, films and names by the description's head noun", () => {
+    expect(isLikelyPlace(hit("town in Indiana, United States"))).toBe(true);
+    expect(isLikelyPlace(hit("city in and county seat of Ravalli County, Montana"))).toBe(true);
+    expect(isLikelyPlace(hit("cemetery in Marion County, Indiana"))).toBe(true);
+    expect(isLikelyPlace(hit("family name"))).toBe(false);
+    expect(isLikelyPlace(hit("2020 film of the 2015 Broadway musical of the same name"))).toBe(false);
+    expect(isLikelyPlace(hit("British racing driver"))).toBe(false);
+    expect(isLikelyPlace(hit("mine in Fremont County, Wyoming"))).toBe(false);
+    expect(isLikelyPlace(hit(null))).toBeNull();
   });
 });
