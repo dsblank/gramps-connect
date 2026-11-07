@@ -22,6 +22,7 @@ import type { StyledText } from "../store/styledText";
 import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookupDialog";
 import { CoordinateFields } from "./CoordinateFields";
 import { PlaceTitleFields } from "./PlaceTitleFields";
+import { PlaceAltNamesField, type PlaceNameItem } from "./PlaceAltNamesField";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -61,6 +62,7 @@ type FieldSpec =
   | { kind: "attributeList"; key: string; label: string }
   | { kind: "addressList"; key: string; label: string }
   | { kind: "urlList"; key: string; label: string }
+  | { kind: "placeAltNames" }
   | {
       /** A plain-handle reference *list* -- Citations/Notes/Tags, phase 4's
        * generalization of PersonEditDialog.tsx's own Notes/Citations/Tags
@@ -152,6 +154,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "text", key: "place_type", label: "Type", placeholder: TYPE_HINT },
       { kind: "placeNameDate", label: "Date" },
       { kind: "placeNameLang", label: "Language" },
+      { kind: "placeAltNames" },
       { kind: "coordinates" },
       { kind: "switch", key: "private", label: "Private" },
       { kind: "urlList", key: "urls", label: "Web links" },
@@ -668,6 +671,15 @@ export function ObjectEditDialog({
             key={f.key}
             items={(draft.data[f.key] as Address[] | undefined) ?? []}
             onChange={(items) => onChange({ [f.key]: items })}
+          />
+        );
+      case "placeAltNames":
+        return (
+          <PlaceAltNamesField
+            key="placeAltNames"
+            idPrefix={`${draft.handle}-alt-name`}
+            items={(draft.data.alt_names as PlaceNameItem[] | undefined) ?? []}
+            onChange={(items) => onChange({ alt_names: items })}
           />
         );
       case "urlList":

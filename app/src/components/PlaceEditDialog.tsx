@@ -6,6 +6,7 @@ import { NewPlaceChoice, WikidataPlaceLookupButton } from "./WikidataPlaceLookup
 import { DateInput } from "./DateInput";
 import { CoordinateFields } from "./CoordinateFields";
 import { PlaceTitleFields } from "./PlaceTitleFields";
+import { PlaceAltNamesField, type PlaceNameItem } from "./PlaceAltNamesField";
 import { t } from "../i18n/i18n";
 
 const TYPE_HINT = "e.g. a built-in name, or your own custom label…";
@@ -89,6 +90,11 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           placeholder={t("e.g. en, fr, la")}
           value={(name.lang as string | undefined) ?? ""}
           onChange={(e) => onChange({ name: { _class: "PlaceName", ...name, lang: e.currentTarget.value } })}
+        />
+        <PlaceAltNamesField
+          idPrefix={`${stackId}-alt-name`}
+          items={(data.alt_names as PlaceNameItem[] | undefined) ?? []}
+          onChange={(items) => onChange({ alt_names: items })}
         />
         <CoordinateFields
           lat={(data.lat as string | undefined) ?? ""}

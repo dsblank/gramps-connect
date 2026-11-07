@@ -194,12 +194,10 @@ Partially editable, by type:
   `ParentPlacesSection.tsx` (add / insert-between / remove / reorder /
   PlaceRef date; writes in `store/placeHierarchy.ts`) as well as via
   Wikidata lookup. PlaceRef notes/citations aren't editable yet.
-  Also still missing: **alternate names** (add/edit/remove — a Place's
-  `alt_names` list is displayed read-only in RelatedPanel but has no editor;
-  each entry is its own `PlaceName` with its own `value`/`date`/`lang`, e.g.
-  for recording a place's older name and the era it applied — the map
-  overlay feature's date gating currently only reads the *primary* name's
-  date for exactly this reason), historical locations, code.
+  Alternate names (`alt_names`) are editable in both place editors
+  (`PlaceAltNamesField.tsx`: value/lang/date per entry); the map overlay
+  feature's date gating still only reads the *primary* name's date.
+  Also still missing: historical locations, code.
 - **Note** — missing: text formatting/links (plain text only), format
   (Flowed/Formatted).
 
