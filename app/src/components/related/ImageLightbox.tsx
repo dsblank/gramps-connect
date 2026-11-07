@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { ActionIcon, Box, Loader, Modal } from "@mantine/core";
+import { ActionIcon, Box, Loader, Modal, Tooltip } from "@mantine/core";
 import { FullscreenDownloadButton } from "./FullscreenDownloadButton";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
@@ -21,6 +21,10 @@ const DOUBLE_CLICK_SCALE = 2.5;
  * on line-mode browsers. Using only deltaY's sign keeps every browser's
  * "one notch" feeling the same. */
 const WHEEL_FACTOR = 1.2;
+/** One click of the corner zoom buttons (or a +/- key press) -- bigger
+ * than a wheel notch, since a click is a deliberate step rather than one
+ * tick of a continuous scroll. */
+const BUTTON_FACTOR = 1.5;
 
 /** The raw stored file, not a thumbnail -- same /file endpoint
  * MapItemEditorDialog.tsx uses for map overlays. One image at a time (this
@@ -234,6 +238,30 @@ export function ImageLightbox({ opened, onClose, handle }: {
     });
   }
 
+  // The corner buttons and +/-/0 keys zoom toward the frame's center (where
+  // zoomAt's px/py come out 0), there being no pointer position to aim at.
+  function zoomCentered(factor: number) {
+    const rect = frameRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, transformRef.current.scale * factor);
+  }
+
+  useEffect(() => {
+    if (!opened) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "+" || e.key === "=") zoomCentered(BUTTON_FACTOR);
+      else if (e.key === "-" || e.key === "_") zoomCentered(1 / BUTTON_FACTOR);
+      else if (e.key === "0") setTransform({ scale: 1, x: 0, y: 0 });
+      else return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- same as the
+    // wheel listener below: zoomCentered only reads refs.
+  }, [opened]);
+
   // React attaches its synthetic `wheel` listener as passive (perf default
   // since React 17), so e.preventDefault() inside a plain onWheel prop
   // throws "Unable to preventDefault inside passive event listener" and
@@ -418,6 +446,29 @@ export function ImageLightbox({ opened, onClose, handle }: {
           </>
         )}
 
+        {/* Left of Download (right: 60) and styled like it; the same
+            stopPropagation as the ✕ below keeps the frame's pointer
+            capture from swallowing the click. */}
+        {([
+          { label: t("Zoom out"), factor: 1 / BUTTON_FACTOR, right: 148, disabled: transform.scale <= MIN_SCALE, glyph: "M5 12h14" },
+          { label: t("Zoom in"), factor: BUTTON_FACTOR, right: 104, disabled: transform.scale >= MAX_SCALE, glyph: "M5 12h14M12 5v14" },
+        ]).map((b) => (
+          <Tooltip key={b.label} label={b.label} withArrow position="bottom">
+            <ActionIcon
+              variant="filled" color="dark" size={36} radius="xl"
+              onClick={() => zoomCentered(b.factor)}
+              disabled={!src || b.disabled}
+              aria-label={b.label}
+              onPointerDown={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+              style={{ position: "absolute", top: 16, right: b.right, zIndex: 3 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d={b.glyph} />
+              </svg>
+            </ActionIcon>
+          </Tooltip>
+        ))}
         <FullscreenDownloadButton handle={handle} blobUrl={src} />
         <ActionIcon
           variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={t("Close")}
