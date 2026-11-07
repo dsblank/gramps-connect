@@ -298,7 +298,9 @@ export function MapItemEditorDialog({ target, onClose, onSaved }: MapItemEditorD
       // be given a different active era. Only catches a duplicate in
       // *this* file -- the same image used in another map-overlay file also
       // attached to this place isn't checked here.
-      if (!(await editorRef.current?.addImage(item.handle))) {
+      // Starts named after the image's own description, so the Overlays
+      // panel has something better than "Untitled" (editable as usual).
+      if (!(await editorRef.current?.addImage(item.handle, (item.desc as string | undefined) ?? ""))) {
         notifications.show({
           color: "red",
           title: t("Already added"),
