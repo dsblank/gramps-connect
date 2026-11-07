@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ViewStore } from "../viewStore";
-import { attachDisplayStores, displayPlaceTitle, draftPlaceTitle, formatPlaceWith, placeTitleFollowsName, samplePlaceHandle } from "../placeIndex";
+import {
+  addFetchedPlace, attachDisplayStores, displayPlaceTitle, draftPlaceTitle, formatPlaceWith, missingEnclosingPlaces,
+  placeTitleFollowsName, samplePlaceHandle,
+} from "../placeIndex";
 
 vi.mock("../../auth/auth", () => ({
   getToken: vi.fn().mockResolvedValue("test-token"),
@@ -67,6 +70,22 @@ describe("draftPlaceTitle", () => {
     expect(draftPlaceTitle({ name: { value: "Somewhere" } })).toBe("Somewhere");
   });
 
+  it("builds from enclosing places fetched one by one when there's no complete index", () => {
+    // The Places table holding a search's matches never builds the index;
+    // the place editor fetches what missingEnclosingPlaces asks for.
+    attachDisplayStores({ place: unloadedStore().store, event: unloadedStore().store });
+    const draft = { name: { value: "Indianapolis" }, placeref_list: [{ ref: "MC" }] };
+    expect(missingEnclosingPlaces(draft)).toEqual(["MC"]);
+    addFetchedPlace("MC", { name: { value: "Marion County" }, placeref_list: [{ ref: "IN" }], place_type: "County" });
+    expect(draftPlaceTitle(draft)).toBeNull();
+    expect(missingEnclosingPlaces(draft)).toEqual(["IN"]);
+    addFetchedPlace("IN", { name: { value: "Indiana" }, placeref_list: [{ ref: "GONE" }], place_type: "State" });
+    // An ancestor that can't be fetched is left out rather than waited on.
+    addFetchedPlace("GONE", null);
+    expect(missingEnclosingPlaces(draft)).toEqual([]);
+    expect(draftPlaceTitle(draft)).toBe("Indianapolis, Marion County, Indiana");
+  });
+
   it("formats an edited name with its enclosing places, not the cached name", () => {
     attachDisplayStores({
       place: loadedStore([
@@ -89,6 +108,7 @@ describe("draftPlaceTitle", () => {
   it("is just the name when the place has no enclosing place", () => {
     expect(draftPlaceTitle({ name: { value: "Somewhere" } })).toBe("Somewhere");
   });
+
   it("tells whether a title still follows the name or was hand-edited", () => {
     const place = { name: { value: "Indy" }, placeref_list: [{ ref: "MC" }] };
     expect(placeTitleFollowsName({ ...place, title: "" })).toBe(true);

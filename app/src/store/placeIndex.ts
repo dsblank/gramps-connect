@@ -142,35 +142,101 @@ export function formatPlaceWith(handle: string, fmt: PlaceFormatDef): string | n
  * reads the same with automatic titles off. Applies whether or not
  * automatic titles are on (the stored title is what desktop shows when
  * they're off). Null when the place has enclosing places but the Places
- * cache has no complete hierarchy yet (see getIndex) -- a title built then
- * would be cut short, so callers leave the title alone instead. */
+ * cache has no complete hierarchy yet (see getIndex) and an enclosing
+ * place hasn't been fetched either (missingEnclosingPlaces) -- a title
+ * built then would be cut short, so callers leave the title alone instead. */
 export function draftPlaceTitle(data: Record<string, unknown>): string | null {
   const name = (data.name ?? null) as PlaceNameJson | null;
   const bare = name?.value ?? "";
   const refs = (data.placeref_list as { ref?: string }[] | undefined) ?? [];
   if (!bare.trim() || !refs.some((r) => r.ref)) return bare;
-  if (!placeStore) return null;
-  requestPlaceLoad(placeStore);
-  const places = getIndex(placeStore);
-  if (!places) return null;
-  const rawType = data.place_type as unknown;
-  const typeName = typeof rawType === "string" ? rawType : (rawType as { string?: string } | null)?.string ?? "";
-  const typeValue = typeof rawType === "object" && rawType && typeof (rawType as { value?: unknown }).value === "number"
-    ? (rawType as { value: number }).value
-    : Object.prototype.hasOwnProperty.call(PLACE_TYPE_VALUES, typeName) ? PLACE_TYPE_VALUES[typeName] : 0;
-  const draft: PlaceRecord = {
-    name,
-    altNames: (data.alt_names as PlaceNameJson[] | undefined) ?? [],
-    type: typeValue,
-    parents: (refs as { ref?: string; date?: PlaceRecord["parents"][number]["date"] }[])
-      .filter((r): r is { ref: string } => typeof r.ref === "string" && r.ref !== ""),
-  };
-  // A key no real handle can be, so the draft wins over the place's own
-  // (saved, possibly stale) cache entry.
-  const key = "\u0000draft";
+  // An enclosing place not known yet would just end the title early, so
+  // wait for it instead -- see missingEnclosingPlaces for how the editor
+  // fills it in.
+  if (missingEnclosingPlaces(data).length) return null;
+  const lookup = draftLookup(data, placeIndexOrNull());
   const settings = getDisplaySettings();
   const fmt = settings.place.formats[settings.place.active] ?? settings.place.formats[0];
-  return formatPlace((h) => (h === key ? draft : places.get(h)), key, fmt) ?? bare;
+  return formatPlace(lookup, DRAFT_KEY, fmt) ?? bare;
+}
+
+// A key no real handle can be, so the draft wins over the place's own
+// (saved, possibly stale) cache entry.
+const DRAFT_KEY = "\u0000draft";
+
+function placeIndexOrNull(): Map<string, PlaceRecord> | null {
+  if (!placeStore) return null;
+  requestPlaceLoad(placeStore);
+  return getIndex(placeStore);
+}
+
+function placeTypeValue(rawType: unknown): number {
+  const typeName = typeof rawType === "string" ? rawType : (rawType as { string?: string } | null)?.string ?? "";
+  return typeof rawType === "object" && rawType && typeof (rawType as { value?: unknown }).value === "number"
+    ? (rawType as { value: number }).value
+    : Object.prototype.hasOwnProperty.call(PLACE_TYPE_VALUES, typeName) ? PLACE_TYPE_VALUES[typeName] : 0;
+}
+
+/** A place's raw JSON (a draft, or a fetched place) as a PlaceRecord. */
+function placeRecordFromJson(data: Record<string, unknown>): PlaceRecord {
+  const refs = (data.placeref_list as { ref?: string; date?: PlaceRecord["parents"][number]["date"] }[] | undefined) ?? [];
+  return {
+    name: (data.name ?? null) as PlaceNameJson | null,
+    altNames: (data.alt_names as PlaceNameJson[] | undefined) ?? [],
+    type: placeTypeValue(data.place_type),
+    parents: refs.filter((r): r is { ref: string } => typeof r.ref === "string" && r.ref !== ""),
+  };
+}
+
+// Enclosing places fetched one at a time for a place editor's built title
+// when there's no complete index to read them from -- the Places table
+// holding a search's matches, or a background fill not done yet. Dropped
+// whenever the Places cache changes, so an edited ancestor is re-fetched.
+let fetchedPlaces = new Map<string, PlaceRecord>();
+// Ones whose fetch failed (deleted, or not readable): not asked for again,
+// and the title is built without them.
+let unfetchablePlaces = new Set<string>();
+let fetchedForRevision = -1;
+
+function draftLookup(data: Record<string, unknown>, places: Map<string, PlaceRecord> | null) {
+  const revision = placeStore?.getSnapshot().revision ?? -1;
+  if (revision !== fetchedForRevision) {
+    fetchedForRevision = revision;
+    fetchedPlaces = new Map();
+    unfetchablePlaces = new Set();
+  }
+  const draft = placeRecordFromJson(data);
+  return (h: string) => (h === DRAFT_KEY ? draft : places?.get(h) ?? fetchedPlaces.get(h));
+}
+
+/** Handles of enclosing places (at any depth) draftPlaceTitle needs but
+ * has neither in the index nor fetched -- for the caller to fetch and hand
+ * to addFetchedPlace. Empty once everything it needs is known. */
+export function missingEnclosingPlaces(data: Record<string, unknown>): string[] {
+  const lookup = draftLookup(data, placeIndexOrNull());
+  const missing: string[] = [];
+  const seen = new Set<string>([DRAFT_KEY]);
+  const queue = [DRAFT_KEY];
+  while (queue.length) {
+    const record = lookup(queue.shift()!);
+    if (!record) continue;
+    for (const { ref } of record.parents) {
+      if (seen.has(ref)) continue;
+      seen.add(ref);
+      if (lookup(ref)) queue.push(ref);
+      else if (!unfetchablePlaces.has(ref)) missing.push(ref);
+    }
+  }
+  return missing;
+}
+
+/** Records a fetched enclosing place (its raw JSON, or null when the fetch
+ * failed) for draftPlaceTitle,
+ * and re-renders useDisplayFormatVersion() subscribers. */
+export function addFetchedPlace(handle: string, data: Record<string, unknown> | null): void {
+  if (data) fetchedPlaces.set(handle, placeRecordFromJson(data));
+  else unfetchablePlaces.add(handle);
+  bump();
 }
 
 /** Whether a place's stored title is still "following" its name -- blank,

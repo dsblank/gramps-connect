@@ -11,10 +11,15 @@
 // Typing a name rebuilds the title too, but only while the title is still
 // "following" the name (placeTitleFollowsName) -- a hand-edited title is
 // left alone.
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Radio, Stack, Text, TextInput } from "@mantine/core";
-import { draftPlaceTitle, placeTitleFollowsName } from "../store/placeIndex";
+import {
+  addFetchedPlace, draftPlaceTitle, missingEnclosingPlaces, placeTitleFollowsName, useDisplayFormatVersion,
+} from "../store/placeIndex";
 import { getViewStore } from "../store/registry";
+import { fetchPlainObject } from "../store/objectsApi";
+import { PLACE_VIEW } from "../store/views";
+import { getToken } from "../auth/auth";
 import { t } from "../i18n/i18n";
 
 interface PlaceTitleFieldsProps {
@@ -28,6 +33,34 @@ export function PlaceTitleFields({ data, onChange, autoFocus }: PlaceTitleFields
   // enclosing places' names are known.
   const placeStore = getViewStore("place");
   useSyncExternalStore(placeStore.subscribe, placeStore.getSnapshot);
+  // ...and as enclosing places fetched below arrive.
+  useDisplayFormatVersion();
+
+  // Without a complete Places cache (a search in the Places table holds
+  // just its matches), fetch the enclosing places the built title needs
+  // one by one. Each arrival re-renders, and the next level up (if any)
+  // shows up as missing in turn.
+  const missing = missingEnclosingPlaces(data).join(",");
+  useEffect(() => {
+    if (!missing) return;
+    let cancelled = false;
+    void (async () => {
+      const token = await getToken();
+      for (const handle of missing.split(",")) {
+        if (cancelled) return;
+        let place: Record<string, unknown> | null = null;
+        try {
+          place = await fetchPlainObject(token, PLACE_VIEW, handle);
+        } catch {
+          // A deleted or unreadable ancestor: built without it.
+        }
+        if (!cancelled) addFetchedPlace(handle, place);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [missing]);
 
   const name = (data.name ?? {}) as Record<string, unknown>;
   const nameValue = (name.value as string | undefined) ?? "";
