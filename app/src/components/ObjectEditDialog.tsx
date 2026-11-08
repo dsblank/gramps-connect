@@ -25,6 +25,7 @@ import { PlaceTitleFields } from "./PlaceTitleFields";
 import { GrampsTypeInput } from "./GrampsTypeInput";
 import type { GrampsTypeKind } from "../store/grampsTypes";
 import { PlaceAltNamesField, type PlaceNameItem } from "./PlaceAltNamesField";
+import { PlaceLocationsField, type PlaceLocation } from "./PlaceLocationsField";
 import type { StorySpec } from "../store/storyBuilder";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
@@ -66,6 +67,7 @@ type FieldSpec =
   | { kind: "addressList"; key: string; label: string }
   | { kind: "urlList"; key: string; label: string }
   | { kind: "placeAltNames" }
+  | { kind: "placeLocations" }
   | {
       /** A plain-handle reference *list* -- Citations/Notes/Tags, phase 4's
        * generalization of PersonEditDialog.tsx's own Notes/Citations/Tags
@@ -157,7 +159,9 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "placeNameLang", label: "Language" },
       { kind: "placeAltNames" },
       { kind: "coordinates" },
+      { kind: "text", key: "code", label: "Code", placeholder: "e.g. a country or postal code" },
       { kind: "switch", key: "private", label: "Private" },
+      { kind: "placeLocations" },
       { kind: "urlList", key: "urls", label: "Web links" },
       CITATIONS_FIELD, NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
     ],
@@ -692,6 +696,14 @@ export function ObjectEditDialog({
             idPrefix={`${draft.handle}-alt-name`}
             items={(draft.data.alt_names as PlaceNameItem[] | undefined) ?? []}
             onChange={(items) => onChange({ alt_names: items })}
+          />
+        );
+      case "placeLocations":
+        return (
+          <PlaceLocationsField
+            key="placeLocations"
+            items={(draft.data.alt_loc as PlaceLocation[] | undefined) ?? []}
+            onChange={(items) => onChange({ alt_loc: items })}
           />
         );
       case "urlList":

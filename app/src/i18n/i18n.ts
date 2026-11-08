@@ -72,8 +72,12 @@ const desktopStrings = [
   "Years", "new", "to",
   // Added 2026-11-01: Gramps desktop msgids the app already used (in t() or in
   // a label rendered through t()) but never listed. Each checked against its
-  // meaning in Gramps; left out on purpose: "Code" (Gramps: a place code),
-  // "Run" (de translation ends in a stray period) and "Tag" (Gramps: the noun).
+  // meaning in Gramps; left out on purpose: "Code" (Gramps: a place code,
+  // but GrampletEditDialog's t("Code") means source code, and the Place
+  // editor's Code shares that one key), "Run" (de translation ends in a
+  // stray period) and "Tag" (Gramps: the noun).
+  // Added 2026-11-08 for the Place editor's alternate locations:
+  "Parish", "Alternate Locations",
   "Abbreviation", "Address", "Adopted people", "After", "Age at death", "All",
   "Alternative names", "Apply", "Arabic", "Auto", "Before", "Birth date", "Bulgarian",
   "Calculated", "Catalan", "Category", "Change", "Check and Repair Database", "Checksum",

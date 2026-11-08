@@ -8,6 +8,7 @@ import { CoordinateFields } from "./CoordinateFields";
 import { PlaceTitleFields } from "./PlaceTitleFields";
 import { GrampsTypeInput } from "./GrampsTypeInput";
 import { PlaceAltNamesField, type PlaceNameItem } from "./PlaceAltNamesField";
+import { PlaceLocationsField, type PlaceLocation } from "./PlaceLocationsField";
 import { t } from "../i18n/i18n";
 
 interface PlaceEditDialogProps {
@@ -37,7 +38,8 @@ interface PlaceEditDialogProps {
  * still goes through ObjectEditDialog.tsx's own FIELD_SPECS-driven dialog,
  * unchanged; this component only ever appears nested inside another dialog
  * (see the plan). Same field set as that FIELD_SPECS entry (Wikidata
- * lookup, name, type, lat, long, private, urls) so both stay in sync by
+ * lookup, name, type, alternate names, lat, long, code, private, alternate
+ * locations, urls) so both stay in sync by
  * inspection. A Wikidata Apply can also silently set `placeref_list`
  * (WikidataPlaceLookupDialog.tsx) -- there's no field here to see that
  * directly, same as the top-level dialog; ParentPlacesSection.tsx
@@ -100,10 +102,20 @@ export function PlaceEditDialog({ stackId, opened, title, data, onChange, onDone
           long={(data.long as string | undefined) ?? ""}
           onChange={onChange}
         />
+        <TextInput
+          label={t("Code")}
+          placeholder="e.g. a country or postal code"
+          value={(data.code as string | undefined) ?? ""}
+          onChange={(e) => onChange({ code: e.currentTarget.value })}
+        />
         <Switch
           label={t("Private")}
           checked={Boolean(data.private)}
           onChange={(e) => onChange({ private: e.currentTarget.checked })}
+        />
+        <PlaceLocationsField
+          items={(data.alt_loc as PlaceLocation[] | undefined) ?? []}
+          onChange={(items) => onChange({ alt_loc: items })}
         />
         <UrlListField
           items={(data.urls as Url[] | undefined) ?? []}

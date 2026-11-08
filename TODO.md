@@ -173,11 +173,10 @@ Partially editable, by type:
 - **Place** — enclosing hierarchy (`placeref_list`) is editable by hand in
   `ParentPlacesSection.tsx` (add / insert-between / remove / reorder /
   PlaceRef date; writes in `store/placeHierarchy.ts`) as well as via
-  Wikidata lookup. PlaceRef notes/citations aren't editable yet.
-  Alternate names (`alt_names`) are editable in both place editors
-  (`PlaceAltNamesField.tsx`: value/lang/date per entry); the map overlay
+  Wikidata lookup. Alternate names (`alt_names`), code and alternate
+  locations (`alt_loc`, `PlaceLocationsField.tsx`) are editable in both
+  place editors, so every Place field is covered; the map overlay
   feature's date gating still only reads the *primary* name's date.
-  Also still missing: historical locations, code.
 - **Note** — the note's format (Flowed/Formatted) is shown but can't be
   changed. Text formatting and links are editable.
 
