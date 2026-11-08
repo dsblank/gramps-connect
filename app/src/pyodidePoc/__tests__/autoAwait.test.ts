@@ -140,11 +140,43 @@ describe("making plain defs async", () => {
   });
 });
 
+describe("generator expressions that look up data", () => {
+  it("become list comprehensions when passed straight to a consuming builtin", () => {
+    expect(rewrite("x = any(get_object(h).gender == 0 for h in hs)")).toBe(
+      "x = any([(await get_object(h)).gender == 0 for h in hs])"
+    );
+    expect(rewrite("n = sum(count(t) for t in types)")).toBe("n = sum([await count(t) for t in types])");
+    expect(rewrite("s = sorted((get_object(h) for h in hs), key=len)")).toBe(
+      "s = sorted([await get_object(h) for h in hs], key=len)"
+    );
+  });
+
+  it("do the same for a str.join", () => {
+    expect(rewrite("s = ', '.join(get_object(h).gramps_id for h in hs)")).toBe(
+      "s = ', '.join([(await get_object(h)).gramps_id for h in hs])"
+    );
+  });
+
+  it("leave generator expressions without a lookup alone", () => {
+    expect(rewrite("x = any(h == 1 for h in hs)")).toBe("x = any((h == 1 for h in hs))");
+  });
+
+  it("leave them alone anywhere else, or when the consumer is the Gramplet's own", () => {
+    expect(rewrite("g = (get_object(h) for h in hs)")).toBe("g = (await get_object(h) for h in hs)");
+    expect(rewrite("def any(xs):\n    return 1\nx = any(get_object(h) for h in hs)")).toBe(
+      "def any(xs):\n    return 1\nx = any((await get_object(h) for h in hs))"
+    );
+  });
+});
+
 describe("_run_gramplet", () => {
   beforeAll(async () => {
     await pyodide.runPythonAsync(`
 async def tags():
     return ["a", "b"]
+
+async def get_object(handle):
+    return handle.upper()
 
 class _FakeDb:
     async def get_person_from_handle(self, handle):
@@ -174,6 +206,43 @@ db = _FakeDb()
   it("runs a def that was made async", async () => {
     expect(await run("def second():\n    return tags()[1]\ndef shout():\n    return second().upper()\nshout()")).toBe(
       "B"
+    );
+  });
+
+  it("runs a generator expression passed to any(), sum() and a join", async () => {
+    expect(await run("any(get_object(h) == 'X' for h in ['a', 'x'])")).toBe(true);
+    expect(await run("sum(len(get_object(h)) for h in ['ab', 'c'])")).toBe(3);
+    expect(await run("'-'.join(get_object(h) for h in ['a', 'b'])")).toBe("A-B");
+  });
+
+  it("explains a lookup inside a lambda, at its own line", async () => {
+    const error = run("x = 1\ns = sorted(['a'], key=lambda h: get_object(h))");
+    await expect(error).rejects.toThrow(/File "<gramplet>", line 2/);
+    await expect(run("s = sorted(['a'], key=lambda h: get_object(h))")).rejects.toThrow(
+      /SyntaxError: Looking up data with get_object\(\) can't happen inside a lambda: .*list comprehension/
+    );
+  });
+
+  it("explains a lookup inside a method, a decorated def, a generator and a def passed as a value", async () => {
+    await expect(run("class C:\n    def m(self):\n        return tags()")).rejects.toThrow(
+      /Looking up data with tags\(\) can't happen inside the method m\(\)/
+    );
+    await expect(run("def deco(f):\n    return f\n@deco\ndef f():\n    return tags()")).rejects.toThrow(
+      /inside f\(\), which has a decorator/
+    );
+    await expect(run("def g():\n    yield tags()")).rejects.toThrow(/inside g\(\), which uses yield: .*return a list/);
+    await expect(run("def key(h):\n    return get_object(h)\nsorted(['a'], key=key)")).rejects.toThrow(
+      /inside key\(\), which is passed around as a value \(for example key=key\)/
+    );
+  });
+
+  it("keeps Python's own message for other syntax errors", async () => {
+    await expect(run("x = (")).rejects.toThrow(/SyntaxError: '\(' was never closed/);
+  });
+
+  it("adds a note when a lookup's generator expression is looped over", async () => {
+    await expect(run("g = (get_object(h) for h in ['a'])\nfor x in g:\n    pass")).rejects.toThrow(
+      /TypeError: 'async_generator' object is not iterable\n.*use a list comprehension/s
     );
   });
 

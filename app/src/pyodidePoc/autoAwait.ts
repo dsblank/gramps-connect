@@ -51,6 +51,20 @@
 // later. A def the Gramplet writes as `async def` itself is left alone,
 // calls included: it can await (or gather) those itself. Lambdas can't be
 // async at all.
+//
+// _run_gramplet() replaces that SyntaxError with one that says, at the same
+// line, which lookup can't happen there and why (a lambda, a method, a
+// decorated def, a generator def, or a def passed around as a value), and
+// what to write instead.
+//
+// A generator expression that gains an `await` becomes an async generator,
+// which `any()` and friends can't loop over ("'async_generator' object is
+// not an iterator"). When one is passed straight to any/all/sum/min/max/
+// sorted/list/set/frozenset/tuple/dict or to a "...".join, it's rewritten
+// as a list comprehension: the same result, minus any()'s early exit (so a
+// few more lookups may run). Anywhere else (assigned, or looped over with
+// a plain for) it's left alone, and the TypeError it raises when looped
+// over gets a note saying to use a list comprehension instead.
 export const AUTO_AWAIT_PY = `
 import ast as _ast
 import copy as _copy
@@ -64,6 +78,34 @@ _AUTO_AWAIT_NAMES = frozenset({
 })
 
 _SCOPES = (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.Lambda, _ast.ClassDef)
+
+# Builtins that consume a whole iterable at once, so a generator expression
+# passed to them can be a list comprehension instead with the same result.
+_GENEXP_CONSUMERS = frozenset({
+    "any", "all", "sum", "min", "max", "sorted", "list", "set", "frozenset",
+    "tuple", "dict",
+})
+
+_ASYNC_GENEXP_NOTE = (
+    "A generator expression, ( ... for ... ), that looks up data can only be "
+    "passed straight to any(), all(), sum(), min(), max(), sorted(), list(), "
+    "set(), tuple(), dict() or a str.join(). Anywhere else, use a list "
+    "comprehension, [ ... for ... ], instead."
+)
+
+
+def _has_own_await(node):
+    # An await (or async for) in this generator expression itself, not in a
+    # nested def, lambda, class or generator expression: what makes it an
+    # async generator.
+    stack = [node.elt, *node.generators]
+    while stack:
+        child = stack.pop()
+        if isinstance(child, _ast.Await) or (isinstance(child, _ast.comprehension) and child.is_async):
+            return True
+        if not isinstance(child, (*_SCOPES, _ast.GeneratorExp)):
+            stack.extend(_ast.iter_child_nodes(child))
+    return False
 
 
 def _defined_names(tree):
@@ -182,10 +224,28 @@ class _AutoAwait(_ast.NodeTransformer):
 
     def visit_Call(self, node):
         self.generic_visit(node)
+        self._listify_genexp(node)
         if self._needs_await(node):
             self._mark_await()
             return _ast.copy_location(_ast.Await(value=node), node)
         return node
+
+    def _consumes_iterable(self, func):
+        if isinstance(func, _ast.Name):
+            return func.id in _GENEXP_CONSUMERS and not self._shadowed(func.id)
+        return (
+            isinstance(func, _ast.Attribute)
+            and func.attr == "join"
+            and isinstance(func.value, _ast.Constant)
+            and isinstance(func.value.value, str)
+        )
+
+    def _listify_genexp(self, node):
+        if not node.args or not isinstance(node.args[0], _ast.GeneratorExp):
+            return
+        gen = node.args[0]
+        if self._consumes_iterable(node.func) and _has_own_await(gen):
+            node.args[0] = _ast.copy_location(_ast.ListComp(elt=gen.elt, generators=gen.generators), gen)
 
     def _needs_await(self, node):
         func = node.func
@@ -223,11 +283,104 @@ def _auto_await_source(source):
     return _ast.unparse(_auto_await_tree(_ast.parse(source)))
 
 
+def _await_label(node):
+    call = node.value
+    if isinstance(call, _ast.Call):
+        func = call.func
+        if isinstance(func, _ast.Name):
+            return func.id + "()"
+        if isinstance(func, _ast.Attribute) and isinstance(func.value, _ast.Name):
+            return func.value.id + "." + func.attr + "()"
+    return "await"
+
+
+def _sync_scope(node, parents):
+    # The nearest def or lambda around node, if it's one that can't await.
+    while node in parents:
+        node = parents[node]
+        if isinstance(node, _ast.AsyncFunctionDef):
+            return None
+        if isinstance(node, (_ast.FunctionDef, _ast.Lambda)):
+            return node
+    return None
+
+
+def _where_and_fix(scope, parents, tree):
+    if isinstance(scope, _ast.Lambda):
+        return ("inside a lambda",
+                "Look the data up first, for example in a list comprehension, and use "
+                "the results; or use a function defined with def and called by name.")
+    name = scope.name + "()"
+    if isinstance(parents.get(scope), _ast.ClassDef):
+        return ("inside the method " + name,
+                "Look the data up before calling the method and pass it in, or use a "
+                "function defined with def outside the class.")
+    if scope.decorator_list:
+        return ("inside " + name + ", which has a decorator",
+                "Remove the decorator, or look the data up before calling it and pass it in.")
+    if any(isinstance(n, (_ast.Yield, _ast.YieldFrom)) for n in _own_nodes(scope)):
+        return ("inside " + name + ", which uses yield",
+                "Build and return a list instead of using yield.")
+    call_funcs = {id(n.func) for n in _ast.walk(tree) if isinstance(n, _ast.Call)}
+    if any(isinstance(n, _ast.Name) and n.id == scope.name and isinstance(n.ctx, _ast.Load)
+           and id(n) not in call_funcs for n in _ast.walk(tree)):
+        return ("inside " + name + ", which is passed around as a value (for example "
+                "key=" + scope.name + ") instead of called by name",
+                "Look the data up first, for example in a list comprehension, then use the results.")
+    return ("inside " + name,
+            "Look the data up first, for example in a list comprehension, then use the results.")
+
+
+def _explain_await_error(err, tree, source):
+    # A friendlier SyntaxError for an await Python can't run where it is, or
+    # None to keep the original (some other syntax problem).
+    message = str(err.msg or "")
+    if "await" not in message and "asynchronous" not in message:
+        return None
+    parents = {}
+    for node in _ast.walk(tree):
+        for child in _ast.iter_child_nodes(node):
+            parents[child] = node
+    stuck = [
+        (node, scope) for node in _ast.walk(tree) if isinstance(node, _ast.Await)
+        for scope in [_sync_scope(node, parents)] if scope is not None
+    ]
+    if not stuck:
+        return None
+    line = err.lineno or 0
+    on_line = [pair for pair in stuck if pair[0].lineno == line]
+    exact = [pair for pair in on_line if err.offset and pair[0].col_offset + 1 == err.offset]
+    node, scope = (exact or on_line or sorted(stuck, key=lambda pair: abs(pair[0].lineno - line)))[0]
+    where, fix = _where_and_fix(scope, parents, tree)
+    label = _await_label(node)
+    what = "await" if label == "await" else "Looking up data with " + label
+    text = (what + " can't happen " + where + ": a lookup has to wait for the "
+            "server, and code there can't wait. " + fix)
+    lines = source.splitlines()
+    lineno = node.lineno
+    source_line = lines[lineno - 1] if 0 < lineno <= len(lines) else None
+    end = node.end_col_offset if node.end_lineno == lineno else None
+    return SyntaxError(text, ("<gramplet>", lineno, node.col_offset + 1, source_line,
+                              lineno, (end + 1) if end is not None else None))
+
+
 async def _run_gramplet(source):
     # "<gramplet>", not runPythonAsync's "<exec>": the bootstrap code
     # (this function included) is "<exec>" too, so tracebacks would mix
     # their line numbers with the Gramplet's own.
     runner = _CodeRunner(source, filename="<gramplet>", flags=_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
     runner.ast = _auto_await_tree(runner.ast)
-    return await runner.compile().run_async(globals())
+    try:
+        runner.compile()
+    except SyntaxError as err:
+        friendly = _explain_await_error(err, runner.ast, source)
+        if friendly is None:
+            raise
+        raise friendly from None
+    try:
+        return await runner.run_async(globals())
+    except TypeError as err:
+        if "async_generator" in str(err):
+            err.add_note(_ASYNC_GENEXP_NOTE)
+        raise
 `;
