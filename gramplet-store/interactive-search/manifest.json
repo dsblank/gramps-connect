@@ -2,7 +2,7 @@
   "id": "interactive-search",
   "name": "People Search",
   "description": "A live search over People: given name, surname, gender, no recorded death date and sort order, within the current filter if one is applied -- with a reset button.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Gramps Connect",
   "category": "example",
   "views": [

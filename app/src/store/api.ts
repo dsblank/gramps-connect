@@ -3,7 +3,7 @@
 // ported from the original Layer 2/3 spike's browser.ts (fetchPage; since
 // removed, see git history).
 import { API_BASE } from "../config";
-import { toSelectEntry } from "./sql";
+import { toOrderByEntry, toSelectEntry } from "./sql";
 import type { ColumnConfig, OrderBy, ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
 
@@ -160,7 +160,7 @@ export async function fetchPage(
     },
     body: JSON.stringify({
       select: ["handle", ...columns.map(toSelectEntry)],
-      order_by: orderBy,
+      order_by: orderBy.map(toOrderByEntry),
       limit,
       after: after ?? undefined,
       count: wantCount,

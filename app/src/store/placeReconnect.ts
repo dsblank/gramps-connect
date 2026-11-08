@@ -130,7 +130,7 @@ async function queryPlaceRefs(
       body: JSON.stringify({
         select: ["handle", "placeref_list"],
         where_expr: whereExpr,
-        order_by: [{ column: "handle", direction: "asc" }],
+        order_by: ["handle"],
         limit: PAGE_SIZE,
         after: after ?? undefined,
       }),

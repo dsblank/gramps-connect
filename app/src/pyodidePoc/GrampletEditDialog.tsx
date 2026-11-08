@@ -84,7 +84,7 @@ function viewSelectValue(views: string[] | undefined): string {
 // on its own too (_cell_kind()).
 const NEW_GRAMPLET_CODE = `import datetime
 
-for person in people(order=[{"column": "change", "direction": "desc"}], limit=10):
+for person in people(order=["-change"], limit=10):
     row(person, datetime.datetime.fromtimestamp(person.change))
 `;
 

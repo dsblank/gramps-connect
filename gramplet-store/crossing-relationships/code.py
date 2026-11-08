@@ -30,7 +30,7 @@
 # apply to a Family query.
 born_and_died_same_place = people(
     and_filters(get_filter(), "birth.place.title == death.place.title and birth.place.title is not None"),
-    order=[{"column": "surname", "direction": "asc"}],
+    order=["surname"],
     limit=50,
 )
 

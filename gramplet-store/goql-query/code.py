@@ -39,14 +39,6 @@ else:
     # leaving where= out entirely).
     where = and_filters(get_filter(), where_text or None)
 
-    # No sort widget here, deliberately: order= only accepts a flat,
-    # top-level column name server-side (gramps-web-api rejects a
-    # relationship-crossing or list-indexed path like "birth.date" or
-    # "primary_name.first_name" in order_by, even though those same paths
-    # are fine in where=/what=) -- and the columns above are exactly that
-    # kind of arbitrary expression, so there's no column here that could
-    # safely be offered as a sort key without silently failing for most
-    # of what someone would actually type.
     # A typo in either box is the server's to reject -- shown as a red
     # message box rather than a Python traceback.
     try:

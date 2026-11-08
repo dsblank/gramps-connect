@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTableSql, insertSql, toRowValues, toSelectEntry, toUpdateRowValues, updateSql } from "../sql";
+import { createTableSql, insertSql, toOrderByEntry, toRowValues, toSelectEntry, toUpdateRowValues, updateSql } from "../sql";
 import { MEDIA_VIEW, PERSON_VIEW, TAG_VIEW, VIEWS } from "../views";
 
 describe("toSelectEntry", () => {
@@ -19,6 +19,14 @@ describe("toSelectEntry", () => {
     for (const view of VIEWS) {
       for (const column of view.columns) expect(typeof toSelectEntry(column)).toBe("string");
     }
+  });
+});
+
+describe("toOrderByEntry", () => {
+  it("sends a column as-is ascending, with a leading '-' descending", () => {
+    expect(toOrderByEntry({ column: "surname", direction: "asc" })).toBe("surname");
+    expect(toOrderByEntry({ column: "birth.date.sortval", direction: "desc" })).toBe("-birth.date.sortval");
+    expect(toOrderByEntry({ column: "desc", direction: "desc" })).toBe("-desc");
   });
 });
 

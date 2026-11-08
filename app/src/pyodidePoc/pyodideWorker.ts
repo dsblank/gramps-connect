@@ -6,7 +6,7 @@
 import { loadPyodide, type PyodideInterface } from "pyodide";
 import { API_BASE } from "../config";
 import { AUTO_AWAIT_PY } from "./autoAwait";
-import { OBJECT_QUERY_ENDPOINTS, objectEndpointBase } from "./objectEndpoints";
+import { OBJECT_QUERY_ENDPOINTS, grampletOrderBy, objectEndpointBase } from "./objectEndpoints";
 import { preprocessPipInstalls } from "./pipInstall";
 import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
@@ -275,8 +275,7 @@ const bridge = {
     if (!endpoint) throw new Error(`filter(): unknown object type ${JSON.stringify(objectType)}`);
     // A `what` entry is passed straight through as a plain select-entry
     // string -- gramps-object-query-language's "almost Python" expression
-    // grammar (gramps-web-api's /query/ `select`, pinned to
-    // gramps-object-query-language>=0.5.0,<0.6) resolves a dotted/bracketed
+    // grammar (gramps-web-api's /query/ `select`) resolves a dotted/bracketed
     // path ("birth.date", "primary_name.surname_list[0].surname") itself,
     // the same as it does for `where_expr`, so there's no need to
     // pre-split it into a {"json_path": [...]} entry here. (An older
@@ -284,6 +283,7 @@ const bridge = {
     // string, which is what the {json_path: entry.split(".")} workaround
     // this replaced was for.)
     const select = ["handle", ...(args.what ?? [])];
+    const orderBy = grampletOrderBy(args.order);
     // Keyset pagination (gramps-web-api's `after`, echoing its own
     // `next_after` back on the following request) rather than an offset --
     // `where_expr`/`order_by`/`select` stay identical across every page
@@ -299,7 +299,7 @@ const bridge = {
         body: JSON.stringify({
           select,
           where_expr: args.where ?? undefined,
-          order_by: args.order ?? undefined,
+          order_by: orderBy,
           limit: Math.min(limit - items.length, MAX_PAGE_LIMIT),
           after,
         }),
@@ -514,8 +514,9 @@ async def filter(object_type, where=None, what=None, order=None, limit=50):
     gramps.gen.lib object. A 'what' entry may cross one relationship with
     a dotted name (e.g. "birth.date", "father.gramps_id") to reach a
     field on the related record; the response key is that same dotted
-    string. 'where' is a where_expr string (e.g. 'gender == 1'), 'order'
-    is a list of {"column": ..., "direction": "asc"|"desc"}. 'limit' isn't
+    string. 'where' is a where_expr string (e.g. 'gender == 1'); 'order' is
+    a list of column names, most significant first, each with a leading
+    "-" for descending (e.g. ["surname", "-birth.date.sortval"]). 'limit' isn't
     capped at gramps-web-api's own per-request max of 1000 -- pass 5000
     and get 5000 (or every match, if fewer), or limit=None for every
     match: the JS bridge pages through multiple requests transparently, so

@@ -49,3 +49,23 @@ export const OBJECT_TYPE_LABELS: Record<string, string> = {
   note: "Note",
   tag: "Tag",
 };
+
+/** A Gramplet's `order=` as /query/ `order_by` strings. Each entry is a
+ * column written as in `where`/`what`, with a leading "-" for descending
+ * ("-change"); the older {"column": ..., "direction": "asc"|"desc"} dict
+ * is still accepted and converted, so Gramplets written before keep
+ * working. Anything else is an error naming the entry. */
+export function grampletOrderBy(order: unknown): string[] | undefined {
+  if (order === null || order === undefined) return undefined;
+  const entries = typeof order === "string" ? [order] : order;
+  if (!Array.isArray(entries)) throw new Error(`order= must be a list, got ${JSON.stringify(order)}`);
+  return entries.map((entry) => {
+    if (typeof entry === "string") return entry;
+    if (entry && typeof entry === "object" && typeof (entry as { column?: unknown }).column === "string") {
+      const { column, direction = "asc" } = entry as { column: string; direction?: unknown };
+      if (direction === "asc") return column;
+      if (direction === "desc") return `-${column}`;
+    }
+    throw new Error(`order= entries are column names like "surname" or "-change", got ${JSON.stringify(entry)}`);
+  });
+}

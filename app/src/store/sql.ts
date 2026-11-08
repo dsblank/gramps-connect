@@ -2,7 +2,7 @@
 // no sql.js/DOM/network dependency, so these are plain-function testable
 // (see __tests__/sql.test.ts). Ported from the original Layer 2/3 spike's
 // browser.ts (since removed, see git history).
-import type { ColumnConfig, ViewConfig } from "./views";
+import type { ColumnConfig, OrderBy, ViewConfig } from "./views";
 
 /** A column's /query/ `select` entry, always a string: a plain column
  * as-is, a json_path as GOQL's own path spelling with an `as` alias from
@@ -13,6 +13,12 @@ export function toSelectEntry(column: ColumnConfig): string {
     .map((seg, i) => (typeof seg === "number" ? `[${seg}]` : i === 0 ? seg : `.${seg}`))
     .join("");
   return `${path} as ${column.key}`;
+}
+
+/** A sort column's /query/ `order_by` entry: its column, with a leading
+ * "-" for descending ("-change"), as GOQL's parse_order_by reads it. */
+export function toOrderByEntry(orderBy: OrderBy): string {
+  return orderBy.direction === "desc" ? `-${orderBy.column}` : orderBy.column;
 }
 
 export function createTableSql(view: ViewConfig): string {

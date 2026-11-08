@@ -30,7 +30,7 @@ NO_SOURCES = (
 bar = st.progress(0, text="Finding public people with no sources...")
 unsourced = people(
     and_filters(get_filter("person"), "private == False", NO_SOURCES),
-    order=[{"column": "surname", "direction": "asc"}],
+    order=["surname"],
     limit=None,
 )
 
