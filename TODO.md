@@ -26,8 +26,6 @@ the wiki are the record of what shipped.
   overwritten, but the edit has to be redone; there's no side-by-side view
   or merge. Low priority: two people editing the same record at once is
   rare.
-- Full object-model UI redesign, design system, search-as-navigation — not
-  scoped yet.
 - **Generations graph (`FamilyGraphView.tsx`) descendant-subtree placement**:
   `DescendantChildrenBox`'s expanded-children row is centered via plain CSS
   (`Stack align="center"`) relative to the *whole* children box's width, not
