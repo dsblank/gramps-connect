@@ -55,3 +55,79 @@ def assert_goql_matches_rule(
         f"{len(missing)} missing (matched by rule, not GOQL), "
         f"{len(extra)} extra (matched by GOQL, not rule)"
     )
+
+
+# -- Rules with values (gqlFilterPresets.ts's detailPresets() and
+# typeSpecificPresets) --------------------------------------------------------
+
+from gramps.gen.lib import AttributeType, EventType, NoteType, PlaceType, RepositoryType, SrcAttributeType
+
+ITER = {
+    "Event": "iter_events", "Place": "iter_places", "Repository": "iter_repositories", "Source": "iter_sources",
+    "Citation": "iter_citations", "Media": "iter_media", "Note": "iter_notes",
+}
+
+TYPE_TABLES = {
+    "EventType": EventType, "PlaceType": PlaceType, "NoteType": NoteType, "AttributeType": AttributeType,
+    "SrcAttributeType": SrcAttributeType, "RepositoryType": RepositoryType,
+}
+
+
+def fill(preset, **values):
+    """goqlFilterCombiner.ts's fillParam(), for every param type. Values
+    for "datetime" are passed already converted to seconds."""
+    expr = preset["expr"]
+    for param in preset.get("params", []):
+        raw = values[param["name"]]
+        kind = param["type"]
+        if kind == "string":
+            out = raw.replace("'", "").replace("\\", "")
+        elif kind == "regex":
+            out = raw.replace("'", "").replace("\\", "\\\\")
+        elif kind == "gramps-type":
+            out = type_condition(param, raw)
+        else:  # integer, choice, datetime
+            out = str(raw)
+        expr = expr.replace("{" + param["name"] + "}", out)
+    return expr
+
+
+def type_condition(param, name):
+    table = TYPE_TABLES[param["table"]]
+    value = next((m[0] for m in table._DATAMAP if m[2] == name), None)
+    field = param["field"]
+    if value not in (None, 0):
+        return f"({field}.value == {value})"
+    return f"({field}.value == 0 and {field}.string == '{name}')"
+
+
+def objects(db, ns):
+    return list(getattr(db, ITER[ns])())
+
+
+def compare(db, ns, expr, rule, user, *, expect_some=True):
+    """The GOQL expr and the gramps-core rule pick the same objects -- and,
+    unless `expect_some` is off (the fixture has nothing to match), at
+    least one, so a case can't pass by both sides matching nothing."""
+    objs = objects(db, ns)
+    if hasattr(rule, "requestprepare"):
+        rule.requestprepare(db, user)
+    expected = rule_matching_handles(db, rule, objs)
+    actual = goql_matching_handles(db, ns, expr, objs)
+    assert actual == expected, (
+        f"{expr!r} vs {type(rule).__name__}: {len(expected - actual)} missing, {len(actual - expected)} extra"
+    )
+    if expect_some:
+        assert expected, f"{type(rule).__name__} matched nothing in the fixture; the case proves nothing"
+    return len(expected)
+
+
+def compare_plain(db, ns, expr, check, *, expect_some=True):
+    """Like compare(), against a plain per-object check, for rules
+    gramps-core lacks or gets wrong."""
+    objs = objects(db, ns)
+    expected = {o.handle for o in objs if check(o)}
+    actual = goql_matching_handles(db, ns, expr, objs)
+    assert actual == expected, f"{expr!r}: {len(expected - actual)} missing, {len(actual - expected)} extra"
+    if expect_some:
+        assert expected, f"{expr!r}: nothing in the fixture to match; the case proves nothing"

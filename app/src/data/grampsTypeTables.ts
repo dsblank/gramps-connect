@@ -131,11 +131,34 @@ export const ATTRIBUTE_TYPE_VALUES: Readonly<Record<string, number>> = {
   "Occupation": 15,
 };
 
-export type GrampsTypeTable = "EventType" | "PlaceType" | "NoteType" | "AttributeType";
+/** Source/Citation attributes (SrcAttribute) -- Gramps defines no standard
+ * names here beyond Unknown/Custom, so every real one is custom. */
+export const SRC_ATTRIBUTE_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Unknown": -1,
+  "Custom": 0,
+};
+
+export const REPOSITORY_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Unknown": -1,
+  "Custom": 0,
+  "Library": 1,
+  "Cemetery": 2,
+  "Church": 3,
+  "Archive": 4,
+  "Album": 5,
+  "Web site": 6,
+  "Bookstore": 7,
+  "Collection": 8,
+  "Safe": 9,
+};
+
+export type GrampsTypeTable = "EventType" | "PlaceType" | "NoteType" | "AttributeType" | "SrcAttributeType" | "RepositoryType";
 
 export const GRAMPS_TYPE_TABLES: Readonly<Record<GrampsTypeTable, Readonly<Record<string, number>>>> = {
   EventType: EVENT_TYPE_VALUES,
   PlaceType: PLACE_TYPE_VALUES,
   NoteType: NOTE_TYPE_VALUES,
   AttributeType: ATTRIBUTE_TYPE_VALUES,
+  SrcAttributeType: SRC_ATTRIBUTE_TYPE_VALUES,
+  RepositoryType: REPOSITORY_TYPE_VALUES,
 };

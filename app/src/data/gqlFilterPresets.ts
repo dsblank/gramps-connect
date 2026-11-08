@@ -286,12 +286,61 @@ function detailPresets(namespace: GqlFilterNamespace, idPrefix: string, hasNotes
   return out;
 }
 
+/** `notes`/`citations`: whether the type has those lists at all (Notes have
+ * neither; Sources, Citations and Repositories have no citations). */
 const DETAIL_RULE_TARGETS: { namespace: GqlFilterNamespace; idPrefix: string; notes: boolean; citations: boolean }[] = [
   { namespace: "Event", idPrefix: "event", notes: true, citations: true },
   { namespace: "Place", idPrefix: "place", notes: true, citations: true },
+  { namespace: "Repository", idPrefix: "repository", notes: true, citations: false },
+  { namespace: "Source", idPrefix: "source", notes: true, citations: false },
+  { namespace: "Citation", idPrefix: "citation", notes: true, citations: false },
+  { namespace: "Media", idPrefix: "media", notes: true, citations: true },
+  { namespace: "Note", idPrefix: "note", notes: false, citations: false },
 ];
 
-/** Rules only one type has (rules/event/, rules/place/). */
+/** "<field> contains <text>" -- gramps-core's match_substring() without
+ * regex, which is case-insensitive like GOQL's `in`. */
+function containsPreset(
+  namespace: GqlFilterNamespace, id: string, label: string, sourceRule: string, field: string,
+): GqlFilterPreset {
+  return {
+    id, label, category: "Properties", namespace, sourceRule, expr: `'{text}' in ${field}`,
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  };
+}
+
+/** gramps-core's HasAttribute: an attribute of that type whose value
+ * contains the text. */
+function attributePreset(namespace: GqlFilterNamespace, idPrefix: string, table: GrampsTypeTable): GqlFilterPreset {
+  return {
+    id: `${idPrefix}-attribute`, label: "Has attribute", category: "Properties", namespace,
+    sourceRule: "HasAttribute", expr: "any({attributeType} and '{value}' in a.value for a in attribute_list)",
+    params: [
+      { name: "attributeType", label: "Attribute", type: "gramps-type", table, field: "a.type" },
+      { name: "value", label: "Value contains", type: "string" },
+    ],
+    supported: true,
+  };
+}
+
+/** A plain sort-value range, like Birth date between -- gramps-core's
+ * HasData/HasCitation/HasMedia match one fuzzy date with Date.match(). */
+function dateBetweenPreset(namespace: GqlFilterNamespace, id: string, label: string, sourceRule: string): GqlFilterPreset {
+  return {
+    id, label, category: "Dates", namespace, sourceRule,
+    expr: "Date('{startDate}') <= date.sortval <= Date('{endDate}')",
+    params: [
+      { name: "startDate", label: "Start date", type: "string" },
+      { name: "endDate", label: "End date", type: "string" },
+    ],
+    supported: true,
+    notes: `gramps-core's ${sourceRule} matches one date with Date.match() (fuzzy, so 'about 1850' overlaps a range); this is a plain range on the sort value instead, same as Birth date between. Items with no date never match.`,
+  };
+}
+
+const ADDRESS_FIELDS = ["street", "locality", "city", "county", "state", "country", "postal", "phone"];
+
+/** Rules only one type has (rules/<type>/). */
 const typeSpecificPresets: GqlFilterPreset[] = [
   {
     id: "event-type", label: "Event type is", category: "Properties", namespace: "Event",
@@ -299,30 +348,9 @@ const typeSpecificPresets: GqlFilterPreset[] = [
     params: [{ name: "eventType", label: "Event type", type: "gramps-type", table: "EventType", field: "type" }],
     supported: true,
   },
-  {
-    id: "event-date-between", label: "Event date between", category: "Dates", namespace: "Event",
-    sourceRule: "HasData", expr: "Date('{startDate}') <= date.sortval <= Date('{endDate}')",
-    params: [
-      { name: "startDate", label: "Start date", type: "string" },
-      { name: "endDate", label: "End date", type: "string" },
-    ],
-    supported: true,
-    notes: "gramps-core's HasData matches one date with Date.match() (fuzzy, so 'about 1850' overlaps a range); this is a plain range on the sort value instead, same as Birth date between. Events with no date never match.",
-  },
-  {
-    id: "event-description-contains", label: "Description contains", category: "Properties", namespace: "Event",
-    sourceRule: "HasData", expr: "'{text}' in description",
-    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
-  },
-  {
-    id: "event-attribute", label: "Has attribute", category: "Properties", namespace: "Event",
-    sourceRule: "HasAttribute", expr: "any({attributeType} and '{value}' in a.value for a in attribute_list)",
-    params: [
-      { name: "attributeType", label: "Attribute", type: "gramps-type", table: "AttributeType", field: "a.type" },
-      { name: "value", label: "Value contains", type: "string" },
-    ],
-    supported: true,
-  },
+  dateBetweenPreset("Event", "event-date-between", "Event date between", "HasData"),
+  containsPreset("Event", "event-description-contains", "Description contains", "HasData", "description"),
+  attributePreset("Event", "event", "AttributeType"),
   {
     id: "place-type", label: "Place type is", category: "Properties", namespace: "Place",
     sourceRule: "HasData", expr: "{placeType}",
@@ -335,14 +363,107 @@ const typeSpecificPresets: GqlFilterPreset[] = [
     params: [{ name: "text", label: "Text", type: "string" }], supported: true,
     notes: "Checks the place's own name and its alternative names, like gramps-core's HasData (get_all_names()) -- not the full title built from enclosing places.",
   },
-  {
-    id: "place-code-contains", label: "Code contains", category: "Properties", namespace: "Place",
-    sourceRule: "HasData", expr: "'{text}' in code",
-    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
-  },
+  containsPreset("Place", "place-code-contains", "Code contains", "HasData", "code"),
   {
     id: "place-no-coordinates", label: "Places without coordinates", category: "Properties", namespace: "Place",
     sourceRule: "HasNoLatOrLon", expr: "regex(lat, '^\\\\s*$') or regex(long, '^\\\\s*$')", supported: true,
+  },
+
+  // -- Source (rules/source/; the text fields are HasSourceBase's) ----------
+  containsPreset("Source", "source-title-contains", "Title contains", "MatchesTitleSubstringOf", "title"),
+  containsPreset("Source", "source-author-contains", "Author contains", "HasSourceBase", "author"),
+  containsPreset("Source", "source-abbreviation-contains", "Abbreviation contains", "HasSourceBase", "abbrev"),
+  containsPreset("Source", "source-publication-contains", "Publication info contains", "HasSourceBase", "pubinfo"),
+  {
+    id: "source-repository-count", label: "Number of repositories", category: "Associations", namespace: "Source",
+    sourceRule: "HasRepository", expr: "len([r for r in reporef_list]) {comparison} {count}",
+    params: [
+      { name: "comparison", label: "Comparison", type: "choice", options: COMPARISON_OPTIONS },
+      { name: "count", label: "Count", type: "integer" },
+    ],
+    supported: true,
+  },
+  {
+    id: "source-call-number-contains", label: "Repository call number contains", category: "Associations",
+    namespace: "Source", sourceRule: "HasRepositoryCallNumberRef",
+    expr: "any('{text}' in r.call_number for r in reporef_list)",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  },
+  attributePreset("Source", "source", "SrcAttributeType"),
+
+  // -- Citation (rules/citation/) -----------------------------------------
+  containsPreset("Citation", "citation-page-contains", "Volume/Page contains", "MatchesPageSubstringOf", "page"),
+  {
+    id: "citation-confidence", label: "Confidence at least", category: "Properties", namespace: "Citation",
+    sourceRule: "HasCitation", expr: "confidence >= {level}",
+    params: [{ name: "level", label: "Confidence", type: "choice", options: CONFIDENCE_OPTIONS }], supported: true,
+  },
+  dateBetweenPreset("Citation", "citation-date-between", "Date between", "HasCitation"),
+  {
+    id: "citation-source-id-is", label: "Source's Gramps ID is", category: "Associations", namespace: "Citation",
+    sourceRule: "HasSourceIdOf", expr: "source.gramps_id == '{id}'",
+    params: [{ name: "id", label: "ID", type: "string" }], supported: true,
+    notes: "gramps-core 6.0's HasSourceIdOf never matches (it has no prepare() to look the ID up); this does what it describes.",
+  },
+  {
+    id: "citation-source-id-matches", label: "Source's Gramps ID matches a regular expression", category: "Associations",
+    namespace: "Citation", sourceRule: "RegExpSourceIdOf", expr: "regex(source.gramps_id, '(?i){pattern}')",
+    params: [{ name: "pattern", label: "Regular expression", type: "regex" }], supported: true,
+  },
+  containsPreset("Citation", "citation-source-title-contains", "Source title contains", "HasSource", "source.title"),
+  containsPreset("Citation", "citation-source-author-contains", "Source author contains", "HasSource", "source.author"),
+  attributePreset("Citation", "citation", "SrcAttributeType"),
+
+  // -- Media (rules/media/; the text fields are HasMedia's) ---------------
+  containsPreset("Media", "media-title-contains", "Title contains", "HasMedia", "desc"),
+  containsPreset("Media", "media-type-contains", "Media type contains", "HasMedia", "mime"),
+  containsPreset("Media", "media-path-contains", "Path contains", "HasMedia", "path"),
+  dateBetweenPreset("Media", "media-date-between", "Date between", "HasMedia"),
+  attributePreset("Media", "media", "AttributeType"),
+  {
+    id: "media-source-id-is", label: "Cites the source with Gramps ID", category: "Associations", namespace: "Media",
+    sourceRule: "HasSourceOf", expr: "any(c.source.gramps_id == '{id}' for c in citations)",
+    params: [{ name: "id", label: "Source ID", type: "string" }], supported: true,
+  },
+  {
+    id: "media-citation-page-contains", label: "Has a citation with Volume/Page containing", category: "Associations",
+    namespace: "Media", sourceRule: "HasCitation", expr: "any('{text}' in c.page for c in citations)",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  },
+
+  // -- Repository (rules/repository/; the fields are HasRepo's) -----------
+  containsPreset("Repository", "repository-name-contains", "Name contains", "MatchesNameSubstringOf", "name"),
+  {
+    id: "repository-type", label: "Repository type is", category: "Properties", namespace: "Repository",
+    sourceRule: "HasRepo", expr: "{repositoryType}",
+    params: [{ name: "repositoryType", label: "Repository type", type: "gramps-type", table: "RepositoryType", field: "type" }],
+    supported: true,
+  },
+  {
+    id: "repository-address-contains", label: "Address contains", category: "Properties", namespace: "Repository",
+    sourceRule: "HasRepo",
+    expr: `any(${ADDRESS_FIELDS.map((f) => `'{text}' in a.${f}`).join(" or ")} for a in address_list)`,
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+    notes: "Checks each address field on its own; gramps-core's HasRepo joins them with ', ' first, so text spanning two fields (\"Main St, Springfield\") only matches there.",
+  },
+  {
+    id: "repository-url-contains", label: "Web address contains", category: "Properties", namespace: "Repository",
+    sourceRule: "HasRepo", expr: "any('{text}' in u.path or '{text}' in u.desc for u in urls)",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  },
+
+  // -- Note (rules/note/) --------------------------------------------------
+  containsPreset("Note", "note-text-contains", "Text contains", "MatchesRegexpOf", "text.string"),
+  {
+    id: "note-text-matches", label: "Text matches a regular expression", category: "Properties", namespace: "Note",
+    sourceRule: "MatchesRegexpOf", expr: "regex(text.string, '(?i){pattern}')",
+    params: [{ name: "pattern", label: "Regular expression", type: "regex" }], supported: true,
+  },
+  {
+    id: "note-type", label: "Note type is", category: "Properties", namespace: "Note",
+    sourceRule: "HasType", expr: "{noteType}",
+    params: [{ name: "noteType", label: "Note type", type: "gramps-type", table: "NoteType", field: "type" }],
+    supported: true,
   },
 ];
 

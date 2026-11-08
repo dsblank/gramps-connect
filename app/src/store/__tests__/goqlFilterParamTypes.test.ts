@@ -3,8 +3,7 @@ import { describe, expect, it } from "vitest";
 import { gqlFilterPresets } from "../../data/gqlFilterPresets";
 import { combineFilters, datetimeParamToSeconds, FilterCombineError } from "../goqlFilterCombiner";
 
-// These strings are what tests/gql_presets/test_event_place_presets.py's
-// fill() produces and checks against gramps-core; keep the two in step.
+// These strings are what tests/gql_presets/helpers.py's fill() produces and checks against gramps-core; keep the two in step.
 
 function render(id: string, values: Record<string, string>): string {
   const preset = gqlFilterPresets.find((p) => p.id === id);
@@ -25,12 +24,25 @@ describe("built-in param types", () => {
     expect(render("event-note-type", { noteType: "Event Note" })).toBe("(any((n.type.value == 10) for n in notes))");
   });
 
+  it("renders the repository type and source attribute tables", () => {
+    expect(render("repository-type", { repositoryType: "Library" })).toBe("((type.value == 1))");
+    expect(render("source-attribute", { attributeType: "Book Cover Type", value: "paper" })).toBe(
+      "(any((a.type.value == 0 and a.type.string == 'Book Cover Type') and 'paper' in a.value for a in attribute_list))",
+    );
+  });
+
   it("doubles backslashes in a regex and strips quotes", () => {
     expect(render("event-id-matches", { pattern: "^e\\d{3}'1$" })).toBe("(regex(gramps_id, '(?i)^e\\\\d{3}1$'))");
   });
 
   it("rejects an invalid regex", () => {
     expect(() => render("event-id-matches", { pattern: "(" })).toThrow(FilterCombineError);
+  });
+
+  it("renders a regex on a whole Note's text", () => {
+    expect(render("note-text-matches", { pattern: "lewis\\s+anderson" })).toBe(
+      "(regex(text.string, '(?i)lewis\\\\s+anderson'))",
+    );
   });
 
   it("accepts only a listed choice", () => {

@@ -62,15 +62,26 @@ is. `example.gramps` has no private objects and few tagged non-Person
 ones, so several of those cases only prove the rule compiles and matches
 nothing it shouldn't.
 
-## Rules with values (Events and Places)
+## Rules with values
 
-`test_event_place_presets.py` covers the Event and Place rules that take
-a value (type, ID, regex, changed-since, reference count, note text/type,
-citation confidence, ...). Its `fill()` mirrors goqlFilterCombiner.ts's
-`fillParam()`, and `app/src/store/__tests__/goqlFilterParamTypes.test.ts`
-pins the TypeScript side to the same strings. Each case asserts the
-gramps-core rule matched something wherever the fixture has anything to
-match.
+The rules that take a value (type, ID, regex, changed-since, reference
+count, note text/type, citation confidence, ...) are split three ways:
+
+- `test_detail_presets.py`: the rules every type shares
+  (`DETAIL_RULE_TARGETS`), parametrized over the types. Where a type has
+  no gramps-core rule of its own for one, the shared base class
+  (`HasNoteSubstrBase`, ...) is the reference.
+- `test_event_place_presets.py`: the Event and Place rules only those
+  types have.
+- `test_record_presets.py`: the Source, Citation, Media, Repository and
+  Note rules only those types have. gramps-core 6.0's `HasSourceIdOf`
+  never matches, so `citation-source-id-is` is checked against what it
+  describes instead.
+
+`helpers.py`'s `fill()` mirrors goqlFilterCombiner.ts's `fillParam()`,
+and `app/src/store/__tests__/goqlFilterParamTypes.test.ts` pins the
+TypeScript side to the same strings. Each case asserts the gramps-core
+rule matched something wherever the fixture has anything to match.
 
 ## Running
 
