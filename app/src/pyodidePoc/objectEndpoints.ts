@@ -50,22 +50,33 @@ export const OBJECT_TYPE_LABELS: Record<string, string> = {
   tag: "Tag",
 };
 
-/** A Gramplet's `order=` as /query/ `order_by` strings. Each entry is a
- * column written as in `where`/`what`, with a leading "-" for descending
+/** A Gramplet's `order=` as /query/ `order_by`. Each entry is a column
+ * written as in `where`/`what`, with a leading "-" for descending
  * ("-change"); the older {"column": ..., "direction": "asc"|"desc"} dict
- * is still accepted and converted, so Gramplets written before keep
- * working. Anything else is an error naming the entry. */
-export function grampletOrderBy(order: unknown): string[] | undefined {
+ * is still accepted, so Gramplets written before keep working. Sent as
+ * strings when `strings` (a gramps-web-api newer than 3.25.2, see
+ * serverCapabilities.ts), as {column, direction} objects otherwise.
+ * Anything else is an error naming the entry. */
+export function grampletOrderBy(
+  order: unknown,
+  strings = true,
+): (string | { column: string; direction: "asc" | "desc" })[] | undefined {
   if (order === null || order === undefined) return undefined;
   const entries = typeof order === "string" ? [order] : order;
   if (!Array.isArray(entries)) throw new Error(`order= must be a list, got ${JSON.stringify(order)}`);
   return entries.map((entry) => {
-    if (typeof entry === "string") return entry;
-    if (entry && typeof entry === "object" && typeof (entry as { column?: unknown }).column === "string") {
-      const { column, direction = "asc" } = entry as { column: string; direction?: unknown };
-      if (direction === "asc") return column;
-      if (direction === "desc") return `-${column}`;
+    let column: string | undefined;
+    let direction: "asc" | "desc" = "asc";
+    if (typeof entry === "string") {
+      const text = entry.trim();
+      [column, direction] = text.startsWith("-") ? [text.slice(1).trim(), "desc"] : [text, "asc"];
+    } else if (entry && typeof entry === "object" && typeof (entry as { column?: unknown }).column === "string") {
+      const d = (entry as { direction?: unknown }).direction ?? "asc";
+      if (d === "asc" || d === "desc") [column, direction] = [(entry as { column: string }).column, d];
     }
-    throw new Error(`order= entries are column names like "surname" or "-change", got ${JSON.stringify(entry)}`);
+    if (!column) {
+      throw new Error(`order= entries are column names like "surname" or "-change", got ${JSON.stringify(entry)}`);
+    }
+    return strings ? (direction === "desc" ? `-${column}` : column) : { column, direction };
   });
 }

@@ -3,7 +3,9 @@
 // ported from the original Layer 2/3 spike's browser.ts (fetchPage; since
 // removed, see git history).
 import { API_BASE } from "../config";
-import { toOrderByEntry, toSelectEntry } from "./sql";
+import { toOrderByWire, toSelectEntry } from "./sql";
+import { fetchServerState } from "./cacheMeta";
+import { supportsOrderByStrings } from "./serverCapabilities";
 import type { ColumnConfig, OrderBy, ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
 
@@ -128,6 +130,17 @@ export async function parseErrorMessage(res: Response): Promise<string> {
   }
 }
 
+/** Whether this server takes `order_by` as strings -- from the memoized
+ * /api/metadata/ every view already fetched. Can't tell (metadata failed)
+ * counts as no, the form every older server takes. */
+export async function orderByStringsSupported(): Promise<boolean> {
+  try {
+    return supportsOrderByStrings((await fetchServerState()).webApiVersion);
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchPage(
   view: ViewConfig,
   token: string,
@@ -160,7 +173,7 @@ export async function fetchPage(
     },
     body: JSON.stringify({
       select: ["handle", ...columns.map(toSelectEntry)],
-      order_by: orderBy.map(toOrderByEntry),
+      order_by: toOrderByWire(orderBy, await orderByStringsSupported()),
       limit,
       after: after ?? undefined,
       count: wantCount,

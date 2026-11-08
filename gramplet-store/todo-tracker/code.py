@@ -28,7 +28,7 @@ where = and_filters(
     "'TODO' in text.string" if todo_only else None,
 )
 
-matching_notes = notes(where, order=["-change"], limit=100)
+matching_notes = notes(where, order=[{"column": "change", "direction": "desc"}], limit=100)
 
 st.write(f"{len(matching_notes)} research note(s)")
 

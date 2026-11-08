@@ -13,6 +13,7 @@ import { ST_BOOTSTRAP_PY } from "./stBootstrap";
 import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, TransactionItem, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 import { apiFetch } from "../store/apiFetch";
 import { getRelationshipPaths, type PathPerson, type ServerRelationship } from "../store/relationshipPath";
+import { supportsOrderByStrings } from "../store/serverCapabilities";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -259,6 +260,24 @@ async function bridgeError(name: string, res: Response): Promise<Error> {
   return new Error(`${name}(): ${res.status} ${message}`);
 }
 
+// Whether this server takes /query/ order_by as strings (gramps-web-api
+// newer than 3.25.2) -- read once from /api/metadata/ per worker. A failed
+// read counts as no, the form every older server takes, and is retried on
+// the next query.
+let orderByStringsPromise: Promise<boolean> | null = null;
+function orderByStringsSupported(): Promise<boolean> {
+  orderByStringsPromise ??= authFetch("filter", `${API_BASE}/api/metadata/`)
+    .then(async (res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return supportsOrderByStrings(String((await res.json())?.gramps_webapi?.version ?? ""));
+    })
+    .catch(() => {
+      orderByStringsPromise = null; // ask again next time rather than keep a failed read
+      return false;
+    });
+  return orderByStringsPromise;
+}
+
 const bridge = {
   async filter(objectType: string, argsJson: string): Promise<string> {
     const args = JSON.parse(argsJson) as {
@@ -283,7 +302,7 @@ const bridge = {
     // string, which is what the {json_path: entry.split(".")} workaround
     // this replaced was for.)
     const select = ["handle", ...(args.what ?? [])];
-    const orderBy = grampletOrderBy(args.order);
+    const orderBy = grampletOrderBy(args.order, await orderByStringsSupported());
     // Keyset pagination (gramps-web-api's `after`, echoing its own
     // `next_after` back on the following request) rather than an offset --
     // `where_expr`/`order_by`/`select` stay identical across every page

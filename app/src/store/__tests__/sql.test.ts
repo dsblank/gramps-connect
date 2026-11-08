@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createTableSql, insertSql, toOrderByEntry, toRowValues, toSelectEntry, toUpdateRowValues, updateSql } from "../sql";
+import {
+  createTableSql, insertSql, toOrderByEntry, toOrderByWire, toRowValues, toSelectEntry, toUpdateRowValues, updateSql,
+} from "../sql";
 import { MEDIA_VIEW, PERSON_VIEW, TAG_VIEW, VIEWS } from "../views";
 
 describe("toSelectEntry", () => {
@@ -27,6 +29,12 @@ describe("toOrderByEntry", () => {
     expect(toOrderByEntry({ column: "surname", direction: "asc" })).toBe("surname");
     expect(toOrderByEntry({ column: "birth.date.sortval", direction: "desc" })).toBe("-birth.date.sortval");
     expect(toOrderByEntry({ column: "desc", direction: "desc" })).toBe("-desc");
+  });
+
+  it("sends strings to a newer server and objects to 3.25.2 and older", () => {
+    const orderBy = [{ column: "surname", direction: "asc" as const }, { column: "change", direction: "desc" as const }];
+    expect(toOrderByWire(orderBy, true)).toEqual(["surname", "-change"]);
+    expect(toOrderByWire(orderBy, false)).toEqual(orderBy);
   });
 });
 

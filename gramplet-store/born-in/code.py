@@ -22,7 +22,7 @@ if birth_place and burial_column_label:
 
     chicago_born = people(
         and_filters(get_filter(), f"birth.place.title == {birth_place!r}"),
-        order=["surname"],
+        order=[{"column": "surname", "direction": "asc"}],
         limit=200,
     )
 

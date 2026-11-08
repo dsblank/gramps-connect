@@ -31,3 +31,23 @@ export const BACKGROUND_DELETE_SINCE: readonly [number, number] = [3, 25];
 export function supportsBackgroundDelete(webApiVersion: string): boolean {
   return grampsVersionAtLeast(webApiVersion, BACKGROUND_DELETE_SINCE);
 }
+
+/** The last gramps-web-api release whose /query/ takes `order_by` only as
+ * {"column", "direction"} objects. Newer releases take GOQL strings
+ * ("surname", "-change") and reject the objects (gramps-web-api#1164). */
+export const LAST_OBJECT_ORDER_BY_VERSION: readonly [number, number, number] = [3, 25, 2];
+
+/** Is version ("3.26.0", "3.25.3rc1") newer than [major, minor, patch]?
+ * An unreadable version counts as not newer. */
+export function versionAfter(version: string, [major, minor, patch]: readonly [number, number, number]): boolean {
+  const m = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(version.trim());
+  if (!m) return false;
+  const v = [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)];
+  const limit = [major, minor, patch];
+  for (let i = 0; i < 3; i++) if (v[i] !== limit[i]) return v[i] > limit[i];
+  return false;
+}
+
+export function supportsOrderByStrings(webApiVersion: string): boolean {
+  return versionAfter(webApiVersion, LAST_OBJECT_ORDER_BY_VERSION);
+}

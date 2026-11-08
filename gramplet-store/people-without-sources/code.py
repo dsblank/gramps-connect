@@ -37,7 +37,7 @@ if unsourced:
     st.info(f"{unsourced} of {total} people have no sources.")
     bar.progress(0.5, text="Loading names...")
     set_column_titles("Person", "Events")
-    for person in people(where=where, order=["surname"], limit=SHOW_AT_MOST):
+    for person in people(where=where, order=[{"column": "surname", "direction": "asc"}], limit=SHOW_AT_MOST):
         row(person, len(person.event_ref_list))
 else:
     st.success(f"All {total} people have at least one source.")

@@ -11,9 +11,10 @@
 // in the first place, the same "don't create the gap" preference as
 // WikidataPlaceLookupDialog.tsx's "Skip this level" checkbox.
 import { API_BASE } from "../config";
-import { PAGE_SIZE, parseErrorMessage } from "./api";
+import { PAGE_SIZE, orderByStringsSupported, parseErrorMessage } from "./api";
 import { apiFetch } from "./apiFetch";
 import { fetchPlainObject, updateObject } from "./objectsApi";
+import { toOrderByWire } from "./sql";
 import { PLACE_VIEW } from "./views";
 
 interface RawPlaceRef {
@@ -122,6 +123,7 @@ async function queryPlaceRefs(
   whereExpr: string
 ): Promise<{ handle: string; placeref_list: RawPlaceRef[] }[]> {
   const found: { handle: string; placeref_list: RawPlaceRef[] }[] = [];
+  const strings = await orderByStringsSupported();
   let after: string | null = null;
   do {
     const res = await apiFetch(`${API_BASE}${PLACE_VIEW.endpoint}`, {
@@ -130,7 +132,7 @@ async function queryPlaceRefs(
       body: JSON.stringify({
         select: ["handle", "placeref_list"],
         where_expr: whereExpr,
-        order_by: ["handle"],
+        order_by: toOrderByWire([{ column: "handle", direction: "asc" }], strings),
         limit: PAGE_SIZE,
         after: after ?? undefined,
       }),

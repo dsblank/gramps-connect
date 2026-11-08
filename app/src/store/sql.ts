@@ -21,6 +21,13 @@ export function toOrderByEntry(orderBy: OrderBy): string {
   return orderBy.direction === "desc" ? `-${orderBy.column}` : orderBy.column;
 }
 
+/** `order_by` as this server takes it: strings on a gramps-web-api newer
+ * than 3.25.2, the {column, direction} objects on 3.25.2 and older (see
+ * serverCapabilities.ts's supportsOrderByStrings()). */
+export function toOrderByWire(orderBy: readonly OrderBy[], strings: boolean): (string | OrderBy)[] {
+  return strings ? orderBy.map(toOrderByEntry) : orderBy.map((o) => ({ column: o.column, direction: o.direction }));
+}
+
 export function createTableSql(view: ViewConfig): string {
   const cols = view.columns.map((c) => `  ${c.key} ${c.sqlType}`).join(",\n");
   // No index on the order column -- viewStore.ts's getRows()/getHandleAt()

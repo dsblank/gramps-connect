@@ -77,11 +77,10 @@ where = and_filters(
 order_column = {"Surname": "surname", "Given name": "given_name", "Gramps ID": "gramps_id"}[sort_field]
 
 # people() returns whole records, in one request. 'order' is a list of
-# column names, most significant first; a leading "-" sorts that column
-# descending (e.g. ["-change"] for most recently changed first). This
-# reruns on every keystroke, so a modest limit keeps typing responsive on
-# a big tree.
-results = people(where, order=[order_column], limit=limit)
+# {"column": ..., "direction": "asc"|"desc"} dicts, most significant
+# column first. This reruns on every keystroke, so a modest limit keeps
+# typing responsive on a big tree.
+results = people(where, order=[{"column": order_column, "direction": "asc"}], limit=limit)
 
 if results:
     st.write(f"{len(results)} match(es)")
