@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createTableSql, insertSql, toRowValues, toSelectEntry, toUpdateRowValues, updateSql } from "../sql";
-import { MEDIA_VIEW, PERSON_VIEW, TAG_VIEW } from "../views";
+import { MEDIA_VIEW, PERSON_VIEW, TAG_VIEW, VIEWS } from "../views";
 
 describe("toSelectEntry", () => {
   it("passes a plain secondary-column select through unchanged", () => {
@@ -8,9 +8,17 @@ describe("toSelectEntry", () => {
     expect(toSelectEntry(surname)).toBe("surname");
   });
 
-  it("adds an `as` alias (from the column key) to a json_path select", () => {
+  it("sends a json_path as a path string with an `as` alias from the column key", () => {
     const birthDate = PERSON_VIEW.columns.find((c) => c.key === "birth_date")!;
-    expect(toSelectEntry(birthDate)).toEqual({ json_path: ["birth", "date"], as: "birth_date" });
+    expect(toSelectEntry(birthDate)).toBe("birth.date as birth_date");
+    expect(toSelectEntry({ ...birthDate, select: { json_path: ["primary_name", "surname_list", 0, "surname"] } }))
+      .toBe("primary_name.surname_list[0].surname as birth_date");
+  });
+
+  it("sends only strings, for every column of every view", () => {
+    for (const view of VIEWS) {
+      for (const column of view.columns) expect(typeof toSelectEntry(column)).toBe("string");
+    }
   });
 });
 

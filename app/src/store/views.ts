@@ -32,11 +32,11 @@ import iconBlog from "../assets/icons/blog-post.svg";
 export interface ColumnConfig {
   /** Both the local SQLite column name and the API response key (the
    * `as` alias for a json_path select entry, sent automatically -- see
-   * toSelectEntry in api.ts). */
+   * toSelectEntry in sql.ts). */
   key: string;
   label: string;
-  /** A plain secondary-column name, or a json_path select entry (without
-   * `as` -- that's added automatically from `key`). */
+  /** A plain secondary-column name, or a path into the record, sent as
+   * GOQL's path string with `as <key>` added (toSelectEntry in sql.ts). */
   select: string | { json_path: (string | number)[] };
   sqlType: "TEXT" | "INTEGER";
   /** API response value -> value to store in local SQLite. Default:

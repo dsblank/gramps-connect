@@ -4,9 +4,15 @@
 // browser.ts (since removed, see git history).
 import type { ColumnConfig, ViewConfig } from "./views";
 
-export function toSelectEntry(column: ColumnConfig): string | { json_path: (string | number)[]; as: string } {
+/** A column's /query/ `select` entry, always a string: a plain column
+ * as-is, a json_path as GOQL's own path spelling with an `as` alias from
+ * the column key ("birth.date as birth_date"). */
+export function toSelectEntry(column: ColumnConfig): string {
   if (typeof column.select === "string") return column.select;
-  return { ...column.select, as: column.key };
+  const path = column.select.json_path
+    .map((seg, i) => (typeof seg === "number" ? `[${seg}]` : i === 0 ? seg : `.${seg}`))
+    .join("");
+  return `${path} as ${column.key}`;
 }
 
 export function createTableSql(view: ViewConfig): string {
