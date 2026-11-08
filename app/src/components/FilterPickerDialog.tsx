@@ -1277,9 +1277,7 @@ function ParamInput({ param, value, onChange }: {
         />
       );
     case "gramps-type": {
-      const names = Object.entries(GRAMPS_TYPE_TABLES[param.table])
-        .filter(([, v]) => v !== 0)
-        .map(([name]) => name);
+      const names = Object.keys(GRAMPS_TYPE_TABLES[param.table]).filter((name) => name !== "Custom");
       const isStandard = names.includes(value);
       return (
         <SelectOrEnter

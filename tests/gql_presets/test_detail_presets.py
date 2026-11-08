@@ -24,9 +24,9 @@ from gramps.gen.filters.rules._matchessourceconfidencebase import MatchesSourceC
 
 from helpers import compare, fill, objects
 
-ALL = ["Event", "Place", "Repository", "Source", "Citation", "Media", "Note"]
-WITH_NOTES = ["Event", "Place", "Repository", "Source", "Citation", "Media"]
-WITH_CITATIONS = ["Event", "Place", "Media"]
+ALL = ["Family", "Event", "Place", "Repository", "Source", "Citation", "Media", "Note"]
+WITH_NOTES = ["Family", "Event", "Place", "Repository", "Source", "Citation", "Media"]
+WITH_CITATIONS = ["Family", "Event", "Place", "Media"]
 
 
 def rule(ns, name, base, *args, **kwargs):
@@ -35,14 +35,15 @@ def rule(ns, name, base, *args, **kwargs):
 
 
 ID_PATTERNS = {
+    "Family": r"^f00[1-3]\d$",
     "Event": r"^e\d{3}1$", "Place": r"P00[0-2]\d", "Repository": r"r000[01]", "Source": r"^s000[0-2]$",
     "Citation": r"C00\d0", "Media": r"^o\d{3}[1-3]", "Note": r"n\d{3}1",
 }
 
 # Note text each type's own notes contain, where any of its objects has notes.
-NOTE_TEXT = {"Event": "FIND OUT", "Source": "important", "Citation": "blue moon", "Repository": "librarian"}
-NOTE_REGEX = {"Event": r"how\s+did", "Source": r"my\s+name", "Citation": r"third\s+blue", "Repository": r"ask\s+lib"}
-NOTE_TYPE = {"Event": "Event Note", "Source": "Transcript", "Citation": "Source text", "Repository": "Repository Note"}
+NOTE_TEXT = {"Family": "GRAMPS AID", "Event": "FIND OUT", "Source": "important", "Citation": "blue moon", "Repository": "librarian"}
+NOTE_REGEX = {"Family": r"look\s+for", "Event": r"how\s+did", "Source": r"my\s+name", "Citation": r"third\s+blue", "Repository": r"ask\s+lib"}
+NOTE_TYPE = {"Family": "Family Note", "Event": "Event Note", "Source": "Transcript", "Citation": "Source text", "Repository": "Repository Note"}
 
 
 @pytest.mark.parametrize("ns", ALL)

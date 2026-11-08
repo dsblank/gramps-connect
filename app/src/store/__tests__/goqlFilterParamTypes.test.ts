@@ -31,6 +31,13 @@ describe("built-in param types", () => {
     );
   });
 
+  it("uses FamilyRelType's own Custom value (4), where Married is 0", () => {
+    expect(render("family-relationship-type", { relType: "Married" })).toBe("((type.value == 0))");
+    expect(render("family-relationship-type", { relType: "Living Apart" })).toBe(
+      "((type.value == 4 and type.string == 'Living Apart'))",
+    );
+  });
+
   it("doubles backslashes in a regex and strips quotes", () => {
     expect(render("event-id-matches", { pattern: "^e\\d{3}'1$" })).toBe("(regex(gramps_id, '(?i)^e\\\\d{3}1$'))");
   });

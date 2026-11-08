@@ -83,12 +83,14 @@ export function datetimeParamToSeconds(raw: string): number | null {
 }
 
 /** A "gramps-type" param's whole condition: the standard type's value, or
- * value 0 (Custom) plus the custom name -- GrampsType's own equality. */
+ * the table's Custom value (0 everywhere but FamilyRelType, where it's 4)
+ * plus the custom name -- GrampsType's own equality. */
 function grampsTypeCondition(param: Extract<GqlPresetParam, { type: "gramps-type" }>, raw: string): string {
   const name = raw.trim();
-  const value = GRAMPS_TYPE_TABLES[param.table][name];
-  if (value !== undefined && value !== 0) return `(${param.field}.value == ${value})`;
-  return `(${param.field}.value == 0 and ${param.field}.string == '${sanitizeTextParam(name)}')`;
+  const table = GRAMPS_TYPE_TABLES[param.table];
+  const value = table[name];
+  if (value !== undefined && name !== "Custom") return `(${param.field}.value == ${value})`;
+  return `(${param.field}.value == ${table.Custom} and ${param.field}.string == '${sanitizeTextParam(name)}')`;
 }
 
 function fillParam(preset: GqlFilterPreset, param: GqlPresetParam, raw: string): string {

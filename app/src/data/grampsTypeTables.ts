@@ -1,7 +1,7 @@
 /** Gramps' own standard type names -> stored `value`, copied from each
  * gen/lib/<type>.py's _DATAMAP (English names; their display and XML names
- * are identical). 0 is "Custom": a custom type is stored as value 0 plus
- * its own `string`. No imports, so export-gql-presets.mjs can load
+ * are identical). A custom type is stored as the "Custom" value -- 0,
+ * except in FamilyRelType -- plus its own `string`. No imports, so export-gql-presets.mjs can load
  * gqlFilterPresets.ts (which imports this) with a plain esbuild bundle. */
 
 export const EVENT_TYPE_VALUES: Readonly<Record<string, number>> = {
@@ -152,7 +152,16 @@ export const REPOSITORY_TYPE_VALUES: Readonly<Record<string, number>> = {
   "Safe": 9,
 };
 
-export type GrampsTypeTable = "EventType" | "PlaceType" | "NoteType" | "AttributeType" | "SrcAttributeType" | "RepositoryType";
+export const FAMILY_REL_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Married": 0,
+  "Unmarried": 1,
+  "Civil Union": 2,
+  "Unknown": 3,
+  "Custom": 4,
+};
+
+export type GrampsTypeTable =
+  | "EventType" | "PlaceType" | "NoteType" | "AttributeType" | "SrcAttributeType" | "RepositoryType" | "FamilyRelType";
 
 export const GRAMPS_TYPE_TABLES: Readonly<Record<GrampsTypeTable, Readonly<Record<string, number>>>> = {
   EventType: EVENT_TYPE_VALUES,
@@ -161,4 +170,5 @@ export const GRAMPS_TYPE_TABLES: Readonly<Record<GrampsTypeTable, Readonly<Recor
   AttributeType: ATTRIBUTE_TYPE_VALUES,
   SrcAttributeType: SRC_ATTRIBUTE_TYPE_VALUES,
   RepositoryType: REPOSITORY_TYPE_VALUES,
+  FamilyRelType: FAMILY_REL_TYPE_VALUES,
 };

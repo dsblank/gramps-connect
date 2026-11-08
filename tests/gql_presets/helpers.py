@@ -60,16 +60,16 @@ def assert_goql_matches_rule(
 # -- Rules with values (gqlFilterPresets.ts's detailPresets() and
 # typeSpecificPresets) --------------------------------------------------------
 
-from gramps.gen.lib import AttributeType, EventType, NoteType, PlaceType, RepositoryType, SrcAttributeType
+from gramps.gen.lib import AttributeType, EventType, FamilyRelType, NoteType, PlaceType, RepositoryType, SrcAttributeType
 
 ITER = {
-    "Event": "iter_events", "Place": "iter_places", "Repository": "iter_repositories", "Source": "iter_sources",
+    "Family": "iter_families", "Event": "iter_events", "Place": "iter_places", "Repository": "iter_repositories", "Source": "iter_sources",
     "Citation": "iter_citations", "Media": "iter_media", "Note": "iter_notes",
 }
 
 TYPE_TABLES = {
     "EventType": EventType, "PlaceType": PlaceType, "NoteType": NoteType, "AttributeType": AttributeType,
-    "SrcAttributeType": SrcAttributeType, "RepositoryType": RepositoryType,
+    "SrcAttributeType": SrcAttributeType, "RepositoryType": RepositoryType, "FamilyRelType": FamilyRelType,
 }
 
 
@@ -96,9 +96,9 @@ def type_condition(param, name):
     table = TYPE_TABLES[param["table"]]
     value = next((m[0] for m in table._DATAMAP if m[2] == name), None)
     field = param["field"]
-    if value not in (None, 0):
+    if value is not None and value != table._CUSTOM:
         return f"({field}.value == {value})"
-    return f"({field}.value == 0 and {field}.string == '{name}')"
+    return f"({field}.value == {table._CUSTOM} and {field}.string == '{name}')"
 
 
 def objects(db, ns):

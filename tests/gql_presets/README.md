@@ -73,6 +73,8 @@ count, note text/type, citation confidence, ...) are split three ways:
   (`HasNoteSubstrBase`, ...) is the reference.
 - `test_event_place_presets.py`: the Event and Place rules only those
   types have.
+- `test_family_presets.py`: the Family rules (father/mother/child
+  name and ID, relationship type, family events, ...).
 - `test_record_presets.py`: the Source, Citation, Media, Repository and
   Note rules only those types have. gramps-core 6.0's `HasSourceIdOf`
   never matches, so `citation-source-id-is` is checked against what it

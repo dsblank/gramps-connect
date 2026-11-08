@@ -289,6 +289,7 @@ function detailPresets(namespace: GqlFilterNamespace, idPrefix: string, hasNotes
 /** `notes`/`citations`: whether the type has those lists at all (Notes have
  * neither; Sources, Citations and Repositories have no citations). */
 const DETAIL_RULE_TARGETS: { namespace: GqlFilterNamespace; idPrefix: string; notes: boolean; citations: boolean }[] = [
+  { namespace: "Family", idPrefix: "family", notes: true, citations: true },
   { namespace: "Event", idPrefix: "event", notes: true, citations: true },
   { namespace: "Place", idPrefix: "place", notes: true, citations: true },
   { namespace: "Repository", idPrefix: "repository", notes: true, citations: false },
@@ -340,6 +341,42 @@ function dateBetweenPreset(namespace: GqlFilterNamespace, id: string, label: str
 
 const ADDRESS_FIELDS = ["street", "locality", "city", "county", "state", "country", "postal", "phone"];
 
+/** A family member's name or ID -- gramps-core's FatherHasNameOf/
+ * MotherHasNameOf/ChildHasNameOf (HasNameOf with only the given name or
+ * the surname filled in, over the primary and alternate names) and
+ * FatherHasIdOf/MotherHasIdOf/ChildHasIdOf (RegExpIdBase). `who` is
+ * "father", "mother" or "child"; a child's condition is wrapped in
+ * any(... for c in children). */
+function familyMemberPresets(who: "father" | "mother" | "child"): GqlFilterPreset[] {
+  const p = who === "child" ? "c" : who;
+  const wrap = (cond: string) => (who === "child" ? `any(${cond} for c in children)` : cond);
+  const label = who === "child" ? "A child's" : who === "father" ? "Father's" : "Mother's";
+  const rule = who === "child" ? "Child" : who === "father" ? "Father" : "Mother";
+  const text = [{ name: "text", label: "Text", type: "string" as const }];
+  return [
+    {
+      id: `family-${who}-given-name-contains`, label: `${label} given name contains`, category: "Properties",
+      namespace: "Family", sourceRule: `${rule}HasNameOf`,
+      expr: wrap(`('{text}' in ${p}.primary_name.first_name or any('{text}' in n.first_name for n in ${p}.alternate_names))`),
+      params: text, supported: true,
+    },
+    {
+      id: `family-${who}-surname-contains`, label: `${label} surname contains`, category: "Properties",
+      namespace: "Family", sourceRule: `${rule}HasNameOf`,
+      expr: wrap(
+        `('{text}' in ${p}.primary_name.surname_list[0].surname or any('{text}' in n.surname_list[0].surname for n in ${p}.alternate_names))`,
+      ),
+      params: text, supported: true,
+      notes: "Checks each name's first surname, which is its primary one unless a name with several surnames marks a later one primary.",
+    },
+    {
+      id: `family-${who}-id-matches`, label: `${label} Gramps ID matches a regular expression`, category: "Properties",
+      namespace: "Family", sourceRule: `${rule}HasIdOf`, expr: wrap(`regex(${p}.gramps_id, '(?i){pattern}')`),
+      params: [{ name: "pattern", label: "Regular expression", type: "regex" }], supported: true,
+    },
+  ];
+}
+
 /** Rules only one type has (rules/<type>/). */
 const typeSpecificPresets: GqlFilterPreset[] = [
   {
@@ -367,6 +404,75 @@ const typeSpecificPresets: GqlFilterPreset[] = [
   {
     id: "place-no-coordinates", label: "Places without coordinates", category: "Properties", namespace: "Place",
     sourceRule: "HasNoLatOrLon", expr: "regex(lat, '^\\\\s*$') or regex(long, '^\\\\s*$')", supported: true,
+  },
+
+  // -- Family (rules/family/) ----------------------------------------------
+  ...familyMemberPresets("father"),
+  ...familyMemberPresets("mother"),
+  ...familyMemberPresets("child"),
+  {
+    id: "family-relationship-type", label: "Relationship type is", category: "Properties", namespace: "Family",
+    sourceRule: "HasRelType", expr: "{relType}",
+    params: [{ name: "relType", label: "Relationship type", type: "gramps-type", table: "FamilyRelType", field: "type" }],
+    supported: true,
+  },
+  {
+    id: "family-child-count", label: "Number of children", category: "Properties", namespace: "Family",
+    sourceRule: "", expr: "len(children) {comparison} {count}",
+    params: [
+      { name: "comparison", label: "Comparison", type: "choice", options: COMPARISON_OPTIONS },
+      { name: "count", label: "Count", type: "integer" },
+    ],
+    supported: true,
+  },
+  {
+    id: "family-event-type", label: "Has a family event of type", category: "Dates", namespace: "Family",
+    sourceRule: "HasEvent", expr: "any({eventType} for e in events)",
+    params: [{ name: "eventType", label: "Event type", type: "gramps-type", table: "EventType", field: "e.type" }],
+    supported: true,
+  },
+  {
+    id: "family-event-date-between", label: "Has a family event of type, between dates", category: "Dates",
+    namespace: "Family", sourceRule: "HasEvent",
+    expr: "any({eventType} and Date('{startDate}') <= e.date.sortval <= Date('{endDate}') for e in events)",
+    params: [
+      { name: "eventType", label: "Event type", type: "gramps-type", table: "EventType", field: "e.type" },
+      { name: "startDate", label: "Start date", type: "string" },
+      { name: "endDate", label: "End date", type: "string" },
+    ],
+    supported: true,
+    notes: "gramps-core's HasEvent matches one date with Date.match() (fuzzy, so 'about 1850' overlaps a range); this is a plain range on the sort value instead, same as Birth date between. Events with no date never match.",
+  },
+  {
+    id: "family-event-place-contains", label: "Has a family event with place name containing", category: "Dates",
+    namespace: "Family", sourceRule: "HasEvent", expr: "any('{text}' in e.place.name.value for e in events)",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+    notes: "Checks the event place's own name; gramps-core's HasEvent checks its full displayed title, which also includes the places that enclose it.",
+  },
+  {
+    id: "family-event-description-contains", label: "Has a family event with description containing", category: "Dates",
+    namespace: "Family", sourceRule: "HasEvent", expr: "any('{text}' in e.description for e in events)",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  },
+  attributePreset("Family", "family", "AttributeType"),
+  {
+    id: "family-source-id-is", label: "Cites the source with Gramps ID", category: "Associations", namespace: "Family",
+    sourceRule: "HasSourceOf", expr: "any(c.source.gramps_id == '{id}' for c in citations)",
+    params: [{ name: "id", label: "Source ID", type: "string" }], supported: true,
+  },
+  {
+    id: "family-citation-page-contains", label: "Has a citation with Volume/Page containing", category: "Associations",
+    namespace: "Family", sourceRule: "HasCitation", expr: "any('{text}' in c.page for c in citations)",
+    params: [{ name: "text", label: "Text", type: "string" }], supported: true,
+  },
+  {
+    id: "family-lds-count", label: "Number of LDS ordinances", category: "Properties", namespace: "Family",
+    sourceRule: "HasLDS", expr: "len([l for l in lds_ord_list]) {comparison} {count}",
+    params: [
+      { name: "comparison", label: "Comparison", type: "choice", options: COMPARISON_OPTIONS },
+      { name: "count", label: "Count", type: "integer" },
+    ],
+    supported: true,
   },
 
   // -- Source (rules/source/; the text fields are HasSourceBase's) ----------
