@@ -183,6 +183,11 @@ RUN python /tmp/webapi-requirements.py /src/gramps-web-api/pyproject.toml \
 # SharedPostgreSQL addon imports -- gramps-web-base supplied both, so
 # neither appears in any dependency list we now read.
 RUN pip install --no-cache-dir -r /tmp/requirements.txt gunicorn psycopg2-binary
+# The checked-out gramps-web-api's pyproject.toml may allow an older
+# gramps-object-query-language than this frontend needs -- force at least
+# this version (the same pin as deploy/Dockerfile and
+# .github/workflows/build-standalone.yml; bump all three together).
+RUN pip install --no-cache-dir "gramps-object-query-language>=0.5.10"
 
 # --- Stage 4: runtime ----------------------------------------------------
 FROM python:3.13-slim AS backend
