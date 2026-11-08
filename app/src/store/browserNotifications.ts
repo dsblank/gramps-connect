@@ -5,7 +5,9 @@
 // and the browser's own permission prompt already gates the actually
 // consequential part. In-page only, per the plan: no service worker, no
 // push subscriptions -- the tab has to be open for this to fire at all.
-const STORAGE_KEY = "gramps-connect_browser_notifications_enabled";
+import { STORAGE_KEYS } from "./storageKeys";
+
+const STORAGE_KEY = STORAGE_KEYS.browserNotifications;
 
 export function isBrowserNotificationsEnabled(): boolean {
   return localStorage.getItem(STORAGE_KEY) === "true";

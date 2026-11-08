@@ -44,6 +44,7 @@ import {
   subscribeExternalSearchWindow,
 } from "../../store/externalSearchWindow";
 import { FloatingWindow } from "../FloatingWindow";
+import { STORAGE_KEYS } from "../../store/storageKeys";
 
 // gramps-web's own wording, so these come already translated from its
 // Weblate catalog (app/public/lang/).
@@ -92,7 +93,7 @@ export function ExternalSearchWindow() {
   const name = personName(win.detail);
   return (
     <FloatingWindow
-      storageKey="gramps-connect:externalSearchWindowGeometry"
+      storageKey={STORAGE_KEYS.externalSearchWindowGeometry}
       title={name ? `${t("External Search")}: ${name}` : t("External Search")}
       zIndex={windowZIndex(stack, EXTERNAL_SEARCH_WINDOW_ID)}
       minimized={win.minimized}

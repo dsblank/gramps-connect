@@ -10,8 +10,9 @@
 // has settled on a record the user picked (not a view's automatic first-
 // row selection).
 import { getCurrentUsername, getTreeId } from "../auth/auth";
+import { STORAGE_KEYS } from "./storageKeys";
 
-const STORAGE_KEY = "gramps-connect_visited";
+const STORAGE_KEY = STORAGE_KEYS.visited;
 
 /** Enough to scroll back a long session; small enough that rewriting the
  * blob on every visit costs nothing. */

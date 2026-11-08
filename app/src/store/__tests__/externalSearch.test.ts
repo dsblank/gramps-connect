@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { STORAGE_KEYS } from "../storageKeys";
 
 const year = { birth: "1832", death: "" };
 const place = { birth: "", death: "Kirchheim" };
@@ -85,9 +86,9 @@ describe("prefs", () => {
   });
 
   it("ignores corrupt storage", () => {
-    localStorage.setItem("gramps-connect_external_search", "{not json");
+    localStorage.setItem(STORAGE_KEYS.externalSearch, "{not json");
     expect(loadPrefs()).toEqual({ hidden: [], custom: [] });
-    localStorage.setItem("gramps-connect_external_search", JSON.stringify({ hidden: [1, "x"], custom: [{ key: "k" }] }));
+    localStorage.setItem(STORAGE_KEYS.externalSearch, JSON.stringify({ hidden: [1, "x"], custom: [{ key: "k" }] }));
     expect(loadPrefs()).toEqual({ hidden: ["x"], custom: [] });
   });
 });

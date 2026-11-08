@@ -64,6 +64,7 @@ import { GrampletWindows } from "./pyodidePoc/GrampletWindows";
 import { ExternalSearchWindow } from "./components/related/ExternalSearchWindow";
 import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
 import logo from "./assets/icons/gramps-connect-logo.svg";
+import { STORAGE_KEYS } from "./store/storageKeys";
 
 export function App() {
   const loggedIn = useSyncExternalStore(subscribeAuth, getAuthSnapshot);
@@ -187,7 +188,7 @@ const NAVBAR_WIDTH = 68;
  * what each one actually needs. Only a completed drag ever writes an entry;
  * the 50% default is never itself persisted, so an update that changes it
  * keeps applying to any view nobody's dragged yet. */
-const ASIDE_WIDTHS_KEY = "gramps-connect_aside_widths";
+const ASIDE_WIDTHS_KEY = STORAGE_KEYS.asideWidths;
 const MIN_ASIDE_WIDTH = 320;
 /** However wide the aside gets dragged, Main (past the navbar rail) keeps at
  * least this much room -- the table stops being usable well before its

@@ -10,8 +10,9 @@
 // than gramps_id since every other Home-page item (RecentItem, TopicItem,
 // StoryItem) is already handle-keyed.
 import { getTreeId } from "../auth/auth";
+import { STORAGE_KEYS } from "./storageKeys";
 
-const STORAGE_KEY = "gramps-connect_home_person";
+const STORAGE_KEY = STORAGE_KEYS.homePerson;
 
 type HandleByTree = Record<string, string>;
 

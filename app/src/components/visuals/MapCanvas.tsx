@@ -15,6 +15,7 @@ import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { t } from "../../i18n/i18n";
 import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl, overlayDateVisible } from "./mapStyles";
+import { STORAGE_KEYS } from "../../store/storageKeys";
 // maplibre-gl loads its tile-parsing/clustering work off the main thread via
 // `new Worker(new URL(\`./${name}\`, import.meta.url))`, with the filename
 // built from a template literal at runtime -- Vite's static asset scanner
@@ -42,7 +43,7 @@ maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 /** Where the user last left the map, so reopening doesn't jump back to a
  * world view. Same idea (and same purpose) as gramps-web's own
  * getMapViewport/saveMapViewport. */
-const VIEWPORT_KEY = "gramps-connect:map-viewport";
+const VIEWPORT_KEY = STORAGE_KEYS.mapViewport;
 
 interface Viewport {
   lat: number;

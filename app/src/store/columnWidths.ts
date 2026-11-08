@@ -4,7 +4,9 @@
 // column key -- column key rather than array index so a future reordering
 // of a view's columns doesn't silently reapply an old width to the wrong
 // column.
-const STORAGE_KEY = "gramps-connect_column_widths";
+import { STORAGE_KEYS } from "./storageKeys";
+
+const STORAGE_KEY = STORAGE_KEYS.columnWidths;
 
 type WidthsByView = Record<string, Record<string, number>>;
 

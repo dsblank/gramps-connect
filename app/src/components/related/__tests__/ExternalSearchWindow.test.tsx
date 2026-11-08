@@ -13,6 +13,7 @@ import { ExternalSearchButton } from "../ExternalSearchButton";
 import { ExternalSearchWindow } from "../ExternalSearchWindow";
 import { act } from "../../../testUtils/renderWithProviders";
 import { closeExternalSearchWindow } from "../../../store/externalSearchWindow";
+import { STORAGE_KEYS } from "../../../store/storageKeys";
 
 const detail = {
   handle: "P1",
@@ -77,7 +78,7 @@ describe("External Search window", () => {
 
     expect(link("CompGen").href).toBe("https://meta.genealogy.net/search?lastname=Schmidt&place=");
     expect(screen.queryByText("Ancestry")).toBeNull();
-    expect(JSON.parse(localStorage.getItem("gramps-connect_external_search")!).hidden).toEqual(["ancestry"]);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.externalSearch)!).hidden).toEqual(["ancestry"]);
   });
 
   it("is a non-modal window: opening it from another person switches it, and it minimizes to a chip", async () => {

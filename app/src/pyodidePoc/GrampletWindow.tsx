@@ -38,6 +38,7 @@ import {
 } from "../store/grampletWindows";
 import type { GrampletOutputResponse, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 import { answerTokenRequest } from "./workerToken";
+import { grampletWindowGeometryKey } from "../store/storageKeys";
 
 // Pulls in prismjs/react-simple-code-editor -- lazy, like every other
 // GrampletEditDialog opener, so a window that's never edited never loads it.
@@ -46,7 +47,7 @@ const GrampletEditDialog = lazy(() => import("./GrampletEditDialog").then((m) =>
 // Per Gramplet, per browser -- the same localStorage convention as the
 // View Gramplet panel's own height (PyodidePocPanel.tsx).
 function geometryStorageKey(grampletId: string): string {
-  return `gramps-connect:grampletWindowGeometry:${grampletId}`;
+  return grampletWindowGeometryKey(grampletId);
 }
 
 interface RunProgress {

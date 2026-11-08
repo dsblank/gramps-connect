@@ -12,8 +12,9 @@
 //    static copy, always as fresh as the server's installed `gramps` version
 import { fetchTranslations } from "../store/translationsApi";
 import bootstrappedLocales from "../../public/lang/index.json";
+import { STORAGE_KEYS } from "../store/storageKeys";
 
-const STORAGE_KEY = "gramps-connect.lang";
+const STORAGE_KEY = STORAGE_KEYS.language;
 
 /** Codes the language list below used to hold by mistake -- Weblate's own
  * tags, which neither app/public/lang/ nor gramps-core's locale directories

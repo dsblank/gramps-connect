@@ -26,6 +26,7 @@ import type { Gramplet, GrampletOutputResponse, PyodideWorkerResponse } from "./
 import { answerTokenRequest } from "./workerToken";
 import classes from "./PyodidePocPanel.module.css";
 import { t } from "../i18n/i18n";
+import { STORAGE_KEYS, viewGrampletPanelCollapsedKey } from "../store/storageKeys";
 
 // Pulls in prismjs/react-simple-code-editor -- lazy for the same reason
 // MenuBar.tsx's own "Add Gramplet…" import is, so a session that never
@@ -39,7 +40,7 @@ type ListStatus = "loading" | "ready" | "error";
 // Persisted the same way DataTable's own column widths are (see
 // store/columnWidths.ts) -- one localStorage number, written on drag end
 // rather than per pointermove frame.
-const HEIGHT_STORAGE_KEY = "gramps-connect:pyodidePocPanelHeight";
+const HEIGHT_STORAGE_KEY = STORAGE_KEYS.viewGrampletPanelHeight;
 const DEFAULT_HEIGHT = 220;
 const MIN_HEIGHT = 120;
 const MAX_HEIGHT = 600;
@@ -60,7 +61,7 @@ function readStoredHeight(): number {
 // yet) rather than expanded: most lists most of the time have no reason
 // to show this at all, it's an opt-in tool, not a permanent fixture.
 function collapsedStorageKey(viewKey: string): string {
-  return `gramps-connect:pyodidePocPanelCollapsed:${viewKey}`;
+  return viewGrampletPanelCollapsedKey(viewKey);
 }
 
 function readStoredCollapsed(viewKey: string): boolean {

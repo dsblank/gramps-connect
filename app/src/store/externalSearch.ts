@@ -31,6 +31,7 @@
 // not per tree or shared, as in gramps-web.
 import type { ObjectDetail } from "./objectDetail";
 import { lifeEventPlace, lifeEventYear } from "./lifeEventDates";
+import { STORAGE_KEYS } from "./storageKeys";
 
 /** gramps-web's three access levels, shown as a badge on each site's row. */
 export type SiteAccess = "open" | "registration" | "subscription";
@@ -254,7 +255,7 @@ export function isValidSearchUrl(template: string): boolean {
 
 // --- Per-browser preferences ------------------------------------------
 
-const STORAGE_KEY = "gramps-connect_external_search";
+const STORAGE_KEY = STORAGE_KEYS.externalSearch;
 
 export interface ExternalSearchPrefs {
   /** Keys of built-in sites the user switched off. */

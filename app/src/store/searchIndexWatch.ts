@@ -11,8 +11,9 @@ import { notifications } from "@mantine/notifications";
 import { getToken } from "../auth/auth";
 import { getTaskStatus } from "./jobsApi";
 import { t } from "../i18n/i18n";
+import { STORAGE_KEYS } from "./storageKeys";
 
-const STORAGE_KEY = "gramps-connect.pendingIndexTasks";
+const STORAGE_KEY = STORAGE_KEYS.pendingIndexTasks;
 const NOTIFICATION_ID = "search-index-updating";
 const POLL_MS = 2000;
 

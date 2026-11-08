@@ -9,7 +9,9 @@
 // SHOW_MANUAL_EXPAND_TOGGLE) is currently hidden, but the preference itself
 // stays live so re-showing it later needs no changes here. Persisted across
 // sessions the same localStorage pattern as browserNotifications.ts.
-const STORAGE_KEY = "gramps-connect_tree_manual_expand";
+import { STORAGE_KEYS } from "./storageKeys";
+
+const STORAGE_KEY = STORAGE_KEYS.treeManualExpand;
 
 export function isManualExpandEnabled(): boolean {
   return localStorage.getItem(STORAGE_KEY) !== "false";

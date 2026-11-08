@@ -30,6 +30,7 @@ import { validateGrampletKindFields } from "./grampletManifest";
 import { OBJECT_TYPES } from "./objectEndpoints";
 import type { Gramplet } from "./types";
 import { apiFetch } from "../store/apiFetch";
+import { grampletAddedViewsKey } from "../store/storageKeys";
 
 export const GRAMPLET_TAG_NAME = "Gramplet";
 const GRAMPLET_MIME = "application/json";
@@ -62,11 +63,7 @@ export function canAuthorGramplets(): boolean {
 // panel `height`/`collapsed` already use -- never written back to the
 // tree, and (unlike those two) not something authoring needs to touch, so
 // removing a Gramplet from your own view needs no permission at all.
-const ADDED_VIEWS_STORAGE_PREFIX = "gramps-connect:grampletAddedViews:";
-
-function addedViewsStorageKey(grampletId: string): string {
-  return `${ADDED_VIEWS_STORAGE_PREFIX}${grampletId}`;
-}
+const addedViewsStorageKey = grampletAddedViewsKey;
 
 /** This browser's own choice of which views show `grampletId` as a tab, or
  * null if never set here -- callers fall back to the Gramplet's own

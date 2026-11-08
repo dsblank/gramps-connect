@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { STORAGE_KEYS } from "../storageKeys";
 
 // Plain Map-backed localStorage, as in columnWidths.test.ts (this suite
 // runs in the "node" environment).
@@ -100,9 +101,9 @@ describe("visitedHistory", () => {
   });
 
   it("survives corrupt storage", () => {
-    storage.setItem("gramps-connect_visited", "{not json");
+    storage.setItem(STORAGE_KEYS.visited, "{not json");
     expect(getVisits()).toEqual([]);
-    storage.setItem("gramps-connect_visited", JSON.stringify({ "tree-1:alice": [{ type: "person" }, 5, null] }));
+    storage.setItem(STORAGE_KEYS.visited, JSON.stringify({ "tree-1:alice": [{ type: "person" }, 5, null] }));
     expect(getVisits()).toEqual([]);
     recordVisit("person", "A", 100);
     expect(getVisits()).toHaveLength(1);

@@ -10,6 +10,7 @@ import {
   useMantineColorScheme,
 } from "@mantine/core";
 import { DisplaySettingsPanel } from "./DisplaySettingsPanel";
+import { LocalSettingsSection } from "./LocalSettingsSection";
 import { getI18nSnapshot, setLanguage, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { fetchLanguages } from "../store/translationsApi";
 import {
@@ -156,6 +157,7 @@ interface PreferencesDialogProps {
  * Two tabs, because the two halves are saved in very different places:
  * - General: this browser's own choices (light/dark, language, desktop
  *   notifications), kept in localStorage and applied immediately -- no Save.
+ *   Ends with LocalSettingsSection's Download / Load / Reset settings.
  * - Family tree: DisplaySettingsPanel.tsx, the tree-wide settings stored in
  *   /api/trees/-/config. Everyone can read them (they shape everything the
  *   app shows); only EditTree (Owner/Admin) can change them -- the panel
@@ -176,6 +178,7 @@ export function PreferencesDialog({ opened, onClose }: PreferencesDialogProps) {
             <ColorSchemeToggle />
             <LanguagePicker />
             <BrowserNotificationsToggle />
+            <LocalSettingsSection />
           </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="tree" pt="sm">

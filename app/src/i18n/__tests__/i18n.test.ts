@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import bootstrappedLocales from "../../../public/lang/index.json";
 import { browserLangToLocale, setLanguage, t } from "../i18n";
+import { STORAGE_KEYS } from "../../store/storageKeys";
 
 // setLanguage() also asks gramps-web-api for the desktop vocabulary; these
 // tests only exercise the static lang/*.json side.
@@ -51,14 +52,14 @@ describe("stored language preference", () => {
   });
 
   it("migrates a code the old language list stored", async () => {
-    localStorage.setItem("gramps-connect.lang", "zh_Hans");
+    localStorage.setItem(STORAGE_KEYS.language, "zh_Hans");
     vi.resetModules();
     const { getI18nSnapshot } = await import("../i18n");
     expect(getI18nSnapshot().lang).toBe("zh_CN");
   });
 
   it("leaves a current code alone", async () => {
-    localStorage.setItem("gramps-connect.lang", "zh_TW");
+    localStorage.setItem(STORAGE_KEYS.language, "zh_TW");
     vi.resetModules();
     const { getI18nSnapshot } = await import("../i18n");
     expect(getI18nSnapshot().lang).toBe("zh_TW");

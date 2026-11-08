@@ -15,8 +15,9 @@
 // button never takes the user out of the app; the browser's own Back still
 // can. The newest position is kept in sessionStorage so a reload partway
 // back still knows Forward has somewhere to go.
+import { STORAGE_KEYS } from "./storageKeys";
 
-const MAX_KEY = "gramps-connect_nav_max";
+const MAX_KEY = STORAGE_KEYS.navMax;
 
 export interface NavHistorySnapshot {
   canGoBack: boolean;

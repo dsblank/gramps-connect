@@ -22,6 +22,7 @@ import { NoteEditor } from "../notes/NoteEditor";
 import { BlogArticle } from "../BlogPostView";
 import { MediaListField, pickerResultLabel } from "../RefPickerField";
 import { t } from "../../i18n/i18n";
+import { blogDraftKey } from "../../store/storageKeys";
 
 const PERM_ADD_OBJ = "AddObject";
 
@@ -42,7 +43,7 @@ const EMPTY: BlogDraft = { title: "", author: "", content: { string: "" }, media
 
 /** Per tree and user, like visitedHistory.ts's own key. */
 function draftKey(): string {
-  return `gramps-connect:blog-draft:${getTreeId() ?? "unknown"}:${getCurrentUsername() ?? ""}`;
+  return blogDraftKey(getTreeId() ?? "unknown", getCurrentUsername() ?? "");
 }
 
 function loadDraft(): BlogDraft {

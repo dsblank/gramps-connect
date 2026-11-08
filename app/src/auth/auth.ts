@@ -10,11 +10,12 @@ import { login as apiLogin, refreshAccessToken as apiRefreshAccessToken } from "
 import { setTokenRenewer } from "../store/apiFetch";
 import { fetchOwnUser } from "../store/usersApi";
 import { API_BASE } from "../config";
+import { STORAGE_KEYS } from "../store/storageKeys";
 
-const STORAGE_KEY = "gramps-connect.token";
-const REFRESH_STORAGE_KEY = "gramps-connect.refreshToken";
-const USERNAME_STORAGE_KEY = "gramps-connect.username";
-const CLOCK_SKEW_STORAGE_KEY = "gramps-connect.clockSkewMs";
+const STORAGE_KEY = STORAGE_KEYS.token;
+const REFRESH_STORAGE_KEY = STORAGE_KEYS.refreshToken;
+const USERNAME_STORAGE_KEY = STORAGE_KEYS.username;
+const CLOCK_SKEW_STORAGE_KEY = STORAGE_KEYS.clockSkewMs;
 
 // Refresh a little before the server would actually reject the token, so a
 // request that starts just under the wire doesn't lose the race. Matches

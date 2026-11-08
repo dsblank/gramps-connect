@@ -23,6 +23,7 @@ import imageCompression from "browser-image-compression";
 import imageCompressionLibUrl from "browser-image-compression/dist/browser-image-compression.js?url";
 import { notifications } from "@mantine/notifications";
 import { t } from "../i18n/i18n";
+import { STORAGE_KEYS } from "./storageKeys";
 
 /** Either is enough to offer a resize. Picked so an ordinary phone photo
  * (12 MP: 4032 px, 2-5 MB) uploads without a question, while scans, maps
@@ -140,7 +141,7 @@ export function askAboutLargeImages(images: LargeImage[]): Promise<ResizeChoice 
 
 // --- Remembered choice -----------------------------------------------------
 
-const STORAGE_KEY = "gramps-connect.largeImageChoice";
+const STORAGE_KEY = STORAGE_KEYS.largeImageChoice;
 
 /** The last answer given, to preselect next time -- a per-browser
  * convenience, so a missing/blocked localStorage just means "original". */

@@ -9,11 +9,12 @@ import {
 } from "../../store/chartExport/exportChart";
 import { layoutOnPage, PAPER_SIZES, type PaperOrientation, type PaperSize } from "../../store/chartExport/paperSizes";
 import { contentGroupOf, exportTransformOf, measureExportFrame } from "../../store/chartExport/prepareSvg";
+import { STORAGE_KEYS } from "../../store/storageKeys";
 
 /** Last-used choices, shared by every chart -- a per-browser convenience
  * (someone who prints A3 PDFs keeps getting A3 PDFs), not anything that
  * needs to follow them across devices. */
-const STORAGE_KEY = "gramps-connect_chart_export";
+const STORAGE_KEY = STORAGE_KEYS.chartExport;
 
 const DEFAULTS: ExportOptions = {
   format: "png",

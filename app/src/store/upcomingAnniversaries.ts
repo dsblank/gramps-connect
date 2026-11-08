@@ -18,6 +18,7 @@ import { EVENT_VIEW, type OrderBy } from "./views";
 import { fetchObjectsByHandle, type RawRecord } from "./objectsByHandle";
 import { getI18nSnapshot } from "../i18n/i18n";
 import { DEFAULT_MAX_AGE_PROB_ALIVE } from "./displaySettings";
+import { STORAGE_KEYS } from "./storageKeys";
 
 /** Days in one window of the card. */
 export const WINDOW_DAYS = 7;
@@ -272,7 +273,7 @@ export async function fetchAnniversaryWindow(
   }
 }
 
-const ONLY_LIVING_KEY = "gramps-connect_anniversaries_only_living";
+const ONLY_LIVING_KEY = STORAGE_KEYS.anniversariesOnlyLiving;
 
 /** The card's Only living box, remembered per browser. */
 export function getOnlyLivingPreference(): boolean {
