@@ -86,7 +86,17 @@ export async function fetchSavedFilters(): Promise<SavedFilter[]> {
       }
     })
   );
-  return filters.filter((f): f is SavedFilter => f !== null);
+  cachedSavedFilters = filters.filter((f): f is SavedFilter => f !== null);
+  return cachedSavedFilters;
+}
+
+let cachedSavedFilters: SavedFilter[] = [];
+
+/** What fetchSavedFilters() last returned -- for ListHeader.tsx's filter
+ * summary, which labels "Matches saved filter" rules without fetching
+ * (same idea as customRuleMedia.ts's getCachedCustomRules()). */
+export function getCachedSavedFilters(): SavedFilter[] {
+  return cachedSavedFilters;
 }
 
 /** Replaces an existing Saved Filter's content in place (PUT, same handle)

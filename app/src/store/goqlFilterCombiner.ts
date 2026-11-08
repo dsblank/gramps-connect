@@ -144,6 +144,9 @@ function fillParams(preset: GqlFilterPreset, values: Record<string, string> | un
 }
 
 function renderPreset(node: FilterPresetNode): string {
+  if (node.preset.unavailableReason) {
+    throw new FilterCombineError(`"${node.preset.label}" can't be used: ${node.preset.unavailableReason}`);
+  }
   if (!node.preset.supported) {
     throw new FilterCombineError(
       `"${node.preset.label}" has no GOQL translation yet${

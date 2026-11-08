@@ -71,6 +71,9 @@ export type GqlFilterCategory =
   | "Associations"
   | "Tags"
   | "Privacy"
+  /** "Matches saved filter" rules (store/contextPresets.ts), one per
+   * Saved Filter. */
+  | "Saved filters"
   /** Not a real built-in category -- reserved for Custom Rules
    * (customRuleMedia.ts's customRuleAsPreset()), user-authored
    * primitives adapted into this same GqlFilterPreset shape so the picker
@@ -127,6 +130,10 @@ export interface GqlFilterPreset {
   params?: GqlPresetParam[];
   supported: boolean;
   notes?: string;
+  /** Set on an app-state rule (store/contextPresets.ts) that can't be
+   * built right now -- e.g. "no home person is set". Compiling it throws
+   * this, phrased to follow the rule's label. */
+  unavailableReason?: string;
 }
 
 /** Rules that mean the same thing on (nearly) every object type -- tags,

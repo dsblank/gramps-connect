@@ -63,7 +63,7 @@ def assert_goql_matches_rule(
 from gramps.gen.lib import AttributeType, EventType, FamilyRelType, NoteType, PlaceType, RepositoryType, SrcAttributeType
 
 ITER = {
-    "Family": "iter_families", "Event": "iter_events", "Place": "iter_places", "Repository": "iter_repositories", "Source": "iter_sources",
+    "Person": "iter_people", "Family": "iter_families", "Event": "iter_events", "Place": "iter_places", "Repository": "iter_repositories", "Source": "iter_sources",
     "Citation": "iter_citations", "Media": "iter_media", "Note": "iter_notes",
 }
 

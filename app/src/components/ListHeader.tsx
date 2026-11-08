@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Button, CloseButton, Group, Text, Title, Tooltip } from "@mantine/core";
-import { gqlFilterPresets, namespaceForViewKey } from "../data/gqlFilterPresets";
+import { gqlFilterPresets, namespaceForViewKey, type GqlFilterPreset } from "../data/gqlFilterPresets";
 import { customRuleAsPreset, getCachedCustomRules } from "../store/customRuleMedia";
+import { buildContextPresets } from "../store/contextPresets";
+import { getCachedSavedFilters } from "../store/savedFilterMedia";
 import { getFilterPickerState, setFilterPickerState } from "../store/filterPickerState";
 import { countRules, createEmptyTree } from "../store/goqlFilterTree";
 import { summarizeFilterTree } from "../store/filterTreeSummary";
@@ -42,7 +44,7 @@ export function ListHeader({ view }: { view: ViewConfig }) {
   const summary = activeCount > 0 && namespace
     ? summarizeFilterTree(
         getFilterPickerState(view.key, namespace).tree,
-        [...gqlFilterPresets, ...getCachedCustomRules().map(customRuleAsPreset)],
+        withContextPresets([...gqlFilterPresets, ...getCachedCustomRules().map(customRuleAsPreset)]),
       )
     : "";
 
@@ -98,4 +100,10 @@ export function ListHeader({ view }: { view: ViewConfig }) {
       )}
     </Group>
   );
+}
+
+/** For the summary's labels only -- the "Matches saved filter" names come
+ * from whatever the Filters dialog last fetched. */
+function withContextPresets(base: GqlFilterPreset[]): GqlFilterPreset[] {
+  return [...base, ...buildContextPresets(base, getCachedSavedFilters())];
 }

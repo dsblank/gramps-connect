@@ -80,6 +80,11 @@ count, note text/type, citation confidence, ...) are split three ways:
   never matches, so `citation-source-id-is` is checked against what it
   describes instead.
 
+- `test_context_presets.py`: Bookmarked and Home person
+  (`app/src/store/contextPresets.ts`), whose handle list is checked
+  against gramps-core's IsBookmarked / IsDefaultPerson using the example
+  tree's own bookmarks and default person.
+
 `helpers.py`'s `fill()` mirrors goqlFilterCombiner.ts's `fillParam()`,
 and `app/src/store/__tests__/goqlFilterParamTypes.test.ts` pins the
 TypeScript side to the same strings. Each case asserts the gramps-core

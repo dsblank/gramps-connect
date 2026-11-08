@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
   Anchor, Button, Checkbox, CloseButton, Collapse, Divider, Group, Modal, NumberInput, ScrollArea, Select,
@@ -17,6 +17,9 @@ import {
   type FilterConnector, type FilterRuleGroup, type FilterRuleRow, type FilterTree, type FilterTreeNode,
 } from "../store/goqlFilterTree";
 import { formatWhereExpr } from "../store/formatWhereExpr";
+import { buildContextPresets, SAVED_FILTER_PRESET_PREFIX } from "../store/contextPresets";
+import { getBookmarksVersion, loadBookmarks, subscribeBookmarks } from "../store/bookmarks";
+import { getToken } from "../auth/auth";
 import { setFilterPickerState } from "../store/filterPickerState";
 import {
   customRuleAsPreset, refreshCustomRules, removeCustomRule, saveCustomRuleManifest,
@@ -34,7 +37,7 @@ import { t } from "../i18n/i18n";
 import { InfoButton } from "./InfoButton";
 import { SearchHelpDialog } from "./SearchHelpDialog";
 
-const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy", "Custom"];
+const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy", "Saved filters", "Custom"];
 
 /** "Load a saved filter…"'s own explicit "nothing loaded" entry -- lets
  * that choice be made right there, rather than only reachable via the
@@ -169,16 +172,35 @@ export function FilterPickerDialog({
     if (!opened) return;
     refreshCustomRules().then(setCustomRules).catch((err) => console.error("[filters] failed to load custom rules", err));
     fetchSavedFilters().then(setSavedFilters).catch((err) => console.error("[filters] failed to load saved filters", err));
+    getToken()
+      .then((token) => loadBookmarks(token))
+      .catch((err) => console.error("[filters] failed to load bookmarks", err));
   }, [opened]);
+  // Rebuilds the Bookmarked rules once the bookmarks arrive (or change).
+  const bookmarksVersion = useSyncExternalStore(subscribeBookmarks, getBookmarksVersion);
 
   // Built-in presets (constant) plus every Custom Rule, adapted into the
   // same shape -- see this component's own doc comment. Not namespace-
   // filtered here; RowView/PresetSearchList each already do their own
   // namespace filtering, and combineFilterTree only ever resolves the
   // ids a tree actually references.
+  // Plus the rules built from app state (Bookmarked, Home person, Matches
+  // saved filter -- store/contextPresets.ts). The home person is read on
+  // each open; it can only change on the Home page. The saved filter
+  // being edited can't match itself, so its own rule is shown greyed out.
   const presets = useMemo(
-    () => [...gqlFilterPresets, ...customRules.map(customRuleAsPreset)],
-    [customRules],
+    () => {
+      const base = [...gqlFilterPresets, ...customRules.map(customRuleAsPreset)];
+      const editingId = savedFilters.find((f) => f.handle === savedFilterHandle)?.id;
+      const fromState = buildContextPresets(base, savedFilters).map((p) =>
+        editingId && p.id === SAVED_FILTER_PRESET_PREFIX + editingId
+          ? { ...p, unavailableReason: "it's the filter you're editing" }
+          : p,
+      );
+      return [...base, ...fromState];
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customRules, savedFilters, savedFilterHandle, bookmarksVersion, opened],
   );
 
   const savedFiltersForNamespace = useMemo(
@@ -1410,15 +1432,18 @@ function PresetOption({ preset, onPick }: { preset: GqlFilterPreset; onPick: (pr
       variant="subtle"
       justify="flex-start"
       fullWidth
-      disabled={!preset.supported}
+      disabled={!preset.supported || !!preset.unavailableReason}
       onClick={() => onPick(preset)}
     >
       {t(preset.label)}
     </Button>
   );
-  if (preset.supported) return option;
+  if (preset.supported && !preset.unavailableReason) return option;
+  const why = preset.unavailableReason
+    ? t(preset.unavailableReason.charAt(0).toUpperCase() + preset.unavailableReason.slice(1))
+    : (preset.notes ?? t("Not available yet"));
   return (
-    <Tooltip label={preset.notes ?? t("Not available yet")} multiline w={280} withArrow>
+    <Tooltip label={why} multiline w={280} withArrow>
       <div>{option}</div>
     </Tooltip>
   );
