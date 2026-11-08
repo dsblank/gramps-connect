@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import userEvent from "@testing-library/user-event";
+import { act, fireEvent } from "@testing-library/react";
 import { renderWithProviders, screen } from "../../../testUtils/renderWithProviders";
 
 vi.mock("../../../auth/auth", () => ({
@@ -46,6 +47,59 @@ describe("NoteEditor", () => {
     const italic = latest!.tags!.find((t) => t.name === "italic");
     expect(italic?.ranges).toEqual([[0, 26]]);
     expect(latest!.tags!.find((t) => t.name === "bold")?.ranges).toEqual([[0, 4]]);
+  });
+});
+
+describe("NoteEditor preformatted", () => {
+  // jsdom has no layout: give ProseMirror's scroll-into-view after a typed
+  // Tab the empty rects a browser would compute, instead of crashing.
+  const emptyRect = () => ({ x: 0, y: 0, top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0, toJSON: () => ({}) });
+  for (const proto of [Range.prototype, Element.prototype, Text.prototype] as unknown as Record<string, unknown>[]) {
+    proto.getClientRects ??= () => [];
+    proto.getBoundingClientRect ??= emptyRect;
+  }
+  function setup(initialPreformatted: boolean) {
+    let latest: StyledText | null = null;
+    let setPre: (v: boolean) => void = () => {};
+    function Host() {
+      const [value, setValue] = useState<StyledText>({ string: "a\tb", tags: [] });
+      const [pre, setPreState] = useState(initialPreformatted);
+      setPre = setPreState;
+      return <NoteEditor value={value} preformatted={pre} onChange={(v) => { latest = v; setValue(v); }} />;
+    }
+    const { container } = renderWithProviders(<Host />);
+    const pm = container.querySelector(".ProseMirror") as HTMLElement & {
+      editor?: { commands: { setTextSelection: (pos: number) => void } };
+    };
+    const pressTabAtStart = (init: KeyboardEventInit = {}) => {
+      pm.focus();
+      pm.editor?.commands.setTextSelection(1);
+      fireEvent.keyDown(pm, { key: "Tab", code: "Tab", ...init });
+    };
+    return { container, pm, pressTabAtStart, latest: () => latest, setPre: (v: boolean) => act(() => setPre(v)) };
+  }
+
+  it("Tab types a tab character in a preformatted note", () => {
+    const { container, pressTabAtStart, latest } = setup(true);
+    expect(container.querySelector("[class*='preformatted']")).not.toBeNull();
+    pressTabAtStart();
+    expect(latest()?.string).toBe("\ta\tb");
+  });
+
+  it("Tab is left alone in a flowed note, and Shift+Tab always is", () => {
+    const { container, pressTabAtStart, latest } = setup(false);
+    expect(container.querySelector("[class*='preformatted']")).toBeNull();
+    pressTabAtStart();
+    pressTabAtStart({ shiftKey: true });
+    expect(latest()).toBeNull();
+  });
+
+  it("follows the flag when it's switched on in an open editor", () => {
+    const { container, pressTabAtStart, latest, setPre } = setup(false);
+    setPre(true);
+    expect(container.querySelector("[class*='preformatted']")).not.toBeNull();
+    pressTabAtStart();
+    expect(latest()?.string).toBe("\ta\tb");
   });
 });
 

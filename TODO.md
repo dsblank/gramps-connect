@@ -177,6 +177,6 @@ Partially editable, by type:
   locations (`alt_loc`, `PlaceLocationsField.tsx`) are editable in both
   place editors, so every Place field is covered; the map overlay
   feature's date gating still only reads the *primary* name's date.
-- **Note** — the note's format (Flowed/Formatted) is shown but can't be
-  changed. Text formatting and links are editable.
+- **Note** — fully editable: text formatting, links, and the format flag
+  (Preformatted switch; `NoteEditor`'s `preformatted` mode).
 

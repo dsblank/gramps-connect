@@ -78,6 +78,9 @@ const desktopStrings = [
   // stray period) and "Tag" (Gramps: the noun).
   // Added 2026-11-08 for the Place editor's alternate locations:
   "Parish", "Alternate Locations",
+  // Added 2026-11-08 for the Note editor's format switch (t() drops the
+  // GTK accelerator underscore):
+  "_Preformatted",
   "Abbreviation", "Address", "Adopted people", "After", "Age at death", "All",
   "Alternative names", "Apply", "Arabic", "Auto", "Before", "Birth date", "Bulgarian",
   "Calculated", "Catalan", "Category", "Change", "Check and Repair Database", "Checksum",

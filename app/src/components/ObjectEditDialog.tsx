@@ -68,6 +68,7 @@ type FieldSpec =
   | { kind: "urlList"; key: string; label: string }
   | { kind: "placeAltNames" }
   | { kind: "placeLocations" }
+  | { kind: "noteFormat" }
   | {
       /** A plain-handle reference *list* -- Citations/Notes/Tags, phase 4's
        * generalization of PersonEditDialog.tsx's own Notes/Citations/Tags
@@ -220,6 +221,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     quick: [GRAMPS_ID_FIELD, { kind: "styledText", key: "text", label: "Text" }],
     details: [
       { kind: "grampsType", key: "type", label: "Type", typeKind: "note_types" },
+      { kind: "noteFormat" },
       { kind: "switch", key: "private", label: "Private" },
       // A Note only ever carries tag_list -- no citation_list/note_list/
       // media_list of its own.
@@ -521,6 +523,19 @@ export function ObjectEditDialog({
             onChange={(e) => onChange({ [f.key]: e.currentTarget.checked })}
           />
         );
+      case "noteFormat":
+        // Note.format is Gramps' NoteFormat number, not a boolean:
+        // 0 = Flowed, 1 = Formatted (gramps/gen/lib/note.py). Gramps
+        // desktop shows it as this same "Preformatted" checkbox.
+        return (
+          <Switch
+            key="noteFormat"
+            label={t("_Preformatted")}
+            description="Keeps spaces and line breaks as typed, in a fixed-width font; Tab types a tab"
+            checked={draft.data.format === 1}
+            onChange={(e) => onChange({ format: e.currentTarget.checked ? 1 : 0 })}
+          />
+        );
       case "color":
         return (
           <ColorInput
@@ -611,6 +626,7 @@ export function ObjectEditDialog({
               onChange={(next) => onChange({ [f.key]: { ...(text ?? {}), ...next } })}
               minHeight={260}
               maxHeight="55vh"
+              preformatted={draft.type === "note" && draft.data.format === 1}
             />
           </Stack>
         );

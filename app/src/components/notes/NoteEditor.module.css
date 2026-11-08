@@ -25,3 +25,13 @@
   line-height: 1.7;
   padding: var(--mantine-spacing-lg) var(--mantine-spacing-xl);
 }
+
+/* A Gramps "Formatted" note: the same fixed-width, unwrapped look the
+   record view gives it (related/NoteText.tsx's preformatted), so columns
+   lined up with spaces or tabs here stay lined up there. */
+.preformatted :global(.ProseMirror) {
+  font-family: var(--mantine-font-family-monospace);
+  white-space: pre;
+  width: max-content;
+  min-width: 100%;
+}

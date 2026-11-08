@@ -238,15 +238,25 @@ export interface NoteEditorProps {
   prose?: boolean;
   autofocus?: boolean;
   placeholder?: string;
+  /** A Gramps "Formatted" note (Note.format === 1): fixed-width font, no
+   * wrapping, and Tab types a tab character, so a layout made with spaces
+   * and tabs (a table) looks here the way it will be shown and printed.
+   * Shift+Tab still moves focus out. Read when a key is pressed, so turning
+   * it on or off applies to an editor that's already open. */
+  preformatted?: boolean;
 }
 
-export function NoteEditor({ value, onChange, minHeight = 240, maxHeight, prose = false, autofocus = false, placeholder }: NoteEditorProps) {
+export function NoteEditor({
+  value, onChange, minHeight = 240, maxHeight, prose = false, autofocus = false, placeholder, preformatted = false,
+}: NoteEditorProps) {
   const [panel, setPanel] = useState<Panel>(null);
   // What this editor last reported, so a parent echoing it back isn't
   // mistaken for an outside change that should reset the editor.
   const lastEmitted = useRef<StyledText | null>(value ?? null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const preformattedRef = useRef(preformatted);
+  preformattedRef.current = preformatted;
 
   const editor = useEditor({
     extensions: noteExtensions({ placeholder }),
@@ -254,6 +264,15 @@ export function NoteEditor({ value, onChange, minHeight = 240, maxHeight, prose 
     autofocus: autofocus ? "end" : false,
     // Mantine's toolbar reads editor.isActive() while rendering.
     shouldRerenderOnTransaction: true,
+    editorProps: {
+      handleKeyDown: (view, event) => {
+        if (!preformattedRef.current || event.key !== "Tab") return false;
+        if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
+        event.preventDefault();
+        view.dispatch(view.state.tr.insertText("\t").scrollIntoView());
+        return true;
+      },
+    },
     onUpdate: ({ editor }) => {
       const next = docToStyledText(editor.getJSON());
       lastEmitted.current = next;
@@ -273,10 +292,14 @@ export function NoteEditor({ value, onChange, minHeight = 240, maxHeight, prose 
     "--note-min-height": typeof minHeight === "number" ? `${minHeight}px` : minHeight,
     maxHeight,
     overflowY: maxHeight ? "auto" : undefined,
+    overflowX: preformatted ? "auto" : undefined,
   } as CSSProperties;
+  const className = [classes.editor, prose && classes.prose, preformatted && classes.preformatted]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <RichTextEditor editor={editor} className={prose ? `${classes.editor} ${classes.prose}` : classes.editor}>
+    <RichTextEditor editor={editor} className={className}>
       <RichTextEditor.Toolbar sticky stickyOffset={0}>
         <RichTextEditor.ControlsGroup>
           <RichTextEditor.Bold />
