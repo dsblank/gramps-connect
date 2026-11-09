@@ -35,24 +35,46 @@ describe("local settings", () => {
     seed();
   });
 
-  it("exports only settings, as raw strings", () => {
+  it("exports only settings, with JSON objects nested", () => {
     const file = exportLocalSettings(new Date("2026-11-08T12:00:00Z"));
     expect(file.format).toBe("gramps-connect-settings");
     expect(file.version).toBe(1);
     expect(file.exported).toBe("2026-11-08T12:00:00.000Z");
     expect(file.settings).toEqual({
       [STORAGE_KEYS.colorScheme]: "dark",
-      [STORAGE_KEYS.columnWidths]: '{"person":{"name":200}}',
-      "gramps-connect:grampletWindowGeometry:g1": '{"left":1}',
+      [STORAGE_KEYS.columnWidths]: { person: { name: 200 } },
+      "gramps-connect:grampletWindowGeometry:g1": { left: 1 },
     });
   });
 
+  it("keeps numbers, booleans and plain strings as their stored text", () => {
+    localStorage.setItem(STORAGE_KEYS.viewGrampletPanelHeight, "220");
+    localStorage.setItem(STORAGE_KEYS.treeManualExpand, "false");
+    localStorage.setItem(STORAGE_KEYS.language, "de");
+    const { settings } = exportLocalSettings();
+    expect(settings[STORAGE_KEYS.viewGrampletPanelHeight]).toBe("220");
+    expect(settings[STORAGE_KEYS.treeManualExpand]).toBe("false");
+    expect(settings[STORAGE_KEYS.language]).toBe("de");
+  });
+
+  it("loads files whose JSON settings are still strings", () => {
+    const { settings } = parseSettingsFile(JSON.stringify({
+      format: "gramps-connect-settings",
+      version: 1,
+      settings: { [STORAGE_KEYS.columnWidths]: '{"person":{"name":300}}' },
+    }));
+    importLocalSettings(settings);
+    expect(localStorage.getItem(STORAGE_KEYS.columnWidths)).toBe('{"person":{"name":300}}');
+  });
+
   it("round-trips through reset and load", () => {
-    const json = JSON.stringify(exportLocalSettings());
+    const before: Record<string, string | null> = {};
+    for (const key of Object.keys(exportLocalSettings().settings)) before[key] = localStorage.getItem(key);
+    const json = JSON.stringify(exportLocalSettings(), null, 2);
     resetLocalSettings();
     expect(exportLocalSettings().settings).toEqual({});
     importLocalSettings(parseSettingsFile(json).settings);
-    expect(exportLocalSettings().settings).toEqual(JSON.parse(json).settings);
+    for (const [key, value] of Object.entries(before)) expect(localStorage.getItem(key)).toBe(value);
   });
 
   it("merges: settings not in the file stay", () => {
@@ -66,7 +88,7 @@ describe("local settings", () => {
     expect(localStorage.getItem(STORAGE_KEYS.columnWidths)).toBe('{"person":{"name":200}}');
   });
 
-  it("skips unknown, excluded and non-string entries", () => {
+  it("skips unknown, excluded and malformed entries", () => {
     const { settings, skipped } = parseSettingsFile(JSON.stringify({
       format: "gramps-connect-settings",
       version: 1,
@@ -75,11 +97,13 @@ describe("local settings", () => {
         [STORAGE_KEYS.visited]: "{}",
         [STORAGE_KEYS.token]: "stolen",
         "evil": "x",
-        [STORAGE_KEYS.chartExport]: { not: "a string" },
+        [STORAGE_KEYS.chartExport]: { format: "pdf" },
+        [STORAGE_KEYS.mapViewport]: 5,
+        [STORAGE_KEYS.homePerson]: null,
       },
     }));
-    expect(settings).toEqual({ [STORAGE_KEYS.language]: "de" });
-    expect(skipped).toBe(4);
+    expect(settings).toEqual({ [STORAGE_KEYS.language]: "de", [STORAGE_KEYS.chartExport]: '{"format":"pdf"}' });
+    expect(skipped).toBe(5);
   });
 
   it("reset leaves Visited, sign-in and other sites alone", () => {
