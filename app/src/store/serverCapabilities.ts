@@ -52,3 +52,41 @@ export function versionAfter(version: string, [major, minor, patch]: readonly [n
 export function supportsOrderByStrings(webApiVersion: string): boolean {
   return versionAfter(webApiVersion, LAST_OBJECT_ORDER_BY_VERSION);
 }
+
+/** Is this 422 body the server rejecting `order_by` for being in the
+ * wrong form? Both forms fail schema validation the same way -- an older
+ * server given strings, or a newer one given objects -- with the field
+ * named under `error.messages.json.order_by`:
+ * `{"error": {"code": 422, "messages": {"json": {"order_by": {"0": ...}}}}}`.
+ * (A newer server also reports a bad GOQL sort string there; retrying that
+ * one in the other form just fails again, which the caller handles.) */
+export function isOrderByFormError(status: number, body: string): boolean {
+  if (status !== 422) return false;
+  try {
+    const order = JSON.parse(body)?.error?.messages?.json?.order_by;
+    return order !== undefined && order !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** Send a /query/ request, retrying once in the other `order_by` form when
+ * the server rejects the one `guess` picked (see isOrderByFormError()).
+ * The version check is only a guess: gramps-web-api#1164, the change to
+ * strings, isn't in any release yet, so a release past
+ * LAST_OBJECT_ORDER_BY_VERSION may still want objects. `remember` is told
+ * the form that worked after a retry, so later requests start with it. If
+ * the retry fails too, the first response comes back -- its error is about
+ * the request as written. */
+export async function withOrderByFallback(
+  guess: boolean,
+  send: (strings: boolean) => Promise<Response>,
+  remember: (strings: boolean) => void
+): Promise<Response> {
+  const res = await send(guess);
+  if (res.status !== 422 || !isOrderByFormError(res.status, await res.clone().text())) return res;
+  const retry = await send(!guess);
+  if (!retry.ok) return res;
+  remember(!guess);
+  return retry;
+}

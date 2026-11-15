@@ -13,7 +13,7 @@ import { ST_BOOTSTRAP_PY } from "./stBootstrap";
 import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, TransactionItem, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 import { apiFetch } from "../store/apiFetch";
 import { getRelationshipPaths, type PathPerson, type ServerRelationship } from "../store/relationshipPath";
-import { supportsOrderByStrings } from "../store/serverCapabilities";
+import { supportsOrderByStrings, withOrderByFallback } from "../store/serverCapabilities";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
 // fetch + WASM instantiation is a several-hundred-ms-to-few-seconds cost
@@ -260,10 +260,11 @@ async function bridgeError(name: string, res: Response): Promise<Error> {
   return new Error(`${name}(): ${res.status} ${message}`);
 }
 
-// Whether this server takes /query/ order_by as strings (gramps-web-api
-// newer than 3.25.3) -- read once from /api/metadata/ per worker. A failed
-// read counts as no, the form every older server takes, and is retried on
-// the next query.
+// Whether this server takes /query/ order_by as strings -- a guess from
+// gramps-web-api's version (newer than 3.25.3), read once from
+// /api/metadata/ per worker, until a rejected request teaches otherwise
+// (withOrderByFallback() in filter() below). A failed read counts as no,
+// the form every older server takes, and is retried on the next query.
 let orderByStringsPromise: Promise<boolean> | null = null;
 function orderByStringsSupported(): Promise<boolean> {
   orderByStringsPromise ??= authFetch("filter", `${API_BASE}/api/metadata/`)
@@ -302,7 +303,8 @@ const bridge = {
     // string, which is what the {json_path: entry.split(".")} workaround
     // this replaced was for.)
     const select = ["handle", ...(args.what ?? [])];
-    const orderBy = grampletOrderBy(args.order, await orderByStringsSupported());
+    // Both forms, checked up front so a bad `order` errors before any request.
+    const orderByAs = { true: grampletOrderBy(args.order, true), false: grampletOrderBy(args.order, false) };
     // Keyset pagination (gramps-web-api's `after`, echoing its own
     // `next_after` back on the following request) rather than an offset --
     // `where_expr`/`order_by`/`select` stay identical across every page
@@ -312,17 +314,25 @@ const bridge = {
     const items: unknown[] = [];
     let after: string | undefined;
     while (items.length < limit) {
-      const res = await authFetch("filter", `${API_BASE}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          select,
-          where_expr: args.where ?? undefined,
-          order_by: orderBy,
-          limit: Math.min(limit - items.length, MAX_PAGE_LIMIT),
-          after,
-        }),
-      });
+      const pageLimit = Math.min(limit - items.length, MAX_PAGE_LIMIT);
+      const res = await withOrderByFallback(
+        await orderByStringsSupported(),
+        (strings) =>
+          authFetch("filter", `${API_BASE}${endpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              select,
+              where_expr: args.where ?? undefined,
+              order_by: orderByAs[`${strings}`],
+              limit: pageLimit,
+              after,
+            }),
+          }),
+        (strings) => {
+          orderByStringsPromise = Promise.resolve(strings);
+        }
+      );
       if (!res.ok) throw await bridgeError("filter", res);
       const page = (await res.json()) as { items: unknown[]; next_after: string | null };
       items.push(...page.items);

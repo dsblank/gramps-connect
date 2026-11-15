@@ -5,7 +5,7 @@
 import { API_BASE } from "../config";
 import { toOrderByWire, toSelectEntry } from "./sql";
 import { fetchServerState } from "./cacheMeta";
-import { supportsOrderByStrings } from "./serverCapabilities";
+import { supportsOrderByStrings, withOrderByFallback } from "./serverCapabilities";
 import type { ColumnConfig, OrderBy, ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
 
@@ -130,15 +130,49 @@ export async function parseErrorMessage(res: Response): Promise<string> {
   }
 }
 
-/** Whether this server takes `order_by` as strings -- from the memoized
- * /api/metadata/ every view already fetched. Can't tell (metadata failed)
- * counts as no, the form every older server takes. */
+// The order_by form a rejected request taught us (see queryWithOrderBy()),
+// which beats the version guess from then on.
+let learnedOrderByStrings: boolean | null = null;
+
+/** Whether this server takes `order_by` as strings -- what an earlier
+ * retry learned, else a guess from the memoized /api/metadata/ every view
+ * already fetched. Can't tell (metadata failed) counts as no, the form
+ * every older server takes. */
 export async function orderByStringsSupported(): Promise<boolean> {
+  if (learnedOrderByStrings !== null) return learnedOrderByStrings;
   try {
     return supportsOrderByStrings((await fetchServerState()).webApiVersion);
   } catch {
     return false;
   }
+}
+
+/** POST a /query/ request whose body `build` makes for a given order_by
+ * form (see sql.ts's toOrderByWire()), retrying once in the other form if
+ * the server rejects this one (serverCapabilities.ts's
+ * withOrderByFallback()). */
+export async function queryWithOrderBy(
+  url: string,
+  token: string,
+  build: (strings: boolean) => Record<string, unknown>
+): Promise<Response> {
+  return withOrderByFallback(
+    await orderByStringsSupported(),
+    (strings) =>
+      apiFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(build(strings)),
+      }),
+    (strings) => {
+      learnedOrderByStrings = strings;
+    }
+  );
+}
+
+/** Tests only: forget what a retry learned. */
+export function resetLearnedOrderBy(): void {
+  learnedOrderByStrings = null;
 }
 
 export async function fetchPage(
@@ -165,21 +199,14 @@ export async function fetchPage(
   // caller needs.
   columns: ColumnConfig[] = view.columns
 ): Promise<{ page: QueryPage; totalCount: number | null }> {
-  const res = await apiFetch(`${API_BASE}${view.endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      select: ["handle", ...columns.map(toSelectEntry)],
-      order_by: toOrderByWire(orderBy, await orderByStringsSupported()),
-      limit,
-      after: after ?? undefined,
-      count: wantCount,
-      where_expr: whereExpr || undefined,
-    }),
-  });
+  const res = await queryWithOrderBy(`${API_BASE}${view.endpoint}`, token, (strings) => ({
+    select: ["handle", ...columns.map(toSelectEntry)],
+    order_by: toOrderByWire(orderBy, strings),
+    limit,
+    after: after ?? undefined,
+    count: wantCount,
+    where_expr: whereExpr || undefined,
+  }));
   if (!res.ok) {
     throw new Error(await parseErrorMessage(res));
   }

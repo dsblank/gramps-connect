@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  grampsVersionAtLeast, supportsBackgroundDelete, supportsLunarCalendars, supportsOrderByStrings, versionAfter,
+  grampsVersionAtLeast, supportsBackgroundDelete, supportsLunarCalendars, isOrderByFormError, supportsOrderByStrings, versionAfter, withOrderByFallback,
 } from "../serverCapabilities";
 
 describe("serverCapabilities", () => {
@@ -51,3 +51,60 @@ describe("versionAfter", () => {
     expect(versionAfter(" 3.26.0 ", [3, 25, 2])).toBe(true);
   });
 });
+
+const OLD_SERVER_REJECTS_STRINGS = JSON.stringify({
+  error: { code: 422, message: "json: order_by: 0: _schema: Invalid input type.", messages: { json: { order_by: { "0": { _schema: ["Invalid input type."] } } } } },
+});
+
+describe("isOrderByFormError", () => {
+  it("spots a schema rejection of order_by", () => {
+    expect(isOrderByFormError(422, OLD_SERVER_REJECTS_STRINGS)).toBe(true);
+  });
+
+  it("ignores other 422s, other statuses and non-JSON", () => {
+    expect(isOrderByFormError(422, JSON.stringify({ error: { code: 422, message: "unknown field 'nosuch' on Person" } }))).toBe(false);
+    expect(isOrderByFormError(422, JSON.stringify({ error: { messages: { json: { select: { "0": ["bad"] } } } } }))).toBe(false);
+    expect(isOrderByFormError(400, OLD_SERVER_REJECTS_STRINGS)).toBe(false);
+    expect(isOrderByFormError(422, "<html>")).toBe(false);
+  });
+});
+
+describe("withOrderByFallback", () => {
+  const reject = () => new Response(OLD_SERVER_REJECTS_STRINGS, { status: 422 });
+  const ok = () => new Response("{}", { status: 200 });
+
+  it("sends once when the guess is accepted", async () => {
+    const send = vi.fn(async () => ok());
+    const remember = vi.fn();
+    const res = await withOrderByFallback(true, send, remember);
+    expect(res.status).toBe(200);
+    expect(send.mock.calls).toEqual([[true]]);
+    expect(remember).not.toHaveBeenCalled();
+  });
+
+  it("retries in the other form and remembers it", async () => {
+    const send = vi.fn(async (strings: boolean) => (strings ? reject() : ok()));
+    const remember = vi.fn();
+    const res = await withOrderByFallback(true, send, remember);
+    expect(res.status).toBe(200);
+    expect(send.mock.calls).toEqual([[true], [false]]);
+    expect(remember).toHaveBeenCalledWith(false);
+  });
+
+  it("returns the first error, unremembered, when the retry fails too", async () => {
+    const send = vi.fn(async () => reject());
+    const remember = vi.fn();
+    const res = await withOrderByFallback(false, send, remember);
+    expect(res.status).toBe(422);
+    expect(await res.text()).toBe(OLD_SERVER_REJECTS_STRINGS);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(remember).not.toHaveBeenCalled();
+  });
+
+  it("doesn't retry an unrelated error", async () => {
+    const send = vi.fn(async () => new Response(JSON.stringify({ error: { code: 422, message: "bad where_expr" } }), { status: 422 }));
+    await withOrderByFallback(true, send, vi.fn());
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+});
+

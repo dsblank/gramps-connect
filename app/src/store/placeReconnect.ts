@@ -11,8 +11,7 @@
 // in the first place, the same "don't create the gap" preference as
 // WikidataPlaceLookupDialog.tsx's "Skip this level" checkbox.
 import { API_BASE } from "../config";
-import { PAGE_SIZE, orderByStringsSupported, parseErrorMessage } from "./api";
-import { apiFetch } from "./apiFetch";
+import { PAGE_SIZE, parseErrorMessage, queryWithOrderBy } from "./api";
 import { fetchPlainObject, updateObject } from "./objectsApi";
 import { toOrderByWire } from "./sql";
 import { PLACE_VIEW } from "./views";
@@ -123,20 +122,15 @@ async function queryPlaceRefs(
   whereExpr: string
 ): Promise<{ handle: string; placeref_list: RawPlaceRef[] }[]> {
   const found: { handle: string; placeref_list: RawPlaceRef[] }[] = [];
-  const strings = await orderByStringsSupported();
   let after: string | null = null;
   do {
-    const res = await apiFetch(`${API_BASE}${PLACE_VIEW.endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        select: ["handle", "placeref_list"],
-        where_expr: whereExpr,
-        order_by: toOrderByWire([{ column: "handle", direction: "asc" }], strings),
-        limit: PAGE_SIZE,
-        after: after ?? undefined,
-      }),
-    });
+    const res = await queryWithOrderBy(`${API_BASE}${PLACE_VIEW.endpoint}`, token, (strings) => ({
+      select: ["handle", "placeref_list"],
+      where_expr: whereExpr,
+      order_by: toOrderByWire([{ column: "handle", direction: "asc" }], strings),
+      limit: PAGE_SIZE,
+      after: after ?? undefined,
+    }));
     if (!res.ok) throw new Error(await parseErrorMessage(res));
     const page: { items: { handle: string; placeref_list?: RawPlaceRef[] | null }[]; next_after: string | null } = await res.json();
     for (const item of page.items) found.push({ handle: item.handle, placeref_list: item.placeref_list ?? [] });
