@@ -31,7 +31,7 @@ describe("toOrderByEntry", () => {
     expect(toOrderByEntry({ column: "desc", direction: "desc" })).toBe("-desc");
   });
 
-  it("sends strings to a newer server and objects to 3.25.2 and older", () => {
+  it("sends strings to a newer server and objects to 3.25.3 and older", () => {
     const orderBy = [{ column: "surname", direction: "asc" as const }, { column: "change", direction: "desc" as const }];
     expect(toOrderByWire(orderBy, true)).toEqual(["surname", "-change"]);
     expect(toOrderByWire(orderBy, false)).toEqual(orderBy);

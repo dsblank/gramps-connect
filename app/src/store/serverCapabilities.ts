@@ -34,8 +34,9 @@ export function supportsBackgroundDelete(webApiVersion: string): boolean {
 
 /** The last gramps-web-api release whose /query/ takes `order_by` only as
  * {"column", "direction"} objects. Newer releases take GOQL strings
- * ("surname", "-change") and reject the objects (gramps-web-api#1164). */
-export const LAST_OBJECT_ORDER_BY_VERSION: readonly [number, number, number] = [3, 25, 2];
+ * ("surname", "-change") and reject the objects (gramps-web-api#1164).
+ * 3.25.3 shipped without #1164, so it is still on the object side. */
+export const LAST_OBJECT_ORDER_BY_VERSION: readonly [number, number, number] = [3, 25, 3];
 
 /** Is version ("3.26.0", "3.25.3rc1") newer than [major, minor, patch]?
  * An unreadable version counts as not newer. */

@@ -14,7 +14,7 @@ describe("grampletOrderBy", () => {
     expect(grampletOrderBy([{ column: "gramps_id" }])).toEqual(["gramps_id"]);
   });
 
-  it("sends objects to a server that takes only those (3.25.2 and older)", () => {
+  it("sends objects to a server that takes only those (3.25.3 and older)", () => {
     expect(grampletOrderBy(["surname", "-change"], false)).toEqual([
       { column: "surname", direction: "asc" },
       { column: "change", direction: "desc" },

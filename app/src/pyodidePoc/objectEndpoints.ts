@@ -54,7 +54,7 @@ export const OBJECT_TYPE_LABELS: Record<string, string> = {
  * written as in `where`/`what`, with a leading "-" for descending
  * ("-change"); the older {"column": ..., "direction": "asc"|"desc"} dict
  * is still accepted, so Gramplets written before keep working. Sent as
- * strings when `strings` (a gramps-web-api newer than 3.25.2, see
+ * strings when `strings` (a gramps-web-api newer than 3.25.3, see
  * serverCapabilities.ts), as {column, direction} objects otherwise.
  * Anything else is an error naming the entry. */
 export function grampletOrderBy(

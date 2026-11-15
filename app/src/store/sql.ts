@@ -22,7 +22,7 @@ export function toOrderByEntry(orderBy: OrderBy): string {
 }
 
 /** `order_by` as this server takes it: strings on a gramps-web-api newer
- * than 3.25.2, the {column, direction} objects on 3.25.2 and older (see
+ * than 3.25.3, the {column, direction} objects on 3.25.3 and older (see
  * serverCapabilities.ts's supportsOrderByStrings()). */
 export function toOrderByWire(orderBy: readonly OrderBy[], strings: boolean): (string | OrderBy)[] {
   return strings ? orderBy.map(toOrderByEntry) : orderBy.map((o) => ({ column: o.column, direction: o.direction }));

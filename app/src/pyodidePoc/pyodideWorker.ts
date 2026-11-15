@@ -261,7 +261,7 @@ async function bridgeError(name: string, res: Response): Promise<Error> {
 }
 
 // Whether this server takes /query/ order_by as strings (gramps-web-api
-// newer than 3.25.2) -- read once from /api/metadata/ per worker. A failed
+// newer than 3.25.3) -- read once from /api/metadata/ per worker. A failed
 // read counts as no, the form every older server takes, and is retried on
 // the next query.
 let orderByStringsPromise: Promise<boolean> | null = null;

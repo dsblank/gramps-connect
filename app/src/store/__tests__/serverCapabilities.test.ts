@@ -33,9 +33,9 @@ describe("supportsBackgroundDelete", () => {
 });
 
 describe("supportsOrderByStrings", () => {
-  it("is false on 3.25.2 and older, true on anything newer", () => {
-    for (const v of ["3.25.2", "3.25.1", "3.24.0", "2.9.9", "3.25"]) expect(supportsOrderByStrings(v)).toBe(false);
-    for (const v of ["3.25.3", "3.26.0", "3.26.0rc1", "4.0.0", "3.26"]) expect(supportsOrderByStrings(v)).toBe(true);
+  it("is false on 3.25.3 and older, true on anything newer", () => {
+    for (const v of ["3.25.3", "3.25.2", "3.25.1", "3.24.0", "2.9.9", "3.25"]) expect(supportsOrderByStrings(v)).toBe(false);
+    for (const v of ["3.25.4", "3.26.0", "3.26.0rc1", "4.0.0", "3.26"]) expect(supportsOrderByStrings(v)).toBe(true);
   });
 
   it("treats an unreadable version as old", () => {
