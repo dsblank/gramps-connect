@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSimpleSearchExpr } from "../simpleSearch";
+import { buildSimpleSearchExpr, prefixSearchExpr } from "../simpleSearch";
 
 describe("buildSimpleSearchExpr", () => {
   it("returns null for empty or 1-character input", () => {
@@ -33,5 +33,26 @@ describe("buildSimpleSearchExpr", () => {
   it("is a contains-match, not prefix-only", () => {
     const build = buildSimpleSearchExpr(["title"]);
     expect(build("hicag")).toBe("like(title, '%hicag%')");
+  });
+});
+
+describe("prefixSearchExpr", () => {
+  it("rewrites every contains-match to a prefix match", () => {
+    const full = buildSimpleSearchExpr(["gramps_id", "title", "name.value"])("USA");
+    expect(prefixSearchExpr(full)).toBe(
+      "like(gramps_id, 'USA%') or like(title, 'USA%') or like(name.value, 'USA%')"
+    );
+  });
+
+  it("keeps any other clauses a picker wraps around the search", () => {
+    expect(prefixSearchExpr("(like(desc, '%map%')) and mime == 'image/png'")).toBe(
+      "(like(desc, 'map%')) and mime == 'image/png'"
+    );
+  });
+
+  it("is null when there's nothing to rewrite", () => {
+    expect(prefixSearchExpr(null)).toBeNull();
+    expect(prefixSearchExpr("mime == 'image/png'")).toBeNull();
+    expect(prefixSearchExpr("like(title, 'USA%')")).toBeNull();
   });
 });

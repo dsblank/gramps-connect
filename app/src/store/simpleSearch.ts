@@ -54,3 +54,23 @@ export function buildSimpleSearchExpr(fields: string[]): (query: string) => stri
     return fields.map((field) => `like(${field}, '%${trimmed}%')`).join(" or ");
   };
 }
+
+/** The "starts with" version of a search where_expr: every
+ * `like(<field>, '%term%')` contains-match rewritten to `like(<field>,
+ * 'term%')`. Pickers (RecordPicker.tsx) use it to list prefix matches ahead
+ * of mere substring matches, so a short exact name (e.g. "USA") isn't
+ * pushed past the result cap by alphabetically earlier places that only
+ * contain it. Works on any builder's output (buildSimpleSearchExpr,
+ * buildPersonSearchExpr, a picker's own wrapper adding extra clauses)
+ * since they all emit that same like() literal shape, and their terms are
+ * already stripped of quotes. Null when there's no contains-match to
+ * rewrite. */
+export function prefixSearchExpr(expr: string | null): string | null {
+  if (!expr) return null;
+  let found = false;
+  const out = expr.replace(/'%([^'%]+)%'/g, (_m, term: string) => {
+    found = true;
+    return `'${term}%'`;
+  });
+  return found ? out : null;
+}

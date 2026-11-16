@@ -3,6 +3,7 @@ import { Button, Card, Divider, Group, Loader, NavLink, ScrollArea, Stack, Text,
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
 import { useNameGroupsVersion } from "../store/nameGroups";
+import { prefixSearchExpr } from "../store/simpleSearch";
 import type { ViewConfig } from "../store/views";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { withGrampsId } from "./related/summary";
@@ -116,10 +117,27 @@ export function RecordPicker({
       // The view's default order -- for People, the tree's name format
       // (views.ts defaultOrderBy), not the static surname-first `orderBy`.
       const orderBy = view.defaultOrderBy?.() ?? view.orderBy;
-      const { page, totalCount: count } = await fetchPage(view, token, null, true, whereExpr, orderBy, RESULT_LIMIT);
+      // Matches that start with the term come first, then the rest of the
+      // contains-matches -- otherwise a short exact name ("USA") sorts
+      // behind 20 alphabetically earlier places that merely contain it
+      // ("Indiana, USA", ...) and can't be picked at all. Two disjoint
+      // queries in parallel, so the total stays exact.
+      const prefixExpr = prefixSearchExpr(whereExpr);
+      if (!prefixExpr) {
+        const { page, totalCount: count } = await fetchPage(view, token, null, true, whereExpr, orderBy, RESULT_LIMIT);
+        if (!cancelled) {
+          setResults(page.items);
+          setTotalCount(count);
+        }
+        return;
+      }
+      const [first, rest] = await Promise.all([
+        fetchPage(view, token, null, true, prefixExpr, orderBy, RESULT_LIMIT),
+        fetchPage(view, token, null, true, `(${whereExpr}) and not (${prefixExpr})`, orderBy, RESULT_LIMIT),
+      ]);
       if (!cancelled) {
-        setResults(page.items);
-        setTotalCount(count);
+        setResults([...first.page.items, ...rest.page.items].slice(0, RESULT_LIMIT));
+        setTotalCount(first.totalCount === null || rest.totalCount === null ? null : first.totalCount + rest.totalCount);
       }
     })()
       .catch(() => {
