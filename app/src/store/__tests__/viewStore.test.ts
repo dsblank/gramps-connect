@@ -1384,3 +1384,88 @@ describe("ViewStore unfiltered reads", () => {
     expect(store.readColumns(["handle"], { unfiltered: true })).toHaveLength(2);
   });
 });
+
+describe("ViewStore.refreshDependents (rows copying another table's data)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  function eventRow(handle: string, place: string, placeTitle: string) {
+    return { handle, gramps_id: handle, place, place_title: placeTitle, change: 1000 };
+  }
+
+  async function loadedEvents(items: ReturnType<typeof eventRow>[]): Promise<ViewStore> {
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items, next_after: null }, totalCount: items.length });
+    const store = new ViewStore(EVENT_VIEW, getSql);
+    await store.runQuery(null, false);
+    return store;
+  }
+
+  it("refetches just the events at an edited place and updates their copied place title", async () => {
+    const store = await loadedEvents([eventRow("E1", "P1", "Rush"), eventRow("E2", "P2", "Decatur")]);
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [eventRow("E1", "P1", "Rush County")], next_after: null }, totalCount: 1 });
+
+    expect(await store.refreshDependents("place", ["P1"])).toBe("patched");
+
+    expect(vi.mocked(fetchPage).mock.lastCall?.[4]).toBe('handle == "E1"');
+    expect(store.readRowByHandle("E1", ["place_title"])).toEqual(["Rush County"]);
+    expect(store.readRowByHandle("E2", ["place_title"])).toEqual(["Decatur"]);
+    expect(store.getSnapshot().loadedCount).toBe(2);
+  });
+
+  it("asks nothing of the server when no cached row points at the changed records", async () => {
+    const store = await loadedEvents([eventRow("E1", "P1", "Rush")]);
+    const calls = vi.mocked(fetchPage).mock.calls.length;
+
+    expect(await store.refreshDependents("place", ["P9"])).toBe("none");
+    expect(await store.refreshDependents("note", ["P1"])).toBe("none");
+    expect(vi.mocked(fetchPage).mock.calls.length).toBe(calls);
+  });
+
+  it("finds rows through a handle-list column (a person's events, for birth/death dates)", async () => {
+    const person = { ...personRow("I1"), event_refs: [{ ref: "E1" }, { ref: "E22" }] };
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [person, { ...personRow("I2"), event_refs: [{ ref: "E2" }] }], next_after: null }, totalCount: 2 });
+    const store = new ViewStore(PERSON_VIEW, getSql);
+    await store.runQuery(null, false);
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [{ ...person, birth_date: '{"year":1900}' }], next_after: null }, totalCount: 1 });
+
+    // E2 is a prefix of E22 but must only match I2, the person who has E2.
+    expect(await store.refreshDependents("event", ["E22"])).toBe("patched");
+    expect(vi.mocked(fetchPage).mock.lastCall?.[4]).toBe('handle == "I1"');
+  });
+});
+
+describe("ViewStore.applyLiveChangesFiltered (live sync while a search is typed in)", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  function placeRow(handle: string, title: string) {
+    return { handle, gramps_id: handle, title, name: { value: title }, change: 1000 };
+  }
+
+  it("updates the whole-tree copy and the shown match, without adding non-matches to the results", async () => {
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [placeRow("P1", "Rush"), placeRow("P2", "Decatur")], next_after: null }, totalCount: 2 });
+    const store = new ViewStore(PLACE_VIEW, getSql);
+    await store.runQuery(null, false);
+    // Searching keeps the whole-tree rows aside.
+    vi.mocked(fetchPage).mockResolvedValueOnce({ page: { items: [placeRow("P2", "Decatur")], next_after: null }, totalCount: 1 });
+    await store.runQuery("like(title, '%Dec%')", false);
+    expect(store.hasWholeTreeRows()).toBe(true);
+
+    vi.mocked(fetchPage).mockResolvedValueOnce({
+      page: { items: [placeRow("P1", "Rush County"), placeRow("P2", "Decatur County")], next_after: null }, totalCount: 2,
+    });
+    await store.applyLiveChangesFiltered([
+      { table: "place", handle: "P1", op: "UPDATE", changedBy: null },
+      { table: "place", handle: "P2", op: "UPDATE", changedBy: null },
+    ]);
+
+    expect(store.readRowByHandle("P1", ["title"], { unfiltered: true })).toEqual(["Rush County"]);
+    expect(store.readRowByHandle("P2", ["title"])).toEqual(["Decatur County"]);
+    expect(store.readRowByHandle("P1", ["title"])).toBeNull();
+    expect(store.getSnapshot().loadedCount).toBe(1);
+  });
+});

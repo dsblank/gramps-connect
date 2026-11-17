@@ -41,6 +41,8 @@ interface FakeServer {
   /** Adds a bulk transaction (an import, say) to that walk: one whose
    * history entry has no changes at all. */
   bulkTransaction?: boolean;
+  /** Changes with handles, for a view's dependsOn walk. */
+  changes?: { obj_class: string; obj_handle: string }[];
 }
 
 /** Stands in for the two endpoints fetchServerState() reads, plus the
@@ -55,6 +57,7 @@ function mockServer({
   metadataFails = false,
   changedClasses = [],
   bulkTransaction = false,
+  changes = [],
 }: FakeServer = {}) {
   vi.stubGlobal(
     "fetch",
@@ -76,6 +79,7 @@ function mockServer({
           json: async () => [
             ...changedClasses.map((obj_class) => ({ changes: [{ obj_class }] })),
             ...(bulkTransaction ? [{ changes: [] }] : []),
+            ...changes.map((change) => ({ changes: [change] })),
           ],
         } as unknown as Response;
       }
@@ -165,6 +169,24 @@ describe("isCacheStale", () => {
     resetServerState();
     mockServer({ cursor: 8, changedClasses: ["Person"] });
     expect(await isCacheStale(db, TAG_VIEW)).toEqual({ stale: false, advanceCursorTo: 8 });
+  });
+
+  it("keeps a cache whose copied-from table changed, reporting which records to refresh", async () => {
+    // Tags pretending to copy data from Places, like Events' place title.
+    const view: ViewConfig = { ...TAG_VIEW, dependsOn: [{ table: "place", via: "name" }] };
+    mockServer({ cursor: 7 });
+    const db = await cachedDb(view);
+
+    resetServerState();
+    mockServer({
+      cursor: 9,
+      changes: [
+        { obj_class: "Place", obj_handle: "P1" },
+        { obj_class: "Place", obj_handle: "P1" },
+        { obj_class: "Note", obj_handle: "N1" },
+      ],
+    });
+    expect(await isCacheStale(db, view)).toEqual({ stale: false, advanceCursorTo: 9, dependents: { place: ["P1"] } });
   });
 
   it("treats a bulk transaction (an import, with no recorded changes) as touching every table", async () => {

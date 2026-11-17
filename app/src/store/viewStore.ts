@@ -102,6 +102,12 @@ export interface ViewSnapshot {
  * indexOfSelected(). */
 const SELECTION_INDEX_LOOKUP_LIMIT = 20;
 
+/** refreshDependents(): rows fetched per request, and the most it patches
+ * row by row before a plain requery is cheaper (a much-used place can be
+ * on thousands of events). */
+const DEPENDENT_FETCH_BATCH = 50;
+const MAX_DEPENDENT_REFRESH = 500;
+
 const EMPTY_SNAPSHOT_BASE = {
   loadedCount: 0,
   totalCount: 0,
@@ -882,6 +888,15 @@ export class ViewStore {
     return { loaded, total: Math.max(loaded, this.unfilteredTotal) };
   }
 
+  /** Whether an `unfiltered` read sees the whole tree's rows (possibly only
+   * a prefix of them so far -- see unfilteredCounts): always while the list
+   * is unfiltered, and while filtered only if a whole-tree copy was kept
+   * when the filter started (not when the list was filtered from the very
+   * first load). */
+  hasWholeTreeRows(): boolean {
+    return (this.whereExpr === null && this.pickerExpr === null) || this.unfilteredDb !== null;
+  }
+
   /** The db a reader asked for: the list's own rows, or with `unfiltered`
    * the whole tree's even while the list is filtered (unfilteredDb). */
   private readDb(unfiltered: boolean): Database | null {
@@ -940,12 +955,21 @@ export class ViewStore {
         // already-cleared transaction range again. Not on the critical
         // path: the cache is already known good, so this can happen after
         // the view is visible.
-        if (staleness.advanceCursorTo !== undefined) {
-          updateCachedCursor(db, staleness.advanceCursorTo);
+        const advanceTo = staleness.advanceCursorTo;
+        const advanceCursor = () => {
+          if (advanceTo === undefined || this.db !== db) return;
+          updateCachedCursor(db, advanceTo);
           saveToOpfs(this.view.opfsFilename, db.export()).catch((err) => {
             console.error(`[${this.view.label}] cursor-advance persist failed`, err);
           });
-        }
+        };
+        // Records this view copies data from changed since (an Event's
+        // place renamed): refresh the rows pointing at them first, and only
+        // then advance the cursor -- or a reload before they land would
+        // trust the old copies for good. A refresh that turned into a
+        // requery persists itself.
+        const dependents = staleness.dependents;
+        if (!dependents) advanceCursor();
         this.db = db;
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
         this.whereExpr = null;
@@ -955,6 +979,15 @@ export class ViewStore {
         this.applyDefaultSelection();
         this.emit();
         this.preferHomePersonDefault();
+        if (dependents) {
+          void (async () => {
+            let requeried = false;
+            for (const [table, handles] of Object.entries(dependents)) {
+              requeried = (await this.refreshDependents(table, handles, advanceTo)) === "requery" || requeried;
+            }
+            if (!requeried) advanceCursor();
+          })().catch((err) => console.error(`[${this.view.label}] refreshing copied rows failed`, err));
+        }
         return;
       } catch {
         await clearOpfs(this.view.opfsFilename);
@@ -1515,6 +1548,100 @@ export class ViewStore {
       stmt.run(toRowValues(this.view, item));
     }
     db.run("COMMIT;");
+  }
+
+  /** applyLiveChange()'s counterpart while the list holds a typed search's
+   * results (useLiveSync.ts routes here then). The whole-tree copy kept
+   * aside while filtered (unfilteredDb) is patched -- it's what the Map,
+   * charts and placeIndex.ts's automatic titles read, so skipping it left
+   * an edited place's old name showing there until the search was cleared.
+   * The visible results are only refreshed in place: a row already shown
+   * gets its new values, but nothing is added or re-sorted, since whether
+   * an edited record still matches the search is the search's business
+   * (re-running it, or clearing it, settles that). */
+  async applyLiveChangesFiltered(notifications: TreeChangeNotification[]): Promise<void> {
+    if (!this.db || notifications.length === 0) return;
+    this.removeDeleted(notifications.filter((n) => n.op === "DELETE").map((n) => n.handle));
+    const changed = notifications.filter((n) => n.op !== "DELETE").map((n) => n.handle);
+    const token = await getToken();
+    for (let i = 0; i < changed.length; i += DEPENDENT_FETCH_BATCH) {
+      const batch = changed.slice(i, i + DEPENDENT_FETCH_BATCH);
+      const expr = batch.map((h) => `handle == ${JSON.stringify(h)}`).join(" or ");
+      const { page } = await fetchPage(this.view, token, null, false, expr, undefined, batch.length);
+      this.mirrorToUnfiltered(page.items);
+      this.updateCachedRows(page.items, { unfiltered: false });
+    }
+    if (this.selectedHandle !== null && changed.includes(this.selectedHandle)) this.selectedRevision += 1;
+    this.emit();
+  }
+
+  /** Re-fetches the cached rows that copy data out of records of `table`
+   * (ViewConfig.dependsOn) after those records changed -- e.g. Events'
+   * place title after a Place edit, which only records a Place change, so
+   * nothing else would ever refresh the Event rows. Rows are found locally
+   * through the dependency's `via` column and updated where they are, in
+   * the list and the whole-tree copy kept aside while it's searched. Not
+   * re-sorted: a list sorted by a copied column (Events by Place) keeps a
+   * renamed place's rows where they were until its next requery. With no
+   * `via` column, or more matching rows than are worth patching, the list
+   * is requeried instead -- reported as "requery", since that finishes (and
+   * persists itself) later, so the caller mustn't persist the old rows as
+   * current in the meantime. */
+  async refreshDependents(table: string, handles: string[], cursor?: number): Promise<"patched" | "requery" | "none"> {
+    const deps = this.view.dependsOn?.filter((d) => d.table === table) ?? [];
+    if (deps.length === 0 || !this.db || handles.length === 0) return "none";
+    if (deps.some((d) => !d.via)) {
+      this.requeryDebounced(cursor);
+      return "requery";
+    }
+    const rows = [...new Set(deps.flatMap((d) => this.dependentRowHandles(d.via!, handles)))];
+    if (rows.length === 0) return "none";
+    if (rows.length > MAX_DEPENDENT_REFRESH) {
+      this.requeryDebounced(cursor);
+      return "requery";
+    }
+    const token = await getToken();
+    for (let i = 0; i < rows.length; i += DEPENDENT_FETCH_BATCH) {
+      const batch = rows.slice(i, i + DEPENDENT_FETCH_BATCH);
+      const expr = batch.map((h) => `handle == ${JSON.stringify(h)}`).join(" or ");
+      const { page } = await fetchPage(this.view, token, null, false, expr, undefined, batch.length);
+      this.updateCachedRows(page.items);
+    }
+    if (this.selectedHandle !== null && rows.includes(this.selectedHandle)) this.selectedRevision += 1;
+    this.emit();
+    return "patched";
+  }
+
+  /** Handles of cached rows (list and whole-tree copy) whose `via` column
+   * names any of `handles` -- a single handle, or a comma-separated list
+   * (views.ts's toHandles/toRefHandles), matched the same way. */
+  private dependentRowHandles(via: string, handles: string[]): string[] {
+    if (!this.view.columns.some((c) => c.key === via)) throw new Error(`${this.view.key}: no cached column ${via}`);
+    const found = new Set<string>();
+    for (const db of [this.db, this.unfilteredDb]) {
+      if (!db) continue;
+      for (let i = 0; i < handles.length; i += 200) {
+        const chunk = handles.slice(i, i + 200);
+        const where = chunk.map(() => `(',' || IFNULL(${via}, '') || ',') LIKE ?`).join(" OR ");
+        const res = db.exec(`SELECT handle FROM ${this.view.key} WHERE ${where};`, chunk.map((h) => `%,${h},%`));
+        for (const [handle] of res[0]?.values ?? []) found.add(handle as string);
+      }
+    }
+    return [...found];
+  }
+
+  /** Writes fresh values into rows already cached -- never adds one. Both
+   * the list and the whole-tree copy unless `unfiltered: false`. */
+  private updateCachedRows(items: Parameters<typeof toRowValues>[1][], { unfiltered = true } = {}): void {
+    for (const db of unfiltered ? [this.db, this.unfilteredDb] : [this.db]) {
+      if (!db || items.length === 0) continue;
+      const stmt = db.prepare(updateSql(this.view));
+      try {
+        for (const item of items) stmt.run(toUpdateRowValues(this.view, item));
+      } finally {
+        stmt.free();
+      }
+    }
   }
 
   /** Patches this view's already-loaded, unfiltered cache in place for one

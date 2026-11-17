@@ -133,6 +133,15 @@ export interface ViewConfig {
    * live-sync notification for that type reaches every view that needs it,
    * not just whichever one happens to share its key. */
   table?: string;
+  /** Other tables whose records this view's cached rows copy data from --
+   * a column that reads through a link (Events' place title, Families'
+   * parent names) -- so live sync (useLiveSync.ts) and the cache check on
+   * reload (cacheMeta.ts) can refresh those rows when such a record
+   * changes: the change is recorded against *that* table only, so nothing
+   * else would. `via` is the cached column holding the linked handle (or a
+   * comma-separated list of them); without one, the whole list is
+   * requeried instead. See ViewStore.refreshDependents. */
+  dependsOn?: { table: string; via?: string }[];
   /** A fixed, non-user-editable where_expr always AND-ed into this view's
    * query (see ViewStore's combinedFilter) -- e.g. the Output view's tag
    * filter. Combined with any user-entered FilterBar search (see
@@ -344,6 +353,8 @@ export const PERSON_VIEW: ViewConfig = {
   label: "People",
   icon: iconPerson,
   endpoint: "/api/people/query/",
+  // Birth/Death dates are read through the person's own events.
+  dependsOn: [{ table: "event", via: "event_refs" }],
   // given_name rides along as a tiebreak from the very first load, matching
   // the "surname" column's own secondarySort (below) that setSort() applies
   // on every later click -- without it, the default sort left same-surname
@@ -409,6 +420,8 @@ export const FAMILY_VIEW: ViewConfig = {
   label: "Family",
   icon: iconFamily,
   endpoint: "/api/families/query/",
+  // Father/Mother names are read through the linked people.
+  dependsOn: [{ table: "person", via: "father_handle" }, { table: "person", via: "mother_handle" }],
   // Family has no flat "name" column of its own (it's derived from two
   // related Person records) -- gramps_id is the closest thing to a
   // stable, always-present sort key.
@@ -498,6 +511,8 @@ export const EVENT_VIEW: ViewConfig = {
   label: "Events",
   icon: iconEvent,
   endpoint: "/api/events/query/",
+  // Place title/name are read through the linked place.
+  dependsOn: [{ table: "place", via: "place" }],
   // Events have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-event.sqlite",
@@ -680,6 +695,10 @@ export const CITATION_VIEW: ViewConfig = {
   label: "Citations",
   icon: iconCitation,
   endpoint: "/api/citations/query/",
+  // Source title is read through the source, whose handle isn't cached
+  // (adding it would force every user to refetch this table): a Source
+  // change requeries the list.
+  dependsOn: [{ table: "source" }],
   // Citations have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-citation.sqlite",

@@ -20,6 +20,8 @@ function unloadedStore() {
     getSnapshot: () => ({ loadedCount: 0, totalCount: 0, revision: 0, whereExpr: null, pickerExpr: null, status: "idle" }),
     ensureLoaded,
     subscribe: () => () => {},
+    hasWholeTreeRows: () => true,
+    unfilteredCounts: () => ({ loaded: 0, total: 0 }),
   } as unknown as ViewStore;
   return { store, ensureLoaded, finish: () => finish() };
 }
@@ -54,6 +56,8 @@ function loadedStore(rows: [string, string, string | null][]) {
     getSnapshot: () => ({ loadedCount: rows.length, totalCount: rows.length, revision: 1, whereExpr: null, pickerExpr: null, status: "idle" }),
     ensureLoaded: vi.fn().mockResolvedValue(undefined),
     subscribe: () => () => {},
+    hasWholeTreeRows: () => true,
+    unfilteredCounts: () => ({ loaded: rows.length, total: rows.length }),
     readColumns: () =>
       rows.map(([handle, name, parent]) => [
         handle, JSON.stringify({ value: name }), null, 0, parent ? JSON.stringify([{ ref: parent }]) : null,
@@ -117,4 +121,31 @@ describe("draftPlaceTitle", () => {
     expect(placeTitleFollowsName({ ...place, title: "Grandma's town" })).toBe(false);
   });
 
+});
+
+describe("automatic titles while the Places table is searched", () => {
+  it("are built from the whole-tree copy, which live sync keeps current", () => {
+    // The table shows a search's single match; the whole tree (with a
+    // rename that arrived during the search) is the kept-aside copy.
+    const wholeTree: [string, string, string | null][] = [["T", "Rushville", "C"], ["C", "Rush County", null]];
+    const reads: unknown[] = [];
+    const store = {
+      getSnapshot: () => ({ loadedCount: 1, totalCount: 1, revision: 99, whereExpr: "like(title, '%Rush%')", pickerExpr: null, status: "ready" }),
+      ensureLoaded: vi.fn().mockResolvedValue(undefined),
+      subscribe: () => () => {},
+      hasWholeTreeRows: () => true,
+      unfilteredCounts: () => ({ loaded: 2, total: 2 }),
+      readColumns: (_cols: string[], opts?: { unfiltered?: boolean }) => {
+        reads.push(opts);
+        return opts?.unfiltered
+          ? wholeTree.map(([handle, name, parent]) => [
+              handle, JSON.stringify({ value: name }), null, 0, parent ? JSON.stringify([{ ref: parent }]) : null,
+            ])
+          : [];
+      },
+    } as unknown as ViewStore;
+    attachDisplayStores({ place: store, event: unloadedStore().store });
+    expect(draftPlaceTitle({ name: { value: "Rushville" }, placeref_list: [{ ref: "C" }] })).toBe("Rushville, Rush County");
+    expect(reads).toContainEqual({ unfiltered: true });
+  });
 });

@@ -59,22 +59,23 @@ function parseJson<T>(value: unknown): T | null {
 }
 
 /** The place lookup, or null when there's no complete one yet. Only built
- * from a *complete, unfiltered* Places cache: a filtered query (a search in
- * the Places table) replaces the cached rows with just the matches, and a
- * background fill has only a prefix -- either way enclosing places would be
- * missing and titles cut short. In those states the last complete index
- * keeps serving (its places are a superset of a filtered set's). */
+ * from the *whole tree's* Places rows, all of them: a search in the Places
+ * table shows just its matches, and a background fill has only a prefix --
+ * either way enclosing places would be missing and titles cut short. While
+ * the table is searched, the whole-tree copy it keeps aside (and live sync
+ * keeps current -- ViewStore.applyLiveChangesFiltered) is read instead, so
+ * a place edited meanwhile shows its new name. With no such copy, or only a
+ * prefix of it, the last complete index keeps serving. */
 function getIndex(store: ViewStore): Map<string, PlaceRecord> | null {
   const snapshot = store.getSnapshot();
   if (index && index.revision === snapshot.revision && index.loadedCount === snapshot.loadedCount) return index.places;
-  const complete =
-    snapshot.loadedCount > 0 && snapshot.loadedCount >= snapshot.totalCount &&
-    snapshot.whereExpr === null && snapshot.pickerExpr === null;
-  if (!complete) return index?.places ?? null;
+  if (!store.hasWholeTreeRows()) return index?.places ?? null;
+  const counts = store.unfilteredCounts();
+  if (!(counts.loaded > 0 && counts.loaded >= counts.total)) return index?.places ?? null;
   const places = new Map<string, PlaceRecord>();
   const titles = new Map<string, string>();
   const grampsIds = new Map<string, string>();
-  for (const row of store.readColumns(["handle", "name", "alt_names", "place_type", "placerefs", "title", "gramps_id"])) {
+  for (const row of store.readColumns(["handle", "name", "alt_names", "place_type", "placerefs", "title", "gramps_id"], { unfiltered: true })) {
     const [handle, name, altNames, placeType, placerefs, title, grampsId] =
       row as [string, string | null, string | null, number | null, string | null, string | null, string | null];
     titles.set(handle, title ?? "");

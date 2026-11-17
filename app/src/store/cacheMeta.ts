@@ -242,6 +242,7 @@ export const STALE_CHECK_PAGESIZE = 1000;
 
 interface HistoryChangeForWalk {
   obj_class: string;
+  obj_handle?: string;
 }
 interface HistoryTransactionForWalk {
   changes: HistoryChangeForWalk[];
@@ -265,7 +266,11 @@ function isBulkTransaction(tx: HistoryTransactionForWalk): boolean {
  * back full (STALE_CHECK_PAGESIZE items -- there may be more beyond it this
  * single page can't see). A cache that far behind is due a refetch anyway
  * (see F1 -- it's a cheap one), so the safe default there is "stale". */
-async function tableTouchedSince(afterId: number, table: string): Promise<boolean | null> {
+async function tableTouchedSince(
+  afterId: number,
+  table: string,
+  dependsOn: string[] = [],
+): Promise<{ touched: boolean; dependents: Record<string, string[]> } | null> {
   try {
     const token = await getToken();
     const res = await apiFetch(
@@ -275,9 +280,20 @@ async function tableTouchedSince(afterId: number, table: string): Promise<boolea
     if (!res.ok) return null;
     const transactions: HistoryTransactionForWalk[] = await res.json();
     if (transactions.length >= STALE_CHECK_PAGESIZE) return null;
-    return transactions.some(
+    const touched = transactions.some(
       (tx) => isBulkTransaction(tx) || tx.changes.some((change) => change.obj_class.toLowerCase() === table)
     );
+    // Records of the tables this view copies data from (ViewConfig.dependsOn)
+    // that changed -- the caller refreshes just the rows that point at them.
+    const dependents: Record<string, string[]> = {};
+    for (const tx of transactions) {
+      for (const change of tx.changes) {
+        const changedTable = change.obj_class.toLowerCase();
+        if (!dependsOn.includes(changedTable) || !change.obj_handle) continue;
+        (dependents[changedTable] ??= []).includes(change.obj_handle) || dependents[changedTable].push(change.obj_handle);
+      }
+    }
+    return { touched, dependents };
   } catch {
     return null;
   }
@@ -346,6 +362,12 @@ export interface CacheStaleResult {
    * `_cache_meta`'s cursor to this value (updateCachedCursor()) so a later
    * reload doesn't re-walk the same already-cleared range forever. */
   advanceCursorTo?: number;
+  /** Set alongside advanceCursorTo when records of a table this view copies
+   * data from (ViewConfig.dependsOn) changed in the walked range: by table,
+   * their handles. The rows themselves are current; the caller refreshes
+   * the ones pointing at these (ViewStore.refreshDependents) *before*
+   * advancing the cursor, so a reload mid-refresh walks them again. */
+  dependents?: Record<string, string[]>;
 }
 
 /** True when the cache's own table holds a different number of rows than
@@ -416,9 +438,11 @@ export async function isCacheStale(db: Database, view: ViewConfig): Promise<Cach
     // counts came with the same fetchServerState() call.
     if (rowCountDisagrees(db, view, server)) return { stale: true };
     if (cachedCursor === server.cursor) return { stale: false };
-    const touched = await tableTouchedSince(cachedCursor, view.table ?? view.key);
-    if (touched === null) return { stale: true };
-    return touched ? { stale: true } : { stale: false, advanceCursorTo: server.cursor };
+    const walk = await tableTouchedSince(cachedCursor, view.table ?? view.key, view.dependsOn?.map((d) => d.table));
+    if (walk === null || walk.touched) return { stale: true };
+    return Object.keys(walk.dependents).length
+      ? { stale: false, advanceCursorTo: server.cursor, dependents: walk.dependents }
+      : { stale: false, advanceCursorTo: server.cursor };
   }
 
   // No cursor to compare (history endpoint not permitted) -- fall back to

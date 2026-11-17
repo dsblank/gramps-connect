@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { pollHistory, type TreeChangeNotification } from "../store/historyPoll";
-import { getViewStoresForTable } from "../store/registry";
+import { allViewStores, getViewStoresForTable } from "../store/registry";
+import type { ViewStore } from "../store/viewStore";
 import { publishTreeChange } from "../store/treeChangeBus";
 import { getCurrentUsername } from "../auth/auth";
 import { recordActivity } from "../store/activeUsers";
@@ -64,7 +65,35 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
         else byTable.set(notification.table, [notification]);
       }
 
+      // Every patch this tick per store, so each store persists once, after
+      // all of them -- its own table's rows and rows it copies from other
+      // tables (refreshDependents) alike.
+      const pending = new Map<ViewStore, Promise<unknown>[]>();
+      // Stores that started a requery this tick instead: it persists itself
+      // once done, and persisting now would stamp the old rows as current.
+      const requerying = new Set<ViewStore>();
+      const requery = (store: ViewStore) => {
+        store.requeryDebounced(cursor);
+        requerying.add(store);
+      };
+      const track = (store: ViewStore, work: Promise<unknown>) => {
+        const list = pending.get(store) ?? [];
+        list.push(work.catch((err) => console.error("live sync: failed to apply change", err)));
+        pending.set(store, list);
+      };
+
       for (const [table, tableNotifications] of byTable) {
+        // Rows elsewhere that copy data out of this table's records (Events'
+        // place title, ...): the change was recorded against this table
+        // only, so those rows are refreshed here or never.
+        const changedHandles = tableNotifications.map((n) => n.handle);
+        for (const store of allViewStores()) {
+          if (store.view.dependsOn?.some((d) => d.table === table)) {
+            track(store, store.refreshDependents(table, changedHandles, cursor).then((result) => {
+              if (result === "requery") requerying.add(store);
+            }));
+          }
+        }
         for (const store of getViewStoresForTable(table)) {
           // A view with a fixed baseFilter (e.g. Output) can't be
           // incrementally patched by applyLiveChange -- a single thin
@@ -72,33 +101,36 @@ export function useLiveSync(onRemoteNoteChange?: (notification: TreeChangeNotifi
           // that filter -- so it gets a full (debounced) requery instead.
           // See ViewStore.requeryDebounced's doc comment.
           if (store.view.baseFilter) {
-            store.requeryDebounced(cursor);
+            requery(store);
             continue;
           }
-          // Same reasoning, for a view's ad hoc user-typed filter (see
-          // ViewStore.applyLiveChange's doc comment): live sync is suspended
-          // for that view while filtered, rather than requeried, since an ad
-          // hoc filter isn't expected to always reflect the very latest data
-          // the moment it changes.
-          if (store.getSnapshot().whereExpr !== null) continue;
+          // A typed search isn't re-run (whether an edited record still
+          // matches is the search's business), but the rows it shows and the
+          // whole-tree copy kept aside meanwhile -- what the Map and automatic
+          // place titles read -- are kept current. See
+          // ViewStore.applyLiveChangesFiltered.
+          if (store.getSnapshot().whereExpr !== null) {
+            track(store, store.applyLiveChangesFiltered(tableNotifications));
+            continue;
+          }
           // A big same-table batch (bulk import, mass edit) would otherwise
           // fire two requests per row via applyLiveChange -- collapse it
           // into the one bulk requery requeryDebounced() already does for
           // the cases above, instead of patching row by row.
           if (tableNotifications.length > REQUERY_THRESHOLD) {
-            store.requeryDebounced(cursor);
+            requery(store);
             continue;
           }
-          // Persisted once this table's whole batch has landed, not per
-          // notification -- see ViewStore.persistLiveState's doc comment.
-          Promise.all(
-            tableNotifications.map((notification) =>
-              store.applyLiveChange(notification).catch((err) => {
-                console.error("live sync: failed to apply change", err);
-              })
-            )
-          ).then(() => store.persistLiveState(cursor));
+          for (const notification of tableNotifications) track(store, store.applyLiveChange(notification));
         }
+      }
+
+      // Persisted once each store's whole batch has landed, not per
+      // notification -- see ViewStore.persistLiveState's doc comment.
+      for (const [store, work] of pending) {
+        Promise.all(work).then(() => {
+          if (!requerying.has(store)) store.persistLiveState(cursor);
+        });
       }
     }
 
