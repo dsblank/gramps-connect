@@ -45,6 +45,9 @@ export interface WikidataSearchResult {
    * label (e.g. "Hamilton, Indiana" for the town labelled "Hamilton"); null
    * for a label match. Used by rankWikidataResults. */
   matchedAlias: string | null;
+  /** Known to be a Wikimedia disambiguation page (set on the candidates
+   * fetchDisambiguationCandidates lists; search results leave it unset). */
+  isDisambiguation?: boolean;
 }
 
 /** One page of searchWikidata's results. */
@@ -219,6 +222,9 @@ export async function searchWikidata(
       label: hit.label ?? hit.id,
       description: hit.description ?? null,
       matchedAlias: hit.match?.type === "alias" ? hit.match.text ?? null : null,
+      // Only a hint, from the English description; picking any hit
+      // checks for real (fetchDisambiguationCandidates).
+      ...(hit.description === "Wikimedia disambiguation page" ? { isDisambiguation: true } : {}),
     })),
     nextOffset: typeof data["search-continue"] === "number" ? data["search-continue"] : null,
   };
@@ -359,15 +365,146 @@ interface WikidataSnak {
 interface WikidataEntity {
   labels?: Record<string, { value?: string }>;
   claims?: Record<string, WikidataSnak[]>;
+  sitelinks?: Record<string, { site?: string; title?: string; url?: string }>;
 }
 
+// The last few entities fetched, so checking a picked item for a
+// disambiguation page (fetchDisambiguationCandidates) and then walking its
+// chain (fetchWikidataChain) is one request, not two. Successes only.
+const ENTITY_CACHE_SIZE = 20;
+const entityCache = new Map<string, WikidataEntity>();
+
 async function fetchEntity(qid: string, signal?: AbortSignal): Promise<WikidataEntity> {
+  const cached = entityCache.get(qid);
+  if (cached) return cached;
   const res = await fetch(`${WIKIDATA_ENTITY_DATA}/${encodeURIComponent(qid)}.json`, { signal });
   if (!res.ok) {
     throw new Error(`Wikidata entity fetch failed for ${qid} (${res.status})`);
   }
   const data = (await res.json()) as { entities: Record<string, WikidataEntity> };
-  return data.entities[qid];
+  // A redirected QID comes back under its target's key.
+  const entity = data.entities[qid] ?? Object.values(data.entities)[0];
+  entityCache.set(qid, entity);
+  if (entityCache.size > ENTITY_CACHE_SIZE) entityCache.delete(entityCache.keys().next().value as string);
+  return entity;
+}
+
+/** Empties fetchEntity's cache (for tests). */
+export function clearWikidataEntityCache(): void {
+  entityCache.clear();
+}
+
+/** P31 value of a "Wikimedia disambiguation page" item. */
+const DISAMBIGUATION_QID = "Q4167410";
+
+/** A disambiguation page's own label, and what its Wikipedia page lists. */
+export interface WikidataDisambiguation {
+  label: string;
+  /** The Wikipedia page the candidates came from. */
+  pageUrl: string;
+  /** Every linked article with a Wikidata item, labelled with its article
+   * title ("Richland Township, Benton County, Indiana") and that wiki's
+   * short description -- most relevant to `label` first. */
+  results: WikidataSearchResult[];
+}
+
+/** Most links a disambiguation page's candidates are read from: about
+ * three requests' worth, far more than any real one lists. */
+const MAX_DISAMBIGUATION_LINKS = 1500;
+
+/** The Wikipedia sitelink to read a disambiguation page's candidates from:
+ * the search language's wiki, then English, then any Wikipedia. */
+function pickWikipediaSitelink(entity: WikidataEntity, languages: string[]): { title: string; host: string } | null {
+  const links = Object.values(entity.sitelinks ?? {}).filter(
+    (l) => l.title && l.url && /^https:\/\/[a-z0-9-]+\.wikipedia\.org\//.test(l.url)
+  );
+  const byCode = (code: string) => links.find((l) => l.site === `${code.replace(/-/g, "_")}wiki`);
+  const codes = [...languages.flatMap(wikidataCodesFor), "en"];
+  const link = codes.map(byCode).find(Boolean) ?? links[0];
+  return link ? { title: link.title!, host: new URL(link.url!).host } : null;
+}
+
+/** When `qid` is a Wikimedia disambiguation page, the places it points
+ * to; null when it's anything else (callers then walk its chain as
+ * usual). The Wikidata item itself holds nothing but a label, so the
+ * candidates come from its Wikipedia page's links (one generator query
+ * also returning each linked article's QID and short description --
+ * `origin=*` makes it CORS-safe, like the Wikidata calls). Links to
+ * missing articles and ones with no Wikidata item are dropped, and so are
+ * redirects, which usually land on a broader article (a township's
+ * redirect to its county) -- except onto another disambiguation page
+ * ("Richland Township (disambiguation)"), which is kept so it can be
+ * opened in turn. Empty `results` (no Wikipedia page, or nothing usable
+ * linked) is still a disambiguation. */
+export async function fetchDisambiguationCandidates(
+  qid: string,
+  languages: string[] = ["en"],
+  signal?: AbortSignal
+): Promise<WikidataDisambiguation | null> {
+  const entity = await fetchEntity(qid, signal);
+  if (!readQidList(entity, "P31").includes(DISAMBIGUATION_QID)) return null;
+  const { label } = readLabels(entity, qid, languages);
+  const sitelink = pickWikipediaSitelink(entity, languages);
+  if (!sitelink) return { label, pageUrl: `https://www.wikidata.org/wiki/${qid}`, results: [] };
+
+  type LinkedPage = {
+    title: string;
+    missing?: boolean;
+    description?: string;
+    pageprops?: { wikibase_item?: string; disambiguation?: string };
+  };
+  const pages = new Map<string, LinkedPage>();
+  const redirectedTo = new Set<string>();
+  let cont: Record<string, string> | undefined;
+  do {
+    const params = new URLSearchParams({
+      action: "query",
+      generator: "links",
+      titles: sitelink.title,
+      gplnamespace: "0",
+      gpllimit: "max",
+      redirects: "1",
+      prop: "pageprops|description",
+      ppprop: "wikibase_item|disambiguation",
+      format: "json",
+      formatversion: "2",
+      origin: "*",
+      ...cont,
+    });
+    const res = await fetch(`https://${sitelink.host}/w/api.php?${params}`, { signal });
+    if (!res.ok) throw new Error(`Wikipedia lookup failed (${res.status})`);
+    const data = (await res.json()) as {
+      query?: { pages?: LinkedPage[]; redirects?: { from: string; to: string }[] };
+      continue?: Record<string, string>;
+    };
+    for (const r of data.query?.redirects ?? []) redirectedTo.add(r.to);
+    // A continued batch can repeat a page with only the props it adds.
+    for (const page of data.query?.pages ?? []) {
+      const prev = pages.get(page.title);
+      pages.set(page.title, prev ? { ...prev, ...page, pageprops: { ...prev.pageprops, ...page.pageprops } } : page);
+    }
+    cont = data.continue;
+  } while (cont && pages.size < MAX_DISAMBIGUATION_LINKS);
+
+  const results: WikidataSearchResult[] = [];
+  for (const page of [...pages.values()].sort((a, b) => a.title.localeCompare(b.title))) {
+    const itemQid = page.pageprops?.wikibase_item;
+    if (page.missing || !itemQid || itemQid === qid) continue;
+    const isDisambiguation = page.pageprops?.disambiguation !== undefined;
+    if (redirectedTo.has(page.title) && !isDisambiguation) continue;
+    results.push({
+      qid: itemQid,
+      label: page.title,
+      description: page.description ?? null,
+      matchedAlias: null,
+      isDisambiguation,
+    });
+  }
+  return {
+    label,
+    pageUrl: `https://${sitelink.host}/wiki/${encodeURIComponent(sitelink.title.replace(/ /g, "_"))}`,
+    results: rankWikidataResults(results, label),
+  };
 }
 
 /** A Gramps language code -> the Wikidata label keys to try for it, best

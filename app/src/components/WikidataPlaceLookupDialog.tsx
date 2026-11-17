@@ -6,15 +6,16 @@
 // (an existing Place already carrying a given QID, via the urls-field
 // query_lang trick verified in the plan) and the actual create/patch step.
 import { useEffect, useRef, useState } from "react";
-import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Checkbox, Group, Loader, Modal, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
 import { getToken } from "../auth/auth";
 import { fetchPage } from "../store/api";
 import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import {
-  fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, isLikelyPlace, rankWikidataResults, searchWikidata, searchWikidataPlaces,
-  type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
+  fetchDisambiguationCandidates, fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, isLikelyPlace, rankWikidataResults,
+  searchWikidata, searchWikidataPlaces,
+  type WikidataDisambiguation, type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
 import { createOverlay, findOverlayTagHandle, isOverlay } from "../store/mapOverlays";
 import { fetchOverlaySource } from "../store/kmlMedia";
@@ -309,6 +310,12 @@ export function WikidataPlaceLookupDialog({
   // results" then pages that search instead.
   const [fullText, setFullText] = useState(false);
   const [phase, setPhase] = useState<Phase>({ name: "search" });
+  // A picked disambiguation page's candidates, shown in place of the
+  // search results until "Back to results" or the query changes -- kept
+  // across a pick's confirm screen so its Back returns to this list.
+  const [disambiguation, setDisambiguation] = useState<WikidataDisambiguation | null>(null);
+  // The hit being checked for a disambiguation page, before its chain walk.
+  const [pickingQid, setPickingQid] = useState<string | null>(null);
   // Default on (see the plan's geoshape follow-up: most people adding a
   // place from Wikidata will want its outline too) -- applies to every
   // newly-created row in the confirmed chain, not reused/"Existing" ones
@@ -327,11 +334,18 @@ export function WikidataPlaceLookupDialog({
     if (opened) {
       setQuery(initialQuery);
       setResults([]);
+      setDisambiguation(null);
+      setPickingQid(null);
       setPhase({ name: "search" });
       setFetchOutlines(true);
       setReplaceName(false);
     }
   }, [opened, initialQuery]);
+
+  // A new search leaves any disambiguation page's list.
+  useEffect(() => {
+    setDisambiguation(null);
+  }, [query]);
 
   // `opened` is a dependency so the initial query (the place's current
   // name) is searched on open: the dialog stays mounted while closed, so
@@ -392,6 +406,26 @@ export function WikidataPlaceLookupDialog({
   }, [opened, query, phase.name]);
 
   async function handlePick(qid: string) {
+    // A disambiguation page has no place to walk up from; list the places
+    // its Wikipedia page points to instead. The entity this fetches is
+    // cached, so the chain walk below doesn't fetch it again.
+    const term = searchedTerm.current;
+    setPickingQid(qid);
+    let candidates: WikidataDisambiguation | null;
+    try {
+      candidates = await fetchDisambiguationCandidates(qid, placeNameLanguages());
+    } catch (err: any) {
+      setPickingQid(null);
+      setPhase({ name: "error", message: err.message ?? String(err) });
+      return;
+    }
+    setPickingQid(null);
+    if (searchedTerm.current !== term) return; // the query changed meanwhile
+    if (candidates) {
+      setShowNonPlaces(false);
+      setDisambiguation(candidates);
+      return;
+    }
     setPhase({ name: "resolving" });
     try {
       const chain = await fetchWikidataChain(qid, undefined, placeNameLanguages()); // leaf-first
@@ -628,10 +662,14 @@ export function WikidataPlaceLookupDialog({
   const canHideNonPlaces = (placeNameLanguages()[0] ?? "en").toLowerCase().startsWith("en");
   // Full-text results are all places already (they have coordinates), even
   // ones whose description doesn't read like it.
-  const shownResults = canHideNonPlaces && !showNonPlaces && !fullText
-    ? results.filter((hit) => isLikelyPlace(hit) !== false)
-    : results;
-  const hiddenCount = results.length - shownResults.length;
+  // A disambiguation page's own candidates are read from Wikipedia links,
+  // so they get the same place filter as a name search.
+  const listed = disambiguation ? disambiguation.results : results;
+  // Disambiguation pages always show: picking one lists its places.
+  const shownResults = canHideNonPlaces && !showNonPlaces && (disambiguation || !fullText)
+    ? listed.filter((hit) => hit.isDisambiguation || isLikelyPlace(hit) !== false)
+    : listed;
+  const hiddenCount = listed.length - shownResults.length;
 
   return (
     <Modal
@@ -653,7 +691,18 @@ export function WikidataPlaceLookupDialog({
               rightSection={searching ? <Loader size="xs" /> : null}
               data-autofocus
             />
-            {fullText && shownResults.length > 0 && (
+            {disambiguation && (
+              <Group justify="space-between" gap="xs" wrap="nowrap" align="flex-start">
+                <Text size="xs" c="dimmed">
+                  {t("\u201c%s\u201d is a disambiguation page. These are the places its Wikipedia page lists.").replace("%s", disambiguation.label)}{" "}
+                  <Anchor href={disambiguation.pageUrl} target="_blank" rel="noopener noreferrer" size="xs">{t("Open page")}</Anchor>
+                </Text>
+                <Button size="compact-xs" variant="subtle" onClick={() => setDisambiguation(null)} style={{ flexShrink: 0 }}>
+                  {t("Back to results")}
+                </Button>
+              </Group>
+            )}
+            {!disambiguation && fullText && shownResults.length > 0 && (
               <Text size="xs" c="dimmed">
                 {t("No place name starts with \u201c%s\u201d, so these are places whose name or description mention those words.").replace("%s", searchedTerm.current)}
               </Text>
@@ -668,10 +717,17 @@ export function WikidataPlaceLookupDialog({
                       justify="flex-start"
                       fullWidth
                       onClick={() => handlePick(hit.qid)}
+                      loading={pickingQid === hit.qid}
+                      disabled={pickingQid != null && pickingQid !== hit.qid}
                       styles={{ label: { whiteSpace: "normal", textAlign: "left" } }}
                     >
                       <Stack gap={0} align="flex-start">
-                        <Text size="sm" fw={500}>{hit.label}</Text>
+                        <Group gap={6} wrap="nowrap">
+                          <Text size="sm" fw={500}>{hit.label}</Text>
+                          {hit.isDisambiguation && (
+                            <Badge size="xs" color="gray" variant="light">{t("Disambiguation")}</Badge>
+                          )}
+                        </Group>
                         {hit.description && <Text size="xs" c="dimmed">{hit.description}</Text>}
                       </Stack>
                     </Button>
@@ -679,12 +735,12 @@ export function WikidataPlaceLookupDialog({
                 </Stack>
               </ScrollArea.Autosize>
             )}
-            {results.length > 0 && (
+            {listed.length > 0 && (
               <Group justify="space-between" gap="xs">
                 <Group gap={4}>
                   <Text size="xs" c="dimmed">
                     {shownResults.length === 0
-                      ? t("No places among %s matches").replace("%s", results.length.toLocaleString())
+                      ? t("No places among %s matches").replace("%s", listed.length.toLocaleString())
                       : t("%s matches, most relevant first").replace("%s", shownResults.length.toLocaleString())}
                   </Text>
                   {hiddenCount > 0 && (
@@ -698,14 +754,17 @@ export function WikidataPlaceLookupDialog({
                     </Button>
                   )}
                 </Group>
-                {nextOffset != null && (
+                {!disambiguation && nextOffset != null && (
                   <Button size="xs" variant="subtle" onClick={handleMoreResults} loading={loadingMore}>
                     {t("More results")}
                   </Button>
                 )}
               </Group>
             )}
-            {results.length === 0 && !searching && query.trim().length >= MIN_SEARCH_LENGTH && (
+            {disambiguation && listed.length === 0 && (
+              <Text size="xs" c="dimmed">{t("Its Wikipedia page links to no other articles with Wikidata items.")}</Text>
+            )}
+            {!disambiguation && results.length === 0 && !searching && query.trim().length >= MIN_SEARCH_LENGTH && (
               <Text size="xs" c="dimmed">{t("No matches")}</Text>
             )}
           </>

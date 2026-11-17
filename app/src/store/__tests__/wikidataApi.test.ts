@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
-import { fetchWikidataChain, fetchWikidataGeoshape, isLikelyPlace, rankWikidataResults, searchWikidata, searchWikidataPlaces } from "../wikidataApi";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  clearWikidataEntityCache, fetchDisambiguationCandidates, fetchWikidataChain, fetchWikidataGeoshape, isLikelyPlace, rankWikidataResults, searchWikidata, searchWikidataPlaces,
+} from "../wikidataApi";
+
+beforeEach(() => clearWikidataEntityCache());
 
 function mockFetchSequence(responses: unknown[]) {
   let call = 0;
@@ -322,5 +326,85 @@ describe("searchWikidataPlaces", () => {
       hit("Q5654405", "Wayne Township", "township in Hamilton County, Indiana"),
     ], "Hamilton Indiana");
     expect(ranked.map((h) => h.qid)).toEqual(["Q2161311", "Q506151", "Q5654405"]);
+  });
+});
+
+describe("fetchDisambiguationCandidates", () => {
+  function disambiguationEntity(sitelinks: Record<string, { title: string; url: string }>) {
+    const e = entity("Q7330670", "Richland Township, Indiana", { instanceOf: ["Q4167410"] });
+    (e.entities.Q7330670 as Record<string, unknown>).sitelinks = Object.fromEntries(
+      Object.entries(sitelinks).map(([site, l]) => [site, { site, ...l }])
+    );
+    return e;
+  }
+
+  it("returns null for anything that isn't a disambiguation page, and the chain walk reuses the fetch", async () => {
+    const fetchMock = mockFetchSequence([entity("Q6346", "Indianapolis", { instanceOf: ["Q1549591"] })]);
+    expect(await fetchDisambiguationCandidates("Q6346")).toBeNull();
+    const chain = await fetchWikidataChain("Q6346");
+    expect(chain[0].label).toBe("Indianapolis");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists the Wikipedia page's linked articles that have items, keeping only redirects onto disambiguation pages", async () => {
+    const fetchMock = mockFetchSequence([
+      disambiguationEntity({
+        enwiki: { title: "Richland Township, Indiana", url: "https://en.wikipedia.org/wiki/Richland_Township,_Indiana" },
+      }),
+      {
+        query: {
+          redirects: [
+            { from: "Richland Township, Warren County, Iowa", to: "Warren County, Iowa" },
+            { from: "Richland Township (disambiguation)", to: "Richland Township" },
+          ],
+          pages: [
+            { title: "Indiana", description: "U.S. state", pageprops: { wikibase_item: "Q1415" } },
+            { title: "Richland Township, Benton County, Indiana", description: "Township in Indiana, United States", pageprops: { wikibase_item: "Q7330656" } },
+            { title: "Richland Township, Yell County, Arkansas", missing: true },
+            { title: "Warren County, Iowa", description: "County in Iowa", pageprops: { wikibase_item: "Q492547" } },
+            { title: "Richland Township", description: "Topic referred to by the same term", pageprops: { wikibase_item: "Q1", disambiguation: "" } },
+            { title: "No Item Page" },
+          ],
+        },
+        continue: { gplcontinue: "next" },
+      },
+      {
+        query: {
+          pages: [{ title: "Richland Township, DeKalb County, Indiana", description: "Township in Indiana, United States", pageprops: { wikibase_item: "Q7330661" } }],
+        },
+      },
+    ]);
+    const result = await fetchDisambiguationCandidates("Q7330670");
+    expect(result?.label).toBe("Richland Township, Indiana");
+    expect(result?.pageUrl).toBe("https://en.wikipedia.org/wiki/Richland_Township%2C_Indiana");
+    const qids = result!.results.map((r) => r.qid);
+    expect(qids.slice(0, 2).sort()).toEqual(["Q7330656", "Q7330661"]);
+    expect(new Set(qids)).toEqual(new Set(["Q7330656", "Q7330661", "Q1415", "Q1"]));
+    expect(result!.results.find((r) => r.qid === "Q1")?.isDisambiguation).toBe(true);
+
+    const pageUrl = new URL(fetchMock.mock.calls[1][0] as string);
+    expect(pageUrl.origin + pageUrl.pathname).toBe("https://en.wikipedia.org/w/api.php");
+    expect(pageUrl.searchParams.get("titles")).toBe("Richland Township, Indiana");
+    expect(pageUrl.searchParams.get("origin")).toBe("*");
+    expect(new URL(fetchMock.mock.calls[2][0] as string).searchParams.get("gplcontinue")).toBe("next");
+  });
+
+  it("reads the search language's Wikipedia first", async () => {
+    const fetchMock = mockFetchSequence([
+      disambiguationEntity({
+        enwiki: { title: "Springfield", url: "https://en.wikipedia.org/wiki/Springfield" },
+        dewiki: { title: "Springfield (Begriffsklärung)", url: "https://de.wikipedia.org/wiki/Springfield_(Begriffskl%C3%A4rung)" },
+      }),
+      { query: { pages: [] } },
+    ]);
+    await fetchDisambiguationCandidates("Q7330670", ["de"]);
+    const url = new URL(fetchMock.mock.calls[1][0] as string);
+    expect(url.host).toBe("de.wikipedia.org");
+    expect(url.searchParams.get("titles")).toBe("Springfield (Begriffsklärung)");
+  });
+
+  it("is still a disambiguation, with no candidates, when there's no Wikipedia page", async () => {
+    mockFetchSequence([disambiguationEntity({})]);
+    expect((await fetchDisambiguationCandidates("Q7330670"))?.results).toEqual([]);
   });
 });
