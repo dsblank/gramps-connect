@@ -41,8 +41,10 @@ describe("RelationshipBetween", () => {
   it("says how the second person is related to the first, and opens the window on the two", () => {
     hook.state = { status: "done", paths: [COUSIN, COUSIN] };
     renderWithProviders(<RelationshipBetween from="H" to="X" revision={0} />);
-    expect(screen.getByText(/Cousin, Xena is Home, Hal's/)).toBeTruthy();
+    const line = screen.getByText(/Cousin, Xena is Home, Hal's/);
     expect(screen.getByText("first cousin").tagName).toBe("B");
+    // One line, cut short if need be, the whole sentence on hover.
+    expect(line.getAttribute("title")).toBe("Cousin, Xena is Home, Hal's first cousin.");
     expect(screen.queryByTestId("chart")).toBeNull();
     fireEvent.click(screen.getByText("Show chart"));
     expect(opened).toEqual([["H", "X"]]);
@@ -64,6 +66,16 @@ describe("RelationshipBetween", () => {
     hook.state = { status: "loading" };
     renderWithProviders(<RelationshipBetween from="H" to="X" revision={0} />);
     expect(screen.getByText("Finding how they're related...")).toBeTruthy();
+  });
+});
+
+describe("the Home person themselves", () => {
+  it("says so, with no search and no Show chart", () => {
+    hook.state = { status: "idle" };
+    renderWithProviders(<RelationshipBetween from="H" to="H" revision={0} />);
+    expect(screen.getByText("This is your Home person.")).toBeTruthy();
+    expect(screen.queryByText("Show chart")).toBeNull();
+    expect(screen.queryByText("Finding how they're related...")).toBeNull();
   });
 });
 

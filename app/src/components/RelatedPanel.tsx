@@ -83,6 +83,10 @@ interface RelatedPanelProps {
    * Defaults to true (today's only behavior: every other mount keeps its
    * own action row). */
   actions?: boolean;
+  /** Shown right under the action row, above the title -- on People, the
+   * sentence saying how the person is related to the Home person
+   * (SelectionDetailView.tsx), so the buttons above it never move. */
+  belowActions?: ReactNode;
 }
 
 type LoadState =
@@ -360,7 +364,7 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
  * selection) -- the only difference between the two mountings is which
  * onNavigate callback AsideSplit wires in. */
 export function RelatedPanel({
-  view, handle, draftStack, revision, onNavigate, onViewGallery, updateDocumentTitle, flow, actions = true,
+  view, handle, draftStack, revision, onNavigate, onViewGallery, updateDocumentTitle, flow, actions = true, belowActions,
 }: RelatedPanelProps) {
   // Summaries and detail fields format dates/places per the tree's display
   // settings; re-render the panel (and its sections) when those change.
@@ -575,6 +579,7 @@ export function RelatedPanel({
           <DiscussButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
       )}
+      {belowActions}
       <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
       {/* Directly under the title, not up in the header slot above: these
           are ways of *viewing* this record rather than actions on it --

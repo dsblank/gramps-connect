@@ -1,25 +1,27 @@
 // @vitest-environment jsdom
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen } from "../../../testUtils/renderWithProviders";
 import type { ViewConfig } from "../../../store/views";
 
-vi.mock("../../RelatedPanel", () => ({ RelatedPanel: ({ handle }: { handle: string }) => <div>{`panel ${handle}`}</div> }));
+vi.mock("../../RelatedPanel", () => ({
+  RelatedPanel: ({ handle, actions, belowActions }: { handle: string; actions: boolean; belowActions?: ReactNode }) => (
+    <div>
+      {actions && <button>{`edit ${handle}`}</button>}
+      {belowActions}
+      <div>{`panel ${handle}`}</div>
+    </div>
+  ),
+}));
 vi.mock("../AddButton", () => ({ AddButton: () => null }));
 vi.mock("../MergeButton", () => ({ MergeButton: () => <button>merge</button> }));
 vi.mock("../BulkDeleteButton", () => ({ BulkDeleteButton: () => null }));
 vi.mock("../BulkTagButton", () => ({ BulkTagButton: () => null }));
-const mounts = vi.hoisted(() => ({ count: 0 }));
-vi.mock("../RelationshipBetween", async () => {
-  const { useEffect } = await import("react");
-  return {
-    RelationshipBetween: ({ from, to, delayMs }: { from: string; to: string; delayMs?: number }) => {
-      useEffect(() => {
-        mounts.count++;
-      }, []);
-      return <div data-testid="between">{`${from}->${to} wait ${delayMs ?? 0}`}</div>;
-    },
-  };
-});
+vi.mock("../RelationshipBetween", () => ({
+  RelationshipBetween: ({ from, to, delayMs }: { from: string; to: string; delayMs?: number }) => (
+    <div data-testid="between">{`${from}->${to} wait ${delayMs ?? 0}`}</div>
+  ),
+}));
 const home = vi.hoisted(() => ({ handle: "H" as string | null }));
 vi.mock("../../../store/homePersonPreference", () => ({ getHomePersonHandle: () => home.handle }));
 
@@ -43,24 +45,25 @@ describe("SelectionDetailView's relationship sentence", () => {
     expect(screen.getByTestId("between").textContent).toBe("A->B wait 0");
   });
 
-  it("is in one place for both: above the two-person buttons, updated in place on a second pick", () => {
+  it("puts the sentence just below the buttons, the panel's own for one, the shared row for two", () => {
     home.handle = "H";
-    mounts.count = 0;
-    const { rerender } = render(PEOPLE, ["A"]);
-    expect(screen.getByTestId("between").textContent).toBe("H->A wait 300");
-    rerender(<SelectionDetailView view={PEOPLE} handles={["A", "B"]} revision={0} onNavigate={() => {}} />);
-    expect(screen.getByTestId("between").textContent).toBe("A->B wait 0");
-    expect(mounts.count).toBe(1);
-    const between = screen.getByTestId("between");
-    const merge = screen.getByText("merge");
-    expect(between.compareDocumentPosition(merge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const follows = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const one = render(PEOPLE, ["A"]);
+    expect(follows(screen.getByText("edit A"), screen.getByTestId("between"))).toBe(true);
+    expect(follows(screen.getByTestId("between"), screen.getByText("panel A"))).toBe(true);
+    one.unmount();
+    render(PEOPLE, ["A", "B"]);
+    expect(follows(screen.getByText("merge"), screen.getByTestId("between"))).toBe(true);
+    expect(follows(screen.getByTestId("between"), screen.getByText("panel A"))).toBe(true);
   });
 
-  it("says nothing for the Home person themselves, with no Home person, or off People", () => {
+  it("keeps the line for the Home person themselves, so nothing moves", () => {
     home.handle = "H";
-    const a = render(PEOPLE, ["H"]);
-    expect(screen.queryByTestId("between")).toBeNull();
-    a.unmount();
+    render(PEOPLE, ["H"]);
+    expect(screen.getByTestId("between").textContent).toBe("H->H wait 300");
+  });
+
+  it("says nothing with no Home person, or off People", () => {
     home.handle = null;
     const b = render(PEOPLE, ["X"]);
     expect(screen.queryByTestId("between")).toBeNull();

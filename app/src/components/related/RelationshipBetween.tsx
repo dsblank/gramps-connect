@@ -11,6 +11,9 @@ import type { RelationshipPath } from "../../store/relationshipPath";
 import { useRelationshipPaths } from "../../store/relationshipPathsApi";
 import { openRelationshipWindow } from "../../store/relationshipWindow";
 
+/** A translated pattern with {0}, {1}... replaced by text. */
+const fill = (pattern: string, parts: string[]) => pattern.replace(/\{(\d+)\}/g, (_, i: string) => parts[Number(i)] ?? "");
+
 /** A translated pattern with {0}, {1}... replaced by nodes. */
 function fillNodes(pattern: string, parts: ReactNode[]): ReactNode {
   return pattern.split(/(\{\d+\})/).map((piece, i) => {
@@ -24,11 +27,20 @@ const labelOf = (path: RelationshipPath) => {
   return end.label || end.relationship_string;
 };
 
+/** The sentence's height when it's one line above a pane: always the
+ * same, whatever it says or whether it's still searching, so nothing below
+ * it moves. */
+const LINE_H = 24;
+
 /** The sentence for two people: `to` described in terms of `from` (for
- * two selected people, the one selected first). `chart="window"` adds Show
- * chart, opening the Relationship window on the two; `chart="always"`
- * draws the chart below and lets it fill the space. `delayMs` waits before
- * searching, so moving through a list only searches where it stops. */
+ * two selected people, the one selected first). `chart="window"`: one
+ * line of fixed height, cut short with the whole sentence on hover, and
+ * Show chart opening the Relationship window on the two -- for above a
+ * pane, padded by the caller. `chart="always"`: the sentence wraps and the
+ * chart is drawn below, filling the space. `delayMs` waits before
+ * searching, so moving through a list only searches where it stops. With
+ * `from` and `to` the same person -- the Home person selected -- it says
+ * so, keeping the line in place. */
 export function RelationshipBetween({
   from, to, revision, chart = "window", delayMs = 0,
 }: {
@@ -42,50 +54,61 @@ export function RelationshipBetween({
   const people = usePeople([from, to]);
   const name = (h: string) => people.get(h)?.name || t("(unknown)");
 
-  let body: ReactNode;
-  if (state.status === "loading" || state.status === "idle") {
-    body = (
-      <Group gap="xs">
-        <Loader size="xs" />
-        <Text size="sm" c="dimmed">
-          {t("Finding how they're related...")}
-        </Text>
-      </Group>
-    );
+  let sentence: ReactNode;
+  let plain: string;
+  let color: string | undefined = "dimmed";
+  let loading = false;
+  const paths = state.status === "done" ? state.paths : [];
+  if (from === to) {
+    plain = t("This is your Home person.");
+    sentence = plain;
+  } else if (state.status === "loading" || state.status === "idle") {
+    loading = true;
+    plain = t("Finding how they're related...");
+    sentence = plain;
   } else if (state.status === "error") {
-    body = (
-      <Text size="sm" c="red">
-        {state.message}
-      </Text>
-    );
-  } else if (state.paths.length === 0) {
-    body = (
-      <Text size="sm" c="dimmed">
-        {fillNodes(t("{0} and {1} aren't related within 15 links."), [name(to), name(from)])}
-      </Text>
-    );
+    color = "red";
+    plain = state.message;
+    sentence = plain;
+  } else if (paths.length === 0) {
+    const pattern = t("{0} and {1} aren't related within 15 links.");
+    plain = fill(pattern, [name(to), name(from)]);
+    sentence = plain;
   } else {
-    body = (
-      <>
-        <Group gap="xs" wrap="wrap">
-          <Text size="sm">{fillNodes(t("{0} is {1}'s {2}."), [name(to), name(from), <b key="l">{labelOf(state.paths[0])}</b>])}</Text>
-          {chart === "window" && (
-            <Anchor component="button" size="sm" onClick={() => openRelationshipWindow(from, to)}>
-              {t("Show chart")}
-            </Anchor>
-          )}
-        </Group>
-        {chart === "always" && (
-          <Box mt="xs">
-            <RelationshipChart paths={state.paths} startLabel={name(from)} interactive />
-          </Box>
+    color = undefined;
+    const pattern = t("{0} is {1}'s {2}.");
+    plain = fill(pattern, [name(to), name(from), labelOf(paths[0])]);
+    sentence = fillNodes(pattern, [name(to), name(from), <b key="l">{labelOf(paths[0])}</b>]);
+  }
+
+  if (chart === "window") {
+    return (
+      <Group gap="xs" wrap="nowrap" h={LINE_H} style={{ flex: "none" }}>
+        {loading && <Loader size="xs" style={{ flex: "none" }} />}
+        <Text size="sm" c={color} truncate="end" title={plain} style={{ flex: 1, minWidth: 0 }}>
+          {sentence}
+        </Text>
+        {paths.length > 0 && (
+          <Anchor component="button" size="sm" style={{ flex: "none" }} onClick={() => openRelationshipWindow(from, to)}>
+            {t("Show chart")}
+          </Anchor>
         )}
-      </>
+      </Group>
     );
   }
   return (
-    <Box px="md" pt="xs" style={chart === "always" ? { height: "100%", overflow: "auto" } : { flex: "none" }}>
-      {body}
+    <Box px="md" pt="xs" style={{ height: "100%", overflow: "auto" }}>
+      <Group gap="xs" wrap="nowrap">
+        {loading && <Loader size="xs" style={{ flex: "none" }} />}
+        <Text size="sm" c={color} style={{ flex: 1, minWidth: 0 }}>
+          {sentence}
+        </Text>
+      </Group>
+      {paths.length > 0 && (
+        <Box mt="xs">
+          <RelationshipChart paths={paths} startLabel={name(from)} interactive />
+        </Box>
+      )}
     </Box>
   );
 }
