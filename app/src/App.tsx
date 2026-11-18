@@ -62,6 +62,7 @@ import { MediaDropOverlay } from "./components/MediaDropOverlay";
 import { PyodidePocPanel } from "./pyodidePoc/PyodidePocPanel";
 import { GrampletWindows } from "./pyodidePoc/GrampletWindows";
 import { ExternalSearchWindow } from "./components/related/ExternalSearchWindow";
+import { RelationshipWindow } from "./components/related/RelationshipWindow";
 import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 import { STORAGE_KEYS } from "./store/storageKeys";
@@ -706,6 +707,9 @@ function AuthenticatedApp() {
       {/* A person's External Search links -- same reason: it stays up
           beside their records while the links open in other tabs. */}
       <ExternalSearchWindow />
+      {/* How two people are related -- same reason: it stays on its pair
+          beside their records while you research them. */}
+      <RelationshipWindow />
       {/* Single shared modal answering every confirmDialog() call across
           the app -- see ConfirmDialogHost.tsx's own doc comment. */}
       <ConfirmDialogHost />

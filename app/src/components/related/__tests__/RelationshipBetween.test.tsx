@@ -18,6 +18,10 @@ vi.mock("../../../pyodidePoc/RelationshipChart", () => ({
     ]),
   RelationshipChart: ({ paths }: { paths: unknown[] }) => <div data-testid="chart">{paths.length} paths</div>,
 }));
+const opened = vi.hoisted(() => [] as [string, string][]);
+vi.mock("../../../store/relationshipWindow", () => ({
+  openRelationshipWindow: (from: string, to: string) => opened.push([from, to]),
+}));
 const home = vi.hoisted(() => ({ handle: null as string | null }));
 vi.mock("../../../store/homePersonPreference", () => ({ getHomePersonHandle: () => home.handle }));
 
@@ -31,21 +35,28 @@ const COUSIN = {
 };
 
 beforeEach(() => {
+  opened.length = 0;
   hook.calls = [];
   home.handle = null;
 });
 
 describe("RelationshipBetween", () => {
-  it("says how the second person is related to the first, with the chart on request", () => {
+  it("says how the second person is related to the first, and opens the window on the two", () => {
     hook.state = { status: "done", paths: [COUSIN, COUSIN] };
     renderWithProviders(<RelationshipBetween from="H" to="X" revision={0} />);
     expect(screen.getByText(/Cousin, Xena is Home, Hal's/)).toBeTruthy();
     expect(screen.getByText("first cousin").tagName).toBe("B");
     expect(screen.queryByTestId("chart")).toBeNull();
     fireEvent.click(screen.getByText("Show chart"));
-    expect(screen.getByTestId("chart").textContent).toBe("2 paths");
-    fireEvent.click(screen.getByText("Hide chart"));
+    expect(opened).toEqual([["H", "X"]]);
     expect(screen.queryByTestId("chart")).toBeNull();
+  });
+
+  it("draws the chart below, with no Show chart, when always open", () => {
+    hook.state = { status: "done", paths: [COUSIN, COUSIN] };
+    renderWithProviders(<RelationshipBetween from="H" to="X" revision={0} chart="always" />);
+    expect(screen.getByTestId("chart").textContent).toBe("2 paths");
+    expect(screen.queryByText("Show chart")).toBeNull();
   });
 
   it("says when they aren't related, and shows a search in progress", () => {
@@ -66,13 +77,13 @@ describe("HomeRelationshipLine", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("names the relationship to the Home person, waiting before it asks, and opens the chart", async () => {
+  it("names the relationship to the Home person, waiting before it asks, and opens the window", () => {
     home.handle = "H";
     hook.state = { status: "done", paths: [COUSIN] };
     renderWithProviders(<HomeRelationshipLine handle="X" revision={4} />);
     expect(hook.calls[0]).toEqual(["H", "X", { revision: 4, delayMs: 300 }]);
     fireEvent.click(screen.getByText("Home person's first cousin"));
-    expect((await screen.findByTestId("chart")).textContent).toBe("1 paths");
+    expect(opened).toEqual([["H", "X"]]);
   });
 
   it("shows nothing for someone not related", () => {

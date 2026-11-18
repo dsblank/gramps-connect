@@ -32,6 +32,7 @@ const DEFS = {
   columnWidths: { key: `${P}columnWidths`, tag: "setting" },
   mapViewport: { key: `${P}mapViewport`, tag: "setting" },
   externalSearchWindowGeometry: { key: `${P}externalSearchWindowGeometry`, tag: "setting" },
+  relationshipWindowGeometry: { key: `${P}relationshipWindowGeometry`, tag: "setting" },
   viewGrampletPanelHeight: { key: `${P}viewGrampletPanelHeight`, tag: "setting" },
   viewGrampletPanelCollapsed: { key: `${P}viewGrampletPanelCollapsed:`, prefix: true, tag: "setting" },
   grampletWindowGeometry: { key: `${P}grampletWindowGeometry:`, prefix: true, tag: "setting" },
