@@ -2,7 +2,7 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen } from "../../testUtils/renderWithProviders";
-import type { RelationshipPath } from "../../store/relationshipPath";
+import type { ChartPath } from "../../store/relationshipPath";
 import { GrampletResultView } from "../GrampletResultView";
 import { layoutRelationshipChart } from "../RelationshipChart";
 
@@ -49,11 +49,13 @@ fetchPage.mockImplementation(async (_view: unknown, _token: string, _after: unkn
 }));
 
 const node = (handle: string, relationship_string = "", gender = 2) => ({ handle, relationship_string, gender });
+/** Someone Gramps has no name for, named from the person before them. */
+const linked = (handle: string, link_label: string, link_from: string, gender = 2) => ({ ...node(handle, "", gender), link_label, link_from });
 
 /** Second cousins once removed would be longer; first cousins once
  * removed through a grandparent couple keeps the test readable:
  * H -> A -> GM (⚭ GF) -> B -> C -> X. */
-const COUSIN: RelationshipPath = {
+const COUSIN: ChartPath = {
   people: [node("H"), node("A", "mother"), node("GM", "grandmother"), node("B", "uncle"), node("C", "first cousin"), node("X", "first cousin once removed")],
   common_ancestors: ["GM", "GF"],
   partner: node("GF", "grandfather", 1),
@@ -91,12 +93,12 @@ describe("layoutRelationshipChart", () => {
 });
 
 describe("in-law layout", () => {
-  it("puts the first person beside their spouse, and labels the rest through her", () => {
+  it("puts the first person beside their spouse, with the server's in-law labels", () => {
     // Lewis ⚭ Luella, whose father is Henry: Henry on top, Luella below
     // him, Lewis beside Luella.
     const { cards, rings } = layoutRelationshipChart(
       {
-        people: [node("L", "", 1), node("W", "wife", 0), node("F", "father", 1)],
+        people: [node("L", "", 1), node("W", "wife", 0), node("F", "father-in-law", 1)],
         common_ancestors: ["F"],
         partner: null,
         via: [{ handle: "W", married_to: "L" }],
@@ -107,7 +109,7 @@ describe("in-law layout", () => {
     expect(at("L").y).toBe(at("W").y);
     expect(at("L").x).toBeLessThan(at("W").x);
     expect(at("F").y).toBeLessThan(at("W").y);
-    expect(at("F").label).toBe("wife's father");
+    expect(at("F").label).toBe("father-in-law");
     expect(at("W").label).toBe("wife");
     expect([at("L").kind, at("W").kind, at("F").kind]).toEqual(["end", "mid", "end"]);
     expect(rings).toHaveLength(1);
@@ -117,7 +119,7 @@ describe("in-law layout", () => {
   it("puts the last person beside their spouse on the right", () => {
     const { cards } = layoutRelationshipChart(
       {
-        people: [node("H"), node("P", "father"), node("B", "brother"), node("BW", "wife")],
+        people: [node("H"), node("P", "father"), node("B", "brother"), linked("BW", "wife", "B")],
         common_ancestors: ["P"],
         partner: null,
         via: [{ handle: "B", married_to: "BW" }],
@@ -132,12 +134,12 @@ describe("in-law layout", () => {
 });
 
 describe("two-marriage layout", () => {
-  it("puts each married-in end beside their spouse, and carries the labels on", () => {
+  it("puts each married-in end beside their spouse, and names the unnamed from the person before", () => {
     // Lewis ⚭ W, whose brother B ⚭ X: W and B under their father P,
     // Lewis left of W, X right of B.
     const { cards, rings } = layoutRelationshipChart(
       {
-        people: [node("L", "", 1), node("W", "wife", 0), node("P", "father", 1), node("B", "brother", 1), node("X", "wife", 0)],
+        people: [node("L", "", 1), node("W", "wife", 0), node("P", "father-in-law", 1), node("B", "brother-in-law", 1), linked("X", "wife", "B", 0)],
         common_ancestors: ["P"],
         partner: null,
         via: [
@@ -153,8 +155,29 @@ describe("two-marriage layout", () => {
     expect(at("L").x).toBeLessThan(at("W").x);
     expect(at("W").x).toBeLessThan(at("B").x);
     expect(at("B").x).toBeLessThan(at("X").x);
-    expect([at("P").label, at("B").label, at("X").label]).toEqual(["wife's father", "wife's brother", "wife's brother's wife"]);
+    expect([at("P").label, at("B").label, at("X").label]).toEqual(["father-in-law", "brother-in-law", "brother-in-law's wife"]);
     expect(rings).toHaveLength(2);
+  });
+});
+
+describe("a path that isn't one family tree", () => {
+  it("is one row of cards, with a ring at each marriage only", () => {
+    // A's brother B ⚭ W, whose brother is WB: a marriage in the middle.
+    const steps = [
+      { ...node("A"), link: null },
+      { ...node("B", "brother", 1), link: "sibling" as const },
+      { ...node("W", "sister-in-law", 0), link: "spouse" as const },
+      { ...linked("WB", "brother", "W", 1), link: "sibling" as const },
+    ];
+    const { cards, rings, lines } = layoutRelationshipChart(
+      { steps, people: steps.map(({ link: _, ...n }) => n), common_ancestors: [], partner: null, via: [] },
+      "Home person"
+    );
+    expect(new Set(cards.map((c) => c.y)).size).toBe(1);
+    expect(cards.map((c) => c.node.handle)).toEqual(["A", "B", "W", "WB"]);
+    expect(lines).toHaveLength(3);
+    expect(rings).toHaveLength(1);
+    expect(cards[3].label).toBe("sister-in-law's brother");
   });
 });
 

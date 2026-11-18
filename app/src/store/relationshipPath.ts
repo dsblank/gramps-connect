@@ -1,88 +1,120 @@
-// The chain of people connecting two people through a common ancestor --
-// what gramps-web-api's /relations/ endpoint can't give (it returns the
-// wording and the common ancestors, never the people in between). Ported
-// from the FastRelationshipGraph addon's relationship_path()/
-// all_relationship_paths() (gramps-project/addons-source#1036): a
-// visited-once ancestor walk from each person, intersected. Two changes
-// from that version: each generation's parents are fetched in one batched
-// request instead of one person and one family at a time, and an ancestor
-// couple is reported as one path with both of them in commonAncestors,
-// not as two near-identical paths (one through each spouse).
+// The chains of people connecting two people, from gramps-web-api's
+// GET /relations/<h1>/<h2>/paths (3.26+): parent, child, sibling and
+// spouse links, shortest first, each person labelled with their
+// relationship to the first person in Gramps' own words. The server does
+// the search (reading only the people near the two ends), so this module
+// only tidies its answer up for the app:
 //
-// Labels are left to the server: each person on a path is described by
-// gramps-web-api's own /relations/<h1>/<node>/all, which runs Gramps' real
-// relationship calculator in the user's language. Pure module with the
-// network calls injected (RelationshipPathDeps), so it runs in the
-// Gramplet worker (pyodideWorker.ts) and in tests alike.
+// - Near-duplicates are dropped. The server links any two children of one
+//   family as siblings, so "my brother" also comes back as "my father's
+//   son" and "my mother's son"; a path through everyone a shorter one goes
+//   through is the same connection with a detour.
+// - Each path also gets the shape RelationshipChart.tsx draws (`people`,
+//   `common_ancestors`, `partner`, `via`): up to a common ancestor (or
+//   ancestor couple) and down, with at most one marriage at each end. A
+//   sibling link becomes the pair's parents, as a family tree shows them.
+// - The server has no name for some people, e.g. past a second marriage.
+//   They get a one-link label from the person before them instead
+//   (`link_label`, e.g. "wife", from `link_from`), which the chart turns
+//   into "brother-in-law's wife" in the user's language.
+//
+// Pure module with the network calls injected (RelationshipPathDeps), so
+// it runs in the Gramplet worker (pyodideWorker.ts) and in tests alike.
 
-export interface PathChildRef {
-  ref: string;
-  frel?: string;
-  mrel?: string;
+export type PathLink = "parent" | "child" | "sibling" | "spouse";
+
+/** One step of a /relations/<h1>/<h2>/paths path. */
+export interface ServerPathStep {
+  handle: string;
+  /** How this person is linked to the one before them; null for the first. */
+  link: PathLink | null;
+  /** Relationship to the path's first person; null when Gramps has no name
+   * for it. */
+  relationship_string: string | null;
+}
+
+export interface ServerPath {
+  steps: ServerPathStep[];
 }
 
 export interface PathFamily {
+  handle?: string;
   father_handle?: string | null;
   mother_handle?: string | null;
-  child_ref_list?: PathChildRef[];
 }
 
 /** The fields this module reads off GET /api/people/?handles=...
- * &extend=primary_parent_family: `family_list` (families this person is a
- * parent in -- only read for the two endpoints, to spot a spouse) and the
- * main parent family Gramps' own calculator follows. */
+ * &extend=parent_family_list. */
 export interface PathPerson {
   handle: string;
   gender?: number;
-  family_list?: string[];
-  extended?: { primary_parent_family?: PathFamily | null };
+  parent_family_list?: string[];
+  extended?: { parent_families?: PathFamily[] };
 }
 
-/** One entry of /api/relations/<h1>/<h2>/all. */
-export interface ServerRelationship {
-  relationship_string?: string;
-  common_ancestors?: string[];
+export interface PathSearchOptions {
+  /** Most links in a path (the server allows at most MAX_PATH_DEPTH). */
+  depth: number;
+  /** Most paths to return. */
+  max: number;
+  /** Only paths up to a common ancestor and down again. */
+  bloodOnly?: boolean;
 }
 
 export interface RelationshipPathDeps {
+  fetchPaths(handle1: string, handle2: string, options: PathSearchOptions): Promise<ServerPath[]>;
   /** Every person named that exists; missing handles are just left out. */
   fetchPeople(handles: string[]): Promise<PathPerson[]>;
-  fetchRelationships(handle1: string, handle2: string): Promise<ServerRelationship[]>;
-  /** A person's gender and everyone they have a family with as a parent --
-   * for in-law paths; without it, only blood relatives and spouses are
-   * found. */
-  fetchSpouses?(handle: string): Promise<{ gender: number; spouses: string[] }>;
 }
+
+/** gramps-web-api's MAX_DEPTH for /paths. */
+export const MAX_PATH_DEPTH = 15;
+/** gramps-web-api's own cap on /paths' `max`. */
+const SERVER_MAX_PATHS = 50;
 
 export interface PathNode {
   handle: string;
   /** This person's relationship to the path's first person ("" for that
-   * person themselves). */
+   * person themselves, and when Gramps has no name for it). */
   relationship_string: string;
   /** Gramps' Person.gender: 0 female, 1 male, 2 unknown, 3 other. */
   gender: number;
+  /** Only when relationship_string is "": this person's relationship to
+   * `link_from` ("wife"), to be read after that person's own label --
+   * "brother-in-law's wife". */
+  link_label?: string;
+  link_from?: string;
+}
+
+export interface PathStep extends PathNode {
+  /** How this person is linked to the one before them; null for the first. */
+  link: PathLink | null;
 }
 
 export interface RelationshipPath {
-  /** From the first person to the second, inclusive, up through
-   * commonAncestors[0] and back down. */
+  /** The chain as found, from the first person to the second. */
+  steps: PathStep[];
+  /** The chart's version of it: from the first person to the second, up
+   * through common_ancestors[0] and back down, plus whoever married in at
+   * either end (see `via`). A path that doesn't have that shape (e.g. two
+   * marriage in the middle) is just the steps, with no common_ancestors. */
   people: PathNode[];
   /** The ancestor the path goes through, then their spouse when both are
-   * common ancestors through the same family. Empty for spouses. */
+   * common ancestors through the same family. Empty for spouses, and for
+   * a path the chart can't draw as one family tree. */
   common_ancestors: string[];
   /** That spouse (common_ancestors[1]), labelled like the people on the
    * path -- they aren't one of them, but a chart draws them beside
    * common_ancestors[0]. Null when there's a single common ancestor. */
   partner: PathNode | null;
   /** For an in-law path, the marriages it goes through, in path order --
-   * at most one at each end. Empty for a blood relative or a spouse. Each
-   * person after a marriage's `handle` is labelled relative to that
-   * person, not the first one: Lewis, then Luella "wife", then Henry
-   * "father" reads "wife's father"; a second marriage further on carries
-   * on from there ("wife's brother's wife"). `partner` is labelled like
-   * the person it stands beside. */
+   * at most one at each end. Empty for every other path. */
   via: InLawMarriage[];
 }
+
+/** What relationship_chart() draws: a path from getRelationshipPaths(),
+ * or one a Gramplet built by hand, which may leave out `steps`. */
+export type ChartPath = Omit<RelationshipPath, "steps"> & { steps?: PathStep[] };
 
 /** One marriage an in-law path goes through: `handle` is the one on the
  * blood-relationship side, `married_to` the end of the path married to
@@ -92,338 +124,237 @@ export interface InLawMarriage {
   married_to: string;
 }
 
-interface AncestorMap {
-  dist: Map<string, number>;
-  /** Path code from the start person, one character per generation:
-   * f/m a birth father/mother, F/M any other relation (adopted, step...). */
-  path: Map<string, string>;
-  prev: Map<string, string | null>;
-  /** `${child}\n${parent}` -> that family's other parent. */
-  partner: Map<string, string>;
-}
-
-const partnerKey = (child: string, parent: string) => `${child}\n${parent}`;
-
-function newAncestorMap(handle: string): AncestorMap {
-  return {
-    dist: new Map([[handle, 0]]),
-    path: new Map([[handle, ""]]),
-    prev: new Map([[handle, null]]),
-    partner: new Map(),
-  };
-}
-
-/** Parents of one already-fetched person, in the order the Python version
- * visits them (father, then mother), with their path codes. Records the
- * couple in `map.partner` as a side effect. */
-function parentsOf(map: AncestorMap, person: PathPerson | undefined): [string, string][] {
-  const family = person?.extended?.primary_parent_family;
-  if (!person || !family) return [];
-  const childRef = family.child_ref_list?.find((cr) => cr.ref === person.handle);
-  if (!childRef) return [];
-  const fh = family.father_handle || null;
-  const mh = family.mother_handle || null;
-  if (fh && mh) {
-    map.partner.set(partnerKey(person.handle, fh), mh);
-    map.partner.set(partnerKey(person.handle, mh), fh);
+/** Whether `longer` is `shorter` with some of its links taken the long way
+ * round, through one more person each: father -> brother for the sibling
+ * link to that brother, or her mother -> his husband for the link to her
+ * father. Every person of `shorter` is on it, in order, with at most one
+ * other person between two neighbours. A longer path that merely shares
+ * its ends (a cousin who is also a husband) isn't one. */
+function isDetourOf(longer: string[], shorter: string[]): boolean {
+  if (longer.length <= shorter.length) return false;
+  let i = 0;
+  for (let j = 0; j < shorter.length; j++) {
+    const at = longer.indexOf(shorter[j], i);
+    if (at < 0 || (j > 0 && at - i > 1) || (j === 0 && at !== 0)) return false;
+    i = at + 1;
   }
-  const out: [string, string][] = [];
-  if (fh) out.push([fh, childRef.frel === "Birth" ? "f" : "F"]);
-  if (mh) out.push([mh, childRef.mrel === "Birth" ? "m" : "M"]);
-  return out;
+  return i === longer.length;
 }
 
-function advance(map: AncestorMap, frontier: string[], depth: number, people: Map<string, PathPerson>): string[] {
-  const next: string[] = [];
-  for (const h of frontier) {
-    for (const [parent, code] of parentsOf(map, people.get(h))) {
-      if (map.dist.has(parent)) continue;
-      map.dist.set(parent, depth);
-      map.path.set(parent, map.path.get(h)! + code);
-      map.prev.set(parent, h);
-      next.push(parent);
-    }
-  }
-  return next;
-}
-
-const isBirthPath = (path: string) => !/[FMA]/.test(path);
-const CODE_RANK: Record<string, number> = { m: 0, f: 1, M: 2, F: 3 };
-
-/** Nearest total distance first; then a direct relation, then birth-only
- * lines, then mother-line before father-line; finally the handle, so ties
- * always break the same way. */
-function compareAncestors(a: AncestorMap, b: AncestorMap, x: string, y: string): number {
-  const key = (h: string): (number | string)[] => {
-    const p1 = a.path.get(h)!;
-    const p2 = b.path.get(h)!;
-    const d1 = a.dist.get(h)!;
-    const d2 = b.dist.get(h)!;
-    return [
-      d1 + d2,
-      d1 === 0 || d2 === 0 ? 0 : 1,
-      isBirthPath(p1) && isBirthPath(p2) ? 0 : 1,
-      p1 ? (CODE_RANK[p1[p1.length - 1]] ?? -1) : -1,
-      p2 ? (CODE_RANK[p2[p2.length - 1]] ?? -1) : -1,
-      h,
-    ];
-  };
-  const kx = key(x);
-  const ky = key(y);
-  for (let i = 0; i < kx.length; i++) {
-    if (kx[i] < ky[i]) return -1;
-    if (kx[i] > ky[i]) return 1;
-  }
-  return 0;
-}
-
-/** Drops a common ancestor that sits behind a nearer one on both people's
- * routes to it -- the same ancestor reached again further up one line, not
- * a separate relationship. */
-function nearestCommonAncestors(common: string[], a: AncestorMap, b: AncestorMap): string[] {
-  return common.filter((far) => {
-    const p1 = a.path.get(far)!;
-    const p2 = b.path.get(far)!;
-    return !common.some((near) => {
-      if (near === far) return false;
-      const q1 = a.path.get(near)!;
-      const q2 = b.path.get(near)!;
-      return q1.length < p1.length && q2.length < p2.length && p1.startsWith(q1) && p2.startsWith(q2);
-    });
+/** Drops each path that is a shorter one's detour (see isDetourOf) --
+ * including a detour of a detour, e.g. through grandfather -> his wife ->
+ * her son for the sibling link to that son. Paths come shortest first. */
+export function dropDetours(paths: ServerPath[]): ServerPath[] {
+  const seen: string[][] = [];
+  return paths.filter((path) => {
+    const handles = path.steps.map((s) => s.handle);
+    const detour = seen.some((shorter) => isDetourOf(handles, shorter));
+    seen.push(handles);
+    return !detour;
   });
 }
 
-/** `anc`'s spouse when that spouse is also a common ancestor reached from
- * both people through the very same family (the ancestor couple). */
-function partnerInCommon(anc: string, a: AncestorMap, b: AncestorMap, common: Set<string>): string | null {
-  const x1 = a.prev.get(anc);
-  const x2 = b.prev.get(anc);
-  if (!x1 || !x2) return null;
-  const pa = a.partner.get(partnerKey(x1, anc));
-  const pb = b.partner.get(partnerKey(x2, anc));
-  if (!pa || pa !== pb || !common.has(pa)) return null;
-  if (a.prev.get(pa) !== x1 || b.prev.get(pa) !== x2) return null;
-  return pa;
+/** The family both people are children of, if any -- one with at least one
+ * parent, so it has someone to draw on top. */
+function sharedParentFamily(a: PathPerson | undefined, b: PathPerson | undefined): PathFamily | null {
+  if (!a || !b) return null;
+  const theirs = new Set(b.parent_family_list ?? []);
+  return (
+    (a.extended?.parent_families ?? []).find(
+      (f) => f.handle && theirs.has(f.handle) && (f.father_handle || f.mother_handle),
+    ) ?? null
+  );
 }
 
-/** [start, ..., anc] by following `prev`. */
-function chainTo(map: AncestorMap, anc: string): string[] {
-  const chain = [anc];
-  for (let h = map.prev.get(anc); h; h = map.prev.get(h)) chain.push(h);
-  return chain.reverse();
+/** A parent family of `child` that `parent` is a parent in. */
+function familyWithParent(child: PathPerson | undefined, parent: string): PathFamily | null {
+  return (child?.extended?.parent_families ?? []).find((f) => f.father_handle === parent || f.mother_handle === parent) ?? null;
 }
 
-interface FoundPath {
-  handles: string[];
-  /** Gender of every person in `handles` and `commonAncestors`. */
-  genders: Map<string, number>;
+const otherParent = (family: PathFamily | null, parent: string): string | null => {
+  if (!family) return null;
+  const other = family.father_handle === parent ? family.mother_handle : family.father_handle;
+  return other && other !== parent ? other : null;
+};
+
+/** What the chart needs, in handles: the blood part (with a sibling link
+ * replaced by the pair's parent), the common ancestors, and the marriages
+ * at the ends. Null for a path that isn't one family tree's worth: a
+ * marriage in the middle, or going up again after coming down. */
+interface ChartShape {
+  people: string[];
   commonAncestors: string[];
-  /** Index in `handles` of commonAncestors[0]. */
-  top: number;
+  via: InLawMarriage[];
 }
 
-/** The chains of people (handles only), nearest first. `depth` counts
- * generations the way Gramps' calculator and /relations/'s own `depth`
- * do: the person themselves plus depth - 1 generations of ancestors. */
-export async function findRelationshipChains(
-  handle1: string,
-  handle2: string,
-  deps: Pick<RelationshipPathDeps, "fetchPeople">,
-  { depth = 15, maxPaths }: { depth?: number; maxPaths?: number } = {},
-): Promise<FoundPath[]> {
-  if (handle1 === handle2) return [{ handles: [handle1], genders: new Map(), commonAncestors: [], top: 0 }];
-  const people = new Map<string, PathPerson>();
-  const load = async (handles: string[]) => {
-    const missing = [...new Set(handles)].filter((h) => !people.has(h));
-    if (missing.length === 0) return;
-    for (const p of await deps.fetchPeople(missing)) people.set(p.handle, p);
-  };
-  await load([handle1, handle2]);
-  const p1 = people.get(handle1);
-  const p2 = people.get(handle2);
-  if (!p1 || !p2) return [];
+function chartShape(steps: ServerPathStep[], people: Map<string, PathPerson>): ChartShape | null {
+  const n = steps.length;
+  const handles = steps.map((s) => s.handle);
+  if (n <= 2 && (n === 1 || steps[1].link === "spouse")) {
+    // A lone person, or a spouse: drawn side by side.
+    return { people: handles, commonAncestors: [], via: [] };
+  }
+  let lo = 0;
+  let hi = n - 1;
+  const via: InLawMarriage[] = [];
+  if (steps[1].link === "spouse") {
+    via.push({ handle: handles[1], married_to: handles[0] });
+    lo = 1;
+  }
+  if (steps[n - 1].link === "spouse") {
+    via.push({ handle: handles[n - 2], married_to: handles[n - 1] });
+    hi = n - 2;
+  }
+  // A spouse's spouse isn't an in-law.
+  if (hi <= lo) return null;
 
-  const found: FoundPath[] = [];
-  // Everyone a path can name was loaded by the walk itself.
-  const gendersOf = (handles: string[]) => new Map(handles.map((h) => [h, people.get(h)?.gender ?? 2]));
-  // Gramps' own calculator reports a spouse before any blood relation.
-  const shared = new Set(p1.family_list ?? []);
-  if ((p2.family_list ?? []).some((f) => shared.has(f))) {
-    found.push({ handles: [handle1, handle2], genders: gendersOf([handle1, handle2]), commonAncestors: [], top: 0 });
-    if (maxPaths === 1) return found;
+  const blood = handles.slice(lo, hi + 1);
+  const links = steps.slice(lo + 1, hi + 1).map((s) => s.link);
+  // Up, at most one step across, then down.
+  let phase = 0;
+  for (const link of links) {
+    const next = link === "parent" ? 0 : link === "sibling" ? 1 : link === "child" ? 2 : 3;
+    if (next < phase || next === 3) return null;
+    phase = next === 1 ? 2 : next;
   }
 
-  // Both walks advance one generation per round, so after round `gen` each
-  // map is complete to that depth and any common ancestor not found yet is
-  // at a total distance of at least gen + 1. One request per round covers
-  // both sides (and an ancestor they share is only fetched once).
-  const a = newAncestorMap(handle1);
-  const b = newAncestorMap(handle2);
-  let frontierA = [handle1];
-  let frontierB = [handle2];
-  for (let gen = 1; gen < depth && (frontierA.length || frontierB.length); gen++) {
-    await load([...frontierA, ...frontierB]);
-    frontierA = advance(a, frontierA, gen, people);
-    frontierB = advance(b, frontierB, gen, people);
-    if (maxPaths === 1) {
-      // Only the nearest is wanted: stop once nothing still unseen could
-      // beat (or tie with) it.
-      let best = Infinity;
-      for (const [h, d] of a.dist) if (b.dist.has(h)) best = Math.min(best, d + b.dist.get(h)!);
-      if (best <= gen) break;
+  const sibling = links.indexOf("sibling");
+  let top: number;
+  let ancestor: string;
+  let partner: string | null = null;
+  if (sibling >= 0) {
+    // blood[sibling] and blood[sibling + 1] are siblings: put a parent of
+    // theirs (and the other one, as the couple) between them.
+    const family = sharedParentFamily(people.get(blood[sibling]), people.get(blood[sibling + 1]));
+    if (!family) return null;
+    ancestor = (family.father_handle || family.mother_handle)!;
+    partner = otherParent(family, ancestor);
+    blood.splice(sibling + 1, 0, ancestor);
+    top = sibling + 1;
+  } else {
+    top = links.lastIndexOf("parent") + 1;
+    ancestor = blood[top];
+    if (top > 0 && top < blood.length - 1) {
+      // The ancestor's spouse is a common ancestor too when both people
+      // come down through the same family.
+      const left = familyWithParent(people.get(blood[top - 1]), ancestor);
+      const right = familyWithParent(people.get(blood[top + 1]), ancestor);
+      if (left?.handle && left.handle === right?.handle) partner = otherParent(left, ancestor);
     }
   }
-
-  const commonAll = [...a.dist.keys()].filter((h) => b.dist.has(h));
-  if (commonAll.length === 0) return found;
-  const commonSet = new Set(commonAll);
-  const ancestors = (maxPaths === 1 ? commonAll : nearestCommonAncestors(commonAll, a, b)).sort((x, y) =>
-    compareAncestors(a, b, x, y),
-  );
-
-  const covered = new Set<string>();
-  for (const anc of ancestors) {
-    if (maxPaths !== undefined && found.length >= maxPaths) break;
-    if (covered.has(anc)) continue;
-    covered.add(anc);
-    const partner = partnerInCommon(anc, a, b, commonSet);
-    if (partner) covered.add(partner);
-    const up = chainTo(a, anc); // [handle1, ..., anc]
-    const down = chainTo(b, anc).reverse().slice(1); // [..., handle2], below anc
-    const commonAncestors = partner ? [anc, partner] : [anc];
-    found.push({
-      handles: [...up, ...down],
-      genders: gendersOf([...up, ...down, ...commonAncestors]),
-      commonAncestors,
-      top: up.length - 1,
-    });
-  }
-  return found;
+  return {
+    people: [...handles.slice(0, lo), ...blood, ...handles.slice(hi + 1)],
+    commonAncestors: partner ? [ancestor, partner] : [ancestor],
+    via,
+  };
 }
 
-/** The server's wording for `node` relative to `handle1`, picked from
- * /all's entries: the one going through `via` (this path's own common
- * ancestor -- `node` itself for someone on handle1's own line), so a
- * cousin who is also a spouse reads "first cousin" on the blood path and
- * "wife" on the spouse one. */
-function pickLabel(entries: ServerRelationship[], via: string | null): string {
-  const usable = entries.filter((e) => e.relationship_string);
-  const match = via
-    ? usable.find((e) => e.common_ancestors?.includes(via))
-    : usable.find((e) => !e.common_ancestors?.length);
-  return (match ?? usable[0])?.relationship_string ?? "";
-}
-
-/** Every path between two people, nearest first, each person labelled with
- * their relationship to `handle1` in Gramps' own words. `maxPaths: 1` is
- * much cheaper on a deep tree: the walk stops as soon as the nearest
- * common ancestor is certain.
- *
- * Only when there's no blood relationship and they aren't spouses (the
- * order Gramps itself goes in), in-law paths: through a marriage at
- * either end or both -- see RelationshipPath.via. /relations/ has no
- * in-law answers of its own, so each label is still Gramps' wording, just
- * relative to the spouse. */
+/** Every path between two people, shortest first, each person labelled
+ * with their relationship to `handle1`. `maxPaths` undefined means as
+ * many as the server gives. */
 export async function getRelationshipPaths(
   handle1: string,
   handle2: string,
   deps: RelationshipPathDeps,
-  options: { depth?: number; maxPaths?: number } = {},
+  options: { depth?: number; maxPaths?: number; bloodOnly?: boolean } = {},
 ): Promise<RelationshipPath[]> {
-  const direct = await bloodPaths(handle1, handle2, deps, options);
-  if (direct.length > 0 || !deps.fetchSpouses || handle1 === handle2) return direct;
+  const depth = Math.max(1, Math.min(options.depth ?? MAX_PATH_DEPTH, MAX_PATH_DEPTH));
+  const { maxPaths, bloodOnly = false } = options;
+  // Room for the detours dropped below: a sibling comes back two more
+  // times, once through each parent.
+  const max = maxPaths === undefined ? SERVER_MAX_PATHS : Math.min(SERVER_MAX_PATHS, maxPaths * 3 + 2);
+  const found = await deps.fetchPaths(handle1, handle2, { depth, max, bloodOnly });
+  const paths = dropDetours(found.filter((p) => p.steps.length > 0)).slice(0, maxPaths);
+  if (paths.length === 0) return [];
 
-  const [first, second] = await Promise.all([deps.fetchSpouses(handle1), deps.fetchSpouses(handle2)]);
-  const spouseLabel = async (h1: string, h2: string) => pickLabel(await deps.fetchRelationships(h1, h2), null);
-  // Gramps Desktop's All Relations quick view, the one place Gramps
-  // looks for in-laws: each person and their spouses, and a blood
-  // relationship between any pairing but the two people themselves -- so
-  // at most one marriage at each end ("wife's brother's wife"). Someone on
-  // both sides (both married the same person) is left out, as there.
-  const side1 = [handle1, ...first.spouses];
-  const side2 = [handle2, ...second.spouses].filter((h) => !side1.includes(h));
-  const pairs = side1.flatMap((a) => side2.map((b) => [a, b] as const)).filter(([a, b]) => a !== handle1 || b !== handle2);
-  const found = (
-    await Promise.all(
-      pairs.map(async ([a, b]) => {
-        // Blood only, like Gramps: a spouse of a spouse isn't an in-law.
-        const subs = (await bloodPaths(a, b, deps, options)).filter((sub) => sub.common_ancestors.length > 0);
-        if (subs.length === 0) return [];
-        const [aLabel, bLabel] = await Promise.all([
-          a === handle1 ? "" : spouseLabel(handle1, a),
-          b === handle2 ? "" : spouseLabel(b, handle2),
-        ]);
-        return subs.map((sub): RelationshipPath => {
-          const people = [...sub.people];
-          const via: InLawMarriage[] = [];
-          if (a !== handle1) {
-            // [handle1, spouse a, ...]: a's relatives are labelled relative to a.
-            people[0] = { ...people[0], relationship_string: aLabel };
-            people.unshift({ handle: handle1, relationship_string: "", gender: first.gender });
-            via.push({ handle: a, married_to: handle1 });
-          }
-          if (b !== handle2) {
-            // [..., spouse b, handle2]: handle2 is labelled relative to b.
-            people.push({ handle: handle2, relationship_string: bLabel, gender: second.gender });
-            via.push({ handle: b, married_to: handle2 });
-          }
-          return { ...sub, people, via };
-        });
-      }),
-    )
-  ).flat();
-  found.sort((x, y) => x.people.length - y.people.length);
-  // A detour isn't another relationship: wife -> her mother -> his
-  // husband reaches the same father-in-law as wife -> her father. Drop a
-  // path that goes through everyone a shorter one does (Gramps' All
-  // Relations hides these too, as repeats of the same wording).
-  const handleSets = found.map((path) => new Set(path.people.map((n) => n.handle)));
-  const distinct = found.filter((path, i) =>
-    handleSets.slice(0, i).every((shorter, j) => found[j].people.length === path.people.length || ![...shorter].every((h) => handleSets[i].has(h))),
-  );
-  return options.maxPaths !== undefined ? distinct.slice(0, options.maxPaths) : distinct;
-}
+  // Each person's label, from whichever path names them -- for a parent
+  // put in for a sibling link, the detour through that parent did.
+  const labels = new Map<string, string>();
+  for (const path of found)
+    for (const step of path.steps)
+      if (step.relationship_string && !labels.has(step.handle)) labels.set(step.handle, step.relationship_string);
 
-async function bloodPaths(
-  handle1: string,
-  handle2: string,
-  deps: RelationshipPathDeps,
-  options: { depth?: number; maxPaths?: number },
-): Promise<RelationshipPath[]> {
-  const chains = await findRelationshipChains(handle1, handle2, deps, options);
-  const labelled = new Map<string, Promise<ServerRelationship[]>>();
-  const entriesFor = (h: string) => {
-    let p = labelled.get(h);
-    if (!p) {
-      p = deps.fetchRelationships(handle1, h);
-      labelled.set(h, p);
-    }
-    return p;
+  const people = new Map<string, PathPerson>();
+  const load = async (handles: string[]) => {
+    const missing = [...new Set(handles)].filter((h) => !people.has(h));
+    if (missing.length > 0) for (const p of await deps.fetchPeople(missing)) people.set(p.handle, p);
   };
+  await load(paths.flatMap((p) => p.steps.map((s) => s.handle)));
+  const shapes = paths.map((p) => chartShape(p.steps, people));
+  // Parents put in for a sibling link, and ancestor couples' spouses.
+  await load(shapes.flatMap((s) => (s ? [...s.people, ...s.commonAncestors] : [])));
+
+  // An ancestor put in for a sibling link that no path the server gave
+  // names: ask for a path to them, no longer than where they stand on this
+  // one -- normally the same way up.
+  const ancestorLabels = new Map<string, Promise<string | null>>();
+  const ancestorLabel = (handle: string, distance: number) => {
+    const known = labels.get(handle);
+    if (known) return Promise.resolve(known);
+    let label = ancestorLabels.get(handle);
+    if (!label) {
+      label = deps
+        .fetchPaths(handle1, handle, { depth: Math.max(1, Math.min(distance, MAX_PATH_DEPTH)), max: 1 })
+        .then((r) => {
+          const steps = r[0]?.steps ?? [];
+          return steps[steps.length - 1]?.relationship_string ?? null;
+        })
+        .catch(() => null);
+      ancestorLabels.set(handle, label);
+    }
+    return label;
+  };
+
+  // One-link labels for anyone the server couldn't name, one request per
+  // distinct pair -- a depth-1 search, so cheap.
+  const linkLabels = new Map<string, Promise<string>>();
+  const linkLabel = (from: string, to: string) => {
+    const key = `${from}\n${to}`;
+    let label = linkLabels.get(key);
+    if (!label) {
+      label = deps
+        .fetchPaths(from, to, { depth: 1, max: 1 })
+        .then((r) => r[0]?.steps[1]?.relationship_string ?? "")
+        .catch(() => "");
+      linkLabels.set(key, label);
+    }
+    return label;
+  };
+  const makeNode = async (handle: string, label: string | null | undefined, from: string | null): Promise<PathNode> => {
+    const node: PathNode = { handle, relationship_string: label ?? "", gender: people.get(handle)?.gender ?? 2 };
+    if (!node.relationship_string && from) {
+      const word = await linkLabel(from, handle);
+      if (word) Object.assign(node, { link_label: word, link_from: from });
+    }
+    return node;
+  };
+
   return Promise.all(
-    chains.map(async (chain) => {
-      const gender = (h: string) => chain.genders.get(h) ?? 2;
-      // An ancestor's own relationship goes through themselves -- which
-      // covers the couple's other spouse too.
-      const partnerHandle = chain.commonAncestors[1];
-      return {
-        via: [],
-        common_ancestors: chain.commonAncestors,
-        partner: partnerHandle
-          ? {
-              handle: partnerHandle,
-              relationship_string: pickLabel(await entriesFor(partnerHandle), partnerHandle),
-              gender: gender(partnerHandle),
-            }
-          : null,
-        people: await Promise.all(
-          chain.handles.map(async (h, i) => {
-            if (i === 0) return { handle: h, relationship_string: "", gender: gender(h) };
-            const via = chain.commonAncestors.length === 0 ? null : i <= chain.top ? h : chain.commonAncestors[0];
-            return { handle: h, relationship_string: pickLabel(await entriesFor(h), via), gender: gender(h) };
-          }),
+    paths.map(async (path, i): Promise<RelationshipPath> => {
+      const steps = await Promise.all(
+        path.steps.map(async (s, j) => ({
+          ...(await makeNode(s.handle, j === 0 ? "" : s.relationship_string, j === 0 ? null : path.steps[j - 1].handle)),
+          link: j === 0 ? null : s.link,
+        })),
+      );
+      const shape = shapes[i];
+      if (!shape) {
+        return { steps, people: steps.map(({ link: _, ...node }) => node), common_ancestors: [], partner: null, via: [] };
+      }
+      const byHandle = new Map(steps.map(({ link: _, ...node }) => [node.handle, node]));
+      const chartPeople = await Promise.all(
+        shape.people.map(
+          async (h, j) => byHandle.get(h) ?? makeNode(h, await ancestorLabel(h, j), j > 0 ? shape.people[j - 1] : null),
         ),
-      };
+      );
+      const [ancestor, partnerHandle] = shape.commonAncestors;
+      // The partner is labelled from the person below the couple, as the
+      // ancestor beside them would be.
+      const below = shape.people[shape.people.indexOf(ancestor) - 1] ?? shape.people[shape.people.indexOf(ancestor) + 1];
+      const partner = partnerHandle
+        ? await makeNode(partnerHandle, await ancestorLabel(partnerHandle, shape.people.indexOf(ancestor)), below ?? null)
+        : null;
+      return { steps, people: chartPeople, common_ancestors: shape.commonAncestors, partner, via: shape.via };
     }),
   );
 }

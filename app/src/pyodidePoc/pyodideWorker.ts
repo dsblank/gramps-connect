@@ -12,7 +12,7 @@ import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
 import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, TransactionItem, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 import { apiFetch } from "../store/apiFetch";
-import { getRelationshipPaths, type PathPerson, type ServerRelationship } from "../store/relationshipPath";
+import { getRelationshipPaths, type PathPerson, type ServerPath } from "../store/relationshipPath";
 import { supportsOrderByStrings, withOrderByFallback } from "../store/serverCapabilities";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
@@ -401,22 +401,29 @@ const bridge = {
     if (!res.ok) throw await bridgeError("get_relationships", res);
     return res.text();
   },
-  // db.get_relationship_paths()'s bridge half -- the walk itself is
-  // store/relationshipPath.ts (one ?handles= request per generation, both
-  // people at once); each person on a path is then labelled by the same
-  // /relations/.../all endpoint relationships() above calls. `maxPaths` 0
-  // means every path.
-  async relationshipPaths(handle1: string, handle2: string, depth: number, maxPaths: number): Promise<string> {
+  // db.get_relationship_paths()'s bridge half -- gramps-web-api's
+  // /relations/<h1>/<h2>/paths does the search; store/relationshipPath.ts
+  // drops the detours and adds the chart's shape (one ?handles= request
+  // for genders and parent families). `maxPaths` 0 means as many as the
+  // server gives.
+  async relationshipPaths(handle1: string, handle2: string, depth: number, maxPaths: number, bloodOnly: boolean): Promise<string> {
     const paths = await getRelationshipPaths(
       handle1,
       handle2,
       {
+        async fetchPaths(h1, h2, { depth, max, bloodOnly }) {
+          const path = `/api/relations/${encodeURIComponent(h1)}/${encodeURIComponent(h2)}/paths`;
+          const query = `depth=${depth}&max=${max}${bloodOnly ? "&blood_only=true" : ""}`;
+          const res = await authFetch("get_relationship_paths", `${API_BASE}${path}?${query}`);
+          if (!res.ok) throw await bridgeError("get_relationship_paths", res);
+          return (await res.json()) as ServerPath[];
+        },
         async fetchPeople(handles) {
           const chunks: string[][] = [];
           for (let i = 0; i < handles.length; i += 100) chunks.push(handles.slice(i, i + 100));
           const pages = await Promise.all(
             chunks.map(async (chunk) => {
-              const query = `handles=${chunk.map(encodeURIComponent).join(",")}&extend=primary_parent_family&keys=handle,gender,family_list,extended`;
+              const query = `handles=${chunk.map(encodeURIComponent).join(",")}&extend=parent_family_list&keys=handle,gender,parent_family_list,extended`;
               const res = await authFetch("get_relationship_paths", `${API_BASE}/api/people/?${query}`);
               if (!res.ok) throw await bridgeError("get_relationship_paths", res);
               return (await res.json()) as PathPerson[];
@@ -424,27 +431,8 @@ const bridge = {
           );
           return pages.flat();
         },
-        async fetchRelationships(h1, h2) {
-          const path = `/api/relations/${encodeURIComponent(h1)}/${encodeURIComponent(h2)}/all`;
-          const res = await authFetch("get_relationship_paths", `${API_BASE}${path}?depth=${encodeURIComponent(String(depth))}`);
-          if (!res.ok) throw await bridgeError("get_relationship_paths", res);
-          return (await res.json()) as ServerRelationship[];
-        },
-        async fetchSpouses(handle) {
-          const url = `${API_BASE}/api/people/${encodeURIComponent(handle)}?extend=family_list&keys=gender,extended`;
-          const res = await authFetch("get_relationship_paths", url);
-          if (!res.ok) throw await bridgeError("get_relationship_paths", res);
-          const person = (await res.json()) as {
-            gender: number;
-            extended?: { families?: { father_handle?: string | null; mother_handle?: string | null }[] };
-          };
-          const spouses = (person.extended?.families ?? [])
-            .map((f) => (f.father_handle === handle ? f.mother_handle : f.father_handle))
-            .filter((h): h is string => !!h);
-          return { gender: person.gender, spouses };
-        },
       },
-      { depth, maxPaths: maxPaths > 0 ? maxPaths : undefined },
+      { depth, maxPaths: maxPaths > 0 ? maxPaths : undefined, bloodOnly },
     );
     return JSON.stringify(paths);
   },
@@ -912,44 +900,44 @@ class Db:
         # \`if not db.get_relationships(...)\` means what it looks like.
         return [item for item in items if item.get("relationship_string")]
 
-    async def get_relationship_paths(self, person1, person2, depth=15, max_paths=None):
+    async def get_relationship_paths(self, person1, person2, depth=15, max_paths=None, blood_only=False):
         """The people connecting two people, not just the wording: a list
-        of paths, nearest first, each {"people": [{"handle": ...,
-        "relationship_string": ..., "gender": ...}, ...],
-        "common_ancestors": [handle, ...], "partner": {...} or None}.
-        "people" runs from person1 to person2 inclusive, up to
-        common_ancestors[0] and back down; each relationship_string is that
-        person's relationship *to person1*, in Gramps' own words ("" for
-        person1). common_ancestors is the ancestor the path goes through,
-        plus their spouse when the two are an ancestor couple, and empty
-        for a spouse path ([person1, person2]); "partner" is that spouse as
-        a "people"-style entry, None without one. Empty list when
-        unrelated within depth. relationship_chart(path) draws one.
+        of paths, shortest first. Each is a dict:
 
-        Only when there's no blood relationship and they aren't spouses,
-        in-law paths, through a marriage at either end or both (as Gramps
-        Desktop's All Relations finds them): "via" lists those marriages
-        in path order, each {"handle": h, "married_to": m} -- h on the
-        blood side, m the end of the path married to h -- and is empty
-        for every other path. Everyone after h in "people" is labelled
-        relative to h: Lewis, Luella "wife", Henry "father" is Lewis's
-        "wife's father", and a second marriage carries on from there
-        ("wife's brother's wife"). /relations/ has no in-law answers.
+        "steps": the chain as found, from person1 to person2, each
+        {"handle", "link", "relationship_string", "gender"}. "link" says how
+        that person is linked to the one before them ("parent", "child",
+        "sibling" or "spouse"; None for person1). relationship_string is
+        their relationship to person1 in Gramps' own words ("" for person1).
 
-        Same arguments as get_relationships(), plus max_paths: pass 1 when
-        only the nearest path will be shown -- the ancestor walk then stops
-        as soon as that path is certain, instead of walking all of depth.
+        "people", "common_ancestors", "partner", "via": the same path the
+        way relationship_chart(path) draws it, up to a common ancestor and
+        back down. A sibling link becomes the pair's parent here, and
+        common_ancestors is that ancestor, plus their spouse when the two
+        are an ancestor couple ("partner" is that spouse, labelled like
+        "people", or None). "via" lists a marriage at either end, each
+        {"handle": h, "married_to": m}: h on the blood side, m the end of
+        the path married to h. For a spouse, and for a path that isn't one
+        family tree (a marriage in the middle), common_ancestors is empty and
+        "people" is just the steps.
 
-        One request per generation walked (both people at once), then one
-        get_relationships()-sized call per person on the paths, made in
-        parallel -- fine for the one pair a Gramplet displays, not for a
-        loop over filter() results."""
+        Gramps has no name for some people, e.g. past a second marriage:
+        their relationship_string is "", and "link_label" is their
+        relationship to the person "link_from" instead ("wife"), to be read
+        after that person's own: "brother-in-law's wife".
+
+        depth is the most links in a path (at most 15), max_paths the most
+        paths (None: as many as the server finds), and blood_only=True
+        keeps only paths up to a common ancestor and down again. The search
+        runs on the server (gramps-web-api 3.26+) and only reads the people
+        near the two ends, so it's quick even on a large tree; an empty
+        list means not connected within depth links."""
         import json as _json
         if person1 is None or person2 is None:
             return []
         handle1 = person1 if isinstance(person1, str) else person1.handle
         handle2 = person2 if isinstance(person2, str) else person2.handle
-        return _json.loads(await _bridge.relationshipPaths(handle1, handle2, depth, max_paths or 0))
+        return _json.loads(await _bridge.relationshipPaths(handle1, handle2, depth, max_paths or 0, bool(blood_only)))
 
     async def get_number_of(self, object_type, where=None):
         """A conditional count, as a \`db\` method rather than the bare
@@ -1306,10 +1294,13 @@ def relationship_chart(path, start_label=None):
     """Draws one path from db.get_relationship_paths() as the app's own
     relationship chart: the common ancestor (or ancestor couple) on top,
     path["people"][0]'s line down the left, the last person's down the
-    right, one row per generation. Each card shows that person's name and
-    years (from the app, in the user's display settings) and their
-    relationship_string; start_label names the first person, who has none
-    ("Home person", in the user's language, when left out).
+    right, one row per generation. A path without common_ancestors (a
+    spouse, or one with a marriage in the middle) is drawn as one row of
+    cards, with a ring at each marriage. Each card shows that person's
+    name and years (from the app, in the user's display settings) and
+    their relationship_string (or link_label after link_from's label);
+    start_label names the first person, who has none ("Home person", in
+    the user's language, when left out).
 
     The path is plain data, so it can be changed first: relabel someone
     (person["relationship_string"] = "..."), or build one by hand in the

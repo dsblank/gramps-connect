@@ -82,7 +82,7 @@
 /** One tab in the panel -- named "Gramplet" after Gramps desktop's own
  * sidebar-widget addons, since that's the closest existing concept this
  * is prototyping a web/Python equivalent of. */
-import type { RelationshipPath } from "../store/relationshipPath";
+import type { ChartPath } from "../store/relationshipPath";
 
 /** Which kind of Gramplet a manifest is (Gramplet.kind below). "view" is a
  * View Gramplet: a tab in the panel under an object-type list, re-run
@@ -450,7 +450,7 @@ export type GrampletBlock =
   /** `relationship_chart(path)` (pyodideWorker.ts) -- one path from
    * db.get_relationship_paths(), possibly edited by the Gramplet, drawn by
    * RelationshipChart.tsx. */
-  | { type: "relationship-chart"; path: RelationshipPath; startLabel: string | null };
+  | { type: "relationship-chart"; path: ChartPath; startLabel: string | null };
 
 /** No `printed` field -- unlike the pre-blocks design, a Gramplet's own
  * print() calls aren't captured as a separate side channel (pyodideWorker.

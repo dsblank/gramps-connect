@@ -17,7 +17,7 @@ import { GENDER_LABEL, genderAccent } from "../charts/genderColors";
 import { t } from "../i18n/i18n";
 import { formatDisplayDate } from "../store/placeIndex";
 import { getViewStore } from "../store/registry";
-import type { PathNode, RelationshipPath } from "../store/relationshipPath";
+import type { ChartPath, PathNode } from "../store/relationshipPath";
 import { fetchPage } from "../store/api";
 import { displayName, PERSON_VIEW } from "../store/views";
 import { ObjectMenu } from "./ObjectCellButton";
@@ -164,33 +164,45 @@ export function composeInLaw(anchor: string, relationship: string): string {
 
 /** Positions only -- no names or dates needed, so this is the part a
  * test can check. */
-export function layoutRelationshipChart(path: RelationshipPath, startLabel: string): Layout {
+/** Each card's label: the person's relationship to the first person, or,
+ * when Gramps has no name for it, their one-link label read after the
+ * label of the person it's from ("brother-in-law's wife"). */
+function chartLabels(path: ChartPath, startLabel: string): Map<string, string> {
+  const nodes = [...path.people, ...(path.partner ? [path.partner] : [])];
+  const byHandle = new Map(nodes.map((n) => [n.handle, n]));
+  const labels = new Map<string, string>([[path.people[0].handle, startLabel]]);
+  const labelOf = (node: PathNode, seen: Set<string>): string => {
+    const known = labels.get(node.handle);
+    if (known !== undefined) return known;
+    let label = node.relationship_string;
+    if (!label && node.link_label) {
+      const from = node.link_from ? byHandle.get(node.link_from) : undefined;
+      // The first person's own label is a name for them ("Home person"),
+      // not a relationship to build on.
+      label =
+        from && from.handle !== path.people[0].handle && !seen.has(from.handle)
+          ? composeInLaw(labelOf(from, new Set([...seen, node.handle])), node.link_label)
+          : node.link_label;
+    }
+    labels.set(node.handle, label);
+    return label;
+  };
+  for (const node of nodes) labelOf(node, new Set());
+  return labels;
+}
+
+export function layoutRelationshipChart(path: ChartPath, startLabel: string): Layout {
   const all = path.people;
   const marriages = path.via ?? [];
-  const viaHandles = new Set(marriages.map((m) => m.handle));
-  // After each of an in-law path's marriages, labels are relative to the
-  // spouse on the far side, so they carry on from that spouse's own label:
-  // "father" becomes "wife's father", and on past a second marriage,
-  // "wife's brother's wife".
-  const labels: string[] = [];
-  let anchor: string | null = null;
-  all.forEach((n, i) => {
-    labels.push(i === 0 ? startLabel : anchor === null ? n.relationship_string : composeInLaw(anchor, n.relationship_string));
-    if (viaHandles.has(n.handle)) anchor = labels[i];
-  });
-  const labelOf = new Map(all.map((n, i) => [n.handle, labels[i]]));
+  const labelOf = chartLabels(path, startLabel);
   const isEnd = (h: string) => h === all[0].handle || h === all[all.length - 1].handle;
   // The blood part is everyone but those who married in; they're added
-  // beside their spouses at the end. The partner stands beside the common
-  // ancestor, so it's labelled the way the ancestor is.
+  // beside their spouses at the end.
   const marriedIn = new Set(marriages.map((m) => m.married_to));
   const nodes = all.filter((n) => !marriedIn.has(n.handle));
-  const firstVia = marriages.find((m) => m.married_to === all[0].handle);
-  const partnerLabel = path.partner
-    ? firstVia
-      ? composeInLaw(labelOf.get(firstVia.handle) ?? "", path.partner.relationship_string)
-      : path.partner.relationship_string
-    : "";
+  const partnerLabel = path.partner ? (labelOf.get(path.partner.handle) ?? "") : "";
+  // How each person is linked to the one before, when the path says.
+  const linkOf = new Map((path.steps ?? []).map((s) => [s.handle, s.link]));
 
   const anc = path.common_ancestors;
   const cards: PlacedCard[] = [];
@@ -201,13 +213,18 @@ export function layoutRelationshipChart(path: RelationshipPath, startLabel: stri
   let height = PAD * 2 + CARD_H;
 
   if (anc.length === 0 || nodes.length < 2) {
-    // A spouse (or a lone person): side by side, joined.
-    nodes.forEach((node, i) => place(node, PAD + i * (CARD_W + LEG_GAP), PAD));
-    if (nodes.length === 2) {
-      const mid = PAD + CARD_H / 2;
-      lines.push([[PAD + CARD_W, mid], [PAD + CARD_W + LEG_GAP, mid]]);
-      rings.push([PAD + CARD_W + LEG_GAP / 2, mid]);
-    }
+    // A spouse (or a lone person): side by side, joined. So is a path that
+    // isn't one family tree's worth, e.g. with a marriage in the middle:
+    // one card after another, a ring at each marriage.
+    const mid = PAD + CARD_H / 2;
+    nodes.forEach((node, i) => {
+      const x = PAD + i * (CARD_W + LEG_GAP);
+      place(node, x, PAD);
+      if (i === 0) return;
+      lines.push([[x - LEG_GAP, mid], [x, mid]]);
+      const link = linkOf.get(node.handle);
+      if (link === "spouse" || (link === undefined && nodes.length === 2)) rings.push([x - LEG_GAP / 2, mid]);
+    });
   } else {
     const top = Math.max(0, nodes.findIndex((n) => n.handle === anc[0]));
     const leftLeg = nodes.slice(0, top).reverse(); // just below the ancestor, down to the first person
@@ -342,7 +359,7 @@ export function RelationshipChart({
   startLabel,
   interactive,
 }: {
-  path: RelationshipPath;
+  path: ChartPath;
   startLabel: string | null;
   interactive: boolean;
 }) {
