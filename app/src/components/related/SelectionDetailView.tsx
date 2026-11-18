@@ -48,10 +48,18 @@ export function SelectionDetailView({
   flow?: boolean;
 }) {
   const isSplit = handles.length === 2;
+  // Who the relationship sentence is about: the second selected described
+  // from the first, or one selected from the Home person. One sentence in
+  // one place for both -- ctrl+clicking a second person changes it in
+  // place. Only with one selected does it wait a moment before searching,
+  // so moving through the list only searches where it stops.
   const home = getHomePersonHandle();
+  const pair: [string, string] | null =
+    view.key !== "person" ? null : isSplit ? [handles[0], handles[1]!] : home && home !== handles[0] ? [home, handles[0]] : null;
 
   return (
     <Stack gap={0} h={flow ? undefined : "100%"}>
+      {pair && <RelationshipBetween from={pair[0]} to={pair[1]} revision={revision} delayMs={isSplit ? 0 : 300} />}
       {isSplit && (
         <Group gap="xs" p="md" pb={0} justify="flex-end" style={{ flex: "none" }}>
           <AddButton view={view} draftStack={draftStack} />
@@ -60,15 +68,6 @@ export function SelectionDetailView({
           <BulkTagButton view={view} handles={handles} />
         </Group>
       )}
-      {/* How the people are related: two selected, the second to the
-          first; one selected, them to the Home person (after a short wait,
-          so moving through the list only searches where it stops). */}
-      {view.key === "person" &&
-        (isSplit ? (
-          <RelationshipBetween from={handles[0]} to={handles[1]!} revision={revision} />
-        ) : (
-          home && home !== handles[0] && <RelationshipBetween from={home} to={handles[0]} revision={revision} delayMs={300} />
-        ))}
       <Group gap={0} wrap="nowrap" align="stretch" style={flow ? undefined : { flex: 1, minHeight: 0 }}>
         {handles.map((h, i) => (
           <Box
