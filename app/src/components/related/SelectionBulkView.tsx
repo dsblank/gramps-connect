@@ -9,6 +9,7 @@ import { pickerResultLabel } from "../RefPickerField";
 import { LINK_STYLE } from "./sections/shared";
 import { BulkDeleteButton } from "./BulkDeleteButton";
 import { BulkTagButton } from "./BulkTagButton";
+import { BulkPrivacyButton } from "./BulkPrivacyButton";
 import type { OnNavigate } from "./types";
 import { t } from "../../i18n/i18n";
 
@@ -119,6 +120,7 @@ export function SelectionBulkView({ view, handles, onNavigate }: { view: ViewCon
         </Text>
         <BulkDeleteButton view={view} handles={handles} />
         <BulkTagButton view={view} handles={handles} />
+        <BulkPrivacyButton view={view} handles={handles} />
       </Group>
       {error && (
         <Alert color="red" title={t("Failed to load")}>

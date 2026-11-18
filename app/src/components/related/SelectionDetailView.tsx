@@ -7,6 +7,7 @@ import { AddButton } from "./AddButton";
 import { MergeButton } from "./MergeButton";
 import { BulkDeleteButton } from "./BulkDeleteButton";
 import { BulkTagButton } from "./BulkTagButton";
+import { BulkPrivacyButton } from "./BulkPrivacyButton";
 import { RelationshipBetween } from "./RelationshipBetween";
 import { getHomePersonHandle } from "../../store/homePersonPreference";
 
@@ -69,6 +70,7 @@ export function SelectionDetailView({
           <MergeButton view={view} handles={handles} />
           <BulkDeleteButton view={view} handles={handles} />
           <BulkTagButton view={view} handles={handles} />
+          <BulkPrivacyButton view={view} handles={handles} />
         </Group>
       )}
       {isSplit && sentence && (

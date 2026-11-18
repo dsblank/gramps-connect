@@ -1,73 +1,51 @@
-import { useRef, useState } from "react";
-import { Alert, Button, Group, Modal, Progress, Stack, Text } from "@mantine/core";
+import { useState } from "react";
+import { Alert, Modal, SegmentedControl, Stack, Button } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { getToken, hasPermissions } from "../../auth/auth";
 import { getViewStore } from "../../store/registry";
-import { attachRefListEntry } from "../../store/refListApi";
 import { getOrCreateTagHandle } from "../../store/jobsApi";
+import { editSelected, supportsBulkEdit, type BulkEditProgress } from "../../store/bulkEdit";
 import { TAG_VIEW } from "../../store/views";
 import type { ViewConfig } from "../../store/views";
 import type { QueryItem } from "../../store/api";
 import { RecordPicker } from "../RecordPicker";
 import { pickerResultLabel } from "../RefPickerField";
 import { t } from "../../i18n/i18n";
+import { BulkEditProgressBar, bulkEditSummary } from "./BulkEditProgress";
+
+type Mode = "add" | "remove";
 
 /** SelectionBulkView.tsx's header action for 3+ selected rows (and
- * SelectionDetailView.tsx's for exactly 2) -- opens the same TAG_VIEW-scoped
- * RecordPicker AttachControl.tsx already uses for its single-object tag
- * picker (RecordPicker itself is reused as-is, not rebuilt), then loops
- * attachRefListEntry over every selected handle instead of just one.
- * `onCreateNew` opts into RecordPicker's "not finding it? create new"
- * bridge -- unlike RefPickerField.tsx's own use of that bridge (which opens
- * a full blank edit dialog for heavier types), a Tag is simple enough
- * (jobsApi.ts's getOrCreateTagHandle: get-or-create by exact name, no
- * dialog) that typing a name that doesn't already exist and applying it in
- * one step reads as "select or create", not two separate flows. */
-/** Records tagged at once. Tagging is one read-and-update per record (no
- * bulk endpoint), so a Ctrl/Cmd+A selection of thousands goes through a few
- * at a time -- which is also what lets Cancel stop it partway. apiFetch
- * still caps and paces the actual requests. */
-const TAG_CONCURRENCY = 4;
-/** Past this many records, show "Tagged 300 of 4,900" and a Cancel button. */
-const TAG_PROGRESS_FROM = 50;
-
+ * SelectionDetailView.tsx's for exactly 2): add a tag to every selected
+ * record, or remove one from them, in one request and one transaction
+ * (store/bulkEdit.ts) -- so one Undo puts it back. Picking uses the same
+ * TAG_VIEW-scoped RecordPicker AttachControl.tsx uses for one record.
+ * Adding also takes a new name (jobsApi.ts's getOrCreateTagHandle:
+ * get-or-create by exact name, no dialog), so "select or create" is one
+ * step; removing only offers existing tags. */
 export function BulkTagButton({ view, handles }: { view: ViewConfig; handles: string[] }) {
   const [opened, setOpened] = useState(false);
+  const [mode, setMode] = useState<Mode>("add");
   const [applying, setApplying] = useState(false);
+  const [progress, setProgress] = useState<BulkEditProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tagged, setTagged] = useState(0);
-  const cancelled = useRef(false);
 
-  if (!hasPermissions("EditObject")) return null;
+  if (!hasPermissions("EditObject") || !supportsBulkEdit(view)) return null;
 
-  async function applyTag(tagHandle: string) {
+  async function apply(tagHandle: string) {
     setApplying(true);
     setError(null);
-    setTagged(0);
-    cancelled.current = false;
-    let done = 0;
-    let next = 0;
-    async function worker() {
-      while (next < handles.length && !cancelled.current) {
-        const handle = handles[next++];
-        await attachRefListEntry(await getToken(), view, handle, "tag_list", tagHandle);
-        done += 1;
-        setTagged(done);
-      }
-    }
+    setProgress(null);
     try {
-      await Promise.all(Array.from({ length: Math.min(TAG_CONCURRENCY, handles.length) }, worker));
-      if (cancelled.current) {
-        notifications.show({
-          message: t("Tagged %s of %s, then stopped.").replace("%s", done.toLocaleString()).replace("%s", handles.length.toLocaleString()),
-        });
-      }
+      const changed = await editSelected(view, handles, [{ op: mode === "add" ? "add_tag" : "remove_tag", handle: tagHandle }], setProgress);
+      notifications.show({
+        color: "green",
+        message: bulkEditSummary(mode === "add" ? t("Tagged %s objects.") : t("Removed the tag from %s objects."), changed, handles.length),
+      });
       setOpened(false);
     } catch (err: any) {
-      // Tagging is additive and per record: whatever got tagged stays
-      // tagged, so just say how far it got.
-      const message = err.message ?? String(err);
-      setError(done > 0 ? t("Tagged %s before an error: %s").replace("%s", done.toLocaleString()).replace("%s", message) : message);
+      // One transaction: on an error nothing was changed.
+      setError(err.message ?? String(err));
     } finally {
       getViewStore(view.key).requeryDebounced();
       setApplying(false);
@@ -75,7 +53,7 @@ export function BulkTagButton({ view, handles }: { view: ViewConfig; handles: st
   }
 
   async function handlePick(item: QueryItem) {
-    await applyTag(item.handle);
+    await apply(item.handle);
   }
 
   async function handleCreateNew(name: string) {
@@ -83,15 +61,14 @@ export function BulkTagButton({ view, handles }: { view: ViewConfig; handles: st
     setApplying(true);
     setError(null);
     try {
-      const token = await getToken();
-      const tagHandle = await getOrCreateTagHandle(token, name);
-      await applyTag(tagHandle);
+      await apply(await getOrCreateTagHandle(await getToken(), name));
     } catch (err: any) {
       setError(err.message ?? String(err));
       setApplying(false);
     }
   }
 
+  const count = handles.length.toLocaleString();
   return (
     <>
       <Button variant="default" size="xs" onClick={() => { setError(null); setOpened(true); }}>
@@ -103,33 +80,28 @@ export function BulkTagButton({ view, handles }: { view: ViewConfig; handles: st
         closeOnClickOutside={!applying}
         closeOnEscape={!applying}
         withCloseButton={!applying}
-        title={`${t("Adding a tag")} — ${handles.length.toLocaleString()} ${t("objects")}`}
+        title={`${mode === "add" ? t("Adding a tag") : t("Removing a tag")} — ${count} ${t("objects")}`}
         size="sm"
       >
         <Stack gap="md">
+          <SegmentedControl
+            size="xs"
+            value={mode}
+            onChange={(v) => setMode(v as Mode)}
+            disabled={applying}
+            data={[
+              { value: "add", label: t("Add tag") },
+              { value: "remove", label: t("Remove tag") },
+            ]}
+          />
           {error && (
-            <Alert color="red" title={t("Could not tag")}>
+            <Alert color="red" title={mode === "add" ? t("Could not tag") : t("Could not remove the tag")}>
               {error}
             </Alert>
           )}
-          {applying && handles.length > TAG_PROGRESS_FROM ? (
-            <Stack gap={4}>
-              <Progress value={(100 * tagged) / handles.length} />
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">
-                  {t("Tagged %s of %s").replace("%s", tagged.toLocaleString()).replace("%s", handles.length.toLocaleString())}
-                </Text>
-                <Button size="xs" variant="default" onClick={() => { cancelled.current = true; }}>
-                  {t("Cancel")}
-                </Button>
-              </Group>
-            </Stack>
-          ) : (
-            <Text size="sm" c={applying ? "dimmed" : undefined}>
-              {applying ? t("Applying…") : null}
-            </Text>
-          )}
+          {applying && <BulkEditProgressBar progress={progress} />}
           <RecordPicker
+            key={mode}
             view={TAG_VIEW}
             searchField="gramps_id"
             placeholder={TAG_VIEW.simpleSearch?.placeholder ?? "Search…"}
@@ -137,8 +109,7 @@ export function BulkTagButton({ view, handles }: { view: ViewConfig; handles: st
             renderLabel={(item) => pickerResultLabel(TAG_VIEW.key, item)}
             onPick={handlePick}
             confirmWithButton
-            createLabel="tag"
-            onCreateNew={handleCreateNew}
+            {...(mode === "add" ? { createLabel: "tag", onCreateNew: handleCreateNew } : {})}
           />
         </Stack>
       </Modal>
