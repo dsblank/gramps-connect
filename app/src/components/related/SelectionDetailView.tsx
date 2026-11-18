@@ -7,6 +7,7 @@ import { AddButton } from "./AddButton";
 import { MergeButton } from "./MergeButton";
 import { BulkDeleteButton } from "./BulkDeleteButton";
 import { BulkTagButton } from "./BulkTagButton";
+import { RelationshipBetween } from "./RelationshipBetween";
 
 /** AsideSplit.tsx's top-pane mount whenever 1 or 2 rows are selected --
  * covers both the plain single-selection case and the 2-selected split
@@ -57,6 +58,8 @@ export function SelectionDetailView({
           <BulkTagButton view={view} handles={handles} />
         </Group>
       )}
+      {/* Two people: how the second selected is related to the first. */}
+      {isSplit && view.key === "person" && <RelationshipBetween from={handles[0]} to={handles[1]!} revision={revision} />}
       <Group gap={0} wrap="nowrap" align="stretch" style={flow ? undefined : { flex: 1, minHeight: 0 }}>
         {handles.map((h, i) => (
           <Box

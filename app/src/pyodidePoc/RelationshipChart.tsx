@@ -31,7 +31,7 @@ const LEG_GAP = 24; // between the two legs' cards
 const PAD = 8;
 const ROW_H = CARD_H + ROW_GAP;
 
-interface PersonInfo {
+export interface PersonInfo {
   name: string;
   birth: GrampsDate | null;
   death: GrampsDate | null;
@@ -84,7 +84,7 @@ async function fetchInfo(handles: string[]): Promise<Map<string, PersonInfo>> {
  * follows edits and costs no request), re-read whenever that cache
  * changes -- a filter applied or cleared, a live-sync update -- and for
  * anyone it doesn't hold, fetched once from the server. */
-function usePeople(handles: string[]): Map<string, PersonInfo> {
+export function usePeople(handles: string[]): Map<string, PersonInfo> {
   const [people, setPeople] = useState(new Map<string, PersonInfo>());
   const fetched = useRef(new Map<string, PersonInfo>());
   const requested = useRef(new Set<string>());
