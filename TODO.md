@@ -51,11 +51,62 @@ the wiki are the record of what shipped.
   gating reads only its Place's *primary* name date (`visualData.ts`,
   `storyHydration.ts`), not dated alternate names (`alt_names`).
 
+## gramps-web-api 3.26 follow-ups
+
+What 3.26.0 makes possible that gramps-connect doesn't use yet, roughly
+most useful first:
+
+- **Save conflict check via ETag** — a plain `GET /api/{type}/{handle}` now
+  returns the same `hash_object` ETag that PUT checks `If-Match` against
+  (#1173). `draftStack.ts`'s `saveAll()` instead re-fetches every edited
+  record and diffs it before saving (an extra request per record, and a
+  window between check and write). Keep the ETag from when the editor
+  opened, send `If-Match`, and turn a 412 into the existing "changed
+  elsewhere" message.
+- **Admin user tools** (`UserManagementPanel.tsx`) — `PUT /users/<name>/`
+  now takes `password` for a user of lower role than the caller (#1157);
+  the panel only offers "Send password reset email". And
+  `POST /users/<name>/merge/` with `{"source": ...}` merges two accounts
+  (site admins, fresh token; #1148).
+- **Merge Tags in one transaction** — `mergeApi.ts`'s `mergeTags()` PATCHes
+  every record that has the losing tag, one by one and not atomically.
+  `/objects/edit-by-handle/` (`bulkEdit.ts`) can do `add_tag` winner +
+  `remove_tag` loser per record type, one transaction per type.
+- **Filter errors that point at the problem** — a bad GOQL expression or
+  rule is now a 422 with the error keyed by where it is in the request,
+  e.g. `{"query": {"rules": {"rules": {"0": {"values": ...}}}}}` (#1180),
+  and `/query/` errors name the field (`where_expr`, `select.1`; #1164).
+  The filter editor could highlight that rule/expression instead of a
+  general error.
+- **`env` in `/query/`** — `{"where_expr": "handle in Env.BOOKMARKS",
+  "env": {...}}` (#1164) would let Bookmarks/Visited filter on the server
+  instead of matching handles in the browser.
+- **Register link on the login page** — `GET /api/register/config/`
+  (no auth) says whether sign-up is open (#1175); `LoginForm.tsx` has no
+  Register link at all.
+- **Report the undo conflict false alarm upstream** — not our bug, and
+  gramps-connect doesn't call undo, but we know the cause:
+  `/transactions/history/<id>/undo` compares a record changed twice in one
+  transaction (e.g. Merge Places) with the transaction's *first* change to
+  it, not its last, so it reports a conflict that isn't there. Hit 7 times
+  restoring Blank Family on 2026-11-18 (e.g. the undo of merge 2401 into
+  P0337). Becomes our problem if gramps-connect adds an Undo button.
+- **Drop the `order_by` fallback** — every supported server takes string
+  `order_by` now; `serverCapabilities.ts`'s `supportsOrderByStrings()` /
+  `withOrderByFallback()` (c7ab940, 11 call sites) can go.
+- **Relationship chart export** — the tree and fan charts export to
+  PNG/JPEG/SVG/PDF; the Relationship chart (window, Graphs view,
+  Gramplets) can't, since it's HTML cards over SVG lines, not one SVG.
+- **Two selected people, Shift+click order** — the relationship sentence
+  describes the second selected from the first; with a Shift+click range,
+  "first" is just the earlier row in the list.
+
 ## Feature ideas / backlog
 
 Roughly by value, most first:
 
-- **DNA support** — `/people/<handle>/dna/matches`, `/ydna`,
+- **DNA support** — `/people/<handle>/dna/matches` (which since 3.26
+  returns each match's relationship `distance`, #1182), `/ydna`,
   `/parsers/dna-match` on the API side; `gramps-web` has a match list,
   Y-DNA/lineage view, and chromosome browser (`GrampsjsViewDnaMatches`,
   `GrampsjsViewYDna`, `ChromosomeBrowser.js`). A large, mostly
