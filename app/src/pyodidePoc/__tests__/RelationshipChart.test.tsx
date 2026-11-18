@@ -133,6 +133,28 @@ describe("in-law layout", () => {
   });
 });
 
+describe("in-law with two legs", () => {
+  it("keeps every line between cards when shifted right for the first person's spouse", () => {
+    // H ⚭ W; W's grandfather G is on top, his son U's son X on the other leg.
+    const { cards, lines } = layoutRelationshipChart(
+      {
+        people: [node("H", "", 1), node("W", "wife", 0), node("P", "father-in-law", 1), node("G", "grandfather-in-law", 1), node("U", "uncle-in-law", 1), node("X", "cousin-in-law", 1)],
+        common_ancestors: ["G"],
+        partner: null,
+        via: [{ handle: "W", married_to: "H" }],
+      },
+      "Home person"
+    );
+    const right = Math.max(...cards.map((c) => c.x)) + 188;
+    for (const line of lines) for (const [x] of line) expect(x).toBeLessThanOrEqual(right);
+    // The line down from G starts under G's centre.
+    const g = cards.find((c) => c.node.handle === "G")!;
+    const fromG = lines.filter((l) => l[0][1] === g.y + 76);
+    expect(fromG.length).toBe(2);
+    for (const l of fromG) expect(l[0][0]).toBe(g.x + 188 / 2);
+  });
+});
+
 describe("two-marriage layout", () => {
   it("puts each married-in end beside their spouse, and names the unnamed from the person before", () => {
     // Lewis ⚭ W, whose brother B ⚭ X: W and B under their father P,

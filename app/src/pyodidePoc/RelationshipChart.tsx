@@ -291,7 +291,8 @@ export function layoutRelationshipChart(path: ChartPath, startLabel: string): La
   const dx = PAD - Math.min(...cards.map((c) => c.x));
   if (dx !== 0) {
     for (const c of cards) c.x += dx;
-    for (const line of lines) for (const p of line) p[0] += dx;
+    // Once per point: both legs' lines start at the same drop point.
+    for (const p of new Set(lines.flat())) p[0] += dx;
     for (const r of rings) r[0] += dx;
   }
   return { cards, lines, rings, width: Math.max(...cards.map((c) => c.x)) + CARD_W + PAD, height };
