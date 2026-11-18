@@ -15,7 +15,6 @@ import { MediaThumbnail } from "./related/MediaThumbnail";
 import { NoteText } from "./related/NoteText";
 import { SECTION_COMPONENTS } from "./related/sections";
 import { summaryLine } from "./related/summary";
-import { HomeRelationshipLine } from "./related/RelationshipBetween";
 import { gtkColorToCss } from "./related/color";
 import { AddButton } from "./related/AddButton";
 import { GeneratedItemActions } from "./related/GeneratedItemActions";
@@ -219,7 +218,7 @@ function ClickableTitle({ onClick, children }: { onClick?: () => void; children:
  * pane with no way to actually select/promote the record it's showing
  * (every *reference* inside a section was clickable, but not the subject
  * of the section list itself). */
-function PanelHeader({ view, detail, onNavigate, revision }: { view: ViewConfig; detail: ObjectDetail; onNavigate: OnNavigate; revision: number }) {
+function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: ObjectDetail; onNavigate: OnNavigate }) {
   const currentPage = useCurrentPage();
   const isSelf = isCurrentPage(currentPage, view.key, detail.handle);
   const navigateToSelf = isSelf ? undefined : () => onNavigate(view.key, detail.handle);
@@ -347,7 +346,6 @@ function PanelHeader({ view, detail, onNavigate, revision }: { view: ViewConfig;
           </ClickableTitle>
           <BookmarkStar type={view.key} handle={detail.handle} />
         </Group>
-        {view.key === "person" && <HomeRelationshipLine handle={detail.handle} revision={revision} />}
         <PrivateIndicator detail={detail} />
       </div>
     </Group>
@@ -577,7 +575,7 @@ export function RelatedPanel({
           <DiscussButton view={view} detail={detail} onAttached={() => setRefetchNonce((n) => n + 1)} />
         </Group>
       )}
-      <PanelHeader view={view} detail={detail} onNavigate={onNavigate} revision={revision} />
+      <PanelHeader view={view} detail={detail} onNavigate={onNavigate} />
       {/* Directly under the title, not up in the header slot above: these
           are ways of *viewing* this record rather than actions on it --
           on their own row and at full size they read as an offer, which a

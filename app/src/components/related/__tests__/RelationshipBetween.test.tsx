@@ -22,10 +22,8 @@ const opened = vi.hoisted(() => [] as [string, string][]);
 vi.mock("../../../store/relationshipWindow", () => ({
   openRelationshipWindow: (from: string, to: string) => opened.push([from, to]),
 }));
-const home = vi.hoisted(() => ({ handle: null as string | null }));
-vi.mock("../../../store/homePersonPreference", () => ({ getHomePersonHandle: () => home.handle }));
 
-import { HomeRelationshipLine, RelationshipBetween } from "../RelationshipBetween";
+import { RelationshipBetween } from "../RelationshipBetween";
 
 const COUSIN = {
   steps: [
@@ -37,7 +35,6 @@ const COUSIN = {
 beforeEach(() => {
   opened.length = 0;
   hook.calls = [];
-  home.handle = null;
 });
 
 describe("RelationshipBetween", () => {
@@ -70,26 +67,12 @@ describe("RelationshipBetween", () => {
   });
 });
 
-describe("HomeRelationshipLine", () => {
-  it("shows nothing with no Home person set", () => {
-    hook.state = { status: "done", paths: [COUSIN] };
-    renderWithProviders(<HomeRelationshipLine handle="X" revision={0} />);
-    expect(screen.queryByRole("button")).toBeNull();
-  });
-
-  it("names the relationship to the Home person, waiting before it asks, and opens the window", () => {
-    home.handle = "H";
-    hook.state = { status: "done", paths: [COUSIN] };
-    renderWithProviders(<HomeRelationshipLine handle="X" revision={4} />);
+describe("waiting before the search", () => {
+  it("passes its delay on, and none by default", () => {
+    hook.state = { status: "loading" };
+    renderWithProviders(<RelationshipBetween from="H" to="X" revision={4} delayMs={300} />);
+    renderWithProviders(<RelationshipBetween from="H" to="X" revision={4} />);
     expect(hook.calls[0]).toEqual(["H", "X", { revision: 4, delayMs: 300 }]);
-    fireEvent.click(screen.getByText("Home person's first cousin"));
-    expect(opened).toEqual([["H", "X"]]);
-  });
-
-  it("shows nothing for someone not related", () => {
-    home.handle = "H";
-    hook.state = { status: "done", paths: [] };
-    renderWithProviders(<HomeRelationshipLine handle="X" revision={0} />);
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(hook.calls[hook.calls.length - 1]).toEqual(["H", "X", { revision: 4, delayMs: 0 }]);
   });
 });

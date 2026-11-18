@@ -8,6 +8,7 @@ import { MergeButton } from "./MergeButton";
 import { BulkDeleteButton } from "./BulkDeleteButton";
 import { BulkTagButton } from "./BulkTagButton";
 import { RelationshipBetween } from "./RelationshipBetween";
+import { getHomePersonHandle } from "../../store/homePersonPreference";
 
 /** AsideSplit.tsx's top-pane mount whenever 1 or 2 rows are selected --
  * covers both the plain single-selection case and the 2-selected split
@@ -47,6 +48,7 @@ export function SelectionDetailView({
   flow?: boolean;
 }) {
   const isSplit = handles.length === 2;
+  const home = getHomePersonHandle();
 
   return (
     <Stack gap={0} h={flow ? undefined : "100%"}>
@@ -58,8 +60,15 @@ export function SelectionDetailView({
           <BulkTagButton view={view} handles={handles} />
         </Group>
       )}
-      {/* Two people: how the second selected is related to the first. */}
-      {isSplit && view.key === "person" && <RelationshipBetween from={handles[0]} to={handles[1]!} revision={revision} />}
+      {/* How the people are related: two selected, the second to the
+          first; one selected, them to the Home person (after a short wait,
+          so moving through the list only searches where it stops). */}
+      {view.key === "person" &&
+        (isSplit ? (
+          <RelationshipBetween from={handles[0]} to={handles[1]!} revision={revision} />
+        ) : (
+          home && home !== handles[0] && <RelationshipBetween from={home} to={handles[0]} revision={revision} delayMs={300} />
+        ))}
       <Group gap={0} wrap="nowrap" align="stretch" style={flow ? undefined : { flex: 1, minHeight: 0 }}>
         {handles.map((h, i) => (
           <Box

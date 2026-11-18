@@ -1,16 +1,12 @@
 // How two people are related, outside a Gramplet: the sentence ("Xena is
 // Hal's first cousin once removed") and the same chart relationship_chart()
-// draws. Two forms:
-// - RelationshipBetween: the full sentence, with Show chart opening the
-//   Relationship window (two selected people, SelectionDetailView.tsx), or
-//   with the chart below it (that window itself, and the Graphs view).
-// - HomeRelationshipLine: one short line under a person's name ("Home
-//   person's first cousin") that opens the window (RelatedPanel.tsx).
+// draws: the full sentence, with Show chart opening the Relationship window
+// (above the selected person or people, SelectionDetailView.tsx), or with
+// the chart below it (that window itself, and the Graphs view).
 import { Anchor, Box, Group, Loader, Text } from "@mantine/core";
 import { Fragment, type ReactNode } from "react";
 import { t } from "../../i18n/i18n";
 import { RelationshipChart, usePeople } from "../../pyodidePoc/RelationshipChart";
-import { getHomePersonHandle } from "../../store/homePersonPreference";
 import type { RelationshipPath } from "../../store/relationshipPath";
 import { useRelationshipPaths } from "../../store/relationshipPathsApi";
 import { openRelationshipWindow } from "../../store/relationshipWindow";
@@ -31,16 +27,18 @@ const labelOf = (path: RelationshipPath) => {
 /** The sentence for two people: `to` described in terms of `from` (for
  * two selected people, the one selected first). `chart="window"` adds Show
  * chart, opening the Relationship window on the two; `chart="always"`
- * draws the chart below and lets it fill the space. */
+ * draws the chart below and lets it fill the space. `delayMs` waits before
+ * searching, so moving through a list only searches where it stops. */
 export function RelationshipBetween({
-  from, to, revision, chart = "window",
+  from, to, revision, chart = "window", delayMs = 0,
 }: {
   from: string;
   to: string;
   revision: number;
   chart?: "window" | "always";
+  delayMs?: number;
 }) {
-  const state = useRelationshipPaths(from, to, { revision });
+  const state = useRelationshipPaths(from, to, { revision, delayMs });
   const people = usePeople([from, to]);
   const name = (h: string) => people.get(h)?.name || t("(unknown)");
 
@@ -89,21 +87,5 @@ export function RelationshipBetween({
     <Box px="md" pt="xs" style={chart === "always" ? { height: "100%", overflow: "auto" } : { flex: "none" }}>
       {body}
     </Box>
-  );
-}
-
-/** One line under a person's name: how they're related to the Home
- * person; clicking it opens the Relationship window on the two. Nothing
- * for the Home person themselves, with no Home person set, or for someone
- * not related. */
-export function HomeRelationshipLine({ handle, revision }: { handle: string; revision: number }) {
-  const home = getHomePersonHandle();
-  // A short wait: moving through a list only searches for where it stops.
-  const state = useRelationshipPaths(home, handle, { revision, delayMs: 300 });
-  if (!home || state.status !== "done" || state.paths.length === 0) return null;
-  return (
-    <Anchor component="button" size="sm" c="dimmed" onClick={() => openRelationshipWindow(home, handle)} title={t("Show how they're related")}>
-      {fillNodes(t("Home person's {0}"), [labelOf(state.paths[0])])}
-    </Anchor>
   );
 }
