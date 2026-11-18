@@ -26,12 +26,22 @@ const labelOf = (path: RelationshipPath) => {
   return end.label || end.relationship_string;
 };
 
-/** The sentence for two selected people: `to` described in terms of
- * `from`, the one selected first. */
-export function RelationshipBetween({ from, to, revision }: { from: string; to: string; revision: number }) {
+/** The sentence for two people: `to` described in terms of `from` (for
+ * two selected people, the one selected first). `chart="always"` shows the
+ * chart without a toggle and lets it fill the space (the Graphs view's
+ * Relationship chart). */
+export function RelationshipBetween({
+  from, to, revision, chart = "toggle",
+}: {
+  from: string;
+  to: string;
+  revision: number;
+  chart?: "toggle" | "always";
+}) {
   const state = useRelationshipPaths(from, to, { revision });
   const people = usePeople([from, to]);
-  const [showChart, setShowChart] = useState(false);
+  const [toggled, setToggled] = useState(false);
+  const showChart = chart === "always" || toggled;
   const name = (h: string) => people.get(h)?.name || t("(unknown)");
 
   let body: ReactNode;
@@ -61,9 +71,11 @@ export function RelationshipBetween({ from, to, revision }: { from: string; to: 
       <>
         <Group gap="xs" wrap="wrap">
           <Text size="sm">{fillNodes(t("{0} is {1}'s {2}."), [name(to), name(from), <b key="l">{labelOf(state.paths[0])}</b>])}</Text>
-          <Anchor component="button" size="sm" onClick={() => setShowChart((v) => !v)}>
-            {showChart ? t("Hide chart") : t("Show chart")}
-          </Anchor>
+          {chart === "toggle" && (
+            <Anchor component="button" size="sm" onClick={() => setToggled((v) => !v)}>
+              {showChart ? t("Hide chart") : t("Show chart")}
+            </Anchor>
+          )}
         </Group>
         {showChart && (
           <Box mt="xs">
@@ -74,7 +86,7 @@ export function RelationshipBetween({ from, to, revision }: { from: string; to: 
     );
   }
   return (
-    <Box px="md" pt="xs" style={{ flex: "none", maxHeight: "50%", overflow: "auto" }}>
+    <Box px="md" pt="xs" style={chart === "always" ? { height: "100%", overflow: "auto" } : { flex: "none", maxHeight: "50%", overflow: "auto" }}>
       {body}
     </Box>
   );
