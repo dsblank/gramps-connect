@@ -82,7 +82,7 @@
 /** One tab in the panel -- named "Gramplet" after Gramps desktop's own
  * sidebar-widget addons, since that's the closest existing concept this
  * is prototyping a web/Python equivalent of. */
-import type { ChartPath } from "../store/relationshipPath";
+import type { RelationshipPath } from "../store/relationshipPath";
 
 /** Which kind of Gramplet a manifest is (Gramplet.kind below). "view" is a
  * View Gramplet: a tab in the panel under an object-type list, re-run
@@ -321,6 +321,10 @@ export interface RunGrampletRequest {
    * view context to it, so the standalone editor's own preview run
    * carries it too. */
   homePersonHandle: string | null;
+  /** t("{0}'s {1}") in the user's language, for relationship labels built
+   * from two ("brother-in-law's wife") -- the worker has no translations of
+   * its own. English when left out. */
+  inLawPattern?: string;
   /** Gramplet.allowChanges, for a (window) Gramplet only -- the worker is
    * what enforces it (changesBootstrap.ts). */
   allowChanges?: boolean;
@@ -447,10 +451,10 @@ export type GrampletBlock =
    * `spec` becomes `n` equal 1s); a column's rendered width is its share of
    * the weights' sum. Always the same length as `columns`. */
   | { type: "columns"; columns: GrampletBlock[][]; weights: number[] }
-  /** `relationship_chart(path)` (pyodideWorker.ts) -- one path from
-   * db.get_relationship_paths(), possibly edited by the Gramplet, drawn by
-   * RelationshipChart.tsx. */
-  | { type: "relationship-chart"; path: ChartPath; startLabel: string | null };
+  /** `relationship_chart(paths)` (pyodideWorker.ts) -- one or more paths
+   * from db.get_relationship_paths(), possibly edited by the Gramplet,
+   * drawn by RelationshipChart.tsx with a pager between them. */
+  | { type: "relationship-chart"; paths: RelationshipPath[]; startLabel: string | null };
 
 /** No `printed` field -- unlike the pre-blocks design, a Gramplet's own
  * print() calls aren't captured as a separate side channel (pyodideWorker.

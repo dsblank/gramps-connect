@@ -159,11 +159,13 @@ describe("dropDetours", () => {
   });
 });
 
+const labels = (nodes: { label: string }[]) => nodes.map((n) => n.label);
+
 describe("getRelationshipPaths", () => {
-  it("turns a sibling link into the ancestor couple, as one path", async () => {
+  it("puts the parents above a sibling link, and drops the detours through them", async () => {
     const { deps } = fakeServer();
     const paths = await getRelationshipPaths("H", "C", deps);
-    // H > A > (sibling) B > C, and not the detours through GF or GM (nor
+    // H > A > (sibling) B > C, not the detours through GF or GM (nor
     // through GF ⚭ GM); the other path is a different connection, through
     // H's son's wife.
     expect(paths.map((p) => handles(p.steps))).toEqual([
@@ -172,23 +174,21 @@ describe("getRelationshipPaths", () => {
     ]);
     const [path] = paths;
     expect(path.steps.map((s) => s.link)).toEqual([null, "parent", "sibling", "child"]);
-    expect(handles(path.people)).toEqual(["H", "A", "GF", "B", "C"]);
-    expect(path.common_ancestors).toEqual(["GF", "GM"]);
-    expect(path.partner).toEqual({ handle: "GM", relationship_string: "grandmother", gender: 0 });
-    // The parent put in for the sibling link is labelled from the detour
-    // through him.
-    expect(path.people.map((n) => n.relationship_string)).toEqual(["", "mother", "grandfather", "uncle", "first cousin"]);
-    expect(path.via).toEqual([]);
+    expect(labels(path.steps)).toEqual(["", "mother", "uncle", "first cousin"]);
+    // Labelled from the detours through them.
+    expect(path.steps[2].parents).toEqual([
+      { handle: "GF", gender: 1, relationship_string: "grandfather", label: "grandfather" },
+      { handle: "GM", gender: 0, relationship_string: "grandmother", label: "grandmother" },
+    ]);
   });
 
-  it("asks the server for the ancestor's label when no path it gave names them", async () => {
+  it("asks the server for an off-path ancestor's label when no path it gave names them", async () => {
     const { deps, calls } = fakeServer();
     // Only the shortest path, no detours to take labels from.
     const fetchPaths = async (from: string, to: string, options: PathSearchOptions) =>
       (await deps.fetchPaths(from, to, options)).slice(0, 1);
     const [path] = await getRelationshipPaths("H", "C", { ...deps, fetchPaths }, { maxPaths: 1 });
-    expect(path.people.map((n) => n.relationship_string)).toEqual(["", "mother", "grandfather", "uncle", "first cousin"]);
-    expect(path.partner?.relationship_string).toBe("grandmother");
+    expect(labels(path.steps[2].parents!)).toEqual(["grandfather", "grandmother"]);
     // No further than where they stand on this path: two links up.
     expect(calls.slice(1).map((c) => [c.to, c.options.depth])).toEqual([
       ["GF", 2],
@@ -196,75 +196,72 @@ describe("getRelationshipPaths", () => {
     ]);
   });
 
-  it("finds a direct ancestor with no detour, the ancestor at the end", async () => {
+  it("gives a peak its partner when both sides come down through the same family", async () => {
     const { deps } = fakeServer();
-    const [path] = await getRelationshipPaths("H", "GM", deps, { maxPaths: 1 });
-    expect(handles(path.people)).toEqual(["H", "A", "GM"]);
-    expect(path.common_ancestors).toEqual(["GM"]);
-    expect(path.partner).toBeNull();
-  });
-
-  it("goes through the one shared parent for a half-sibling", async () => {
-    const { deps } = fakeServer();
-    const [path] = await getRelationshipPaths("H", "S", deps);
-    expect(handles(path.people)).toEqual(["H", "A", "S"]);
-    expect(path.common_ancestors).toEqual(["A"]);
-    expect(path.partner).toBeNull();
+    // H's half-brother S: through A, but A ⚭ AF (H) and A ⚭ SF (S) differ.
+    const [half] = await getRelationshipPaths("H", "S", deps);
+    expect(handles(half.steps)).toEqual(["H", "A", "S"]);
+    expect(half.steps[1].partner).toBeNull();
+    // Up to a parent and down through the same family: the server gives
+    // that only as a detour of the sibling link, so build one by hand --
+    // P1 and P2, children of D ⚭ M, through D.
+    const people = new Map([
+      ["P1", { handle: "P1", parent_family_list: ["f"], extended: { parent_families: [{ handle: "f", father_handle: "D", mother_handle: "M" }] } }],
+      ["P2", { handle: "P2", parent_family_list: ["f"], extended: { parent_families: [{ handle: "f", father_handle: "D", mother_handle: "M" }] } }],
+      ["D", { handle: "D", gender: 1 }],
+      ["M", { handle: "M", gender: 0 }],
+    ]);
+    const [peak] = await getRelationshipPaths(
+      "P1",
+      "P2",
+      {
+        fetchPaths: async (from, to, o) =>
+          from === "P1" && to === "P2" && o.depth > 1
+            ? [{ steps: [{ handle: "P1", link: null, relationship_string: "" }, { handle: "D", link: "parent", relationship_string: "father" }, { handle: "P2", link: "child", relationship_string: "brother" }] }]
+            : to === "M"
+              ? [{ steps: [{ handle: "P1", link: null, relationship_string: "" }, { handle: "M", link: "parent", relationship_string: "mother" }] }]
+              : [],
+        fetchPeople: async (hs) => hs.flatMap((h) => (people.has(h) ? [people.get(h)!] : [])),
+      },
+    );
+    expect(peak.steps[1].partner).toEqual({ handle: "M", gender: 0, relationship_string: "mother", label: "mother" });
   });
 
   it("gives a spouse first, then the blood relationship", async () => {
     const { deps } = fakeServer();
     const paths = await getRelationshipPaths("K", "X", deps);
-    expect(handles(paths[0].people)).toEqual(["K", "X"]);
-    expect(paths[0].common_ancestors).toEqual([]);
-    expect(paths[0].people[1].relationship_string).toBe("wife");
-    expect(paths.some((p) => p.common_ancestors.includes("GF"))).toBe(true);
+    expect(handles(paths[0].steps)).toEqual(["K", "X"]);
+    expect(paths[0].steps[1]).toMatchObject({ link: "spouse", label: "wife" });
+    expect(paths.some((p) => p.steps.some((s) => s.parents?.some((n) => n.handle === "GF")))).toBe(true);
   });
 
-  it("puts an in-law's marriage in via, labelled by the server", async () => {
+  it("labels in-laws in the server's words", async () => {
     const { deps } = fakeServer();
     const [path] = await getRelationshipPaths("H", "HWF", deps);
-    expect(handles(path.people)).toEqual(["H", "HW", "HWF"]);
-    expect(path.via).toEqual([{ handle: "HW", married_to: "H" }]);
-    expect(path.common_ancestors).toEqual(["HWF"]);
-    expect(path.people[2].relationship_string).toBe("father-in-law");
+    expect(handles(path.steps)).toEqual(["H", "HW", "HWF"]);
+    expect(labels(path.steps)).toEqual(["", "wife", "father-in-law"]);
   });
 
-  it("names someone the server can't from the person before them: brother-in-law's wife", async () => {
+  it("builds a label for someone the server can't name, with the given pattern", async () => {
     const { deps, calls } = fakeServer();
     const [path] = await getRelationshipPaths("H", "HWBW", deps, { maxPaths: 1 });
     expect(handles(path.steps)).toEqual(["H", "HW", "HWB", "HWBW"]);
-    expect(handles(path.people)).toEqual(["H", "HW", "HWF", "HWB", "HWBW"]);
-    expect(path.via).toEqual([
-      { handle: "HW", married_to: "H" },
-      { handle: "HWB", married_to: "HWBW" },
-    ]);
-    expect(path.common_ancestors).toEqual(["HWF", "HWM"]);
-    const last = path.people[4];
-    expect(last).toMatchObject({ relationship_string: "", link_label: "wife", link_from: "HWB" });
-    expect(path.steps[3]).toMatchObject({ link: "spouse", link_label: "wife", link_from: "HWB" });
-    // One depth-1 request for that one link, shared by steps and people.
+    expect(path.steps[3]).toMatchObject({ link: "spouse", relationship_string: "", label: "brother-in-law's wife" });
+    expect(labels(path.steps[2].parents!)).toEqual(["father-in-law", "mother-in-law"]);
+    // One depth-1 request for that one link.
     expect(calls.filter((c) => c.options.depth === 1)).toEqual([{ from: "HWB", to: "HWBW", options: { depth: 1, max: 1 } }]);
+
+    const [translated] = await getRelationshipPaths("H", "HWBW", deps, { maxPaths: 1, inLawPattern: "{1} van {0}" });
+    expect(translated.steps[3].label).toBe("wife van brother-in-law");
   });
 
-  it("leaves a path with a marriage in the middle as just its steps", async () => {
+  it("keeps a marriage in the middle as just its steps", async () => {
     const { deps } = fakeServer();
     // S's half-brother H's wife's father.
     const [path] = await getRelationshipPaths("S", "HWF", deps, { maxPaths: 1 });
     expect(path.steps.map((s) => s.link)).toEqual([null, "parent", "child", "spouse", "parent"]);
-    expect(handles(path.people)).toEqual(["S", "A", "H", "HW", "HWF"]);
-    expect(path.common_ancestors).toEqual([]);
-    expect(path.via).toEqual([]);
-  });
-
-  it("leaves a path that isn't one family tree as just its steps", async () => {
-    const { deps } = fakeServer();
-    // AF ⚭ A ⚭ SF: a spouse's spouse.
-    const [path] = await getRelationshipPaths("AF", "SF", deps, { maxPaths: 1 });
-    expect(handles(path.steps)).toEqual(["AF", "A", "SF"]);
-    expect(handles(path.people)).toEqual(["AF", "A", "SF"]);
-    expect(path.common_ancestors).toEqual([]);
-    expect(path.via).toEqual([]);
+    expect(handles(path.steps)).toEqual(["S", "A", "H", "HW", "HWF"]);
+    expect(path.steps[1].partner).toBeNull();
   });
 
   it("asks for room for the detours, caps depth, and passes blood_only", async () => {
@@ -288,7 +285,7 @@ describe("getRelationshipPaths", () => {
     expect(peopleRequests).toEqual([]);
   });
 
-  it("loads everyone on the paths in one request, plus one for the ancestors put in", async () => {
+  it("loads everyone on the paths in one request, plus one for the parents above", async () => {
     const { deps, peopleRequests } = fakeServer();
     await getRelationshipPaths("H", "C", deps, { maxPaths: 1 });
     expect(peopleRequests).toEqual([["H", "A", "B", "C"], ["GF", "GM"]]);

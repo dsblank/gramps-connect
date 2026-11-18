@@ -5,34 +5,16 @@
 # pane, get_home_person() is whoever is set as Home person on the Home
 # page.
 #
-# db.get_relationship_paths() asks gramps-web-api to find the chain of
+# db.get_relationship_paths() asks gramps-web-api for the chains of
 # parents, children, siblings and marriages between the two, each person
 # labelled with their relationship to the Home person by the real
 # gramps.gen.relationship calculator -- desktop's exact wording ("second
-# cousin once removed", "father-in-law") without reimplementing any of
-# it here. relationship_chart() draws the chain the way the app draws its
-# other charts. A path is plain data: change a label, or build your own,
-# before charting it.
+# cousin once removed", "father-in-law") without reimplementing any of it
+# here. relationship_chart() draws them the way the app draws its other
+# charts, with a pager when there's more than one. A path is plain data:
+# change a label, or build your own, before charting it.
 
 from html import escape
-
-
-def label_of(path, handle):
-    # Gramps has no name for some people, e.g. past a second marriage:
-    # those have a link_label ("wife") relative to link_from instead, read
-    # after link_from's own label -- "brother-in-law's wife".
-    steps = {s["handle"]: s for s in path["steps"]}
-    first = path["steps"][0]["handle"]
-    step = steps.get(handle)
-    if step is None:
-        return ""
-    if step["relationship_string"] or not step.get("link_label"):
-        return step["relationship_string"]
-    source = step.get("link_from")
-    if source is None or source == first or source not in steps:
-        return step["link_label"]
-    return label_of(path, source) + "'s " + step["link_label"]
-
 
 person = get_selected()
 
@@ -53,27 +35,14 @@ else:
         # label describes a person in terms of the first one, so
         # (home_person, person) gives "son"/"niece"/... meaning the
         # selected person is the Home person's son/niece. Same direction
-        # Gramps Desktop's own status bar uses. max_paths=1: only the
-        # shortest path is drawn.
-        paths = []
-        if "relationship_chart" in globals():
-            paths = db.get_relationship_paths(home_person, person, max_paths=1)
+        # Gramps Desktop's own status bar uses. The shortest comes first;
+        # up to five, for the chart's pager.
+        paths = db.get_relationship_paths(home_person, person, max_paths=5)
 
-        if paths and "steps" in paths[0]:
-            relationship = label_of(paths[0], person.handle)
-        else:
-            # An older gramps-connect: no path search, or one without
-            # "steps" -- ask for the wording alone.
-            relationship = db.get_relationship(home_person, person)
-
-        if paths:
-            if relationship:
-                html(f"{escape(name_of(person))} is {escape(name_of(home_person))}'s <b>{escape(relationship)}</b>.")
-            else:
-                html(f"How {escape(name_of(person))} is connected to {escape(name_of(home_person))}:")
-            relationship_chart(paths[0])
-        elif relationship:
-            html(f"{escape(name_of(person))} is {escape(name_of(home_person))}'s <b>{escape(relationship)}</b>.")
-        else:
+        if not paths:
             # None within 15 links, the most the search goes.
             html(f"No relationship found between {escape(name_of(person))} and {escape(name_of(home_person))}.")
+        else:
+            relationship = paths[0]["steps"][-1]["label"]
+            html(f"{escape(name_of(person))} is {escape(name_of(home_person))}'s <b>{escape(relationship)}</b>.")
+            relationship_chart(paths)

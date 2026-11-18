@@ -1,15 +1,17 @@
-// relationship_chart(path)'s block (pyodideWorker.ts): one path from
-// db.get_relationship_paths() as the genealogist's "inverted V" -- the
-// common ancestor (or ancestor couple) on top, the first person's line down
-// the left, the last person's down the right, one row per generation, so
-// "once removed" is simply one leg being a row longer.
+// relationship_chart(paths)'s block (pyodideWorker.ts): paths from
+// db.get_relationship_paths() drawn the way a family tree shows them --
+// for an ordinary relationship the genealogist's "inverted V", the common
+// ancestor (or ancestor couple) on top, the first person's line down the
+// left, the last person's down the right, one row per generation; for a
+// chain through marriages, several of those side by side, joined by rings
+// (see layoutRelationshipChart). More than one path: a pager above.
 //
 // The Gramplet decides who is on the path and what each card says; names
 // and dates come from the local person cache here, so they follow the
 // tree's name format and the user's date settings, and cost no request.
 // Cards are HTML (the browser wraps names properly); only the connecting
 // lines are SVG, drawn underneath.
-import { Paper, Text, UnstyledButton, useComputedColorScheme } from "@mantine/core";
+import { Group, Pagination, Paper, Text, UnstyledButton, useComputedColorScheme } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getToken } from "../auth/auth";
@@ -17,7 +19,7 @@ import { GENDER_LABEL, genderAccent } from "../charts/genderColors";
 import { t } from "../i18n/i18n";
 import { formatDisplayDate } from "../store/placeIndex";
 import { getViewStore } from "../store/registry";
-import type { ChartPath, PathNode } from "../store/relationshipPath";
+import type { PathLink, PathNode, PathStep, RelationshipPath } from "../store/relationshipPath";
 import { fetchPage } from "../store/api";
 import { displayName, PERSON_VIEW } from "../store/views";
 import { ObjectMenu } from "./ObjectCellButton";
@@ -155,147 +157,168 @@ interface Layout {
   height: number;
 }
 
-/** "wife's father": an in-law label, relative to the person married into
- * the family. The pattern is translatable, so a language can put the two
- * the other way round. */
-export function composeInLaw(anchor: string, relationship: string): string {
-  return t("{0}'s {1}").replace("{0}", anchor).replace("{1}", relationship);
+const COL_W = CARD_W + LEG_GAP;
+const vertical = (link: PathLink | null) => link === "parent" || link === "child";
+
+/** Where the chain turns round: up then down (a peak, the common ancestor)
+ * or down then up (a valley). */
+function isTurn(steps: PathStep[], i: number): boolean {
+  return i > 0 && i < steps.length - 1 && vertical(steps[i].link) && vertical(steps[i + 1].link) && steps[i].link !== steps[i + 1].link;
 }
 
-/** Positions only -- no names or dates needed, so this is the part a
- * test can check. */
-/** Each card's label: the person's relationship to the first person, or,
- * when Gramps has no name for it, their one-link label read after the
- * label of the person it's from ("brother-in-law's wife"). */
-function chartLabels(path: ChartPath, startLabel: string): Map<string, string> {
-  const nodes = [...path.people, ...(path.partner ? [path.partner] : [])];
-  const byHandle = new Map(nodes.map((n) => [n.handle, n]));
-  const labels = new Map<string, string>([[path.people[0].handle, startLabel]]);
-  const labelOf = (node: PathNode, seen: Set<string>): string => {
-    const known = labels.get(node.handle);
-    if (known !== undefined) return known;
-    let label = node.relationship_string;
-    if (!label && node.link_label) {
-      const from = node.link_from ? byHandle.get(node.link_from) : undefined;
-      // The first person's own label is a name for them ("Home person"),
-      // not a relationship to build on.
-      label =
-        from && from.handle !== path.people[0].handle && !seen.has(from.handle)
-          ? composeInLaw(labelOf(from, new Set([...seen, node.handle])), node.link_label)
-          : node.link_label;
+/** A card before it's put in pixels: `v` counts columns (a turn sits half
+ * way between two), `row` generations, up being negative. */
+interface Slot {
+  node: PathNode;
+  label: string;
+  kind: CardKind;
+  v: number;
+  row: number;
+}
+
+/** Positions only -- no names or dates needed, so this is the part a test
+ * can check.
+ *
+ * The chain is drawn the way a family tree would show it, one link at a
+ * time: a run of parents (or children) is one column, one row per
+ * generation; at a turn the chain moves on to a new column, with the
+ * ancestor (or ancestor couple) centred above the two, or the shared child
+ * below; a marriage moves across with rings; a sibling link moves across
+ * with the pair's parents above. So an ordinary relationship is the
+ * genealogist's "inverted V", and a chain through marriages is several of
+ * them side by side. If anything would overlap (a chain that doubles back
+ * on itself), every person gets a column of their own instead. */
+export function layoutRelationshipChart(path: RelationshipPath, startLabel: string): Layout {
+  return layout(path, startLabel, false) ?? layout(path, startLabel, true)!;
+}
+
+function layout(path: RelationshipPath, startLabel: string, staircase: boolean): Layout | null {
+  const steps = path.steps;
+  const last = steps.length - 1;
+  const turn = (i: number) => !staircase && isTurn(steps, i);
+  const labelOf = (node: PathNode) => node.label || node.relationship_string || "";
+
+  // Each person's row and column.
+  const rows: number[] = [];
+  const cols: number[] = [];
+  let c = 0;
+  let r = 0;
+  steps.forEach((step, i) => {
+    if (i > 0) {
+      r += step.link === "parent" ? -1 : step.link === "child" ? 1 : 0;
+      if (staircase || turn(i - 1) || step.link === "spouse" || step.link === "sibling") c += 1;
     }
-    labels.set(node.handle, label);
-    return label;
-  };
-  for (const node of nodes) labelOf(node, new Set());
-  return labels;
-}
+    rows.push(r);
+    cols.push(turn(i) ? c + 0.5 : c);
+  });
 
-export function layoutRelationshipChart(path: ChartPath, startLabel: string): Layout {
-  const all = path.people;
-  const marriages = path.via ?? [];
-  const labelOf = chartLabels(path, startLabel);
-  const isEnd = (h: string) => h === all[0].handle || h === all[all.length - 1].handle;
-  // The blood part is everyone but those who married in; they're added
-  // beside their spouses at the end.
-  const marriedIn = new Set(marriages.map((m) => m.married_to));
-  const nodes = all.filter((n) => !marriedIn.has(n.handle));
-  const partnerLabel = path.partner ? (labelOf.get(path.partner.handle) ?? "") : "";
-  // How each person is linked to the one before, when the path says.
-  const linkOf = new Map((path.steps ?? []).map((s) => [s.handle, s.link]));
+  const slots: Slot[] = steps.map((node, i) => ({
+    node,
+    label: i === 0 ? startLabel : labelOf(node),
+    kind: i === 0 || i === last ? "end" : turn(i) && node.link === "parent" ? "top" : "mid",
+    v: cols[i],
+    row: rows[i],
+  }));
+  // An ancestor couple: the one on the chain on the left, their spouse on
+  // the right, together centred over the turn.
+  const couples: { i: number; v: number; row: number; two: boolean }[] = [];
+  steps.forEach((step, i) => {
+    if (staircase) return;
+    if (turn(i) && step.link === "parent" && step.partner) {
+      slots[i].v -= 0.5;
+      slots.push({ node: step.partner, label: labelOf(step.partner), kind: "top", v: cols[i] + 0.5, row: rows[i] });
+    }
+    if (step.link === "sibling" && step.parents?.length) {
+      const mid = (cols[i - 1] + cols[i]) / 2;
+      const two = step.parents.length > 1;
+      step.parents.slice(0, 2).forEach((parent, j) =>
+        slots.push({ node: parent, label: labelOf(parent), kind: "top", v: two ? mid - 0.5 + j : mid, row: rows[i] - 1 }),
+      );
+      couples.push({ i, v: mid, row: rows[i] - 1, two });
+    }
+  });
 
-  const anc = path.common_ancestors;
-  const cards: PlacedCard[] = [];
+  // Two cards in one row closer than a card's width would overlap.
+  for (let a = 0; a < slots.length; a++)
+    for (let b = a + 1; b < slots.length; b++)
+      if (slots[a].row === slots[b].row && Math.abs(slots[a].v - slots[b].v) * COL_W < CARD_W) return null;
+
+  const minV = Math.min(...slots.map((s) => s.v));
+  const minRow = Math.min(...slots.map((s) => s.row));
+  const maxRow = Math.max(...slots.map((s) => s.row));
+  const X = (v: number) => PAD + (v - minV) * COL_W;
+  const cx = (v: number) => X(v) + CARD_W / 2;
+  const top = (row: number) => PAD + (row - minRow) * ROW_H;
+  const bottom = (row: number) => top(row) + CARD_H;
+  const mid = (row: number) => top(row) + CARD_H / 2;
+
   const lines: Point[][] = [];
   const rings: Point[] = [];
-  const place = (node: PathNode, x: number, y: number, top = false) =>
-    cards.push({ node, label: labelOf.get(node.handle) ?? "", kind: isEnd(node.handle) ? "end" : top ? "top" : "mid", x, y });
-  let height = PAD * 2 + CARD_H;
+  /** A marriage between the cards at columns v and v + 1. */
+  const marriage = (v: number, row: number) => {
+    lines.push([[X(v) + CARD_W, mid(row)], [X(v + 1), mid(row)]]);
+    rings.push([X(v + 1) - LEG_GAP / 2, mid(row)]);
+  };
+  /** From under someone (or a couple) down to the tops of two people. */
+  const branchDown = (from: Point, row: number, to: number[]) => {
+    const elbow = bottom(row) + ROW_GAP / 2;
+    for (const k of to) lines.push([from, [from[0], elbow], [cx(cols[k]), elbow], [cx(cols[k]), top(rows[k])]]);
+  };
+  /** From above someone up to the bottoms of two people. */
+  const branchUp = (from: Point, row: number, to: number[]) => {
+    const elbow = top(row) - ROW_GAP / 2;
+    for (const k of to) lines.push([from, [from[0], elbow], [cx(cols[k]), elbow], [cx(cols[k]), bottom(rows[k])]]);
+  };
 
-  if (anc.length === 0 || nodes.length < 2) {
-    // A spouse (or a lone person): side by side, joined. So is a path that
-    // isn't one family tree's worth, e.g. with a marriage in the middle:
-    // one card after another, a ring at each marriage.
-    const mid = PAD + CARD_H / 2;
-    nodes.forEach((node, i) => {
-      const x = PAD + i * (CARD_W + LEG_GAP);
-      place(node, x, PAD);
-      if (i === 0) return;
-      lines.push([[x - LEG_GAP, mid], [x, mid]]);
-      const link = linkOf.get(node.handle);
-      if (link === "spouse" || (link === undefined && nodes.length === 2)) rings.push([x - LEG_GAP / 2, mid]);
-    });
-  } else {
-    const top = Math.max(0, nodes.findIndex((n) => n.handle === anc[0]));
-    const leftLeg = nodes.slice(0, top).reverse(); // just below the ancestor, down to the first person
-    const rightLeg = nodes.slice(top + 1); // just below the ancestor, down to the last person
-    const legs = [leftLeg, rightLeg].filter((leg) => leg.length > 0);
-    const couple = anc.length === 2 && path.partner !== null;
-    const across = Math.max(legs.length, couple ? 2 : 1);
-    const centre = PAD + (CARD_W * across + LEG_GAP * (across - 1)) / 2;
-    height = PAD * 2 + CARD_H + ROW_H * Math.max(leftLeg.length, rightLeg.length);
-
-    // The ancestor row: one card, or the couple side by side with the legs
-    // hanging from the middle of their line, like a family tree's drop line.
-    let drop: Point;
-    if (couple) {
-      const mid = PAD + CARD_H / 2;
-      const leftX = centre - LEG_GAP / 2 - CARD_W;
-      const rightX = centre + LEG_GAP / 2;
-      lines.push([[leftX + CARD_W, mid], [rightX, mid]]);
-      rings.push([centre, mid]);
-      place(nodes[top], leftX, PAD, true);
-      cards.push({ node: path.partner!, label: partnerLabel, kind: "top", x: rightX, y: PAD });
-      drop = [centre, mid];
+  steps.forEach((step, i) => {
+    if (turn(i)) {
+      if (step.link === "parent") {
+        // The ancestor (or couple) above both sides.
+        let from: Point = [cx(cols[i]), bottom(rows[i])];
+        if (step.partner) {
+          marriage(cols[i] - 0.5, rows[i]);
+          from = [cx(cols[i]), mid(rows[i])];
+        }
+        branchDown(from, rows[i], [i - 1, i + 1]);
+      } else {
+        branchUp([cx(cols[i]), top(rows[i])], rows[i], [i - 1, i + 1]);
+      }
+      return;
+    }
+    if (i === 0 || turn(i - 1)) return;
+    const prev = i - 1;
+    if (step.link === "spouse") {
+      marriage(cols[prev], rows[i]);
+    } else if (step.link === "sibling") {
+      const couple = couples.find((k) => k.i === i);
+      if (!couple) {
+        lines.push([[X(cols[prev]) + CARD_W, mid(rows[i])], [X(cols[i]), mid(rows[i])]]);
+      } else if (couple.two) {
+        marriage(couple.v - 0.5, couple.row);
+        branchDown([cx(couple.v), mid(couple.row)], couple.row, [prev, i]);
+      } else {
+        branchDown([cx(couple.v), bottom(couple.row)], couple.row, [prev, i]);
+      }
     } else {
-      place(nodes[top], centre - CARD_W / 2, PAD, true);
-      drop = [centre, PAD + CARD_H];
+      // A parent above a child: straight down in one column, or an elbow
+      // between two (the staircase).
+      const [upper, lower] = rows[prev] < rows[i] ? [prev, i] : [i, prev];
+      if (cols[upper] === cols[lower]) {
+        lines.push([[cx(cols[upper]), bottom(rows[upper])], [cx(cols[lower]), top(rows[lower])]]);
+      } else {
+        branchDown([cx(cols[upper]), bottom(rows[upper])], rows[upper], [lower]);
+      }
     }
+  });
 
-    // Each leg: a column of cards, the first joined to the ancestor row by
-    // an elbow, the rest by straight lines.
-    const columns: [PathNode[], number][] =
-      legs.length === 2
-        ? [
-            [leftLeg, centre - LEG_GAP / 2 - CARD_W / 2],
-            [rightLeg, centre + LEG_GAP / 2 + CARD_W / 2],
-          ]
-        : legs.map((leg) => [leg, centre]);
-    const elbowY = PAD + CARD_H + ROW_GAP / 2;
-    for (const [leg, cx] of columns) {
-      lines.push([drop, [drop[0], elbowY], [cx, elbowY], [cx, PAD + ROW_H]]);
-      leg.forEach((node, i) => {
-        const y = PAD + ROW_H * (i + 1);
-        if (i > 0) lines.push([[cx, y - ROW_GAP], [cx, y]]);
-        place(node, cx - CARD_W / 2, y);
-      });
-    }
-  }
-
-  // An in-law path: whoever married in sits beside their spouse -- on the
-  // left when they're the first person, on the right when the last.
-  for (const marriage of marriages) {
-    const spouse = cards.find((c) => c.node.handle === marriage.handle);
-    const node = all.find((n) => n.handle === marriage.married_to);
-    if (!spouse || !node) continue;
-    const onLeft = node === all[0];
-    const x = onLeft ? spouse.x - LEG_GAP - CARD_W : spouse.x + CARD_W + LEG_GAP;
-    const mid = spouse.y + CARD_H / 2;
-    const gapStart = onLeft ? x + CARD_W : spouse.x + CARD_W;
-    lines.push([[gapStart, mid], [gapStart + LEG_GAP, mid]]);
-    rings.push([gapStart + LEG_GAP / 2, mid]);
-    place(node, x, spouse.y);
-  }
-
-  // Shift everything right if a card landed left of the margin.
-  const dx = PAD - Math.min(...cards.map((c) => c.x));
-  if (dx !== 0) {
-    for (const c of cards) c.x += dx;
-    // Once per point: both legs' lines start at the same drop point.
-    for (const p of new Set(lines.flat())) p[0] += dx;
-    for (const r of rings) r[0] += dx;
-  }
-  return { cards, lines, rings, width: Math.max(...cards.map((c) => c.x)) + CARD_W + PAD, height };
+  const cards = slots.map((s) => ({ node: s.node, label: s.label, kind: s.kind, x: X(s.v), y: top(s.row) }));
+  return {
+    cards,
+    lines,
+    rings,
+    width: Math.max(...cards.map((c) => c.x)) + CARD_W + PAD,
+    height: top(maxRow) + CARD_H + PAD,
+  };
 }
 
 function PersonCard({
@@ -356,48 +379,61 @@ function PersonCard({
 }
 
 export function RelationshipChart({
-  path,
+  paths,
   startLabel,
   interactive,
 }: {
-  path: ChartPath;
+  paths: RelationshipPath[];
   startLabel: string | null;
   interactive: boolean;
 }) {
   const dark = useComputedColorScheme("light") === "dark";
+  const [index, setIndex] = useState(0);
+  const path = paths[Math.min(index, paths.length - 1)];
   const layout = layoutRelationshipChart(path, startLabel ?? t("Home person"));
   const people = usePeople(layout.cards.map((c) => c.node.handle));
+  const end = path.steps[path.steps.length - 1];
   return (
-    <div style={{ overflowX: "auto", marginBottom: "var(--mantine-spacing-xs)" }}>
-      <div style={{ position: "relative", width: layout.width, height: layout.height }}>
-        <svg width={layout.width} height={layout.height} style={{ position: "absolute", inset: 0 }} aria-hidden>
-          {layout.lines.map((points, i) => (
-            <path
-              key={i}
-              d={points.map(([x, y], j) => `${j === 0 ? "M" : "L"}${x},${y}`).join(" ")}
-              fill="none"
-              stroke="var(--mantine-color-dimmed)"
-              strokeWidth={1.5}
+    <div style={{ marginBottom: "var(--mantine-spacing-xs)" }}>
+      {paths.length > 1 && (
+        <Group gap="xs" mb={4}>
+          <Pagination size="xs" total={paths.length} value={index + 1} onChange={(page) => setIndex(page - 1)} />
+          <Text size="xs" c="dimmed">
+            {end.label || end.relationship_string}
+          </Text>
+        </Group>
+      )}
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ position: "relative", width: layout.width, height: layout.height }}>
+          <svg width={layout.width} height={layout.height} style={{ position: "absolute", inset: 0 }} aria-hidden>
+            {layout.lines.map((points, i) => (
+              <path
+                key={i}
+                d={points.map(([x, y], j) => `${j === 0 ? "M" : "L"}${x},${y}`).join(" ")}
+                fill="none"
+                stroke="var(--mantine-color-dimmed)"
+                strokeWidth={1.5}
+              />
+            ))}
+            {/* Two linked rings: the first is filled so it hides the line
+                behind it, the second isn't, so they look linked. */}
+            {layout.rings.map(([x, y], i) => (
+              <g key={i} stroke="var(--mantine-color-dimmed)" strokeWidth={1.5}>
+                <circle cx={x - 3.5} cy={y} r={5.5} fill="var(--mantine-color-body)" />
+                <circle cx={x + 3.5} cy={y} r={5.5} fill="none" />
+              </g>
+            ))}
+          </svg>
+          {layout.cards.map((card, i) => (
+            <PersonCard
+              key={`${card.node.handle}-${i}`}
+              card={card}
+              info={people.get(card.node.handle)}
+              dark={dark}
+              interactive={interactive}
             />
           ))}
-          {/* Two linked rings: the first is filled so it hides the line
-              behind it, the second isn't, so they look linked. */}
-          {layout.rings.map(([x, y], i) => (
-            <g key={i} stroke="var(--mantine-color-dimmed)" strokeWidth={1.5}>
-              <circle cx={x - 3.5} cy={y} r={5.5} fill="var(--mantine-color-body)" />
-              <circle cx={x + 3.5} cy={y} r={5.5} fill="none" />
-            </g>
-          ))}
-        </svg>
-        {layout.cards.map((card) => (
-          <PersonCard
-            key={card.node.handle}
-            card={card}
-            info={people.get(card.node.handle)}
-            dark={dark}
-            interactive={interactive}
-          />
-        ))}
+        </div>
       </div>
     </div>
   );

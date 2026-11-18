@@ -237,6 +237,7 @@ export function GrampletWindow({
       whereExpr: ctx.whereExpr,
       filterType: ctx.whereExpr ? ctx.viewKey : null,
       homePersonHandle: getHomePersonHandle(),
+      inLawPattern: t("{0}'s {1}"),
       allowChanges,
       // Opening the window is always a dry run; only the Run button saves.
       dryRun,

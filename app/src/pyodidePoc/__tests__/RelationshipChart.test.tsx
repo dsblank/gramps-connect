@@ -2,7 +2,7 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen } from "../../testUtils/renderWithProviders";
-import type { ChartPath } from "../../store/relationshipPath";
+import type { PathLink, PathNode, PathStep, RelationshipPath } from "../../store/relationshipPath";
 import { GrampletResultView } from "../GrampletResultView";
 import { layoutRelationshipChart } from "../RelationshipChart";
 
@@ -48,158 +48,189 @@ fetchPage.mockImplementation(async (_view: unknown, _token: string, _after: unkn
   totalCount: null,
 }));
 
-const node = (handle: string, relationship_string = "", gender = 2) => ({ handle, relationship_string, gender });
-/** Someone Gramps has no name for, named from the person before them. */
-const linked = (handle: string, link_label: string, link_from: string, gender = 2) => ({ ...node(handle, "", gender), link_label, link_from });
+const node = (handle: string, label = "", gender = 2): PathNode => ({ handle, relationship_string: label, label, gender });
+const step = (handle: string, link: PathLink | null, label = "", extra: Partial<PathStep> = {}): PathStep => ({
+  ...node(handle, label),
+  link,
+  ...extra,
+});
 
-/** Second cousins once removed would be longer; first cousins once
- * removed through a grandparent couple keeps the test readable:
+/** First cousins once removed through a grandparent couple:
  * H -> A -> GM (⚭ GF) -> B -> C -> X. */
-const COUSIN: ChartPath = {
-  people: [node("H"), node("A", "mother"), node("GM", "grandmother"), node("B", "uncle"), node("C", "first cousin"), node("X", "first cousin once removed")],
-  common_ancestors: ["GM", "GF"],
-  partner: node("GF", "grandfather", 1),
-  via: [],
+const COUSIN: RelationshipPath = {
+  steps: [
+    step("H", null),
+    step("A", "parent", "mother"),
+    step("GM", "parent", "grandmother", { partner: node("GF", "grandfather", 1) }),
+    step("B", "child", "uncle"),
+    step("C", "child", "first cousin"),
+    step("X", "child", "first cousin once removed"),
+  ],
 };
+
+const CARD_W = 188;
+const CARD_H = 76;
+
+function at(cards: { node: { handle: string }; x: number; y: number; label: string; kind: string }[], h: string) {
+  const card = cards.find((c) => c.node.handle === h);
+  if (!card) throw new Error(`no card for ${h}`);
+  return card;
+}
+
+/** No two cards overlap. */
+function expectNoOverlap(cards: { x: number; y: number }[]) {
+  for (let i = 0; i < cards.length; i++)
+    for (let j = i + 1; j < cards.length; j++) {
+      const [a, b] = [cards[i], cards[j]];
+      const apart = Math.abs(a.x - b.x) >= CARD_W || Math.abs(a.y - b.y) >= CARD_H;
+      expect(apart, `cards ${i} and ${j} overlap`).toBe(true);
+    }
+}
 
 describe("layoutRelationshipChart", () => {
   it("puts the couple on top and one leg per side, one row per generation", () => {
     const { cards, rings } = layoutRelationshipChart(COUSIN, "Home person");
-    const at = (h: string) => cards.find((c) => c.node.handle === h)!;
-    expect(at("GM").y).toBe(at("GF").y);
-    expect(at("GM").x).toBeLessThan(at("GF").x);
+    expect(at(cards, "GM").y).toBe(at(cards, "GF").y);
+    expect(at(cards, "GM").x).toBeLessThan(at(cards, "GF").x);
     // The left leg (to H) is a row shorter than the right one (to X).
-    expect(at("A").y).toBe(at("B").y);
-    expect(at("H").y).toBe(at("C").y);
-    expect(at("X").y).toBeGreaterThan(at("H").y);
-    expect(at("H").x).toBeLessThan(at("X").x);
+    expect(at(cards, "A").y).toBe(at(cards, "B").y);
+    expect(at(cards, "H").y).toBe(at(cards, "C").y);
+    expect(at(cards, "X").y).toBeGreaterThan(at(cards, "H").y);
+    expect(at(cards, "H").x).toBe(at(cards, "A").x);
+    expect(at(cards, "B").x).toBe(at(cards, "X").x);
+    expect(at(cards, "H").x).toBeLessThan(at(cards, "X").x);
     expect(rings).toHaveLength(1);
-    expect(at("H").label).toBe("Home person");
-    expect([at("H").kind, at("X").kind, at("GM").kind, at("A").kind]).toEqual(["end", "end", "top", "mid"]);
+    expect(at(cards, "H").label).toBe("Home person");
+    expect([at(cards, "H").kind, at(cards, "X").kind, at(cards, "GM").kind, at(cards, "A").kind]).toEqual(["end", "end", "top", "mid"]);
+    expectNoOverlap(cards);
+  });
+
+  it("puts a sibling link's parents above the pair", () => {
+    const { cards, rings } = layoutRelationshipChart(
+      {
+        steps: [
+          step("H", null),
+          step("A", "parent", "mother"),
+          step("B", "sibling", "uncle", { parents: [node("GF", "grandfather", 1), node("GM", "grandmother", 0)] }),
+          step("C", "child", "first cousin"),
+        ],
+      },
+      "Me",
+    );
+    expect(at(cards, "GF").y).toBeLessThan(at(cards, "A").y);
+    expect(at(cards, "GF").x).toBe(at(cards, "A").x);
+    expect(at(cards, "GM").x).toBe(at(cards, "B").x);
+    expect(at(cards, "A").y).toBe(at(cards, "B").y);
+    expect(at(cards, "C").x).toBe(at(cards, "B").x);
+    expect(rings).toHaveLength(1);
+    expectNoOverlap(cards);
   });
 
   it("draws a direct line as one column, and a spouse side by side", () => {
-    const line = layoutRelationshipChart(
-      { people: [node("H"), node("P", "father"), node("G", "grandfather")], common_ancestors: ["G"], partner: null, via: [] },
-      "Me"
-    );
+    const line = layoutRelationshipChart({ steps: [step("H", null), step("P", "parent", "father"), step("G", "parent", "grandfather")] }, "Me");
     expect(new Set(line.cards.map((c) => c.x)).size).toBe(1);
-    expect(line.cards.find((c) => c.node.handle === "G")!.kind).toBe("end");
+    expect(at(line.cards, "G").kind).toBe("end");
+    expect(line.rings).toHaveLength(0);
 
-    const spouse = layoutRelationshipChart({ people: [node("H"), node("W", "wife")], common_ancestors: [], partner: null, via: [] }, "Me");
+    const spouse = layoutRelationshipChart({ steps: [step("H", null), step("W", "spouse", "wife")] }, "Me");
     expect(spouse.cards[0].y).toBe(spouse.cards[1].y);
     expect(spouse.rings).toHaveLength(1);
   });
-});
 
-describe("in-law layout", () => {
-  it("puts the first person beside their spouse, with the server's in-law labels", () => {
-    // Lewis ⚭ Luella, whose father is Henry: Henry on top, Luella below
-    // him, Lewis beside Luella.
+  it("puts the first person beside their spouse, under her father", () => {
     const { cards, rings } = layoutRelationshipChart(
-      {
-        people: [node("L", "", 1), node("W", "wife", 0), node("F", "father-in-law", 1)],
-        common_ancestors: ["F"],
-        partner: null,
-        via: [{ handle: "W", married_to: "L" }],
-      },
-      "Home person"
+      { steps: [step("L", null), step("W", "spouse", "wife"), step("F", "parent", "father-in-law")] },
+      "Home person",
     );
-    const at = (h: string) => cards.find((c) => c.node.handle === h)!;
-    expect(at("L").y).toBe(at("W").y);
-    expect(at("L").x).toBeLessThan(at("W").x);
-    expect(at("F").y).toBeLessThan(at("W").y);
-    expect(at("F").label).toBe("father-in-law");
-    expect(at("W").label).toBe("wife");
-    expect([at("L").kind, at("W").kind, at("F").kind]).toEqual(["end", "mid", "end"]);
+    expect(at(cards, "L").y).toBe(at(cards, "W").y);
+    expect(at(cards, "L").x).toBeLessThan(at(cards, "W").x);
+    expect(at(cards, "F").y).toBeLessThan(at(cards, "W").y);
+    expect(at(cards, "F").x).toBe(at(cards, "W").x);
+    expect(at(cards, "F").label).toBe("father-in-law");
     expect(rings).toHaveLength(1);
     expect(Math.min(...cards.map((c) => c.x))).toBe(8);
   });
 
-  it("puts the last person beside their spouse on the right", () => {
-    const { cards } = layoutRelationshipChart(
+  it("lays a chain through marriages out as family trees side by side", () => {
+    // H's brother B ⚭ W, whose cousin is WC: H, B under their parents;
+    // B ⚭ W; W up to her grandparent G and down to WC.
+    const { cards, rings, lines } = layoutRelationshipChart(
       {
-        people: [node("H"), node("P", "father"), node("B", "brother"), linked("BW", "wife", "B")],
-        common_ancestors: ["P"],
-        partner: null,
-        via: [{ handle: "B", married_to: "BW" }],
-      },
-      "Home person"
-    );
-    const at = (h: string) => cards.find((c) => c.node.handle === h)!;
-    expect(at("BW").y).toBe(at("B").y);
-    expect(at("BW").x).toBeGreaterThan(at("B").x);
-    expect(at("BW").label).toBe("brother's wife");
-  });
-});
-
-describe("in-law with two legs", () => {
-  it("keeps every line between cards when shifted right for the first person's spouse", () => {
-    // H ⚭ W; W's grandfather G is on top, his son U's son X on the other leg.
-    const { cards, lines } = layoutRelationshipChart(
-      {
-        people: [node("H", "", 1), node("W", "wife", 0), node("P", "father-in-law", 1), node("G", "grandfather-in-law", 1), node("U", "uncle-in-law", 1), node("X", "cousin-in-law", 1)],
-        common_ancestors: ["G"],
-        partner: null,
-        via: [{ handle: "W", married_to: "H" }],
-      },
-      "Home person"
-    );
-    const right = Math.max(...cards.map((c) => c.x)) + 188;
-    for (const line of lines) for (const [x] of line) expect(x).toBeLessThanOrEqual(right);
-    // The line down from G starts under G's centre.
-    const g = cards.find((c) => c.node.handle === "G")!;
-    const fromG = lines.filter((l) => l[0][1] === g.y + 76);
-    expect(fromG.length).toBe(2);
-    for (const l of fromG) expect(l[0][0]).toBe(g.x + 188 / 2);
-  });
-});
-
-describe("two-marriage layout", () => {
-  it("puts each married-in end beside their spouse, and names the unnamed from the person before", () => {
-    // Lewis ⚭ W, whose brother B ⚭ X: W and B under their father P,
-    // Lewis left of W, X right of B.
-    const { cards, rings } = layoutRelationshipChart(
-      {
-        people: [node("L", "", 1), node("W", "wife", 0), node("P", "father-in-law", 1), node("B", "brother-in-law", 1), linked("X", "wife", "B", 0)],
-        common_ancestors: ["P"],
-        partner: null,
-        via: [
-          { handle: "W", married_to: "L" },
-          { handle: "B", married_to: "X" },
+        steps: [
+          step("H", null),
+          step("B", "sibling", "brother", { parents: [node("P", "father", 1)] }),
+          step("W", "spouse", "sister-in-law"),
+          step("WP", "parent", ""),
+          step("G", "parent", "", { partner: null }),
+          step("U", "child", ""),
+          step("WC", "child", ""),
         ],
       },
-      "Home person"
+      "Me",
     );
-    const at = (h: string) => cards.find((c) => c.node.handle === h)!;
-    expect(at("L").y).toBe(at("W").y);
-    expect(at("X").y).toBe(at("B").y);
-    expect(at("L").x).toBeLessThan(at("W").x);
-    expect(at("W").x).toBeLessThan(at("B").x);
-    expect(at("B").x).toBeLessThan(at("X").x);
-    expect([at("P").label, at("B").label, at("X").label]).toEqual(["father-in-law", "brother-in-law", "brother-in-law's wife"]);
-    expect(rings).toHaveLength(2);
-  });
-});
-
-describe("a path that isn't one family tree", () => {
-  it("is one row of cards, with a ring at each marriage only", () => {
-    // A's brother B ⚭ W, whose brother is WB: a marriage in the middle.
-    const steps = [
-      { ...node("A"), link: null },
-      { ...node("B", "brother", 1), link: "sibling" as const },
-      { ...node("W", "sister-in-law", 0), link: "spouse" as const },
-      { ...linked("WB", "brother", "W", 1), link: "sibling" as const },
-    ];
-    const { cards, rings, lines } = layoutRelationshipChart(
-      { steps, people: steps.map(({ link: _, ...n }) => n), common_ancestors: [], partner: null, via: [] },
-      "Home person"
-    );
-    expect(new Set(cards.map((c) => c.y)).size).toBe(1);
-    expect(cards.map((c) => c.node.handle)).toEqual(["A", "B", "W", "WB"]);
-    expect(lines).toHaveLength(3);
+    expect(at(cards, "W").y).toBe(at(cards, "B").y);
+    expect(at(cards, "W").x).toBeGreaterThan(at(cards, "B").x);
+    expect(at(cards, "WP").x).toBe(at(cards, "W").x);
+    // G is centred over the turn, between W's column and WC's.
+    expect(at(cards, "G").x).toBeGreaterThan(at(cards, "WP").x);
+    expect(at(cards, "G").x).toBeLessThan(at(cards, "WC").x);
+    expect(at(cards, "G").kind).toBe("top");
+    expect(at(cards, "WC").y).toBe(at(cards, "W").y);
+    expect(at(cards, "P").y).toBeLessThan(at(cards, "H").y);
     expect(rings).toHaveLength(1);
-    expect(cards[3].label).toBe("sister-in-law's brother");
+    expectNoOverlap(cards);
+    // Every line stays inside the chart.
+    const right = Math.max(...cards.map((c) => c.x)) + CARD_W;
+    for (const line of lines) for (const [x] of line) expect(x).toBeLessThanOrEqual(right);
+  });
+
+  it("centres the shared child below a valley", () => {
+    // A's child K, whose other parent (not A's spouse) is B.
+    const { cards } = layoutRelationshipChart({ steps: [step("A", null), step("K", "child", "son"), step("B", "parent", "")] }, "Me");
+    expect(at(cards, "K").y).toBeGreaterThan(at(cards, "A").y);
+    expect(at(cards, "B").y).toBe(at(cards, "A").y);
+    expect(at(cards, "K").x).toBeGreaterThan(at(cards, "A").x);
+    expect(at(cards, "K").x).toBeLessThan(at(cards, "B").x);
+    expectNoOverlap(cards);
+  });
+
+  it("gives everyone a column of their own when the tree shape would overlap", () => {
+    // Down, up, then a sibling whose parents would land on X's row and
+    // column: overlapping in the tree shape.
+    const steps = [
+      step("A", null),
+      step("K", "child", "son"),
+      step("X", "parent", ""),
+      step("Y", "sibling", "", { parents: [node("Q", "", 1), node("R", "", 0)] }),
+      step("Z", "parent", ""),
+    ];
+    const { cards } = layoutRelationshipChart({ steps }, "Me");
+    expectNoOverlap(cards);
+    // Just the chain, one column each, left to right.
+    expect(cards.map((c) => c.node.handle)).toEqual(["A", "K", "X", "Y", "Z"]);
+    expect(cards.map((c) => c.x)).toEqual([...cards.map((c) => c.x)].sort((a, b) => a - b));
+  });
+
+  it("keeps the line from the ancestor under them when shifted right", () => {
+    // H ⚭ W; W's grandfather G on top, his son U's son X on the other leg.
+    const { cards, lines } = layoutRelationshipChart(
+      {
+        steps: [
+          step("H", null),
+          step("W", "spouse", "wife"),
+          step("P", "parent", "father-in-law"),
+          step("G", "parent", "grandfather-in-law", { partner: null }),
+          step("U", "child", "uncle-in-law"),
+          step("X", "child", "cousin-in-law"),
+        ],
+      },
+      "Home person",
+    );
+    const g = at(cards, "G");
+    const fromG = lines.filter((l) => l[0][1] === g.y + CARD_H);
+    expect(fromG).toHaveLength(2);
+    for (const l of fromG) expect(l[0][0]).toBe(g.x + CARD_W / 2);
+    expectNoOverlap(cards);
   });
 });
 
@@ -208,7 +239,7 @@ describe("relationship_chart block", () => {
     renderWithProviders(
       <GrampletResultView
         status="done"
-        response={{ type: "blocks", runId: "r", blocks: [{ type: "relationship-chart", path: COUSIN, startLabel: null }] }}
+        response={{ type: "blocks", runId: "r", blocks: [{ type: "relationship-chart", paths: [COUSIN], startLabel: null }] }}
       />
     );
     expect(await screen.findByText("Home, Hal")).toBeTruthy();
@@ -222,11 +253,26 @@ describe("relationship_chart block", () => {
     expect(screen.getAllByText("(unknown)").length).toBeGreaterThan(0);
   });
 
+  it("switches between several paths with a pager", async () => {
+    const SPOUSE: RelationshipPath = { steps: [step("H", null), step("X", "spouse", "wife")] };
+    renderWithProviders(
+      <GrampletResultView
+        status="done"
+        response={{ type: "blocks", runId: "r3", blocks: [{ type: "relationship-chart", paths: [SPOUSE, COUSIN], startLabel: null }] }}
+      />
+    );
+    expect(await screen.findByText("Cousin, Xena")).toBeTruthy();
+    expect(screen.getAllByText("wife").length).toBeGreaterThan(0);
+    expect(screen.queryByText("first cousin")).toBeNull();
+    act(() => screen.getByRole("button", { name: "2" }).click());
+    expect(await screen.findByText("first cousin")).toBeTruthy();
+  });
+
   it("re-reads the cache when it changes, without the path changing", async () => {
     renderWithProviders(
       <GrampletResultView
         status="done"
-        response={{ type: "blocks", runId: "r2", blocks: [{ type: "relationship-chart", path: COUSIN, startLabel: null }] }}
+        response={{ type: "blocks", runId: "r2", blocks: [{ type: "relationship-chart", paths: [COUSIN], startLabel: null }] }}
       />
     );
     expect(await screen.findByText("Home, Hal")).toBeTruthy();

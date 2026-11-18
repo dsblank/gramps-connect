@@ -260,6 +260,7 @@ export function GrampletEditDialog({
         // works the same here as it does on a real view -- a Gramplet
         // built around it is testable from this preview.
         homePersonHandle: getHomePersonHandle(),
+        inLawPattern: t("{0}'s {1}"),
         // Never a real run here, only ever a dry run (see
         // GRAMPLET_WRITES_PLAN.md): to change data, save it and run it from
         // the Gramplets menu.

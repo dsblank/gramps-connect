@@ -80,7 +80,7 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
               <SymbolRow
                 symbol="db.get_relationship_paths(person1, person2, depth=15, max_paths=None, blood_only=False)"
                 meaning={t(
-                  "The people connecting the two, shortest path first, found on the server through parents, children, siblings and marriages -- quick even on a large tree. Each path has 'steps': [{'handle': ..., 'link': ..., 'relationship_string': ...}, ...] from person1 to person2, where 'link' is how each person is linked to the one before ('parent', 'child', 'sibling' or 'spouse') and relationship_string their relationship to person1. 'people', 'common_ancestors', 'partner' and 'via' are the same path as relationship_chart() draws it. Where Gramps has no name for someone, relationship_string is empty and 'link_label' names them from 'link_from' instead ('wife', read as 'brother-in-law's wife'). depth is the most links in a path (at most 15); blood_only=True keeps only paths through a common ancestor."
+                  "The people connecting the two, shortest path first, found on the server through parents, children, siblings and marriages -- quick even on a large tree. Each path is {'steps': [...]} from person1 to person2; each step has 'handle', 'link' (how they're linked to the one before: 'parent', 'child', 'sibling' or 'spouse'), 'relationship_string' (Gramps' words for their relationship to person1) and 'label' (the text to show -- for someone Gramps has no word for, built from the person before, like 'brother-in-law's wife'). A sibling step also has 'parents', and the top of a path has 'partner', the ancestor's spouse. depth is the most links in a path (at most 15); blood_only=True keeps only paths through a common ancestor."
                 )}
               />
             </Table.Tbody>
@@ -192,9 +192,9 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                 )}
               />
               <SymbolRow
-                symbol="relationship_chart(path, start_label=None)"
+                symbol="relationship_chart(paths, start_label=None)"
                 meaning={t(
-                  "Draws one path from db.get_relationship_paths() as a chart: the common ancestor on top, one line of people down each side, one row per generation (a path with a marriage in the middle is one row of cards). Names and dates come from the app; each card's label is that person's relationship_string, so change those first to relabel anyone. start_label names the first person (\"Home person\" if left out)."
+                  "Draws a path from db.get_relationship_paths(), or a list of them with a pager, the way a family tree shows it: a line of parents or children one column, one row per generation, the common ancestor above the two sides, marriages across with rings, and the parents above a sibling link. Names and dates come from the app; each card shows that step's 'label', so change those first to relabel anyone. start_label names the first person (\"Home person\" if left out)."
                 )}
               />
             </Table.Tbody>

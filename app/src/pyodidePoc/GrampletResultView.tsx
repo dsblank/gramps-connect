@@ -365,7 +365,7 @@ function BlockOutput({
   onWidgetEvent?: (key: string, value: unknown) => void;
 }) {
   if (block.type === "relationship-chart") {
-    return <RelationshipChart path={block.path} startLabel={block.startLabel} interactive={interactive} />;
+    return <RelationshipChart paths={block.paths} startLabel={block.startLabel} interactive={interactive} />;
   }
   if (block.type === "html") {
     return <HtmlOutput markup={block.markup} interactive={interactive} onWidgetEvent={onWidgetEvent} />;

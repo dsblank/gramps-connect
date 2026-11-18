@@ -12,7 +12,7 @@ import { CHANGES_BOOTSTRAP_PY } from "./changesBootstrap";
 import { ST_BOOTSTRAP_PY } from "./stBootstrap";
 import type { ChangeGroup, GrampletBlock, PyodideWorkerRequest, TransactionItem, PyodideWorkerResponse, RunGrampletRequest } from "./types";
 import { apiFetch } from "../store/apiFetch";
-import { getRelationshipPaths, type PathPerson, type ServerPath } from "../store/relationshipPath";
+import { DEFAULT_IN_LAW_PATTERN, getRelationshipPaths, type PathPerson, type ServerPath } from "../store/relationshipPath";
 import { supportsOrderByStrings, withOrderByFallback } from "../store/serverCapabilities";
 
 // Loaded once per worker instance and reused across messages -- the ~14MB
@@ -403,10 +403,12 @@ const bridge = {
   },
   // db.get_relationship_paths()'s bridge half -- gramps-web-api's
   // /relations/<h1>/<h2>/paths does the search; store/relationshipPath.ts
-  // drops the detours and adds the chart's shape (one ?handles= request
-  // for genders and parent families). `maxPaths` 0 means as many as the
-  // server gives.
+  // drops the detours, adds the parents above sibling links and the
+  // ancestor couples, and builds a label for anyone Gramps has no word for
+  // with the current run's translated pattern. `maxPaths` 0 means as many
+  // as the server gives.
   async relationshipPaths(handle1: string, handle2: string, depth: number, maxPaths: number, bloodOnly: boolean): Promise<string> {
+    const inLawPattern = currentInLawPattern;
     const paths = await getRelationshipPaths(
       handle1,
       handle2,
@@ -432,7 +434,7 @@ const bridge = {
           return pages.flat();
         },
       },
-      { depth, maxPaths: maxPaths > 0 ? maxPaths : undefined, bloodOnly },
+      { depth, maxPaths: maxPaths > 0 ? maxPaths : undefined, bloodOnly, inLawPattern },
     );
     return JSON.stringify(paths);
   },
@@ -902,36 +904,28 @@ class Db:
 
     async def get_relationship_paths(self, person1, person2, depth=15, max_paths=None, blood_only=False):
         """The people connecting two people, not just the wording: a list
-        of paths, shortest first. Each is a dict:
+        of paths, shortest first, each {"steps": [...]} from person1 to
+        person2. Each step is a dict:
 
-        "steps": the chain as found, from person1 to person2, each
-        {"handle", "link", "relationship_string", "gender"}. "link" says how
-        that person is linked to the one before them ("parent", "child",
-        "sibling" or "spouse"; None for person1). relationship_string is
-        their relationship to person1 in Gramps' own words ("" for person1).
+        "handle", "gender"; "link", how that person is linked to the one
+        before them ("parent", "child", "sibling" or "spouse"; None for
+        person1); "relationship_string", their relationship to person1 in
+        Gramps' own words ("" for person1, and where Gramps has none); and
+        "label", the text to show: relationship_string, or for someone
+        Gramps has no word for, one built from the person before them in
+        the user's language ("brother-in-law's wife").
 
-        "people", "common_ancestors", "partner", "via": the same path the
-        way relationship_chart(path) draws it, up to a common ancestor and
-        back down. A sibling link becomes the pair's parent here, and
-        common_ancestors is that ancestor, plus their spouse when the two
-        are an ancestor couple ("partner" is that spouse, labelled like
-        "people", or None). "via" lists a marriage at either end, each
-        {"handle": h, "married_to": m}: h on the blood side, m the end of
-        the path married to h. For a spouse, and for a path that isn't one
-        family tree (a marriage in the middle), common_ancestors is empty and
-        "people" is just the steps.
-
-        Gramps has no name for some people, e.g. past a second marriage:
-        their relationship_string is "", and "link_label" is their
-        relationship to the person "link_from" instead ("wife"), to be read
-        after that person's own: "brother-in-law's wife".
+        A "sibling" step also has "parents", the two siblings' parents (the
+        same keys, no "link"). A step where the chain goes up to an
+        ancestor and back down has "partner", that ancestor's spouse when
+        both sides come down through the same family, else None.
 
         depth is the most links in a path (at most 15), max_paths the most
         paths (None: as many as the server finds), and blood_only=True
         keeps only paths up to a common ancestor and down again. The search
-        runs on the server (gramps-web-api 3.26+) and only reads the people
-        near the two ends, so it's quick even on a large tree; an empty
-        list means not connected within depth links."""
+        runs on the server and only reads the people near the two ends, so
+        it's quick even on a large tree; an empty list means not connected
+        within depth links. relationship_chart(paths) draws them."""
         import json as _json
         if person1 is None or person2 is None:
             return []
@@ -1290,25 +1284,30 @@ def html(markup):
     _flush_table()
     _gramplet_sink_stack[-1].append({"type": "html", "markup": str(markup)})
 
-def relationship_chart(path, start_label=None):
-    """Draws one path from db.get_relationship_paths() as the app's own
-    relationship chart: the common ancestor (or ancestor couple) on top,
-    path["people"][0]'s line down the left, the last person's down the
-    right, one row per generation. A path without common_ancestors (a
-    spouse, or one with a marriage in the middle) is drawn as one row of
-    cards, with a ring at each marriage. Each card shows that person's
-    name and years (from the app, in the user's display settings) and
-    their relationship_string (or link_label after link_from's label);
+def relationship_chart(paths, start_label=None):
+    """Draws paths from db.get_relationship_paths() as the app's own
+    relationship chart, the way a family tree shows them: a run of parents
+    or children one column, one row per generation, the common ancestor
+    (or ancestor couple) above the two sides, a marriage across with
+    rings, and the parents above a sibling link. So an ordinary
+    relationship is the "inverted V", and a chain through marriages is
+    several side by side. Each card shows that person's name and years
+    (from the app, in the user's display settings) and their "label";
     start_label names the first person, who has none ("Home person", in
     the user's language, when left out).
 
-    The path is plain data, so it can be changed first: relabel someone
-    (person["relationship_string"] = "..."), or build one by hand in the
-    same shape. Clicking a card offers the same choices as a person in a
-    row() table."""
+    paths is one path or a list of them: with more than one, a pager
+    above the chart switches between them. A path is plain data, so it can
+    be changed first: relabel someone (step["label"] = "..."), or build one
+    by hand in the same shape. Clicking a card offers the same choices as
+    a person in a row() table."""
     import json as _json
-    if not isinstance(path, dict) or not isinstance(path.get("people"), list) or not path["people"]:
-        raise TypeError("relationship_chart() takes one path from db.get_relationship_paths()")
+    if isinstance(paths, dict):
+        paths = [paths]
+    if not isinstance(paths, (list, tuple)) or not paths or not all(
+        isinstance(p, dict) and isinstance(p.get("steps"), list) and p["steps"] for p in paths
+    ):
+        raise TypeError("relationship_chart() takes a path from db.get_relationship_paths(), or a list of them")
     _flush_print()
     _flush_table()
     # Round-tripped through JSON so a DataDict or other dict subclass in
@@ -1316,7 +1315,7 @@ def relationship_chart(path, start_label=None):
     # with a Python error rather than later in the worker.
     _gramplet_sink_stack[-1].append({
         "type": "relationship-chart",
-        "path": _json.loads(_json.dumps(path)),
+        "paths": _json.loads(_json.dumps(list(paths))),
         "startLabel": None if start_label is None else str(start_label),
     })
 
@@ -1946,7 +1945,12 @@ function escapeHtml(text: string): string {
 let queuedRequest: RunGrampletRequest | null = null;
 let running = false;
 
+/** The running Gramplet's RunGrampletRequest.inLawPattern, read by
+ * db.get_relationship_paths(). Runs never overlap (see runOne). */
+let currentInLawPattern = DEFAULT_IN_LAW_PATTERN;
+
 async function runOne(request: RunGrampletRequest): Promise<void> {
+  currentInLawPattern = request.inLawPattern || DEFAULT_IN_LAW_PATTERN;
   const { code, runId } = request;
   currentRunId = runId;
   sessionExpired = false;

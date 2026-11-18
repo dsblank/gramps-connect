@@ -569,6 +569,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       whereExpr,
       filterType: viewKey,
       homePersonHandle: getHomePersonHandle(),
+      inLawPattern: t("{0}'s {1}"),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, gramplets, runNonce, selectionNonce, viewKey, collapsed]);
@@ -628,6 +629,7 @@ export function PyodidePocPanel({ viewKey }: { viewKey: string }) {
       whereExpr,
       filterType: viewKey,
       homePersonHandle: getHomePersonHandle(),
+      inLawPattern: t("{0}'s {1}"),
       widgetEvent: { key, value },
     });
   }
