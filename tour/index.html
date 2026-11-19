@@ -137,7 +137,7 @@ h2 small { font: 600 12px var(--font-body); color: var(--faint); font-variant-nu
 .editbar code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; color: var(--muted); }
 body.editing .viewport { cursor: crosshair; }
 .pick { position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border: 2px solid #e8590c; border-radius: 50%; box-shadow: 0 0 0 2px #fff, inset 0 0 0 2px #fff; pointer-events: none; z-index: 4; }
-.pick[hidden] { display: none; }
+.pick[hidden], .editbar[hidden], .voicepick[hidden] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .layer.anim { transition: none; }
