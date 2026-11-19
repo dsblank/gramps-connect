@@ -79,6 +79,11 @@ export interface WikidataPlaceNode {
    * from `label`: a place's alternative names, for place formats in those
    * languages. */
   altLabels: WikidataLabel[];
+  /** Wikidata's aliases ("KY", "Commonwealth of Kentucky", "USA") in the
+   * requested languages plus language-neutral ("mul") ones. Used only to
+   * recognize a place the tree already has under another name -- never
+   * written to a new place, unlike altLabels. */
+  aliases: string[];
   lat: number | null;
   long: number | null;
   /** Raw P31 ("instance of") QIDs -- kept around for callers that want to
@@ -364,6 +369,7 @@ interface WikidataSnak {
 
 interface WikidataEntity {
   labels?: Record<string, { value?: string }>;
+  aliases?: Record<string, { value?: string }[]>;
   claims?: Record<string, WikidataSnak[]>;
   sitelinks?: Record<string, { site?: string; title?: string; url?: string }>;
 }
@@ -553,6 +559,31 @@ function readLabels(entity: WikidataEntity, qid: string, languages: string[]): P
   };
 }
 
+/** Aliases in `languages` (best first) and then "mul", deduplicated. */
+function readAliases(entity: WikidataEntity, languages: string[]): string[] {
+  const out: string[] = [];
+  for (const code of [...languages.flatMap(wikidataCodesFor), "mul"]) {
+    for (const alias of entity.aliases?.[code] ?? []) {
+      if (alias.value && !out.includes(alias.value)) out.push(alias.value);
+    }
+  }
+  return out;
+}
+
+/** A place name reduced for comparison: case, periods and apostrophes
+ * ignored, other punctuation treated as a space, so "Washington, D.C.",
+ * "washington dc" and "Washington DC" are all the same name. Accents are
+ * kept: they can tell two real places apart. */
+export function normalizePlaceName(name: string): string {
+  return name
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[.'\u2019`]/g, "")
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function readCoords(entity: WikidataEntity): { lat: number; long: number } | null {
   const value = entity.claims?.P625?.[0]?.mainsnak?.datavalue?.value as
     | { latitude?: number; longitude?: number }
@@ -603,6 +634,7 @@ export async function fetchWikidataChain(
     chain.push({
       qid,
       ...readLabels(entity, qid, languages),
+      aliases: readAliases(entity, languages),
       lat: coords?.lat ?? null,
       long: coords?.long ?? null,
       instanceOf,

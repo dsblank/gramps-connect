@@ -13,7 +13,7 @@ import { MEDIA_VIEW, PLACE_VIEW } from "../store/views";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "../store/objectsApi";
 import { getViewStore } from "../store/registry";
 import {
-  fetchDisambiguationCandidates, fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, isLikelyPlace, rankWikidataResults,
+  fetchDisambiguationCandidates, fetchWikidataChain, fetchWikidataGeoshape, geoshapeColorFor, isLikelyPlace, normalizePlaceName, rankWikidataResults,
   searchWikidata, searchWikidataPlaces,
   type WikidataDisambiguation, type WikidataLabel, type WikidataPlaceNode, type WikidataSearchResult,
 } from "../store/wikidataApi";
@@ -287,11 +287,55 @@ interface WikidataPlaceLookupDialogProps {
   /** The place's own current media_list, if any -- an outline of the
    * picked item already in it isn't fetched again. */
   existingMedia?: { ref?: string }[];
+  /** The place's current enclosing places (its placeref_list refs), if it
+   * has any -- they and their own parents are tried first when matching
+   * the Wikidata hierarchy to places already in the tree. */
+  parentHandles?: string[];
   onApply: (result: WikidataLookupResult) => void;
 }
 
+/** An enclosing place of the one being looked up, with every name it goes by. */
+interface AncestorPlace {
+  handle: string;
+  title: string;
+  names: string[];
+}
+
+/** How far up an existing hierarchy to look; deeper than any real one. */
+const MAX_ANCESTOR_DEPTH = 10;
+
+/** The enclosing places above `startHandles`, nearest first, following
+ * every parent (a place can have several, e.g. over different periods).
+ * A place that can't be fetched is skipped rather than failing the lookup. */
+async function fetchAncestorPlaces(token: string, startHandles: string[]): Promise<AncestorPlace[]> {
+  const out: AncestorPlace[] = [];
+  const seen = new Set<string>();
+  let level = startHandles;
+  for (let depth = 0; depth < MAX_ANCESTOR_DEPTH && level.length > 0; depth++) {
+    const next: string[] = [];
+    for (const handle of level) {
+      if (seen.has(handle)) continue;
+      seen.add(handle);
+      let place: Record<string, unknown>;
+      try {
+        place = await fetchPlainObject(token, PLACE_VIEW, handle);
+      } catch {
+        continue;
+      }
+      const name = (place.name as { value?: string } | undefined)?.value ?? "";
+      const altNames = ((place.alt_names as { value?: string }[] | undefined) ?? []).map((n) => n.value ?? "");
+      out.push({ handle, title: (place.title as string | undefined) || name, names: [name, ...altNames].filter(Boolean) });
+      for (const ref of (place.placeref_list as { ref?: string }[] | undefined) ?? []) {
+        if (ref.ref) next.push(ref.ref);
+      }
+    }
+    level = next;
+  }
+  return out;
+}
+
 export function WikidataPlaceLookupDialog({
-  opened, onClose, stackId, zIndex, initialQuery, currentName = "", existingMedia, onApply,
+  opened, onClose, stackId, zIndex, initialQuery, currentName = "", existingMedia, parentHandles = [], onApply,
 }: WikidataPlaceLookupDialogProps) {
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<WikidataSearchResult[]>([]);
@@ -430,6 +474,13 @@ export function WikidataPlaceLookupDialog({
     try {
       const chain = await fetchWikidataChain(qid, undefined, placeNameLanguages()); // leaf-first
       const token = await getToken();
+      // The place's own current enclosing places: when one of them has a
+      // Wikidata level's name, that's almost certainly the same place (KY
+      // above LaRue County is Kentucky), a far better guess than the first
+      // place anywhere in the tree with that name.
+      const ancestors = await fetchAncestorPlaces(token, parentHandles);
+      // One existing place stands for at most one level of the chain.
+      const used = new Set<string>();
       const rows: ChainRow[] = [];
       for (let i = chain.length - 1; i >= 0; i--) {
         const node = chain[i];
@@ -453,24 +504,40 @@ export function WikidataPlaceLookupDialog({
           } else {
             // Fallback for a hierarchy that predates this feature: nothing
             // has ever been QID-tagged, so the query above always misses
-            // even when the place already exists (see issue #14). name.value
-            // holds just the place's own name (not the hierarchical title --
-            // see PLACE_VIEW's own title/name split in views.ts), matching
-            // what a Wikidata chain label looks like at every level -- in
-            // any of the languages fetched, since the tree may have named it
-            // in another one. A guess, not a certainty, so it's surfaced as
-            // "possible", not "existing".
-            const nameWhereExpr = [node.label, ...node.altLabels.map((l) => l.value)]
-              .map((label) => `name.value == '${escapeQueryLangString(label)}'`)
-              .join(" or ");
-            const { page: namePage } = await fetchPage(PLACE_VIEW, token, null, false, nameWhereExpr, PLACE_VIEW.orderBy, 1);
-            const nameMatch = namePage.items[0];
-            if (nameMatch) {
-              existingHandle = nameMatch.handle;
-              existingTitle = (nameMatch.title as string | undefined) ?? node.label;
+            // even when the place already exists (see issue #14). Compared
+            // against the level's label in every language fetched and its
+            // Wikidata aliases ("KY", "USA"), since a tree often names a
+            // place by an abbreviation. A guess, not a certainty, so it's
+            // surfaced as "possible", not "existing".
+            const names = [node.label, ...node.altLabels.map((l) => l.value), ...node.aliases];
+            const wanted = new Set(names.map(normalizePlaceName).filter(Boolean));
+            // First the place's own enclosing places, by name or any
+            // alternative name, ignoring case and punctuation...
+            const ancestor = ancestors.find(
+              (a) => !used.has(a.handle) && a.names.some((n) => wanted.has(normalizePlaceName(n)))
+            );
+            if (ancestor) {
+              existingHandle = ancestor.handle;
+              existingTitle = ancestor.title || node.label;
               matchedBy = "name";
+            } else {
+              // ...then anywhere in the tree. name.value holds just the
+              // place's own name (not the hierarchical title -- see
+              // PLACE_VIEW's own title/name split in views.ts). This one
+              // is an exact match: the server can't compare names loosely.
+              const nameWhereExpr = names
+                .map((label) => `name.value == '${escapeQueryLangString(label)}'`)
+                .join(" or ");
+              const { page: namePage } = await fetchPage(PLACE_VIEW, token, null, false, nameWhereExpr, PLACE_VIEW.orderBy, 10);
+              const nameMatch = namePage.items.find((item) => !used.has(item.handle));
+              if (nameMatch) {
+                existingHandle = nameMatch.handle;
+                existingTitle = (nameMatch.title as string | undefined) ?? node.label;
+                matchedBy = "name";
+              }
             }
           }
+          if (existingHandle) used.add(existingHandle);
         }
         rows.push({
           node, isLeaf, typeOverride: node.placeType ?? "", existingHandle, existingTitle, matchedBy,
@@ -1019,6 +1086,7 @@ export function WikidataPlaceLookupButton({ stackId, zIndex, data, onChange }: W
         initialQuery={currentTitle}
         currentName={currentTitle}
         existingMedia={data.media_list as { ref?: string }[] | undefined}
+        parentHandles={((data.placeref_list as { ref?: string }[] | undefined) ?? []).flatMap((r) => (r.ref ? [r.ref] : []))}
         onApply={(result) => onChange(applyWikidataLookupResult(data, result))}
       />
     </>

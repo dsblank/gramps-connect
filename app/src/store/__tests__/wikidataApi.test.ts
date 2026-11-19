@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  clearWikidataEntityCache, fetchDisambiguationCandidates, fetchWikidataChain, fetchWikidataGeoshape, isLikelyPlace, rankWikidataResults, searchWikidata, searchWikidataPlaces,
+  clearWikidataEntityCache, fetchDisambiguationCandidates, fetchWikidataChain, fetchWikidataGeoshape, isLikelyPlace, normalizePlaceName, rankWikidataResults, searchWikidata, searchWikidataPlaces,
 } from "../wikidataApi";
 
 beforeEach(() => clearWikidataEntityCache());
@@ -112,7 +112,10 @@ describe("rankWikidataResults", () => {
 function entity(
   qid: string,
   label: string,
-  opts: { lat?: number; long?: number; parents?: string[]; instanceOf?: string[]; geoshapeTitle?: string } = {}
+  opts: {
+    lat?: number; long?: number; parents?: string[]; instanceOf?: string[]; geoshapeTitle?: string;
+    aliases?: Record<string, string[]>;
+  } = {}
 ) {
   const claims: Record<string, unknown[]> = {};
   if (opts.lat != null && opts.long != null) {
@@ -127,7 +130,10 @@ function entity(
   if (opts.geoshapeTitle) {
     claims.P3896 = [{ mainsnak: { datavalue: { value: opts.geoshapeTitle } } }];
   }
-  return { entities: { [qid]: { labels: { en: { value: label } }, claims } } };
+  const aliases = Object.fromEntries(
+    Object.entries(opts.aliases ?? {}).map(([lang, values]) => [lang, values.map((value) => ({ language: lang, value }))])
+  );
+  return { entities: { [qid]: { labels: { en: { value: label } }, aliases, claims } } };
 }
 
 describe("fetchWikidataChain", () => {
@@ -143,6 +149,17 @@ describe("fetchWikidataChain", () => {
     expect(chain.map((n) => n.placeType)).toEqual(["City", "County", "State", "Country"]);
     expect(chain[0]).toMatchObject({ label: "Indianapolis", lat: 39.7686, long: -86.1581 });
     expect(chain[3]).toMatchObject({ label: "United States", lat: 39.828, long: -98.58 });
+  });
+
+  it("reads aliases in the requested languages and then language-neutral ones, deduplicated", async () => {
+    mockFetchSequence([
+      entity("Q1603", "Kentucky", {
+        aliases: { en: ["KY", "Commonwealth of Kentucky"], mul: ["KY", "US-KY"], fr: ["Kentucky (État)"] },
+      }),
+    ]);
+    const [node] = await fetchWikidataChain("Q1603", undefined, ["en"]);
+    expect(node.aliases).toEqual(["KY", "Commonwealth of Kentucky", "US-KY"]);
+    expect(node.altLabels).toEqual([]); // aliases never become alternative names
   });
 
   it("stops at a cycle instead of looping forever", async () => {
@@ -406,5 +423,19 @@ describe("fetchDisambiguationCandidates", () => {
   it("is still a disambiguation, with no candidates, when there's no Wikipedia page", async () => {
     mockFetchSequence([disambiguationEntity({})]);
     expect((await fetchDisambiguationCandidates("Q7330670"))?.results).toEqual([]);
+  });
+});
+
+describe("normalizePlaceName", () => {
+  it("ignores case and punctuation, so a tree's spelling matches Wikidata's", () => {
+    expect(normalizePlaceName("Washington, D.C.")).toBe("washington dc");
+    expect(normalizePlaceName("Washington DC")).toBe("washington dc");
+    expect(normalizePlaceName("  U.S.A. ")).toBe(normalizePlaceName("usa"));
+    expect(normalizePlaceName("Stratford-upon-Avon")).toBe("stratford upon avon");
+    expect(normalizePlaceName("St. John's")).toBe("st johns");
+  });
+
+  it("keeps accents, which can tell two places apart", () => {
+    expect(normalizePlaceName("Zieliński")).not.toBe(normalizePlaceName("Zielinski"));
   });
 });
