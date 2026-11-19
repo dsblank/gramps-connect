@@ -126,6 +126,19 @@ h2 small { font: 600 12px var(--font-body); color: var(--faint); font-variant-nu
 .credits p { margin: 0 0 6px; }
 .credits a { color: var(--accent); }
 
+/* Edit mode (index.html?edit): click a screenshot to read its coordinates */
+.editbar { flex: none; display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px dashed var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.editbar .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.editbar strong { font-weight: 600; margin-right: 4px; }
+.editbar .hint { color: var(--muted); }
+.editbar button { font: 600 12px var(--font-body); height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.editbar button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.editbar button:disabled { opacity: .45; cursor: default; }
+.editbar code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; color: var(--muted); }
+body.editing .viewport { cursor: crosshair; }
+.pick { position: absolute; left: 0; top: 0; width: 20px; height: 20px; margin: -10px 0 0 -10px; border: 2px solid #e8590c; border-radius: 50%; box-shadow: 0 0 0 2px #fff, inset 0 0 0 2px #fff; pointer-events: none; z-index: 4; }
+.pick[hidden] { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .layer.anim { transition: none; }
   .layer img { transition: none; }
@@ -154,11 +167,26 @@ h2 small { font: 600 12px var(--font-body); color: var(--faint); font-variant-nu
           <img id="imgA" alt="">
           <img id="imgB" alt="" style="opacity:0">
           <div class="typed" id="typed" hidden></div>
+          <div class="pick" id="pickMark" hidden></div>
           <div class="cursor" id="cursor" aria-hidden="true">
             <svg width="24" height="24" viewBox="0 0 24 24"><path d="M3 2 L3 19 L7.6 14.8 L10.6 21.6 L13.6 20.3 L10.7 13.6 L17 13.6 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
           </div>
         </div>
       </div>
+    </div>
+    <div class="editbar" id="editbar" hidden>
+      <div class="row"><strong>Edit mode</strong><span class="hint" id="editInfo"></span></div>
+      <div class="row">
+        <button type="button" data-act="cur" data-needs-pick>Pointer here</button>
+        <button type="button" data-act="cam" data-needs-pick>Camera here</button>
+        <button type="button" data-act="typeAt" data-needs-pick data-needs-type>Typing here</button>
+        <button type="button" data-act="zout">Zoom −</button>
+        <button type="button" data-act="zin">Zoom +</button>
+        <button type="button" data-act="click">Click: off</button>
+        <button type="button" data-act="copy-step">Copy step</button>
+        <button type="button" data-act="copy-all">Copy scenes.js</button>
+      </div>
+      <code id="editCode"></code>
     </div>
     <div class="controls">
       <button class="btn play" id="play" type="button"><svg id="playIcon" viewBox="0 0 14 14"><path d="M3 1.5v11l9.5-5.5z"/></svg><span id="playLabel">Play</span></button>
@@ -182,75 +210,40 @@ h2 small { font: 600 12px var(--font-body); color: var(--faint); font-variant-nu
   </aside>
 </div>
 
+<script src="scenes.js"></script>
 <script>
 const IW = 1519, IH = 784;
 
-// Every step: which frame is showing, where the camera looks (cx, cy, zoom; zoom 1 = whole screen),
-// where the cursor goes, whether it clicks, and the line of narration.
-const SCENES = [
-  { title: "Home", url: "#/home", steps: [
-    { img: "home", cam: [760, 392, 1], cur: [760, 420],
-      text: "Signing in opens Home, a one-page summary of the tree. This is the US Presidents example: 2,266 people, 1,117 families and nearly 4,000 events." },
-    { img: "home", cam: [308, 200, 2.3], cur: [212, 163],
-      text: "The home person is who everything else is measured from, such as how others are related and which anniversaries come up. Here it's Abraham Lincoln." },
-    { img: "home", cam: [780, 380, 2.0], cur: [640, 282],
-      text: "The Change Log lists the latest edits to the tree. Today's entries are the map outlines added for this tour." },
-    { img: "home", cam: [1253, 175, 2.3], cur: [1146, 160],
-      text: "Stories, discussions and bookmarks sit alongside, each one click away." },
-  ]},
-  { title: "Finding someone", url: "#/person", steps: [
-    { img: "home", cam: [380, 300, 1.4], cur: [27, 134], click: true,
-      text: "The rail on the left has one icon per kind of record, the same categories Gramps uses. The first opens People." },
-    { img: "people", cam: [420, 120, 2.3], cur: [300, 104], click: true, type: "lincoln",
-      text: "To find someone, type part of their name, or a Gramps ID, into the search box." },
-    { img: "lincoln", cam: [440, 230, 1.8], cur: [250, 162], click: true,
-      text: "The list narrows as you type. Abraham Lincoln is at the top." },
-    { img: "lincoln", cam: [1180, 330, 1.6], cur: [990, 154],
-      text: "His record opens beside the list: his photo, his events, his parents and his family. Pick another row and this side follows." },
-    { img: "lincoln", cam: [1180, 545, 2.2], cur: [940, 540],
-      text: "This portrait was added by dragging the file onto his record. Its caption carries the photographer and the license." },
-  ]},
-  { title: "Family", url: "#/tree", steps: [
-    { img: "lincoln", cam: [1000, 200, 2.4], cur: [1008, 206], click: true,
-      text: "Graphs draws the family around whoever you're looking at." },
-    { img: "tree", cam: [760, 420, 1], cur: [790, 410],
-      text: "Parents and grandparents fan out to the right, children to the left. Cards show photos where the tree has them." },
-    { img: "tree", cam: [1200, 400, 1.6], cur: [1267, 189], click: true,
-      text: "A − folds a branch away and a + opens the next generation, so a large tree stays readable." },
-    { img: "tree", cam: [220, 90, 2.6], cur: [172, 77], click: true,
-      text: "The same family as a fan chart:" },
-    { img: "fan", cam: [787, 413, 1.05], cur: [787, 470],
-      text: "Each ring is one generation further back. You can rotate it, add generations, and shade it by lifespan." },
-  ]},
-  { title: "Maps", url: "#/map", steps: [
-    { img: "map", cam: [787, 420, 1], cur: [700, 470],
-      text: "Every place in the tree has coordinates, so every event can go on a map. This is Kentucky, where Lincoln was born." },
-    { img: "map", cam: [800, 410, 2.4], cur: [793, 412],
-      text: "The state and county outlines came from Wikidata. A lookup links a place in the tree to its Wikidata entry and brings the boundary along." },
-    { img: "map", cam: [1390, 180, 2.6], cur: [1305, 176],
-      text: "The Overlays panel lists the outlines in view. Each one can be hidden, or faded to see the map underneath." },
-    { img: "map", cam: [930, 80, 2.6], cur: [966, 77], click: true,
-      text: "Historical swaps today's map for one of the period." },
-    { img: "map1809", cam: [1150, 80, 2.6], cur: [1158, 77], click: true,
-      text: "Pick a year, here 1809, the year Lincoln was born:" },
-    { img: "map1809", cam: [800, 400, 1], cur: [1370, 352],
-      text: "The towns and borders are those of that year. West Virginia is still part of Virginia." },
-  ]},
-  { title: "Stories", url: "#/story", steps: [
-    { img: "story", cam: [760, 392, 1], cur: [1047, 560],
-      text: "Every person can have a story, a slideshow built from the tree. Lincoln's was generated with one click, including his family." },
-    { img: "story", cam: [1300, 392, 2.0], cur: [1477, 392], click: true,
-      text: "Use the arrows or the keyboard to move from moment to moment." },
-    { img: "story-birth", cam: [760, 392, 1], cur: [1047, 560],
-      text: "The map moves to where each moment happened, and a photo of the place appears when the tree has one: Sinking Spring, Kentucky, 1809." },
-    { img: "story-mary", cam: [760, 392, 1], cur: [1047, 580],
-      text: "Relatives' moments are woven in. His wife Mary Todd's birth, in Lexington, shows her portrait." },
-    { img: "story-ford", cam: [1047, 380, 1.45], cur: [1047, 588],
-      text: "Each slide starts with words drawn from the tree, and you can rewrite any of them. This one was retitled \"Shot at Ford's Theater\" and given a sentence of its own." },
-    { img: "story-ford", cam: [760, 740, 2.0], cur: [879, 760],
-      text: "The timeline along the bottom marks every moment, so you can see the shape of a whole life at a glance." },
-  ]},
-];
+// The tour's content lives in scenes.js (window.TOUR_SCENES); this file is only the player.
+const SCENES = window.TOUR_SCENES;
+
+// <serialize> Writes scenes.js in its standard layout. Used by edit mode's "Copy scenes.js",
+// and the same code generated the file, so a copy round-trips exactly.
+const SCENES_HEADER = `// Gramps Connect tour: the scenes and their narration.
+// Edit this file to change the tour; index.html is the player and needs no changes.
+// To find coordinates, open index.html?edit and click on a screenshot (see README.md).
+//
+// Each step:
+//   img     screenshot in img/, without ".jpg"; every screenshot is 1519 x 784
+//   cam     [x, y, zoom]: where the camera centres, in screenshot pixels; zoom 1 shows it all
+//   cur     [x, y]: where the pointer moves to
+//   click   true to show a click ripple when the pointer arrives
+//   type    text typed into a box at typeAt [x, y] (default [131, 95])
+//   text    the narration: shown on the right, highlighted and read aloud
+`;
+function fmtStep(st) {
+  const parts = [`img: ${JSON.stringify(st.img)}`, `cam: [${st.cam.join(", ")}]`, `cur: [${st.cur.join(", ")}]`];
+  if (st.click) parts.push("click: true");
+  if (st.type) parts.push(`type: ${JSON.stringify(st.type)}`);
+  if (st.typeAt) parts.push(`typeAt: [${st.typeAt.join(", ")}]`);
+  return `{ ${parts.join(", ")},\n      text: ${JSON.stringify(st.text)} }`;
+}
+function serializeScenes(scenes) {
+  return SCENES_HEADER + "window.TOUR_SCENES = [\n" + scenes.map(sc =>
+    `  { title: ${JSON.stringify(sc.title)}, url: ${JSON.stringify(sc.url)}, steps: [\n` +
+    sc.steps.map(st => `    ${fmtStep(st)},\n`).join("") + "  ]},\n").join("") + "];\n";
+}
+// </serialize>
 
 // ---------- engine ----------
 const $ = (id) => document.getElementById(id);
@@ -444,6 +437,7 @@ function show(i, { animate = true } = {}) {
   stepStart = performance.now(); stepDur = durationFor(st); pos = 0; finished = false;
   if (playing) startReading();
   updateTrack(); paintHighlight();
+  if (EDIT) renderEdit();
 }
 function advance() {
   if (idx === STEPS.length - 1) { finished = true; setPlaying(false); return; }
@@ -517,11 +511,67 @@ document.addEventListener("keydown", e => {
 });
 new ResizeObserver(() => applyCam(false)).observe(viewport);
 
+// ---------- edit mode (index.html?edit) ----------
+// Click a screenshot to pick a point (in screenshot pixels), apply it to the current step, preview it,
+// then "Copy scenes.js" and paste the whole file over tour/scenes.js. Nothing is saved by the page itself.
+var EDIT = new URLSearchParams(location.search).has("edit");
+let picked = null;
+const round2 = (n) => Math.round(n * 100) / 100;
+function renderEdit() {
+  const st = STEPS[idx];
+  $("editInfo").textContent = `Step ${idx + 1} of ${STEPS.length} · ${SCENES[st.scene].title} · ` +
+    (picked ? `picked x ${picked[0]}, y ${picked[1]}` : "click the screenshot to pick a point");
+  $("editCode").textContent = fmtStep(st);
+  $("editbar").querySelectorAll("button").forEach(b => {
+    b.disabled = (b.hasAttribute("data-needs-pick") && !picked) || (b.hasAttribute("data-needs-type") && !st.type);
+  });
+  $("editbar").querySelector('[data-act="click"]').textContent = st.click ? "Click: on" : "Click: off";
+}
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand("copy"); ta.remove();
+  }
+  const old = btn.textContent; btn.textContent = "Copied"; setTimeout(() => (btn.textContent = old), 1200);
+}
+function initEdit() {
+  document.body.classList.add("editing");
+  $("editbar").hidden = false;
+  viewport.addEventListener("click", (e) => {
+    const r = layer.getBoundingClientRect(), sc = r.width / IW;
+    const x = Math.round((e.clientX - r.left) / sc), y = Math.round((e.clientY - r.top) / sc);
+    if (x < 0 || y < 0 || x > IW || y > IH) return;
+    picked = [x, y];
+    const m = $("pickMark"); m.hidden = false; m.style.left = x + "px"; m.style.top = y + "px";
+    m.style.transform = `scale(${curScale})`;
+    renderEdit();
+  });
+  $("editbar").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-act]"); if (!b || b.disabled) return;
+    const st = STEPS[idx], src = SCENES[st.scene].steps[st.k];
+    const set = (key, val) => { if (val === undefined) { delete st[key]; delete src[key]; } else { st[key] = val; src[key] = val; } };
+    switch (b.dataset.act) {
+      case "cur": set("cur", [...picked]); break;
+      case "cam": set("cam", [picked[0], picked[1], st.cam[2]]); break;
+      case "typeAt": set("typeAt", [...picked]); break;
+      case "zin": set("cam", [st.cam[0], st.cam[1], round2(st.cam[2] + 0.1)]); break;
+      case "zout": set("cam", [st.cam[0], st.cam[1], Math.max(1, round2(st.cam[2] - 0.1))]); break;
+      case "click": set("click", st.click ? undefined : true); break;
+      case "copy-step": copyText(fmtStep(st), b); return;
+      case "copy-all": copyText(serializeScenes(SCENES), b); return;
+    }
+    if (playing) setPlaying(false);
+    show(idx);                                  // preview the change
+  });
+}
+
 buildScript();
 var stepEls = [...document.querySelectorAll(".step")];
 if (synth) { loadVoices(); synth.addEventListener?.("voiceschanged", loadVoices); window.addEventListener("pagehide", () => synth.cancel()); }
 else $("voice").hidden = true;
 setVoice(voiceOn);
+if (EDIT) initEdit();
 imgs[0].src = `img/${STEPS[0].img}.jpg`;
 show(0, { animate: false });
 firstShow = false;
