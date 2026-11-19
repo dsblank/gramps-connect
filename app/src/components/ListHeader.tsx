@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, CloseButton, Group, Text, Title, Tooltip } from "@mantine/core";
+import { ActionIcon, Button, CloseButton, Group, Text, Title, Tooltip } from "@mantine/core";
 import { gqlFilterPresets, namespaceForViewKey, type GqlFilterPreset } from "../data/gqlFilterPresets";
 import { customRuleAsPreset, getCachedCustomRules } from "../store/customRuleMedia";
 import { buildContextPresets } from "../store/contextPresets";
@@ -8,6 +8,8 @@ import { getFilterPickerState, setFilterPickerState } from "../store/filterPicke
 import { countRules, createEmptyTree } from "../store/goqlFilterTree";
 import { summarizeFilterTree } from "../store/filterTreeSummary";
 import { getViewStore } from "../store/registry";
+import { getHomePersonHandle } from "../store/homePersonPreference";
+import { formatHash } from "../hash";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
 import { FilterPickerDialog } from "./FilterPickerDialog";
@@ -16,7 +18,8 @@ import { FilterPickerDialog } from "./FilterPickerDialog";
  * mounts this inside the same Box as FilterBar/DataTable, not the aside) --
  * the view's plural label (e.g. "People", "Places"), plus a "Filters"
  * trigger right after it for any view whose GOQL namespace has presets
- * (see gqlFilterPresets.ts's namespaceForViewKey).
+ * (see gqlFilterPresets.ts's namespaceForViewKey). People also gets a
+ * "Go to home person" button at the far right (HomePersonButton below).
  * The per-type "Add a Person"/"Start a discussion" action used to live
  * here too; it now lives beside RelatedPanel's own Edit/Delete/etc row
  * instead (see related/AddButton.tsx's own doc comment for why). */
@@ -89,6 +92,7 @@ export function ListHeader({ view }: { view: ViewConfig }) {
           </Tooltip>
         )}
       </Group>
+      {view.key === "person" && <HomePersonButton />}
       {namespace && (
         <FilterPickerDialog
           opened={filtersOpen}
@@ -99,6 +103,36 @@ export function ListHeader({ view }: { view: ViewConfig }) {
         />
       )}
     </Group>
+  );
+}
+
+/** Selects the home person (homePersonPreference.ts) in the People list,
+ * the same hash navigation a Home-page link uses. Read at render rather
+ * than subscribed to: the preference is only ever set on the Home page,
+ * and ListHeader remounts per view, so it's fresh whenever People shows. */
+function HomePersonButton() {
+  const handle = getHomePersonHandle();
+  const label = handle ? t("Go to home person") : t("No home person set (set one on the Home page)");
+  return (
+    <Tooltip label={label} openDelay={400}>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        data-disabled={!handle || undefined}
+        onClick={() => {
+          if (handle) window.location.hash = formatHash({ viewKey: "person", handle });
+        }}
+        aria-label={label}
+        style={{ flexShrink: 0 }}
+      >
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 11.5 12 4l9 7.5" />
+          <path d="M5.5 9.5V20h13V9.5" />
+          <path d="M10 20v-5.5h4V20" />
+        </svg>
+      </ActionIcon>
+    </Tooltip>
   );
 }
 
