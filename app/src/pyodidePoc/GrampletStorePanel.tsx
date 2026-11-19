@@ -29,6 +29,7 @@ import {
   updateFromCatalog,
   wasEditedSinceInstall,
 } from "./grampletStore";
+import { acknowledgeGrampletStoreNews } from "./grampletStoreNews";
 import { PythonCodeEditor } from "./PythonCodeEditor";
 import { OBJECT_TYPE_LABELS } from "./objectEndpoints";
 import { t } from "../i18n/i18n";
@@ -89,6 +90,8 @@ export function GrampletStorePanel({ onClose }: { onClose: () => void }) {
         setCatalog(entries);
         setInstalled(gramplets);
         setStatus("ready");
+        // Everything shown here now counts as seen by the daily check.
+        acknowledgeGrampletStoreNews(entries, gramplets);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err));

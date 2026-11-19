@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
-import { Box, Button, Divider, Group, Loader, Menu, Text } from "@mantine/core";
+import { Badge, Box, Button, Divider, Group, Indicator, Loader, Menu, Text } from "@mantine/core";
 import { getToken, hasPermissions } from "../auth/auth";
 import { addDesktopTranslations, getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { ImportDialog } from "./ImportDialog";
@@ -30,6 +30,11 @@ import { trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { fetchGramplets, GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
 import { grampletMenuGroups } from "../pyodidePoc/grampletMenu";
+import {
+  getGrampletStoreNews,
+  onOpenGrampletStoreRequest,
+  subscribeGrampletStoreNews,
+} from "../pyodidePoc/grampletStoreNews";
 import { MAX_GRAMPLET_WINDOWS, openGrampletWindow } from "../store/grampletWindows";
 import type { Gramplet } from "../pyodidePoc/types";
 import { notifications } from "@mantine/notifications";
@@ -98,6 +103,10 @@ interface MenuItemSpec {
    * changes data), with `hintLabel` as its tooltip text. */
   hint?: string;
   hintLabel?: string;
+  /** A count shown at the right end of the row (e.g. new Gramplets in the
+   * Store) -- omitted or 0 shows nothing. Takes the place of `hint`. */
+  badge?: number;
+  badgeLabel?: string;
 }
 
 interface AppMenuProps {
@@ -107,6 +116,9 @@ interface AppMenuProps {
    * come from the server (Reports) hold off fetching until someone
    * actually looks at it. */
   onOpen?: () => void;
+  /** A small dot on the menu's own button: something inside it is new. */
+  indicator?: boolean;
+  indicatorLabel?: string;
 }
 
 /** One row of a dropdown: a plain item, or a submenu when it has children.
@@ -129,7 +141,11 @@ function AppMenuItem({ item }: { item: MenuItemSpec }) {
       c={item.danger ? "red" : undefined}
       disabled={item.disabled}
       rightSection={
-        item.hint ? (
+        item.badge ? (
+          <Badge size="xs" circle title={item.badgeLabel} aria-label={item.badgeLabel}>
+            {item.badge}
+          </Badge>
+        ) : item.hint ? (
           <Text span size="xs" c="dimmed" title={item.hintLabel} aria-label={item.hintLabel}>
             {item.hint}
           </Text>
@@ -156,7 +172,7 @@ function AppMenuItem({ item }: { item: MenuItemSpec }) {
  * items yet ("Nothing here yet") vs. one whose items all got filtered out
  * by hasPermissions() ("You don't have permission..."), so a restricted
  * user doesn't read the latter as "this feature isn't built." */
-function AppMenu({ label, items, onOpen }: AppMenuProps) {
+function AppMenu({ label, items, onOpen, indicator, indicatorLabel }: AppMenuProps) {
   const visibleItems = items.filter(
     (item) => !item.perm || hasPermissions(...(Array.isArray(item.perm) ? item.perm : [item.perm]))
   );
@@ -164,9 +180,11 @@ function AppMenu({ label, items, onOpen }: AppMenuProps) {
   return (
     <Menu shadow="md" width={200} position="bottom-start" onOpen={onOpen}>
       <Menu.Target>
-        <Button variant="subtle" size="xs">
-          {label}
-        </Button>
+        <Indicator disabled={!indicator} size={7} offset={4} title={indicator ? indicatorLabel : undefined}>
+          <Button variant="subtle" size="xs" aria-label={indicator && indicatorLabel ? `${label} (${indicatorLabel})` : undefined}>
+            {label}
+          </Button>
+        </Indicator>
       </Menu.Target>
       <Menu.Dropdown>
         {visibleItems.length === 0 ? (
@@ -315,6 +333,12 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const [documentationOpened, setDocumentationOpened] = useState(false);
   const [grampletOpened, setGrampletOpened] = useState(false);
   const [grampletStoreOpened, setGrampletStoreOpened] = useState(false);
+  // Daily Store check's findings (grampletStoreNews.ts): a dot on the
+  // Gramplets menu, a count on "Gramplet Store…"; its toast's Open button
+  // asks this component (which owns the dialog) to open the Store.
+  const storeNews = useSyncExternalStore(subscribeGrampletStoreNews, getGrampletStoreNews);
+  const storeNewsCount = storeNews.newCount + storeNews.updateCount;
+  useEffect(() => onOpenGrampletStoreRequest(() => setGrampletStoreOpened(true)), []);
   const [reindexOpened, setReindexOpened] = useState(false);
   const [placeLanguageRepairOpened, setPlaceLanguageRepairOpened] = useState(false);
   const [checkRepairOpened, setCheckRepairOpened] = useState(false);
@@ -551,6 +575,8 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               perm: GRAMPLET_AUTHOR_PERMISSION,
               onClick: () => setGrampletStoreOpened(true),
               separatorBefore: true,
+              badge: storeNewsCount,
+              badgeLabel: t("New in the Gramplet Store"),
             },
             {
               // Opens GrampletEditDialog.tsx, defaulting to a Gramplet (the
@@ -562,6 +588,8 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             },
           ]}
           onOpen={loadWindowGramplets}
+          indicator={storeNewsCount > 0}
+          indicatorLabel={t("New in the Gramplet Store")}
         />
         <AppMenu
           label={t("Reports")}

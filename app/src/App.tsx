@@ -61,6 +61,8 @@ import { useMediaDrop } from "./hooks/useMediaDrop";
 import { MediaDropOverlay } from "./components/MediaDropOverlay";
 import { PyodidePocPanel } from "./pyodidePoc/PyodidePocPanel";
 import { GrampletWindows } from "./pyodidePoc/GrampletWindows";
+import { startGrampletStoreCheck } from "./pyodidePoc/grampletStoreNews";
+import { showGrampletStoreNewsToast } from "./pyodidePoc/GrampletStoreNewsToast";
 import { ExternalSearchWindow } from "./components/related/ExternalSearchWindow";
 import { RelationshipWindow } from "./components/related/RelationshipWindow";
 import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
@@ -455,6 +457,10 @@ function AuthenticatedApp() {
   // A search reindex an import/restore left running when it reloaded the
   // page -- see searchIndexWatch.ts. Same once-per-app lifetime.
   useEffect(() => watchRememberedIndexTasks(), []);
+
+  // Daily look at the Gramplet Store for new Gramplets and updates to
+  // installed ones -- see grampletStoreNews.ts. Same once-per-app lifetime.
+  useEffect(() => startGrampletStoreCheck(showGrampletStoreNewsToast), []);
 
   // Background username -> full_name resolution for the chat views
   // (ChatBubble.tsx) -- fire-and-forget so it's already warm by the time a

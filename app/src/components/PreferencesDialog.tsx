@@ -20,6 +20,8 @@ import {
   isBrowserNotificationsEnabled,
   type NotificationBlocker,
 } from "../store/browserNotifications";
+import { canAuthorGramplets } from "../pyodidePoc/grampletMedia";
+import { isGrampletStoreCheckEnabled, setGrampletStoreCheckEnabled } from "../pyodidePoc/grampletStoreNews";
 
 const BLOCKER_MESSAGES: Record<NotificationBlocker, string> = {
   insecure: "Not available here: browsers only allow notifications on a secure (https://) connection.",
@@ -148,6 +150,25 @@ function BrowserNotificationsToggle() {
   );
 }
 
+/** Daily check of the Gramplet Store (grampletStoreNews.ts) -- shown only
+ * to users who can install Gramplets, the only ones it ever tells. */
+function GrampletStoreCheckToggle() {
+  const [enabled, setEnabled] = useState(isGrampletStoreCheckEnabled);
+  if (!canAuthorGramplets()) return null;
+  return (
+    <Switch
+      label={t("Check the Gramplet Store for news")}
+      description={t("Once a day, look for new Gramplets in the Gramplet Store and for updates to the ones installed in this tree, and let you know.")}
+      checked={enabled}
+      onChange={(e) => {
+        const next = e.currentTarget.checked;
+        setGrampletStoreCheckEnabled(next);
+        setEnabled(next);
+      }}
+    />
+  );
+}
+
 interface PreferencesDialogProps {
   opened: boolean;
   onClose: () => void;
@@ -178,6 +199,7 @@ export function PreferencesDialog({ opened, onClose }: PreferencesDialogProps) {
             <ColorSchemeToggle />
             <LanguagePicker />
             <BrowserNotificationsToggle />
+            <GrampletStoreCheckToggle />
             <LocalSettingsSection />
           </Stack>
         </Tabs.Panel>

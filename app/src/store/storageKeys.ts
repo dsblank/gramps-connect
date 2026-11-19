@@ -42,8 +42,10 @@ const DEFS = {
   anniversariesOnlyLiving: { key: `${P}anniversariesOnlyLiving`, tag: "setting" },
   homePerson: { key: `${P}homePerson`, tag: "setting" },
   blogDraft: { key: `${P}blogDraft:`, prefix: true, tag: "setting" },
+  grampletStoreCheck: { key: `${P}grampletStoreCheck`, tag: "setting" },
   // localStorage, excluded
   visited: { key: `${P}visited`, tag: "excluded" },
+  grampletStoreNews: { key: `${P}grampletStoreNews:`, prefix: true, tag: "excluded" },
   // sessionStorage
   token: { key: `${P}token`, tag: "excluded" },
   refreshToken: { key: `${P}refreshToken`, tag: "excluded" },
@@ -66,6 +68,8 @@ export const STORAGE_KEYS = Object.fromEntries(
 export const viewGrampletPanelCollapsedKey = (viewKey: string) => `${DEFS.viewGrampletPanelCollapsed.key}${viewKey}`;
 export const grampletWindowGeometryKey = (grampletId: string) => `${DEFS.grampletWindowGeometry.key}${grampletId}`;
 export const grampletAddedViewsKey = (grampletId: string) => `${DEFS.grampletAddedViews.key}${grampletId}`;
+export const grampletStoreNewsKey = (treeId: string, username: string) =>
+  `${DEFS.grampletStoreNews.key}${treeId}:${username}`;
 export const blogDraftKey = (treeId: string, username: string) => `${DEFS.blogDraft.key}${treeId}:${username}`;
 
 /** True if `key` is a localStorage setting that Download / Load / Reset
