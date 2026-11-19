@@ -343,6 +343,7 @@ function draftFromEvent(
     description: record.description,
     role,
     relation,
+    standardType: isStandardEventType(record.type),
   });
   return {
     point: { eventRef, title, text },

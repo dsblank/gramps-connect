@@ -86,6 +86,11 @@ export interface Moment {
    * set when the moment is a relative's rather than the story subject's
    * own, so the sentence says who this is instead of naming a stranger. */
   relation?: string;
+  /** Whether `type` is one of Gramps' own event types (views.ts's
+   * isStandardEventType). Only those are put in sentence case mid-sentence
+   * ("Cause of death of …"); a custom type is the author's own wording,
+   * which may hold a name or an acronym, and is left as written. */
+  standardType?: boolean;
 }
 
 /** A place title as it should read in a sentence or a slide heading: the
@@ -212,6 +217,23 @@ function joinProse(names: string[]): string {
   return `${present.slice(0, -1).join(", ")} and ${present[present.length - 1]}`;
 }
 
+/** A Gramps event type as it reads at the start of a sentence: "Cause Of
+ * Death" -> "Cause of death". Gramps' own type names are in title case;
+ * each word after the first that's capitalized and otherwise lowercase is
+ * lowered, so an all-capitals word is left alone. */
+function sentenceCaseType(type: string): string {
+  return type
+    .split(" ")
+    .map((word, i) => (i > 0 && /^\p{Lu}\p{Ll}*$/u.test(word) ? word.toLowerCase() : word))
+    .join(" ");
+}
+
+/** `text` with its first letter capitalized, for an event description
+ * that becomes a sentence of its own ("assassinated by …"). */
+function capitalizeFirst(text: string): string {
+  return text.replace(/^\p{Ll}/u, (c) => c.toUpperCase());
+}
+
 /** Ends `text` with a full stop unless it already ends in some sentence
  * punctuation of its own -- so an author's description that reads "Second
  * son." isn't given a second period, and one that reads "Second son" is. */
@@ -253,8 +275,10 @@ export function momentText(moment: Moment): string {
   if (!isSubjectRole(moment.role) && subjects.length > 0) {
     sentence = `${joinProse(subjects)} took part in this ${type} as ${moment.role}`;
   } else if (phrase && subjects.length > 0) sentence = `${who} ${phrase}`;
-  else if (subjects.length > 0) sentence = `${type} of ${joinProse(subjects)}`;
-  else sentence = type || "";
+  else {
+    const noun = moment.standardType ? sentenceCaseType(type) : type;
+    sentence = subjects.length > 0 ? `${noun} of ${joinProse(subjects)}` : noun || "";
+  }
 
   if (dateText) sentence += datePreposition ? ` ${datePreposition} ${dateText}` : ` ${dateText}`;
   if (placeTitle) sentence += ` in ${placeTitle}`;
@@ -266,7 +290,7 @@ export function momentText(moment: Moment): string {
   // that merely repeats the event type, which is what the guard drops.
   const extra = storyDescription(description);
   if (extra && extra.toLowerCase() !== type.toLowerCase() && !sentence.includes(extra)) {
-    return `${sentence} ${ensureSentence(extra)}`.trim();
+    return `${sentence} ${ensureSentence(capitalizeFirst(extra))}`.trim();
   }
   return sentence || type;
 }

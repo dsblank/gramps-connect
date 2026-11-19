@@ -14,6 +14,21 @@ function moment(over: Partial<Moment> = {}): Moment {
 }
 
 describe("momentText", () => {
+  it("puts a built-in Gramps type in sentence case and starts its description with a capital", () => {
+    expect(momentText(moment({
+      type: "Cause Of Death", standardType: true, subjects: ["Abraham Lincoln"],
+      dateText: "14 Apr 1865", datePreposition: "on", placeTitle: "Ford's Theater, Washington DC, USA",
+      description: "assassinated by John Wilkes Booth",
+    }))).toBe(
+      "Cause of death of Abraham Lincoln on 14 Apr 1865 in Ford's Theater, Washington DC, USA. Assassinated by John Wilkes Booth."
+    );
+  });
+
+  it("leaves a custom type's wording alone", () => {
+    expect(momentText(moment({ type: "Joined NASA Program", standardType: false, subjects: ["Anna Schmidt"] })))
+      .toBe("Joined NASA Program of Anna Schmidt.");
+  });
+
   it("puts a full date behind 'on' and a year behind 'in'", () => {
     expect(momentText(moment({ dateText: "3 Mar 1854", datePreposition: "on" })))
       .toBe("Anna Schmidt was born on 3 Mar 1854.");
