@@ -20,7 +20,9 @@ import { formatWhereExpr } from "../store/formatWhereExpr";
 import { buildContextPresets, SAVED_FILTER_PRESET_PREFIX } from "../store/contextPresets";
 import { getBookmarksVersion, loadBookmarks, subscribeBookmarks } from "../store/bookmarks";
 import { getToken } from "../auth/auth";
-import { setFilterPickerState } from "../store/filterPickerState";
+import { getFilterPickerState, setFilterPickerState } from "../store/filterPickerState";
+import { summarizeFilterTree } from "../store/filterTreeSummary";
+import { logActivity } from "../store/activityLog";
 import {
   customRuleAsPreset, refreshCustomRules, removeCustomRule, saveCustomRuleManifest,
   setCachedCustomRules, uploadCustomRule, validateWhereExpr, type CustomRule,
@@ -129,7 +131,14 @@ export function FilterPickerDialog({
 }: FilterPickerDialogProps) {
   const snapshot = useViewStore(viewKey);
 
-  const [tree, setTreeState] = useState<FilterTree>(() => createEmptyTree(namespace));
+  // Starts from the tree last applied to this view (filterPickerState.ts),
+  // so a remount -- coming back to the view, or an Activity step that
+  // re-applies a filter -- opens on the filter that's actually active.
+  // Only while a filter is applied: one cleared while this was unmounted
+  // leaves its tree behind in that state.
+  const [tree, setTreeState] = useState<FilterTree>(() =>
+    snapshot.pickerExpr !== null ? getFilterPickerState(viewKey, namespace).tree : createEmptyTree(namespace),
+  );
   function setTree(next: FilterTree) {
     setTreeState(next);
   }
@@ -278,6 +287,9 @@ export function FilterPickerDialog({
         await store.clearPickerFilter();
       } else if (preview.ok) {
         await store.setPickerFilter(preview.whereExpr);
+        logActivity({
+          kind: "filter", viewKey, summary: summarizeFilterTree(tree, presets), tree, whereExpr: preview.whereExpr,
+        });
       } else {
         return; // Apply is disabled in this state; nothing to do.
       }

@@ -1,0 +1,48 @@
+/* One grid for every row, so time, kind, what, where and how long line up
+   down the whole page, across the full width the Records tab uses. */
+.grid {
+  display: grid;
+  grid-template-columns: 56px 20px 112px minmax(0, 2fr) minmax(0, 1fr) 88px;
+  column-gap: var(--mantine-spacing-md);
+  align-items: center;
+  padding: 6px var(--mantine-spacing-sm);
+}
+
+.nested {
+  padding-left: calc(var(--mantine-spacing-sm) + 32px);
+}
+
+.row {
+  display: block;
+  width: 100%;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.row:hover {
+  background-color: var(--mantine-color-default-hover);
+}
+
+.session {
+  border-radius: var(--mantine-radius-sm);
+  background-color: var(--mantine-color-default-hover);
+  padding: 6px var(--mantine-spacing-sm);
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+}
+
+.duration {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Narrow window: the "where" column goes; it's the least needed. */
+@media (max-width: 48em) {
+  .grid {
+    grid-template-columns: 48px 20px 96px minmax(0, 1fr) 64px;
+  }
+  .detail {
+    display: none;
+  }
+}

@@ -5,6 +5,7 @@
 // second one. Same shape as externalSearchWindow.ts.
 import { dock, undock } from "./bottomDock";
 import { raiseWindow, removeWindow } from "./windowStack";
+import { logActivity } from "./activityLog";
 
 export const RELATIONSHIP_WINDOW_ID = "relationship";
 export const RELATIONSHIP_CHIP_WIDTH = 240;
@@ -27,6 +28,7 @@ function notify(): void {
 
 export function openRelationshipWindow(from: string, to: string): void {
   state = { from, to, minimized: false };
+  logActivity({ kind: "relationship", from, to });
   undock(RELATIONSHIP_WINDOW_ID);
   raiseWindow(RELATIONSHIP_WINDOW_ID);
   notify();

@@ -4,6 +4,7 @@ import { getToken } from "../../auth/auth";
 import { fetchSearch, sortByRelevance, type SearchHit } from "../../store/searchApi";
 import { t } from "../../i18n/i18n";
 import { VisualFrame } from "./VisualFrame";
+import { logActivity } from "../../store/activityLog";
 import { checkIndex, IndexNotice, ObjectResultCard, TypeTabs, type IndexState } from "./ObjectResultList";
 import { ReindexDialog } from "../ReindexDialog";
 
@@ -25,6 +26,12 @@ const RESULTS_LIMIT = 10;
  * survives that remount; a real page reload starts it fresh, same as every
  * other view's filter box. */
 let lastSearch: { query: string; type: string | null } = { query: "", type: null };
+
+/** Makes the next mount of this page run `query` -- how View > Visited's
+ * Activity tab goes back to a search, before routing here. */
+export function presetSearch(query: string, type: string | null): void {
+  lastSearch = { query, type };
+}
 
 type State =
   | { status: "idle" }
@@ -84,6 +91,9 @@ export function SearchView() {
       return;
     }
     setState({ status: "loading", query: trimmed });
+    // The mount-time restore (the only caller passing `query`) re-runs a
+    // search already recorded, not a new one.
+    if (overrides?.query === undefined) logActivity({ kind: "searchAll", query: trimmed, type });
     try {
       const token = await getToken();
       const { hits, total } = await fetchSearch(token, trimmed, 1, RESULTS_LIMIT, type);

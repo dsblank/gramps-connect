@@ -28,6 +28,7 @@ import {
 import { deliverJob, trackJob } from "../store/jobsPoll";
 import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { t } from "../i18n/i18n";
+import { logActivity } from "../store/activityLog";
 import { BUILTIN_NAME_FORMATS, getDisplaySettings } from "../store/displaySettings";
 import { displayNameFormat } from "../store/nameDisplay";
 
@@ -171,6 +172,7 @@ export function ReportDialog({ reportId, onClose }: ReportDialogProps) {
     const options = toRequestOptions(fields, values);
     onClose();
     notifyJobStarted("report", name);
+    logActivity({ kind: "report", name, desc });
 
     (async () => {
       const token = await getToken();

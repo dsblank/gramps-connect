@@ -4,6 +4,7 @@ import { getViewStore } from "../store/registry";
 import { VIEWS } from "../store/views";
 import { useViewStore } from "./useViewStore";
 import { isVisitable, recordVisit } from "../store/visitedHistory";
+import { installActivityAwayTracking, logActivity } from "../store/activityLog";
 
 /** How long a record has to stay selected to count as a visit
  * (View > Visited): long enough that arrowing through a list doesn't
@@ -191,6 +192,25 @@ export function useHistorySync(): {
     const timer = setTimeout(() => recordVisit(activeKey, visitHandle), VISIT_DWELL_MS);
     return () => clearTimeout(timer);
   }, [activeKey, visitHandle]);
+
+  // Every page that settles for the same dwell is a step in View >
+  // Visited's Activity tab (activityLog.ts): a record, a list, or a visual
+  // and its subject. Same "user picked it" rule as the visit above.
+  const subjectType = visual ? visualSubject?.type : undefined;
+  const subjectHandle = visual ? visualSubject?.handle : undefined;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      logActivity({
+        kind: "route",
+        viewKey: activeKey,
+        ...(visitHandle ? { handle: visitHandle } : {}),
+        ...(subjectType && subjectHandle ? { subject: { type: subjectType, handle: subjectHandle } } : {}),
+      });
+    }, VISIT_DWELL_MS);
+    return () => clearTimeout(timer);
+  }, [activeKey, visitHandle, subjectType, subjectHandle]);
+
+  useEffect(() => installActivityAwayTracking(), []);
 
   const dismissForeignTree = useCallback(() => setForeignTree(null), []);
 

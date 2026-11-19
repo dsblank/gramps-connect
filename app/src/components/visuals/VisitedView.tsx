@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Box, Button, Center, Group, Stack, Text } from "@mantine/core";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Box, Button, Center, Group, SegmentedControl, Stack, Text } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import {
   clearVisits, forgetVisits, getVisits, getVisitsVersion, subscribeVisits, type Visit,
@@ -12,6 +12,7 @@ import { t } from "../../i18n/i18n";
 import { VisualFrame } from "./VisualFrame";
 import { ObjectResultCard, TypeTabs } from "./ObjectResultList";
 import { DateTimeColumn } from "./LatestChangeColumns";
+import { ActivityView } from "./ActivityList";
 
 /** Visits shown per "Load more" -- each page is one request per type
  * among them (objectsByHandle.ts), plus the cards' own thumbnails. */
@@ -22,13 +23,39 @@ let lastType: string | null = null;
 
 const keyOf = (v: { type: string; handle: string }) => `${v.type}:${v.handle}`;
 
-/** View > Visited: the records this user has opened from a table, most
+type Mode = "records" | "activity";
+
+/** The tab last picked, kept across visits like the type tab. */
+let lastMode: Mode = "records";
+
+/** View > Visited, in two tabs: Records (below) and Activity
+ * (ActivityList.tsx), every step in order. */
+export function VisitedView() {
+  const [mode, setMode] = useState<Mode>(lastMode);
+  const modeSwitch = (
+    <SegmentedControl
+      size="xs"
+      value={mode}
+      onChange={(value) => {
+        lastMode = value as Mode;
+        setMode(value as Mode);
+      }}
+      data={[
+        { value: "records", label: t("Records") },
+        { value: "activity", label: t("Activity") },
+      ]}
+    />
+  );
+  return mode === "activity" ? <ActivityView modeSwitch={modeSwitch} /> : <RecordsView modeSwitch={modeSwitch} />;
+}
+
+/** View > Visited's Records tab: the records this user has opened from a table, most
  * recent first, grouped Today / Yesterday / ... by when they were opened.
  * The list itself is kept in this browser (store/visitedHistory.ts); the
  * records are fetched fresh from the server a page at a time, so each card
  * shows the record as it is now. A record that's gone (deleted, or no
  * longer visible to this user) drops out of the list. */
-export function VisitedView() {
+function RecordsView({ modeSwitch }: { modeSwitch: ReactNode }) {
   const version = useSyncExternalStore(subscribeVisits, getVisitsVersion);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const visits = useMemo(() => getVisits(), [version]);
@@ -120,7 +147,8 @@ export function VisitedView() {
       empty={empty}
       scope={<TypeTabs active={typeFilter} onSelect={selectType} />}
       toolbar={
-        <Group justify="flex-end">
+        <Group justify="space-between">
+          {modeSwitch}
           <Button size="xs" variant="default" onClick={handleClear} disabled={visits.length === 0}>
             {t("Clear history")}
           </Button>

@@ -9,6 +9,7 @@ import { InfoButton } from "./InfoButton";
 import { SearchHelpDialog } from "./SearchHelpDialog";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
+import { logActivity } from "../store/activityLog";
 
 interface FilterBarProps {
   view: ViewConfig;
@@ -159,7 +160,11 @@ export function FilterBar({ view }: FilterBarProps) {
   function submit() {
     const whereExpr = view.simpleSearch && !useGoql ? view.simpleSearch.buildExpr(input) : input.trim() || null;
     apply(whereExpr).then((ok) => {
-      if (ok) setDirty(false);
+      if (!ok) return;
+      setDirty(false);
+      if (whereExpr !== null) {
+        logActivity({ kind: "search", viewKey: view.key, text: input.trim(), useGoql, whereExpr });
+      }
     });
   }
 

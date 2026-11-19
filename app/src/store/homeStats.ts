@@ -335,7 +335,7 @@ export async function fetchHomeBookmarks(token: string, limit: number): Promise<
 
 /** "type:handle" -> raw record for whichever of `refs` exist, one request
  * per type (objectsByHandle.ts). */
-async function fetchRecords(token: string, refs: { type: string; handle: string }[]): Promise<Map<string, RawObject>> {
+export async function fetchRecords(token: string, refs: { type: string; handle: string }[]): Promise<Map<string, RawObject>> {
   const byType = new Map<string, string[]>();
   for (const { type, handle } of refs) byType.set(type, [...(byType.get(type) ?? []), handle]);
   const found = new Map<string, RawObject>();
@@ -343,6 +343,12 @@ async function fetchRecords(token: string, refs: { type: string; handle: string 
     for (const [handle, obj] of await fetchObjectsByHandle(token, type, handles)) found.set(`${type}:${handle}`, obj);
   }));
   return found;
+}
+
+/** The one-line label Home's cards use for a record, e.g. a person's name. */
+export function recordLabel(viewKey: string, obj: RawObject): string {
+  const build = RECENT_LABEL[viewKey];
+  return build ? build(obj) : String(obj.gramps_id ?? "");
 }
 
 function toItem(viewKey: string, handle: string, obj: RawObject, unix: number): RecentItem {

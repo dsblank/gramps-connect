@@ -8,7 +8,7 @@
 //
 // `setting`: a per-browser preference in localStorage, part of Download /
 // Load / Reset. `excluded`: kept out of all three -- sessionStorage
-// (sign-in, per-tab state) and the Visited history.
+// (sign-in, per-tab state) and the Visited and Activity histories.
 
 const P = "gramps-connect:";
 
@@ -45,6 +45,7 @@ const DEFS = {
   grampletStoreCheck: { key: `${P}grampletStoreCheck`, tag: "setting" },
   // localStorage, excluded
   visited: { key: `${P}visited`, tag: "excluded" },
+  activity: { key: `${P}activity`, tag: "excluded" },
   grampletStoreNews: { key: `${P}grampletStoreNews:`, prefix: true, tag: "excluded" },
   // sessionStorage
   token: { key: `${P}token`, tag: "excluded" },

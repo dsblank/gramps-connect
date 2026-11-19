@@ -36,6 +36,7 @@ import {
   subscribeGrampletStoreNews,
 } from "../pyodidePoc/grampletStoreNews";
 import { MAX_GRAMPLET_WINDOWS, openGrampletWindow } from "../store/grampletWindows";
+import { logActivity } from "../store/activityLog";
 import type { Gramplet } from "../pyodidePoc/types";
 import { notifications } from "@mantine/notifications";
 import { clearAllOpfs } from "../store/opfs";
@@ -389,7 +390,9 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   }
 
   function openWindowGramplet(gramplet: Gramplet) {
-    if (openGrampletWindow(gramplet) === "full") {
+    const opened = openGrampletWindow(gramplet);
+    if (opened === "opened") logActivity({ kind: "gramplet", id: gramplet.id, name: gramplet.label });
+    if (opened === "full") {
       notifications.show({
         color: "orange",
         title: t("Too many Gramplet windows"),

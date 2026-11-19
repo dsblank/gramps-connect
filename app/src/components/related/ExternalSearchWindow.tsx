@@ -45,6 +45,7 @@ import {
 } from "../../store/externalSearchWindow";
 import { FloatingWindow } from "../FloatingWindow";
 import { STORAGE_KEYS } from "../../store/storageKeys";
+import { logActivity } from "../../store/activityLog";
 
 // gramps-web's own wording, so these come already translated from its
 // Weblate catalog (app/public/lang/).
@@ -178,12 +179,18 @@ function ExternalSearchContent({ detail }: { detail: ObjectDetail }) {
 /** A real link, so middle-click and copy-link work as on the app's other
  * links; noreferrer so the other site isn't sent this app's URL. */
 function SiteLink({ site, terms }: { site: ExternalSite; terms: SearchTerms }) {
+  const url = fillTemplate(site.url, terms);
+  // A step in View > Visited's Activity tab. Left and middle click both
+  // open the site.
+  const log = () => logActivity({ kind: "external", site: site.name, terms: termsSummary(terms), url });
   return (
     <UnstyledButton
       component="a"
-      href={fillTemplate(site.url, terms)}
+      href={url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={log}
+      onAuxClick={(e) => { if (e.button === 1) log(); }}
       p="xs"
       style={{ borderRadius: 4 }}
     >
