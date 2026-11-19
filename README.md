@@ -29,14 +29,11 @@ server, built around two ideas:
   to refresh the page, the same way collaborative documents show you a
   co-author's edits appearing in real time.
 
-Gramps Connect is under active development. The standalone build,
-**gramps-connect-desktop**, is the easiest way to try it today (see
-[Installing](#installing), below); a containerized deployment is
+Gramps Connect reached 1.0 and is still actively developed. The
+standalone build, **gramps-connect-desktop**, is the easiest way to try
+it (see [Installing](#installing), below); a containerized deployment is
 available for hosting it for a family to share (see
-[Deploying](#deploying)). If you're looking for a fully mature,
-feature-complete option right now, [gramps-web](https://github.com/gramps-project/gramps-web)
-or the [desktop application](https://gramps-project.org/download/) cover
-more ground.
+[Deploying](#deploying)).
 
 For a full tour of the app itself, see [docs/Overview.md](docs/Overview.md);
 for the search-box query language behind it, see [docs/GOQL.md](docs/GOQL.md).
@@ -99,8 +96,8 @@ it up.
 
 Yes — Family Trees → Import... takes a Gramps XML (`.gramps`) or GEDCOM
 (`.ged`) file, same as the real deployment. Just don't treat it as your
-only copy — keep a backup regardless, the way you should for any tool
-still under active development.
+only copy — keep regular backups, as you should with any genealogy
+software.
 
 **Does upgrading gramps-connect-desktop wipe my data?**
 

@@ -54,7 +54,7 @@ export function AboutDialog({ opened, onClose }: AboutDialogProps) {
         </Text>
 
         <Text size="sm">
-          {t("This is an experiment rather than finished software, and it is not an official release of the Gramps Project. Keep your tree backed up.")}
+          {t("As with any genealogy software, keep regular backups of your tree.")}
         </Text>
 
         <Stack gap={2}>
