@@ -590,9 +590,16 @@ export function WikidataPlaceLookupDialog({
           }
         }
         const refs = (existing.placeref_list as { _class?: string; ref?: string }[] | undefined) ?? [];
-        const nextRefs = refs.filter((r) => r.ref === entry.correctParent || !chainHandles.has(r.ref ?? ""));
-        if (entry.correctParent && !nextRefs.some((r) => r.ref === entry.correctParent)) {
-          nextRefs.push({ _class: "PlaceRef", ref: entry.correctParent });
+        const kept = refs.filter((r) => r.ref === entry.correctParent || !chainHandles.has(r.ref ?? ""));
+        // The confirmed parent goes first: titles follow the first undated
+        // enclosing place, so an unrelated one kept from before (a county
+        // also linked to the wrong state, say) would otherwise still win.
+        // Others are kept after it, not dropped -- they may be deliberate
+        // (a dated boundary change).
+        let nextRefs = kept;
+        if (entry.correctParent) {
+          const parentRef = kept.find((r) => r.ref === entry.correctParent) ?? { _class: "PlaceRef", ref: entry.correctParent };
+          nextRefs = [parentRef, ...kept.filter((r) => r !== parentRef)];
         }
         if (JSON.stringify(nextRefs) !== JSON.stringify(refs)) {
           update.placeref_list = nextRefs;
