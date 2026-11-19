@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseDate } from "../parse";
-import { makeDate } from "../entry";
-import { formatDate } from "../display";
-import { Calendar, Modifier, NewYear, Quality } from "../types";
+import { parseDate } from "../parse.js";
+import { makeDate } from "../entry.js";
+import { formatDate } from "../display.js";
+import { Calendar, Modifier, NewYear, Quality } from "../types.js";
 
 test("plain month day, year", () => {
   const d = parseDate("Jan 1, 1983");

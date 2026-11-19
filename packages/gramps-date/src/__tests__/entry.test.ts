@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { makeDate, validateDate, emptyDate } from "../entry";
-import { Modifier, Calendar } from "../types";
-import { formatDate } from "../display";
+import { makeDate, validateDate, emptyDate } from "../entry.js";
+import { Modifier, Calendar } from "../types.js";
+import { formatDate } from "../display.js";
 
 test("makeDate builds a simple date with computed sortval", () => {
   const d = makeDate({ start: [25, 11, 1914, false] });

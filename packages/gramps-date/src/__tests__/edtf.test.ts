@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { toEdtf } from "../edtf";
-import { Calendar, Modifier, Quality, type GrampsDate } from "../types";
+import { toEdtf } from "../edtf.js";
+import { Calendar, Modifier, Quality, type GrampsDate } from "../types.js";
 
 function date(
   dateval: GrampsDate["dateval"],

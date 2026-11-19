@@ -3,7 +3,7 @@
 // ./en.generated.ts (Gramps' base DateDisplay/DateParser in an en_US
 // locale -- month-first numeric dates). Layouts: Gramps' base ones.
 
-import { strings } from "./en.generated";
-import { fromGramps } from "./fromGramps";
+import { strings } from "./en.generated.js";
+import { fromGramps } from "./fromGramps.js";
 
 export const en = fromGramps(strings, null);

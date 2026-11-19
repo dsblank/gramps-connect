@@ -18,8 +18,8 @@
 // plain value ("Mar25", "3-25"), distinct from display.ts's formatExtras
 // which produces the "(Julian, Mar25)" *suffix* string.
 
-import { Calendar, Modifier, NewYear, Quality, type DatePart, type GrampsDate, type NewYearValue } from "./types";
-import { dateToSdn, isValidCalendarDate } from "./calendar";
+import { Calendar, Modifier, NewYear, Quality, type DatePart, type GrampsDate, type NewYearValue } from "./types.js";
+import { dateToSdn, isValidCalendarDate } from "./calendar.js";
 
 export interface ValidationResult {
   date1Invalid: boolean;

@@ -3,7 +3,7 @@
 // what Gramps intends. The tests accept our text for these (it must still
 // read back). Each is also listed for reporting upstream.
 
-import { Modifier } from "../types";
+import { Modifier } from "../types.js";
 
 export interface DisplayCase {
   lang: string;

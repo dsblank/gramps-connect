@@ -34,11 +34,11 @@
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/blob/master/gramps/gen/datehandler/_dateparser.py
 
-import { Calendar, Modifier, Quality, isLunarCalendar, type NewYear, type DatePart, type GrampsDate, type NewYearValue } from "./types";
-import { makeDate } from "./entry";
-import { isValidCalendarDate } from "./calendar";
-import { parseLunarText } from "./locales/lunar";
-import { type DateLocale, type MonthNames, type GregorianLayout, getLocale } from "./locale";
+import { Calendar, Modifier, Quality, isLunarCalendar, type NewYear, type DatePart, type GrampsDate, type NewYearValue } from "./types.js";
+import { makeDate } from "./entry.js";
+import { isValidCalendarDate } from "./calendar.js";
+import { parseLunarText } from "./locales/lunar.js";
+import { type DateLocale, type MonthNames, type GregorianLayout, getLocale } from "./locale.js";
 
 export interface ParseDateOptions {
   /** Locale code (see locale.ts's registry) or a DateLocale object

@@ -9,8 +9,8 @@ import {
   swedishSdn, swedishYmd,
   isValidCalendarDate,
   dateToSdn,
-} from "../calendar";
-import { Calendar } from "../types";
+} from "../calendar.js";
+import { Calendar } from "../types.js";
 
 test("Gregorian round-trip", () => {
   assert.deepEqual(gregorianYmd(gregorianSdn(1914, 11, 25)), [1914, 11, 25]);

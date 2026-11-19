@@ -26,14 +26,14 @@
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/blob/master/gramps/gen/datehandler/_datedisplay.py
 
-import { Calendar, Modifier, NewYearValue, Quality, isLunarCalendar, type DatePart, type GrampsDate, getStartDate, getStopDate } from "./types";
-import { type DateLocale, type InflectKey, type MonthFormLists, getLocale } from "./locale";
-import { BASE_LAYOUTS, type GregorianLayout } from "./layouts";
+import { Calendar, Modifier, NewYearValue, Quality, isLunarCalendar, type DatePart, type GrampsDate, getStartDate, getStopDate } from "./types.js";
+import { type DateLocale, type InflectKey, type MonthFormLists, getLocale } from "./locale.js";
+import { BASE_LAYOUTS, type GregorianLayout } from "./layouts.js";
 
 // In its own module so locale files can use it without a display.ts <->
 // locale.ts import cycle; re-exported here for existing importers.
-import { DateFormat } from "./formats";
-import { lunarText } from "./locales/lunar";
+import { DateFormat } from "./formats.js";
+import { lunarText } from "./locales/lunar.js";
 export { DateFormat };
 
 export interface FormatDateOptions {

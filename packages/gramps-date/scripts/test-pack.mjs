@@ -49,22 +49,31 @@ try {
   `);
   console.log(run(process.execPath, ["dates.mjs"], project).trim());
 
+  // Typechecked under both resolution modes consumers use: "bundler"
+  // (Vite, esbuild, ...) and "nodenext" (plain Node), which only resolves
+  // the declarations' relative imports if they carry .js extensions. The
+  // last line must fail: it proves `en` has its real type, not `any` from
+  // an unresolved re-export.
   writeFileSync(join(project, "app.ts"), `
-    import { parseDate, toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
+    import { en, parseDate, toEdtf, type GrampsDate } from "@gramps-connect/gramps-date";
     const date: GrampsDate = parseDate("1850");
     export const edtf: string | undefined = toEdtf(date);
+    // @ts-expect-error -- en is a DateLocale
+    export const probe: symbol = en;
   `);
-  writeFileSync(join(project, "tsconfig.json"), JSON.stringify({
-    compilerOptions: {
-      target: "ES2020", module: "ESNext", moduleResolution: "bundler", strict: true,
-      noEmit: true, skipLibCheck: false, lib: ["ES2020"], types: [],
-    },
-    files: ["app.ts"],
-  }));
   const tsPackage = createRequire(import.meta.url).resolve("typescript/package.json");
   const tsc = join(dirname(tsPackage), JSON.parse(readFileSync(tsPackage, "utf8")).bin.tsc);
-  run(process.execPath, [tsc, "-p", project], project);
-  console.log("types resolve");
+  for (const [module, moduleResolution] of [["ESNext", "bundler"], ["NodeNext", "NodeNext"]]) {
+    writeFileSync(join(project, "tsconfig.json"), JSON.stringify({
+      compilerOptions: {
+        target: "ES2020", module, moduleResolution, strict: true,
+        noEmit: true, skipLibCheck: false, lib: ["ES2020"], types: [],
+      },
+      files: ["app.ts"],
+    }));
+    run(process.execPath, [tsc, "-p", project], project);
+    console.log(`types resolve (moduleResolution ${moduleResolution})`);
+  }
   console.log("package tests passed");
 } finally {
   rmSync(work, { recursive: true, force: true });

@@ -5,14 +5,14 @@
 // Checked against Gramps' own output by __tests__/locales.test.ts and
 // __tests__/grampsTests.test.ts.
 
-import type { DateLocale } from "../locale";
-import { Modifier, Quality, type DatePart } from "../types";
-import type { GregorianLayout } from "../layouts";
-import { DateFormat } from "../formats";
-import { LOCALE_LOADERS } from "./available.generated";
-import { fromGramps, IDENTITY_FORMAT_INDEX } from "./fromGramps";
-import { ZH_CN_WORDS, ZH_TW_WORDS, zhLayout } from "./zh";
-import { KO_LUNAR_STYLE, VI_LUNAR_STYLE } from "./lunar";
+import type { DateLocale } from "../locale.js";
+import { Modifier, Quality, type DatePart } from "../types.js";
+import type { GregorianLayout } from "../layouts.js";
+import { DateFormat } from "../formats.js";
+import { LOCALE_LOADERS } from "./available.generated.js";
+import { fromGramps, IDENTITY_FORMAT_INDEX } from "./fromGramps.js";
+import { ZH_CN_WORDS, ZH_TW_WORDS, zhLayout } from "./zh.js";
+import { KO_LUNAR_STYLE, VI_LUNAR_STYLE } from "./lunar.js";
 
 interface LocaleLayout {
   /** See DateLocale.numericLstrip. */

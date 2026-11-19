@@ -8,7 +8,7 @@
 //
 // Format 0 is ISO; format 2 adds the year's name in the 60-year cycle.
 
-import { Calendar, type DatePart } from "../types";
+import { Calendar, type DatePart } from "../types.js";
 
 export interface LunarStyle {
   /** The calendar this applies to (the language's own). */

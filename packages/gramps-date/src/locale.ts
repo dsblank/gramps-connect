@@ -11,9 +11,9 @@
 // displayer lays out dates its own way also needs its layouts in
 // locales/index.ts.
 
-import type { Calendar, DatePart, GrampsDate, Modifier, NewYear, NewYearValue, Quality } from "./types";
-import type { GregorianLayout } from "./layouts";
-import type { LunarStyle } from "./locales/lunar";
+import type { Calendar, DatePart, GrampsDate, Modifier, NewYear, NewYearValue, Quality } from "./types.js";
+import type { GregorianLayout } from "./layouts.js";
+import type { LunarStyle } from "./locales/lunar.js";
 
 /** What a language's own display() gets to work with. */
 export interface DisplayHelpers {
@@ -29,7 +29,7 @@ export type ParserPatternName =
   | "aboutBrackets" | "bce" | "calendar" | "calendarNewyear" | "calendarNewyearIso" | "iso" | "isoTimestamp"
   | "modifier" | "modifierAfter" | "numeric" | "newyear" | "newyearIso" | "quality" | "quarter" | "range"
   | "span" | "today" | "rfc";
-export { BASE_LAYOUTS, type GregorianLayout } from "./layouts";
+export { BASE_LAYOUTS, type GregorianLayout } from "./layouts.js";
 
 /** A month-name table, index 0 unused (Gramps' own 1-based month
  * convention) -- 13 entries for calendars with an intercalary/leap month
@@ -272,8 +272,8 @@ export function isLocaleRegistered(code: string): boolean {
 // fallback, and registering it in this module (not a downstream barrel)
 // guarantees it for every importer, this package's own tests included.
 // Every other language loads on demand: loadLocale().
-import { en } from "./locales/en";
-import { availableLocaleCodes, buildLocale } from "./locales/index";
+import { en } from "./locales/en.js";
+import { availableLocaleCodes, buildLocale } from "./locales/index.js";
 registerLocale(en);
 
 /** Every language that can be loaded (and English), by code. */

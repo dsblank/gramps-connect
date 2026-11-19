@@ -13,12 +13,12 @@ import { gunzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { formatDate } from "../display";
-import { parseDate } from "../parse";
-import { loadLocale } from "../locale";
-import { makeDate, validateDate } from "../entry";
-import type { DatePart, GrampsDate } from "../types";
-import { knownGrampsBug } from "./knownGrampsBugs";
+import { formatDate } from "../display.js";
+import { parseDate } from "../parse.js";
+import { loadLocale } from "../locale.js";
+import { makeDate, validateDate } from "../entry.js";
+import type { DatePart, GrampsDate } from "../types.js";
+import { knownGrampsBug } from "./knownGrampsBugs.js";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 

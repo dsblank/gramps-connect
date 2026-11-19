@@ -1,6 +1,6 @@
 {
   "name": "@gramps-connect/gramps-date",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Gramps' Date in TypeScript: parse and display dates the way Gramps does, in all 43 of its languages, with calendar conversion and Extended Date/Time Format (EDTF) output.",
   "license": "AGPL-3.0-or-later",
   "type": "module",

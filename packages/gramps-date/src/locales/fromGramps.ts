@@ -4,9 +4,9 @@
 // from this package's six DateFormat values to the language's numbered
 // formats.
 
-import type { DateLocale, Inflection } from "../locale";
-import { baseLayouts, type BaseTextTemplates, type GregorianLayout } from "../layouts";
-import { NewYear } from "../types";
+import type { DateLocale, Inflection } from "../locale.js";
+import { baseLayouts, type BaseTextTemplates, type GregorianLayout } from "../layouts.js";
+import { NewYear } from "../types.js";
 
 /** The shape of a generated strings file -- loose on purpose (`as const`
  * literals from JSON), narrowed into DateLocale's types below. */

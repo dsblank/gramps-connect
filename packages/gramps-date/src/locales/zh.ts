@@ -6,9 +6,9 @@
 // around a date is the displayer's own, not translated: postfix 以前/以后,
 // and a quality fused with "before"/"after" ("估计早于").
 
-import { Modifier, Quality, type DatePart, type GrampsDate } from "../types";
-import type { DateLocale, DisplayHelpers } from "../locale";
-import { zhLunarStyle } from "./lunar";
+import { Modifier, Quality, type DatePart, type GrampsDate } from "../types.js";
+import type { DateLocale, DisplayHelpers } from "../locale.js";
+import { zhLunarStyle } from "./lunar.js";
 
 interface ZhWords {
   estimated: string; // 估计为

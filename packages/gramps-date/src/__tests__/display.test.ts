@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { formatDate, DateFormat, Modifier, Quality, Calendar, NewYear, type GrampsDate } from "../index";
+import { formatDate, DateFormat, Modifier, Quality, Calendar, NewYear, type GrampsDate } from "../index.js";
 
 function date(overrides: Partial<GrampsDate>): GrampsDate {
   return {

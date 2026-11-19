@@ -17,8 +17,8 @@
 //   Licensed under the GNU General Public License, version 2 or later.
 //   https://github.com/gramps-project/gramps/blob/master/gramps/gen/lib/gcalendar.py
 
-import { Calendar, isLunarCalendar } from "./types";
-import { LUNAR_TABLES, type LunarYearTable } from "./lunarTables.generated";
+import { Calendar, isLunarCalendar } from "./types.js";
+import { LUNAR_TABLES, type LunarYearTable } from "./lunarTables.generated.js";
 
 const GRG_SDN_OFFSET = 32045;
 const GRG_DAYS_PER_5_MONTHS = 153;

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseDate } from "../parse";
-import { DateFormat, formatDate } from "../display";
+import { parseDate } from "../parse.js";
+import { DateFormat, formatDate } from "../display.js";
 
 // The app's date input shows dates in whichever DateFormat the tree's
 // Preferences pick and reads the text back with parseDate() -- so every

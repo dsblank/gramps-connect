@@ -10,10 +10,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseDate } from "../parse";
-import { makeDate, validateDate } from "../entry";
-import { getLocale } from "../locale";
-import { Calendar, Modifier, Quality } from "../types";
+import { parseDate } from "../parse.js";
+import { makeDate, validateDate } from "../entry.js";
+import { getLocale } from "../locale.js";
+import { Calendar, Modifier, Quality } from "../types.js";
 
 const en = getLocale("en");
 

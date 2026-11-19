@@ -6,7 +6,7 @@
 // calendars, dual-dated years, a non-default new-year start, text-only
 // dates, an unknown year) gets no EDTF at all, which the format allows,
 // rather than a plausible-looking wrong one.
-import { Calendar, getStartDate, getStopDate, Modifier, Quality, type DatePart, type GrampsDate } from "./types";
+import { Calendar, getStartDate, getStopDate, Modifier, Quality, type DatePart, type GrampsDate } from "./types.js";
 
 function pad(n: number, width: number): string {
   return String(n).padStart(width, "0");
