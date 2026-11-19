@@ -11,8 +11,8 @@ import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { EVENT_VIEW, PLACE_VIEW, VIEWS, type ViewConfig } from "./store/views";
 import { getViewStore } from "./store/registry";
-import { HOME_KEY, isStorelessKey, isVisualKey, type VisualKey } from "./hash";
-import { getAuthSnapshot, getCurrentUsername, getToken, subscribe as subscribeAuth } from "./auth/auth";
+import { HOME_KEY, isStorelessKey, isVisualKey, setRouteTreeSource, type VisualKey } from "./hash";
+import { getAuthSnapshot, getCurrentUsername, getToken, getTreeId, subscribe as subscribeAuth } from "./auth/auth";
 import { loadDisplaySettings } from "./store/displaySettings";
 import { loadNameGroupMappings, watchNameGroupMappings } from "./store/nameGroups";
 import { dateLocaleCode } from "./store/placeIndex";
@@ -57,6 +57,7 @@ import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
 import { EditDialogs } from "./components/EditDialogs";
+import { ForeignTreeDialog } from "./components/ForeignTreeDialog";
 import { useMediaDrop } from "./hooks/useMediaDrop";
 import { MediaDropOverlay } from "./components/MediaDropOverlay";
 import { PyodidePocPanel } from "./pyodidePoc/PyodidePocPanel";
@@ -68,6 +69,9 @@ import { RelationshipWindow } from "./components/related/RelationshipWindow";
 import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 import { STORAGE_KEYS } from "./store/storageKeys";
+
+// Every route the app formats names the signed-in tree -- see hash.ts.
+setRouteTreeSource(getTreeId);
 
 export function App() {
   const loggedIn = useSyncExternalStore(subscribeAuth, getAuthSnapshot);
@@ -272,7 +276,7 @@ function AuthenticatedApp() {
     if (lang !== "en") setLanguage(lang);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const { activeKey, setActiveKey, visualSubject } = useHistorySync();
+  const { activeKey, setActiveKey, visualSubject, foreignTree, dismissForeignTree } = useHistorySync();
   const liveSyncStatus = useLiveSync(onRemoteNoteChange);
   // The active tree's own name (gramps-web-api's metadata.database.name),
   // shown alongside the wordmark below so a user signed into more than one
@@ -719,6 +723,7 @@ function AuthenticatedApp() {
       {/* Single shared modal answering every confirmDialog() call across
           the app -- see ConfirmDialogHost.tsx's own doc comment. */}
       <ConfirmDialogHost />
+      <ForeignTreeDialog link={foreignTree} currentTreeName={treeName} onClose={dismissForeignTree} />
       <LargeImageDialogHost />
     </>
   );

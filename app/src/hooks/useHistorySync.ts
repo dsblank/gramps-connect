@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { formatHash, isStorelessKey, isVisualKey, parseHash, type VisualSubject } from "../hash";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { formatHash, HOME_KEY, isForeignRoute, isStorelessKey, isVisualKey, parseHash, type VisualSubject } from "../hash";
 import { getViewStore } from "../store/registry";
 import { VIEWS } from "../store/views";
 import { useViewStore } from "./useViewStore";
@@ -9,6 +9,27 @@ import { isVisitable, recordVisit } from "../store/visitedHistory";
  * (View > Visited): long enough that arrowing through a list doesn't
  * record every row it passes, short enough that a glance still counts. */
 const VISIT_DWELL_MS = 1000;
+
+/** A link to a tree other than the one this session is signed in to --
+ * see hash.ts's isForeignRoute. */
+export interface ForeignTreeLink {
+  treeId: string;
+  /** The link itself, so it can be put back in the address bar before
+   * signing out (signing in again then lands on it). */
+  hash: string;
+}
+
+/** The location's route, or Home in its place when the route belongs to
+ * another tree: its handles mean nothing here, so nothing of it is applied. */
+function readLocalRoute() {
+  const route = parseHash();
+  return isForeignRoute(route) ? { ...route, viewKey: HOME_KEY, handle: null, subject: null } : route;
+}
+
+function readForeign(): ForeignTreeLink | null {
+  const route = parseHash();
+  return isForeignRoute(route) ? { treeId: route.treeId!, hash: window.location.hash } : null;
+}
 
 /** Keeps the URL hash, the active sidebar tab, and the active view's
  * DataTable selection in sync with each other -- so the browser's native
@@ -35,13 +56,21 @@ export function useHistorySync(): {
    * when the active route isn't a visual). Read from the hash rather than
    * held anywhere else -- see hash.ts's VisualSubject. */
   visualSubject: VisualSubject | null;
+  /** Set when the URL named another tree -- shown to the user (App.tsx's
+   * ForeignTreeDialog) rather than applied; cleared by dismissForeignTree. */
+  foreignTree: ForeignTreeLink | null;
+  dismissForeignTree: () => void;
 } {
-  const [activeKey, setActiveKey] = useState(() => parseHash().viewKey);
+  const [activeKey, setActiveKey] = useState(() => readLocalRoute().viewKey);
+  const [foreignTree, setForeignTree] = useState<ForeignTreeLink | null>(readForeign);
+  // The last route this hook wrote or applied -- where a foreign link
+  // pasted mid-session sends the address bar back to.
+  const lastLocalHash = useRef<string | null>(null);
   // Mirrors the route's subject. Held in state (rather than re-parsed at
   // each render) so the outward effect below has something to write back
   // *from*: without it, that effect would reformat a scoped visual route as
   // its bare "#/map" self and immediately throw the scope away again.
-  const [visualSubject, setVisualSubject] = useState<VisualSubject | null>(() => parseHash().subject);
+  const [visualSubject, setVisualSubject] = useState<VisualSubject | null>(() => readLocalRoute().subject);
   // A visual page (#/map, #/timeline) or Home (#/home) is a route but not a
   // view: it has no store, so there's no snapshot to sync and
   // getViewStore() would throw on its key. Subscribe to the first view
@@ -59,7 +88,21 @@ export function useHistorySync(): {
     async function applyHash() {
       applyingHash.current = true;
       try {
-        const { viewKey, handle, subject } = parseHash();
+        const route = parseHash();
+        if (isForeignRoute(route)) {
+          setForeignTree({ treeId: route.treeId!, hash: window.location.hash });
+          // Mid-session (a pasted link), nothing else would undo it: the
+          // outward effect below only runs when the route state changes, and
+          // that's exactly what isn't happening. On the initial load the
+          // state is already Home (readLocalRoute), and that effect replaces
+          // the URL itself.
+          if (lastLocalHash.current) {
+            window.history.replaceState(window.history.state, "", lastLocalHash.current);
+          }
+          return;
+        }
+        lastLocalHash.current = formatHash(route.treeId === null ? { ...route, treeId: undefined } : route);
+        const { viewKey, handle, subject } = route;
         setActiveKey(viewKey);
         setVisualSubject(subject);
         if (isStorelessKey(viewKey)) return; // nothing to select -- see `noStore` above
@@ -113,14 +156,20 @@ export function useHistorySync(): {
       // formatHash ignores it but nothing else would have cleared it.
       subject: visual ? visualSubject : null,
     });
+    lastLocalHash.current = next;
     if (window.location.hash !== next) {
-      if (formatHash(parseHash()) === next) {
+      const current = parseHash();
+      // An older link with no tree formats, here, with this session's --
+      // so a fresh load of one just gets the tree spelled in.
+      if (formatHash({ ...current, treeId: current.treeId ?? undefined }) === next || isForeignRoute(current)) {
         // Same route, only spelled differently -- most often a fresh load
         // with no hash at all, which parses as Home. Rewrite it in place:
         // pushing it would leave a Back step onto the unspelled URL, which
         // just redirects here again (and wipes Forward on the way), so the
         // header's Back button (HistoryNav.tsx) would look stuck. Same URL
-        // semantics, so no hashchange is needed or fired.
+        // semantics, so no hashchange is needed or fired. A foreign link
+        // (loaded fresh, so the state here is Home) is replaced for the same
+        // reason: Back onto it would only raise the same notice again.
         window.history.replaceState(window.history.state, "", next);
       } else {
         window.location.hash = next;
@@ -143,5 +192,7 @@ export function useHistorySync(): {
     return () => clearTimeout(timer);
   }, [activeKey, visitHandle]);
 
-  return { activeKey, setActiveKey, visualSubject };
+  const dismissForeignTree = useCallback(() => setForeignTree(null), []);
+
+  return { activeKey, setActiveKey, visualSubject, foreignTree, dismissForeignTree };
 }

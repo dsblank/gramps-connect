@@ -42,6 +42,14 @@ export async function fetchTrees(token: string): Promise<Tree[]> {
   return res.json();
 }
 
+/** One tree's details. Anyone may read their own tree's; another tree's
+ * needs ViewOtherTree (site admins) and 403s otherwise. */
+export async function fetchTree(token: string, treeId: string): Promise<Tree> {
+  const res = await apiFetch(`${API_BASE}/api/trees/${encodeURIComponent(treeId)}`, { headers: authHeaders(token) });
+  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  return res.json();
+}
+
 /** 405s server-side outside TREE_MULTI mode -- callers should check
  * metadata's `server.multi_tree` first (fetchMetadata in metadataApi.ts)
  * and hide the control entirely rather than let this throw. */

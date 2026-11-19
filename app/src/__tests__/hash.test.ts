@@ -1,23 +1,23 @@
-import { describe, expect, it } from "vitest";
-import { formatHash, isHomeKey, isStorelessKey, isSubjectKey, isVisualKey, parseHash } from "../hash";
+import { afterEach, describe, expect, it } from "vitest";
+import { formatHash, isForeignRoute, isHomeKey, setRouteTreeSource, isStorelessKey, isSubjectKey, isVisualKey, parseHash } from "../hash";
 
 describe("parseHash", () => {
   it("reads a plain view route", () => {
-    expect(parseHash("#/place")).toEqual({ viewKey: "place", handle: null, subject: null });
+    expect(parseHash("#/place")).toEqual({ viewKey: "place", handle: null, subject: null, treeId: null });
   });
 
   it("reads a view route's selected handle", () => {
-    expect(parseHash("#/place/abc123")).toEqual({ viewKey: "place", handle: "abc123", subject: null });
+    expect(parseHash("#/place/abc123")).toEqual({ viewKey: "place", handle: "abc123", subject: null, treeId: null });
   });
 
   it("falls back to Home for a missing or unknown key", () => {
     for (const hash of ["", "#", "#/", "#/nonsense"]) {
-      expect(parseHash(hash)).toEqual({ viewKey: "home", handle: null, subject: null });
+      expect(parseHash(hash)).toEqual({ viewKey: "home", handle: null, subject: null, treeId: null });
     }
   });
 
   it("reads an unscoped visual route", () => {
-    expect(parseHash("#/map")).toEqual({ viewKey: "map", handle: null, subject: null });
+    expect(parseHash("#/map")).toEqual({ viewKey: "map", handle: null, subject: null, treeId: null });
   });
 
   it("reads a visual's subject", () => {
@@ -25,6 +25,7 @@ describe("parseHash", () => {
       viewKey: "map",
       handle: null,
       subject: { type: "person", handle: "abc123" },
+      treeId: null,
     });
   });
 
@@ -33,7 +34,7 @@ describe("parseHash", () => {
     // handle -- all of them stale/hand-edited URLs that should still land on
     // a working map.
     for (const hash of ["#/map/note:abc123", "#/map/abc123", "#/map/person:", "#/map/:abc123"]) {
-      expect(parseHash(hash)).toEqual({ viewKey: "map", handle: null, subject: null });
+      expect(parseHash(hash)).toEqual({ viewKey: "map", handle: null, subject: null, treeId: null });
     }
   });
 
@@ -44,18 +45,20 @@ describe("parseHash", () => {
   });
 
   it("reads the Home route", () => {
-    expect(parseHash("#/home")).toEqual({ viewKey: "home", handle: null, subject: null });
+    expect(parseHash("#/home")).toEqual({ viewKey: "home", handle: null, subject: null, treeId: null });
   });
 });
 
 describe("formatHash", () => {
   it("round-trips every route shape through parseHash", () => {
     for (const route of [
-      { viewKey: "place", handle: null, subject: null },
-      { viewKey: "place", handle: "abc123", subject: null },
-      { viewKey: "map", handle: null, subject: null },
-      { viewKey: "timeline", handle: null, subject: { type: "person", handle: "abc123" } },
-      { viewKey: "home", handle: null, subject: null },
+      { viewKey: "place", handle: null, subject: null, treeId: null },
+      { viewKey: "place", handle: "abc123", subject: null, treeId: null },
+      { viewKey: "map", handle: null, subject: null, treeId: null },
+      { viewKey: "timeline", handle: null, subject: { type: "person", handle: "abc123" }, treeId: null },
+      { viewKey: "person", handle: "abc123", subject: null, treeId: "3f2a-tree" },
+      { viewKey: "map", handle: null, subject: { type: "place", handle: "p1" }, treeId: "3f2a-tree" },
+      { viewKey: "home", handle: null, subject: null, treeId: null },
     ]) {
       expect(parseHash(formatHash(route))).toEqual(route);
     }
@@ -70,7 +73,7 @@ describe("formatHash", () => {
   });
 
   it("drops the subject segment when there is no subject", () => {
-    expect(formatHash({ viewKey: "map", handle: null, subject: null })).toBe("#/map");
+    expect(formatHash({ viewKey: "map", handle: null, subject: null, treeId: null })).toBe("#/map");
   });
 });
 
@@ -81,7 +84,7 @@ describe("key predicates", () => {
   });
 
   it("parses #/changed as a page with no handle or subject", () => {
-    expect(parseHash("#/changed")).toEqual({ viewKey: "changed", handle: null, subject: null });
+    expect(parseHash("#/changed")).toEqual({ viewKey: "changed", handle: null, subject: null, treeId: null });
     expect(formatHash({ viewKey: "changed" })).toBe("#/changed");
   });
 
@@ -99,5 +102,34 @@ describe("key predicates", () => {
   it("treats Home and both visuals, and nothing else, as storeless", () => {
     for (const key of ["home", "map", "timeline"]) expect(isStorelessKey(key)).toBe(true);
     for (const key of ["place", "person"]) expect(isStorelessKey(key)).toBe(false);
+  });
+});
+
+describe("tree prefix", () => {
+  afterEach(() => setRouteTreeSource(() => null));
+
+  it("reads the tree a link was made in", () => {
+    expect(parseHash("#/t/abc-123/person/h1")).toEqual({ viewKey: "person", handle: "h1", subject: null, treeId: "abc-123" });
+    expect(parseHash("#/t/abc-123")).toEqual({ viewKey: "home", handle: null, subject: null, treeId: "abc-123" });
+  });
+
+  it("prefixes every formatted route with the session's tree", () => {
+    setRouteTreeSource(() => "abc-123");
+    expect(formatHash({ viewKey: "person", handle: "h1" })).toBe("#/t/abc-123/person/h1");
+    expect(formatHash({ viewKey: "map", subject: { type: "place", handle: "p1" } })).toBe("#/t/abc-123/map/place:p1");
+    expect(formatHash({ viewKey: "home", treeId: null })).toBe("#/home");
+  });
+
+  it("leaves the prefix off without a tree (single-tree server)", () => {
+    expect(formatHash({ viewKey: "person", handle: "h1" })).toBe("#/person/h1");
+  });
+
+  it("only calls a route foreign when both sides name different trees", () => {
+    setRouteTreeSource(() => "mine");
+    expect(isForeignRoute(parseHash("#/t/other/person/h1"))).toBe(true);
+    expect(isForeignRoute(parseHash("#/t/mine/person/h1"))).toBe(false);
+    expect(isForeignRoute(parseHash("#/person/h1"))).toBe(false);
+    setRouteTreeSource(() => null);
+    expect(isForeignRoute(parseHash("#/t/other/person/h1"))).toBe(false);
   });
 });

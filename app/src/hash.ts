@@ -12,7 +12,46 @@ export interface HashRoute {
   handle: string | null;
   /** Only ever set on a visual route -- see VisualSubject. */
   subject: VisualSubject | null;
+  /** The tree the link was made in (gramps-web-api's tree id, the `tree`
+   * claim of the session that formatted it), or null for a link without
+   * one -- an older link, or one from a single-tree server, whose tokens
+   * carry no tree. See setRouteTreeSource. */
+  treeId: string | null;
 }
+
+/** Where formatHash gets the tree to prefix every route with. A hook-up
+ * rather than an import of auth.ts's getTreeId: auth.ts sits under most of
+ * the store modules, several of which import this file, so App.tsx wires
+ * the two together instead (and tests run with no tree at all).
+ *
+ * Why the tree is in the URL at all: handles are only meaningful inside one
+ * tree, and a user can belong to more than one, so a link that doesn't say
+ * which tree it's for can only be guessed at from whatever the reader
+ * happens to be signed in to. With it, a link opened in the wrong tree can
+ * say so (useHistorySync.ts's foreignTree) instead of silently showing
+ * nothing, or Home. */
+let routeTreeSource: () => string | null = () => null;
+
+export function setRouteTreeSource(source: () => string | null): void {
+  routeTreeSource = source;
+}
+
+/** The tree this session's routes belong to, or null (a single-tree
+ * server, or not wired up). */
+export function currentRouteTreeId(): string | null {
+  return routeTreeSource();
+}
+
+/** True when `route` names a tree, and it isn't the one this session is
+ * signed in to. A route with no tree, or a session with none, is never
+ * foreign: there's nothing to compare, so it's taken as meant for here. */
+export function isForeignRoute(route: HashRoute): boolean {
+  const current = routeTreeSource();
+  return route.treeId !== null && current !== null && route.treeId !== current;
+}
+
+/** The tree segment: "#/t/<treeId>/<route>". "t" is never a view key. */
+const TREE_SEGMENT = "t";
 
 /** The record a visual is scoped to, when it's showing one record's data
  * rather than the whole tree: "Bob Smith's events on the timeline", "this
@@ -99,7 +138,8 @@ export function isStorelessKey(key: string): boolean {
 }
 
 /** Parses "#/<viewKey>", "#/<viewKey>/<handle>", "#/home", or a visual's
- * "#/<visualKey>/<type>:<handle>" (also tolerates a missing leading slash,
+ * "#/<visualKey>/<type>:<handle>", each optionally behind a
+ * "#/t/<treeId>" prefix (also tolerates a missing leading slash,
  * or no hash at all). An unrecognized/missing view key falls back to Home
  * rather than erroring -- a fresh load, or a stale/hand-edited URL, should
  * still land somewhere sane, and by the same rule an unparseable subject
@@ -108,23 +148,38 @@ export function isStorelessKey(key: string): boolean {
  * `handle`; neither does Home. */
 export function parseHash(hash: string = window.location.hash): HashRoute {
   const body = hash.slice(1);
-  const parts = body.split("/").filter(Boolean);
+  let parts = body.split("/").filter(Boolean);
+  let treeId: string | null = null;
+  if (parts[0] === TREE_SEGMENT && parts.length > 1) {
+    try {
+      treeId = decodeURIComponent(parts[1]);
+    } catch {
+      treeId = parts[1];
+    }
+    parts = parts.slice(2);
+  }
   const [viewKey, handle] = parts;
   if (viewKey && isVisualKey(viewKey)) {
-    return { viewKey, handle: null, subject: parseSubject(handle) };
+    return { viewKey, handle: null, subject: parseSubject(handle), treeId };
   }
   if (!viewKey || isHomeKey(viewKey)) {
-    return { viewKey: HOME_KEY, handle: null, subject: null };
+    return { viewKey: HOME_KEY, handle: null, subject: null, treeId };
   }
   if (!VIEWS.some((v) => v.key === viewKey)) {
-    return { viewKey: HOME_KEY, handle: null, subject: null };
+    return { viewKey: HOME_KEY, handle: null, subject: null, treeId };
   }
-  return { viewKey, handle: handle ?? null, subject: null };
+  return { viewKey, handle: handle ?? null, subject: null, treeId };
 }
 
+/** Formats a route, prefixed with its tree: `route.treeId` when given
+ * (null for none), otherwise this session's own (setRouteTreeSource) -- so
+ * every link the app builds names the tree it was built in without any
+ * caller having to know about trees. */
 export function formatHash(route: Partial<HashRoute> & { viewKey: string }): string {
+  const tree = route.treeId === undefined ? routeTreeSource() : route.treeId;
+  const prefix = tree ? `#/${TREE_SEGMENT}/${encodeURIComponent(tree)}/` : "#/";
   if (isVisualKey(route.viewKey)) {
-    return route.subject ? `#/${route.viewKey}/${formatSubject(route.subject)}` : `#/${route.viewKey}`;
+    return route.subject ? `${prefix}${route.viewKey}/${formatSubject(route.subject)}` : `${prefix}${route.viewKey}`;
   }
-  return route.handle ? `#/${route.viewKey}/${route.handle}` : `#/${route.viewKey}`;
+  return route.handle ? `${prefix}${route.viewKey}/${route.handle}` : `${prefix}${route.viewKey}`;
 }
