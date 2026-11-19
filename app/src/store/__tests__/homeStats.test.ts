@@ -4,12 +4,12 @@ vi.mock("../api", async () => {
   const actual = await vi.importActual<typeof import("../api")>("../api");
   return { ...actual, fetchPage: vi.fn() };
 });
-vi.mock("../cacheMeta", () => ({
-  fetchServerState: vi.fn(),
+vi.mock("../metadataApi", () => ({
+  fetchMetadata: vi.fn(),
 }));
 
 import { fetchPage, type QueryItem } from "../api";
-import { fetchServerState } from "../cacheMeta";
+import { fetchMetadata } from "../metadataApi";
 import { fetchHomeCounts, fetchHomePerson, fetchRecentTopics, fetchLatestStories, fetchRecentlyChanged, timeAgo } from "../homeStats";
 
 function page(items: QueryItem[]) {
@@ -170,13 +170,15 @@ describe("fetchLatestStories", () => {
 });
 
 describe("fetchHomeCounts", () => {
-  it("reads counts off cacheMeta's already-memoized server state", async () => {
-    vi.mocked(fetchServerState).mockResolvedValue({
-      dbName: "x", dbId: "y", grampsVersion: "6.0.8", webApiVersion: "3.25.0", cursor: null,
-      counts: { person: 4668, family: 2855 },
-    });
+  it("reads fresh counts from /api/metadata/ on every call, re-keyed by view", async () => {
+    vi.mocked(fetchMetadata)
+      .mockResolvedValueOnce({ object_counts: { people: 4668, families: 2855, media: 4 } } as never)
+      .mockResolvedValueOnce({ object_counts: { people: 4668, families: 2855, media: 13 } } as never);
 
-    expect(await fetchHomeCounts()).toEqual({ person: 4668, family: 2855 });
+    expect(await fetchHomeCounts("tok")).toEqual({ person: 4668, family: 2855, media: 4 });
+    // A later visit to Home sees what changed since, not the first answer.
+    expect(await fetchHomeCounts("tok")).toEqual({ person: 4668, family: 2855, media: 13 });
+    expect(fetchMetadata).toHaveBeenCalledWith("tok");
   });
 });
 

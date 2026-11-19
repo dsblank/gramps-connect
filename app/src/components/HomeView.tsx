@@ -74,7 +74,7 @@ export function HomeView() {
       const [
         countsResult, recentResult, topicsResult, storiesResult, blogResult, homePersonResult, visitedResult, bookmarksResult,
       ] = await Promise.all([
-        fetchHomeCounts(),
+        fetchHomeCounts(token),
         fetchRecentlyChanged(token, RECENT_LIMIT),
         fetchRecentTopics(token, TOPIC_LIMIT),
         fetchLatestStories(token, STORY_LIMIT),

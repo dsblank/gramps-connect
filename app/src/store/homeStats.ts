@@ -6,7 +6,8 @@
 // ten of it locally.
 import { API_BASE } from "../config";
 import { fetchPage, parseErrorMessage, type QueryItem } from "./api";
-import { fetchServerState } from "./cacheMeta";
+import { countsFromMetadata } from "./cacheMeta";
+import { fetchMetadata } from "./metadataApi";
 import { VIEWS, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, formatChange, type ViewConfig } from "./views";
 import { apiFetch } from "./apiFetch";
 import { forgetVisits, getVisits } from "./visitedHistory";
@@ -274,13 +275,13 @@ export async function fetchHomePerson(token: string, handle: string): Promise<Qu
   return { handle: person.handle, gramps_id: person.gramps_id ?? "", primary_name: person.primary_name };
 }
 
-/** Per-type row counts, keyed by STAT_VIEWS' own `key`s. Reuses cacheMeta's
- * already-memoized /api/metadata/ + history read (every ViewStore's own
- * staleness check shares the same one request per page load) rather than
- * issuing a second, Home-specific fetch of the same data. */
-export async function fetchHomeCounts(): Promise<Record<string, number>> {
-  const state = await fetchServerState();
-  return state.counts;
+/** Per-type row counts, keyed by STAT_VIEWS' own `key`s. Fetched fresh on
+ * every call, not taken from cacheMeta's per-page-load memo: that snapshot
+ * is from when the page loaded, so Statistics would go on showing counts
+ * from before anything added or deleted since (by this tab or, via live
+ * sync, anyone else) until a full reload. One small request per Home visit. */
+export async function fetchHomeCounts(token: string): Promise<Record<string, number>> {
+  return countsFromMetadata(await fetchMetadata(token));
 }
 
 /** "15 minutes ago" / "a month ago", from a `change` column's raw Unix

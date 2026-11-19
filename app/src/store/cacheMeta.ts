@@ -76,6 +76,16 @@ const COUNT_KEY_BY_TABLE: Record<string, string> = {
   tag: "tags",
 };
 
+/** /api/metadata/'s object_counts, re-keyed by this app's view/table keys. */
+export function countsFromMetadata(metadata: { object_counts?: Record<string, number> } | null | undefined): Record<string, number> {
+  const rawCounts: Record<string, number> = metadata?.object_counts ?? {};
+  const counts: Record<string, number> = {};
+  for (const [table, countKey] of Object.entries(COUNT_KEY_BY_TABLE)) {
+    if (typeof rawCounts[countKey] === "number") counts[table] = rawCounts[countKey];
+  }
+  return counts;
+}
+
 function hash(text: string): string {
   // FNV-1a, 32-bit -- this only needs to change when its input changes,
   // not to resist collisions from an adversary, so there's no reason to
@@ -160,11 +170,7 @@ export function resetServerState(): void {
 async function loadServerState(): Promise<ServerState> {
   const token = await getToken();
   const [metadata, cursor] = await Promise.all([fetchMetadata(token), fetchCursor(token)]);
-  const rawCounts: Record<string, number> = metadata?.object_counts ?? {};
-  const counts: Record<string, number> = {};
-  for (const [table, countKey] of Object.entries(COUNT_KEY_BY_TABLE)) {
-    if (typeof rawCounts[countKey] === "number") counts[table] = rawCounts[countKey];
-  }
+  const counts = countsFromMetadata(metadata);
   return {
     dbName: String(metadata?.database?.name ?? ""),
     dbId: String(metadata?.database?.id ?? ""),
