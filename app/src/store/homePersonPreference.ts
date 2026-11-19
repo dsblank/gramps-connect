@@ -25,9 +25,9 @@ function readAll(): HandleByTree {
   }
 }
 
-/** getTreeId() is only non-null in multi-tree mode -- "unknown" (gramps-web's
- * own fallback key, for consistency) covers the single-tree case, where
- * every session already talks to the same one tree anyway. */
+/** "unknown" (gramps-web's own fallback key, for consistency) covers a
+ * session whose token carries no tree -- in practice only a treeless site
+ * admin, since every other token names its tree (see auth.ts's getTreeId). */
 function treeKey(): string {
   return getTreeId() ?? "unknown";
 }

@@ -15,7 +15,7 @@ import { seriesColor } from "./eventCategories";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { t } from "../../i18n/i18n";
 import { applyOhmYear, crossfadeStyleSwap, mapStyleKey, mapStyleUrl, overlayDateVisible } from "./mapStyles";
-import { STORAGE_KEYS } from "../../store/storageKeys";
+import { loadViewport, saveViewport } from "../../store/mapViewport";
 // maplibre-gl loads its tile-parsing/clustering work off the main thread via
 // `new Worker(new URL(\`./${name}\`, import.meta.url))`, with the filename
 // built from a template literal at runtime -- Vite's static asset scanner
@@ -39,40 +39,6 @@ import { STORAGE_KEYS } from "../../store/storageKeys";
 // they're served at a fixed path the same way the sql.js WASM files are
 // (see registry.ts's locateFile).
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
-
-/** Where the user last left the map, so reopening doesn't jump back to a
- * world view. Same idea (and same purpose) as gramps-web's own
- * getMapViewport/saveMapViewport. */
-const VIEWPORT_KEY = STORAGE_KEYS.mapViewport;
-
-interface Viewport {
-  lat: number;
-  lng: number;
-  zoom: number;
-}
-
-function loadViewport(): Viewport | null {
-  try {
-    const raw = window.localStorage.getItem(VIEWPORT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Viewport>;
-    if (typeof parsed.lat !== "number" || typeof parsed.lng !== "number" || typeof parsed.zoom !== "number") {
-      return null;
-    }
-    return { lat: parsed.lat, lng: parsed.lng, zoom: parsed.zoom };
-  } catch {
-    return null;
-  }
-}
-
-function saveViewport(viewport: Viewport): void {
-  try {
-    window.localStorage.setItem(VIEWPORT_KEY, JSON.stringify(viewport));
-  } catch {
-    // A private-mode/quota failure costs the user a remembered viewport and
-    // nothing else -- not worth surfacing.
-  }
-}
 
 const SOURCE = "places";
 const CLUSTER_LAYER = "place-clusters";

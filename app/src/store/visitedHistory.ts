@@ -63,8 +63,8 @@ function writeAll(all: VisitsByKey): void {
   for (const listener of listeners) listener();
 }
 
-/** Tree and user: getTreeId() is null outside multi-tree mode, where
- * "unknown" stands for the one tree (homePersonPreference.ts's own key). */
+/** Tree and user, with "unknown" for a session with no tree
+ * (homePersonPreference.ts's own fallback key). */
 function storageKey(): string {
   return `${getTreeId() ?? "unknown"}:${getCurrentUsername() ?? ""}`;
 }
