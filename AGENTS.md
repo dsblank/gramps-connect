@@ -14,6 +14,50 @@
   separate follow-up. A pure refactor, internal fix, or doc-comment change
   with no visible effect doesn't need this.
 
+## Principles
+
+### Every change can be taken back
+
+A shared tree is only safe to open to other people if mistakes can be
+undone. Treat reversibility as part of a feature, not a later addition:
+
+- Anything that deletes, merges, or changes many records at once (bulk
+  edits, merges, deletes, imports, Gramplet writes, automated fixes such
+  as Wikidata lookups) should come with a way to undo it. If it can't yet,
+  say so in the plan and add the undo to `TODO.md`. Don't treat "This
+  cannot be undone" as finished.
+- The server undoes whole transactions, so one user action should be one
+  transaction where possible. An action split across many requests can't
+  be undone as a unit and leaves a half-done state if it fails partway.
+- Make the way back visible where the change happened, for example a
+  short Undo notification after a delete or a link from a record's
+  History to the change it was part of, instead of expecting people to
+  find it later.
+- When undoing isn't possible, the confirmation should say exactly what
+  will be lost (counts, names), and large irreversible actions need a
+  stronger confirmation (the bulk-delete password is the model).
+
+### Two kinds of users
+
+Gramps Connect has two audiences, and features should work for both:
+
+- **Gramps users** expect Gramps' layout, vocabulary, and data model
+  (events, citations, references, Gramps IDs). The full editors and list
+  views keep that, so the app feels familiar to them.
+- **Family members on a hosted tree**, who may never have used Gramps.
+  For them, roles decide what they *may* do, but they don't make
+  anything easier to *understand*. Where a feature is something a
+  relative would do (add a photo, share a memory, correct a date, tag a
+  face), design that path in plain words around what they're trying to
+  do, without requiring them to understand Gramps' object model first.
+
+Contributions from people (or tools) who shouldn't edit the tree
+directly should take the form "suggest, then review": the change is
+proposed and an editor accepts, edits, or rejects it. Prefer designs
+that keep this possible over ones that only work as direct writes.
+When designing a feature, ask how each audience would use it. If it only
+makes sense to one of them, that's fine, but decide that on purpose.
+
 ## Backend & deployment architecture
 
 - gramps-connect is a pure browser frontend (React/TypeScript) with no
