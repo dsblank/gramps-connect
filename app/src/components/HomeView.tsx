@@ -25,6 +25,8 @@ import iconChat from "../assets/icons/chat-message.svg";
 import iconStory from "../assets/icons/story-book.svg";
 import iconBlog from "../assets/icons/blog-post.svg";
 import { t } from "../i18n/i18n";
+import { RecentActivityRows } from "./visuals/ActivityList";
+import { showActivityTab, showRecordsTab } from "./visuals/VisitedView";
 
 const RECENT_LIMIT = 8;
 const TOPIC_LIMIT = 5;
@@ -148,7 +150,13 @@ export function HomeView() {
               ) : (
                 <RecordRows items={visited} />
               )}
-              <Anchor component="a" href={formatHash({ viewKey: "visited" })} mt="sm" display="inline-block">
+              <Anchor
+                component="a"
+                href={formatHash({ viewKey: "visited" })}
+                onClick={showRecordsTab}
+                mt="sm"
+                display="inline-block"
+              >
                 {t("See all visited")}
               </Anchor>
             </Panel>
@@ -279,6 +287,21 @@ export function HomeView() {
               )}
               <Anchor component="a" href={formatHash({ viewKey: "bookmarks" })} mt="sm" display="inline-block">
                 {t("See all bookmarks")}
+              </Anchor>
+            </Panel>
+
+            {/* In this column because it's the shortest: Stories and Blog
+                show five and three. */}
+            <Panel title={t("Recent activity")}>
+              <RecentActivityRows limit={RECENT_LIMIT} timeAgo={timeAgo} />
+              <Anchor
+                component="a"
+                href={formatHash({ viewKey: "visited" })}
+                onClick={showActivityTab}
+                mt="sm"
+                display="inline-block"
+              >
+                {t("See all activity")}
               </Anchor>
             </Panel>
           </Stack>

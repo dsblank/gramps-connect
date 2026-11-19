@@ -5,7 +5,7 @@ import { formatHash, isVisualKey, type VisualKey } from "../../hash";
 import { clearActivity, getActivity, getActivityVersion, subscribeActivity, type ActivityEntry } from "../../store/activityLog";
 import { fetchOwnEdits, type EditEntry } from "../../store/activityEdits";
 import {
-  buildSessions, collapseRuns, formatDuration, type Session, type TimelineEntry, type TimelineItem, type TimelineRow,
+  buildSessions, collapseRuns, formatDuration, isHidden, type Session, type TimelineEntry, type TimelineItem, type TimelineRow,
 } from "../../store/activityTimeline";
 import { fetchRecords, recordLabel } from "../../store/homeStats";
 import { ageGroupOf } from "../../store/ageGroups";
@@ -227,7 +227,7 @@ function Row({ item, labels, nested }: { item: TimelineItem; labels: Labels; nes
   if (!clickable) return body;
   return (
     <UnstyledButton
-      onClick={() => { replay(entry).catch((err) => console.error("[activity] going back failed", err)); }}
+      onClick={() => goBack(entry)}
       className={classes.row}
       title={t("Go back to this step")}
     >
@@ -318,51 +318,52 @@ function SessionBlock({ session, labels }: { session: Session; labels: Labels })
   );
 }
 
-/** View > Visited's Activity tab: every step of this user's research,
- * grouped into sittings, newest first, each a link back to that step. The
- * steps are kept in this browser (store/activityLog.ts); the user's own
- * edits come from the server's history (store/activityEdits.ts). */
-export function ActivityView({ modeSwitch }: { modeSwitch: ReactNode }) {
+/** The browser's step log, kept current. */
+function useActivityLog(): ActivityEntry[] {
   const version = useSyncExternalStore(subscribeActivity, getActivityVersion);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const log = useMemo<ActivityEntry[]>(() => getActivity(), [version]);
-  const [edits, setEdits] = useState<EditEntry[]>([]);
-  const [editsLoading, setEditsLoading] = useState(true);
-  const [labels, setLabels] = useState<Labels>(() => new Map());
-  const [limit, setLimit] = useState(PAGE_SESSIONS);
-  const [error, setError] = useState<string | null>(null);
+  return useMemo<ActivityEntry[]>(() => getActivity(), [version]);
+}
 
-  const oldestAt = log.length > 0 ? log[0].at : Math.floor(Date.now() / 1000) - EDITS_FALLBACK_SECONDS;
+/** This user's edits since `after` (activityEdits.ts). A failure (most
+ * often a Guest, who can't read the history) just means no edits. */
+function useOwnEdits(after: number): { edits: EditEntry[]; loading: boolean } {
+  const [edits, setEdits] = useState<EditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     const username = getCurrentUsername();
     if (!username) {
-      setEditsLoading(false);
+      setLoading(false);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const found = await fetchOwnEdits(await getToken(), username, oldestAt - 1);
+        const found = await fetchOwnEdits(await getToken(), username, after - 1);
         if (!cancelled) setEdits(found);
       } catch (err) {
-        // Most often a Guest, who can't read the history: just no edits.
         console.warn("[activity] own edits: fetch failed", err);
       } finally {
-        if (!cancelled) setEditsLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [oldestAt]);
+  }, [after]);
+  return { edits, loading };
+}
 
-  const sessions = useMemo(() => buildSessions(log, edits), [log, edits]);
-  const shown = sessions.slice(0, limit);
+/** Labels for the records `entries` name, fetched as they're first needed
+ * (one request per type) and kept. */
+function useRecordLabels(entries: TimelineEntry[]): { labels: Labels; error: string | null } {
+  const [labels, setLabels] = useState<Labels>(() => new Map());
+  const [error, setError] = useState<string | null>(null);
   const needed = useMemo(() => {
     const refs = new Map<string, Ref>();
-    for (const s of shown) for (const it of s.items) for (const r of refsOf(it.entry)) {
+    for (const entry of entries) for (const r of refsOf(entry)) {
       if (!labels.has(keyOf(r))) refs.set(keyOf(r), r);
     }
     return [...refs.values()];
-  }, [shown, labels]);
+  }, [entries, labels]);
   const neededKey = needed.map(keyOf).join(",");
 
   useEffect(() => {
@@ -388,6 +389,79 @@ export function ActivityView({ modeSwitch }: { modeSwitch: ReactNode }) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [neededKey]);
+  return { labels, error };
+}
+
+function goBack(entry: TimelineEntry): void {
+  replay(entry).catch((err) => console.error("[activity] going back failed", err));
+}
+
+/** Opening a record: what Home's Recently visited card already lists. */
+function isRecordOpen(entry: TimelineEntry): boolean {
+  return entry.kind === "route" && !!entry.handle;
+}
+
+/** The Home page's Recent activity card body: the newest `limit` steps
+ * other than opening a record (the Recently visited card beside it has
+ * those), each a link back to it. Edits are read only as far back as those
+ * steps reach (a week when there are none), so the card stays one small
+ * read. */
+export function RecentActivityRows({ limit, timeAgo }: { limit: number; timeAgo: (unix: number) => string }) {
+  const log = useActivityLog();
+  const visible = log.filter((e) => !isHidden(e) && !isRecordOpen(e));
+  const after = visible.length >= limit
+    ? visible[visible.length - limit].at
+    : Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
+  const { edits, loading } = useOwnEdits(after);
+  const items = useMemo(
+    () => buildSessions(log, edits).flatMap((s) => s.items).map((it) => it.entry)
+      .filter((e) => !isRecordOpen(e)).slice(0, limit),
+    [log, edits, limit],
+  );
+  const { labels } = useRecordLabels(items);
+  if (items.length === 0) {
+    return loading ? null : (
+      <Text c="dimmed">{t("Your searches, filters, charts and edits will be listed here.")}</Text>
+    );
+  }
+  return (
+    <Stack gap="xs">
+      {items.map((entry, i) => {
+        const d = describe(entry, labels);
+        const clickable = canReplay(entry, labels);
+        const row = (
+          <Group gap="xs" wrap="nowrap">
+            <Box w={20} style={{ flex: "none", display: "flex", justifyContent: "center" }}>
+              {d.icon && <img src={d.icon} alt="" width={20} height={20} />}
+            </Box>
+            {d.badge && <Badge size="sm" variant="light" tt="none" style={{ flex: "none" }}>{d.badge}</Badge>}
+            <Text truncate style={{ flex: 1, minWidth: 0 }} c={clickable ? undefined : "dimmed"}>{d.text}</Text>
+            <Text size="xs" c="dimmed" style={{ flex: "none" }}>{timeAgo(entry.at)}</Text>
+          </Group>
+        );
+        return clickable ? (
+          <UnstyledButton key={i} onClick={() => goBack(entry)} title={t("Go back to this step")}>{row}</UnstyledButton>
+        ) : (
+          <Box key={i}>{row}</Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
+/** View > Visited's Activity tab: every step of this user's research,
+ * grouped into sittings, newest first, each a link back to that step. The
+ * steps are kept in this browser (store/activityLog.ts); the user's own
+ * edits come from the server's history (store/activityEdits.ts). */
+export function ActivityView({ modeSwitch }: { modeSwitch: ReactNode }) {
+  const log = useActivityLog();
+  const [limit, setLimit] = useState(PAGE_SESSIONS);
+  const oldestAt = log.length > 0 ? log[0].at : Math.floor(Date.now() / 1000) - EDITS_FALLBACK_SECONDS;
+  const { edits, loading: editsLoading } = useOwnEdits(oldestAt);
+  const sessions = useMemo(() => buildSessions(log, edits), [log, edits]);
+  const shown = useMemo(() => sessions.slice(0, limit), [sessions, limit]);
+  const shownEntries = useMemo(() => shown.flatMap((s) => s.items.map((it) => it.entry)), [shown]);
+  const { labels, error } = useRecordLabels(shownEntries);
 
   async function handleClear() {
     const ok = await confirmDialog(

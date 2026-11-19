@@ -28,6 +28,17 @@ type Mode = "records" | "activity";
 /** The tab last picked, kept across visits like the type tab. */
 let lastMode: Mode = "records";
 
+/** Makes the next opening of this page show the Activity tab -- for the
+ * Home page's "See all activity" link. */
+export function showActivityTab(): void {
+  lastMode = "activity";
+}
+
+/** Same, for the Records tab ("See all visited"). */
+export function showRecordsTab(): void {
+  lastMode = "records";
+}
+
 /** View > Visited, in two tabs: Records (below) and Activity
  * (ActivityList.tsx), every step in order. */
 export function VisitedView() {
