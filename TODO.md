@@ -163,6 +163,31 @@ Test only on the :5102 bench tree, undoing only ids created there.
   from its **History**" (Wikidata place fixes), which isn't true yet; fix
   it, and replace "No undo yet" when this ships.
 
+## Multiple trees
+
+Routes carry the tree (`#/t/<treeId>/`, `hash.ts`), and the desktop app
+runs in multi-tree mode like every deployment. Still open:
+
+- **Tree switcher for ordinary users** — one browser holding a sign-in per
+  tree (`{treeId: {username, refreshToken}}`) and switching the active one
+  by minting an access token from the stored refresh token, per the
+  multi-tree client plan (one account per tree; gramps-web-api ties each
+  token to one tree). Then `ForeignTreeDialog.tsx` can switch straight to
+  the link's tree when a sign-in for it is stored, instead of signing out.
+- **Foreign-link dialog for site admins** — a site admin can already move
+  their own account to another tree (Manage Family Trees → Select Family
+  Tree, `ManageTreesDialog.tsx`). `ForeignTreeDialog.tsx` should offer that
+  ("Switch to that tree") for an admin, keeping the link so it opens after
+  the reload, rather than only "Sign in to that tree".
+- **Sign-in page doesn't name the link's tree** — opening a `#/t/<id>/...`
+  link while signed out shows the plain sign-in form; the tree only comes
+  up (as the foreign-link dialog) after signing in to the wrong one.
+- **Verify the desktop multi-tree migration on real builds** —
+  `launcher.migrate_to_multi_tree()` was tested from source against a
+  scratch install made with the previous launcher, not with a built
+  executable or a real existing install, and not on Windows/macOS (media
+  move via `shutil.move`; the `tree-id` marker file).
+
 ## Feature ideas / backlog
 
 Roughly by value, most first:
