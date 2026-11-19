@@ -101,6 +101,68 @@ most useful first:
   describes the second selected from the first; with a Shift+click range,
   "first" is just the earlier row in the list.
 
+## Undo and reasons for changes
+
+The server undoes only whole transactions; a record's History entry is that
+record's share of one. Plan: undo whole changes in context, plus a
+per-record revert where that's safe, plus an optional reason on each save.
+Test only on the :5102 bench tree, undoing only ids created there.
+
+- **Change page** — one transaction (`GET /transactions/history/<id>`):
+  what it was, who and when, its records grouped Added / Updated /
+  Deleted, each expanding to the existing diff (`historyDiff.ts`); deleted
+  records shown as they were; large changes paged with counts by type.
+  Reached from a footer in `HistoryButton.tsx`'s What changed dialog
+  ("Part of 'Merge Places' · 3 records changed together") and from a
+  **Records | Changes** toggle on View > Change Log (`ChangedView.tsx`; list
+  history with `page=`, never the whole listing). A change already undone
+  shows "Undone by change #N".
+- **Undo whole change** on the Change page — `GET …/undo` check, then
+  `POST` as a task with progress; `?message=` "Undo of change #N" so the
+  Undone-by link can be found. Three outcomes: clean → confirm; the
+  server's false alarm (record changed twice in one transaction, compared
+  with its first change — see the 3.26 item above) → verify each record
+  against the transaction's *last* write for it, and only then force; a
+  real conflict → list the records changed later (who, when, link to that
+  change), no Force button. Password above 500 records, as bulk delete.
+  Needs Add+Edit+Delete permission (Editor and up); others see the page
+  without the button.
+- **Revert this record** in What changed — an ordinary save in the app, so
+  it shows in History and can itself be reverted. Applies the inverse of
+  that entry's diff only (lists item by item: "remove tag Calendar", not
+  "set tags back"), so later edits to other fields stay. Through the normal
+  save conflict check. Cases:
+  - only this record in the transaction → no warning;
+  - part of a bigger change, own fields only → warning naming the change
+    and saying the other records keep it, with a link to the Change page;
+  - those fields changed again later → warn who/when will be overwritten;
+  - would reference a record that no longer exists (e.g. a place removed
+    by the same merge) → blocked, offer undoing the whole change;
+  - record was added → revert is a delete, warn which records from the
+    change refer to it; record was deleted → re-create, warn that records
+    which pointed to it won't again.
+- **Undo after delete** — replace "This cannot be undone from here." in
+  `DeleteButton.tsx` / `BulkDeleteButton.tsx` with a ~10 s notification
+  carrying Undo of that delete's transaction (no dialog; a conflict falls
+  back to the full dialog). Check first that the DELETE response gives the
+  transaction id.
+- **Reason for change** — optional message stored in the transaction
+  description, like a commit message: a field above Save in every editor
+  and in the bulk Tag/Privacy/Delete, Merge and Undo dialogs, with recent
+  reasons offered; per-tree setting Off / Optional / Required; stored as
+  "Edit Person: <reason>"; shown in History, What changed, the Change page
+  and the Changes list, and searchable there. Blocked on the server: plain
+  `PUT`/`POST`/`DELETE` and edit-by-handle have fixed descriptions; only
+  `/api/transactions/` and undo take `?message=`. Routing saves through
+  `/api/transactions/` is not the fix — it needs Add+Edit+Delete (no
+  Contributors) and skips `update_object()`'s family/person back-reference
+  updates and Gramps ID check. Proposed upstream on 2026-11-18 (gramps-web-api
+  Discussions: optional `message` on the write endpoints); until then only
+  Gramplet writes and undo can carry a reason.
+- **Wiki** — `Data-Model-and-Editing.md` says fixed places "can be undone
+  from its **History**" (Wikidata place fixes), which isn't true yet; fix
+  it, and replace "No undo yet" when this ships.
+
 ## Feature ideas / backlog
 
 Roughly by value, most first:
