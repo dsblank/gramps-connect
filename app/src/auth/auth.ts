@@ -163,12 +163,14 @@ export function setCurrentUsername(username: string): void {
   writeStored(USERNAME_STORAGE_KEY, username);
 }
 
-/** The tree this session's token is scoped to (gramps-web-api's token.py
- * sets a `tree` claim only in multi-tree mode -- see get_tokens there), or
- * null in the single-tree case. Used by the cache-staleness check
- * (store/cacheMeta.ts) to tell one tree's cached rows from another's;
- * that check pairs it with the served database's own name/id, precisely
- * because this is null on a single-tree server. */
+/** The tree this session's token is scoped to (the `tree` claim from
+ * gramps-web-api's token.py get_tokens), or null when it has none. A
+ * signed-in user's token always carries one, in single-tree mode too:
+ * util.py's get_tree_id_or_none() falls back to the configured tree's
+ * directory name for a user with no tree of their own. Only a treeless
+ * site admin on a multi-tree server gets none. Used by the cache-staleness
+ * check (store/cacheMeta.ts) to tell one tree's cached rows from
+ * another's, and by hash.ts to put the tree in every route. */
 export function getTreeId(): string | null {
   if (!cachedToken) return null;
   const tree = decodeClaims(cachedToken)?.tree;

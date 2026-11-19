@@ -14,8 +14,8 @@ export interface HashRoute {
   subject: VisualSubject | null;
   /** The tree the link was made in (gramps-web-api's tree id, the `tree`
    * claim of the session that formatted it), or null for a link without
-   * one -- an older link, or one from a single-tree server, whose tokens
-   * carry no tree. See setRouteTreeSource. */
+   * one -- an older link, or one made by a session with no tree (a
+   * treeless site admin; see auth.ts's getTreeId). See setRouteTreeSource. */
   treeId: string | null;
 }
 
@@ -36,8 +36,8 @@ export function setRouteTreeSource(source: () => string | null): void {
   routeTreeSource = source;
 }
 
-/** The tree this session's routes belong to, or null (a single-tree
- * server, or not wired up). */
+/** The tree this session's routes belong to, or null (a session with no
+ * tree, or not wired up). */
 export function currentRouteTreeId(): string | null {
   return routeTreeSource();
 }

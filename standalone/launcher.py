@@ -4,8 +4,9 @@ Bundles gramps-web-api (as the backend) with app/'s production build (as
 the frontend), so a tester can run one executable with no separate install,
 server, or database setup.
 
-On first run: creates an isolated GRAMPSHOME under DATA_DIR, an admin user,
-and a single empty tree -- ready to import a Gramps XML (.gramps) or
+On first run: creates an isolated GRAMPSHOME under DATA_DIR, a site admin
+user, and an empty tree (gramps-web-api runs in multi-tree mode, so the
+admin can add more) -- ready to import a Gramps XML (.gramps) or
 GEDCOM (.ged) file into via the app's own Family Trees -> Import... screen.
 On later runs, reuses what's already there. ensure_setup() is idempotent
 and runs on every launch (not just a detected "first run"), so a run that
@@ -18,6 +19,7 @@ from __future__ import annotations
 import argparse
 import io
 import os
+import shutil
 import socket
 import sys
 import time
@@ -31,6 +33,12 @@ APP_NAME = "gramps-connect-desktop"
 TREE_NAME = "gramps-connect-desktop"
 ADMIN_USER = "admin"
 ADMIN_PASSWORD = "admin"
+# Written once this install runs in multi-tree mode (see
+# migrate_to_multi_tree()), holding the desktop tree's id. Its presence is
+# what says the one-time migration is done; its content is how later
+# launches find the tree, by id rather than by name, so renaming the tree
+# in the app doesn't make the next launch create a new empty one.
+TREE_ID_FILE = "tree-id"
 # Defaults for --host/--port; main() overwrites these from the CLI flags
 # before anything else reads them.
 HOST = "127.0.0.1"
@@ -79,10 +87,9 @@ def ensure_gramps_dirs() -> None:
 # otherwise just fail with "Connection was refused." Setting these mirrors
 # gramps-web-api's own (non-deprecated) GRAMPSWEB_-prefixed env var names,
 # which app.config.from_prefixed_env() would read automatically -- except
-# create_app() is called below with config_from_env=False (this app has no
-# use for gramps-web-api's other env-configurable options, e.g. TREE_MULTI,
-# which don't apply to a single-tree desktop build), so it's replicated by
-# hand here instead, scoped to just the e-mail keys. Booleans are parsed
+# create_app() is called below with config_from_env=False (this app sets
+# the rest of gramps-web-api's options itself, in build_config()), so it's
+# replicated by hand here instead, scoped to just the e-mail keys. Booleans are parsed
 # case-insensitively from "true"/"1"/"yes"/"on" (anything else is False),
 # rather than reusing from_prefixed_env's default json.loads -- that would
 # silently misparse e.g. "no" or "False" as truthy non-empty strings.
@@ -141,7 +148,14 @@ def build_config() -> dict:
         }
 
     return {
-        "TREE": TREE_NAME,
+        # Multi-tree mode, like every gramps-connect deployment: the desktop
+        # tree is just the first one, the admin is a site admin who can add
+        # more, and each tree's media lives in its own media/<tree id>/
+        # folder so trees never see each other's files. An install from
+        # before this is converted on its next launch, see
+        # migrate_to_multi_tree().
+        "TREE": "*",
+        "MEDIA_PREFIX_TREE": True,
         "SECRET_KEY": "gramps-connect-desktop-not-a-real-secret",
         "USER_DB_URI": f"sqlite:///{data_path('users.sqlite')}",
         "STATIC_PATH": resource_path("frontend"),
@@ -480,8 +494,94 @@ def _run_alembic(fn, cfg, url: str, revision: str) -> None:
                 os.environ[key] = value
 
 
+def find_or_create_tree() -> str:
+    """The desktop tree's id (its directory name), creating it if missing.
+
+    After the multi-tree migration the id is read from TREE_ID_FILE. Before
+    it, or on a first run, the tree is looked up by TREE_NAME, as the
+    single-tree setup always did, and created under that name if absent.
+    """
+    from gramps_webapi.dbmanager import WebDbManager
+
+    try:
+        with open(data_path(TREE_ID_FILE), encoding="utf8") as f:
+            tree_id = f.read().strip()
+    except FileNotFoundError:
+        tree_id = ""
+    db_manager = None
+    if tree_id:
+        try:
+            db_manager = WebDbManager(dirname=tree_id, create_if_missing=False)
+        except ValueError:
+            # Its folder is gone (deleted by hand): fall back to the name.
+            db_manager = None
+    if db_manager is None:
+        db_manager = WebDbManager(name=TREE_NAME, create_if_missing=True)
+    dbstate = db_manager.get_db(readonly=False)
+    dbstate.db.close()
+    return db_manager.dirname
+
+
+def migrate_to_multi_tree(tree_id: str) -> None:
+    """Convert a single-tree install to multi-tree mode, once.
+
+    Earlier versions ran gramps-web-api with one fixed tree, where an
+    account with no tree belongs to that tree. In multi-tree mode only a
+    site admin may have no tree, and any other account without one can't
+    sign in at all; and media files move from media/ to media/<tree id>/.
+    So, before TREE_ID_FILE exists:
+
+    - the admin account (an Owner with no tree, as earlier versions created
+      it) becomes a site admin of the desktop tree;
+    - every other account with no tree is given the desktop tree, keeping
+      its role;
+    - everything in media/ moves into media/<tree id>/.
+
+    Each step is safe to repeat, and TREE_ID_FILE is written last, so a run
+    interrupted partway finishes the job on the next launch. A fresh
+    install goes through here too, with nothing to change.
+
+    Needs an app context.
+    """
+    if os.path.isfile(data_path(TREE_ID_FILE)):
+        return
+    from gramps_webapi.auth import User, user_db
+    from gramps_webapi.auth.const import ROLE_ADMIN, ROLE_OWNER
+
+    changed = 0
+    for user in user_db.session.query(User).filter(User.tree.is_(None)):
+        if user.name == ADMIN_USER and (user.role or 0) <= ROLE_OWNER:
+            user.role = ROLE_ADMIN
+        if (user.role or 0) < ROLE_ADMIN or user.name == ADMIN_USER:
+            user.tree = tree_id
+            changed += 1
+    user_db.session.commit()
+
+    media = data_path("media")
+    tree_media = os.path.join(media, tree_id)
+    os.makedirs(tree_media, exist_ok=True)
+    moved = 0
+    for entry in os.listdir(media):
+        if entry == tree_id:
+            continue
+        target = os.path.join(tree_media, entry)
+        if os.path.exists(target):
+            print(f"Not moving media/{entry}: media/{tree_id}/{entry} already exists.")
+            continue
+        shutil.move(os.path.join(media, entry), target)
+        moved += 1
+
+    with open(data_path(TREE_ID_FILE), "w", encoding="utf8") as f:
+        f.write(tree_id + "\n")
+    if changed or moved:
+        print(
+            f"Converted to multi-tree mode: {changed} account(s) assigned to "
+            f"the tree, {moved} media item(s) moved to media/{tree_id}/."
+        )
+
+
 def ensure_setup(app) -> None:
-    """Idempotently ensure the admin user and tree exist.
+    """Idempotently ensure the tree and admin user exist.
 
     Called on *every* launch, not gated behind a "first run" flag: a run
     that crashes partway through this exact function (disk full, or a
@@ -493,30 +593,30 @@ def ensure_setup(app) -> None:
     forever, with no way to recover short of deleting the whole data
     directory by hand. Each step here is safe to repeat instead: the user
     database itself is created/upgraded by migrate_user_db() before the
-    app is built (see main()); add_user()
-    raises ValueError("User already exists") if it does, caught below;
-    WebDbManager's create_if_missing just opens an existing tree by that
-    name rather than recreating it.
+    app is built (see main()); find_or_create_tree() opens an existing tree
+    rather than recreating it; add_user() raises ValueError("User already
+    exists") if it does, caught below; and migrate_to_multi_tree() runs
+    once, finishing on a later launch if interrupted.
     """
     from gramps_webapi.auth import add_user
-    from gramps_webapi.auth.const import ROLE_OWNER
-    from gramps_webapi.dbmanager import WebDbManager
+    from gramps_webapi.auth.const import ROLE_ADMIN
 
     with app.app_context():
+        tree_id = find_or_create_tree()
         try:
             add_user(
                 ADMIN_USER,
                 ADMIN_PASSWORD,
                 fullname="Admin",
-                role=ROLE_OWNER,
-                tree=None,
+                role=ROLE_ADMIN,
+                tree=tree_id,
             )
         except ValueError as exc:
             if "already exists" not in str(exc):
                 raise
-        db_manager = WebDbManager(name=TREE_NAME, create_if_missing=True)
-        dbstate = db_manager.get_db(readonly=False)
-        dbstate.db.close()
+        migrate_to_multi_tree(tree_id)
+        # Uploads create it on demand, but other media requests expect it.
+        os.makedirs(data_path("media", tree_id), exist_ok=True)
 
 
 def main() -> None:
