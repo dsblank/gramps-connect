@@ -35,6 +35,8 @@ it (see [Installing](#installing), below); a containerized deployment is
 available for hosting it for a family to share (see
 [Deploying](#deploying)).
 
+To see it in action, watch the narrated
+[five-minute tour](https://dsblank.github.io/gramps-connect/tour/).
 For a full tour of the app itself, see [docs/Overview.md](docs/Overview.md);
 for the search-box query language behind it, see [docs/GOQL.md](docs/GOQL.md).
 
