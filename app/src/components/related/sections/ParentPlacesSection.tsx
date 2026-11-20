@@ -11,6 +11,7 @@ import {
 import { fetchPage, type QueryItem } from "../../../store/api";
 import { PLACE_VIEW } from "../../../store/views";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
+import { SortableList, useOptimisticOrder } from "../../SortableList";
 import { DateInput } from "../../DateInput";
 import { RecordPicker } from "../../RecordPicker";
 import { pickerResultLabel } from "../../RefPickerField";
@@ -33,12 +34,14 @@ type Row = { ref: RawRef; target: unknown };
  * enclosing places, asks whether it goes *between* this place and one of
  * them (adding a level: city-in-state -> city-in-county-in-state) or
  * alongside them; each row can be removed, given a date (a PlaceRef's own
- * "enclosed by this place during ..." range) and, with more than one, moved
- * up/down -- the first undated one is what titles are built from. Neither
+ * "enclosed by this place during ..." range) and, with more than one,
+ * dragged by its grip (SortableList.tsx) to reorder -- the first undated
+ * one is what titles are built from. Neither
  * place editor shows placeref_list at all, so this section is also the
  * only place the hierarchy is ever visible. */
 export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionProps) {
-  const rows: Row[] = zipRefs(detail.placeref_list, detail.extended?.places);
+  const order = useOptimisticOrder<Row>(zipRefs(detail.placeref_list, detail.extended?.places), detail);
+  const rows = order.rows;
   const canEdit = hasPermissions("EditObject");
   const [adding, setAdding] = useState(false);
   const [datingIndex, setDatingIndex] = useState<number | null>(null);
@@ -60,13 +63,14 @@ export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionPr
     })?.("");
   }
 
-  async function run(action: (token: string) => Promise<void>) {
+  async function run(action: (token: string) => Promise<void>, onError?: () => void) {
     if (busy) return;
     setBusy(true);
     try {
       await action(await getToken());
       onRefetch?.();
     } catch (err) {
+      onError?.();
       notifications.show({
         color: "red",
         title: t("Couldn't change enclosing places"),
@@ -75,6 +79,13 @@ export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionPr
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleMove(from: number, to: number) {
+    if (busy) return;
+    const handle = rows[from].ref.ref;
+    order.move(from, to);
+    void run((token) => moveEnclosingPlace(token, detail.handle, from, handle, to), order.revert);
   }
 
   async function handleRemove(index: number, row: Row) {
@@ -95,38 +106,29 @@ export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionPr
         <CircleGlyphButton glyph="+" label={t("Add an enclosing place")} onClick={() => setAdding(true)} />
       )}
     >
-      {rows.map((row, i) => (
-        <RefRow
-          key={`${i}-${row.ref.ref}`}
-          type="place"
-          handle={row.ref.ref}
-          obj={row.target}
-          refMeta={row.ref}
-          onNavigate={onNavigate}
-          extra={canEdit && (
-            <>
-              {rows.length > 1 && i > 0 && (
-                <CircleGlyphButton
-                  glyph="↑"
-                  label={t("Move up")}
-                  size={16}
-                  onClick={() => run((token) => moveEnclosingPlace(token, detail.handle, i, row.ref.ref, -1))}
-                />
+      <SortableList
+        keys={rows.map((row) => row.ref.ref)}
+        onMove={handleMove}
+        disabled={!canEdit}
+        gap="var(--mantine-spacing-sm)"
+        renderItem={(i, grip) => {
+          const row = rows[i];
+          return (
+            <RefRow
+              type="place"
+              handle={row.ref.ref}
+              obj={row.target}
+              refMeta={row.ref}
+              grip={grip}
+              onNavigate={onNavigate}
+              extra={canEdit && (
+                <CircleGlyphButton glyph="📅" label={t("Set date")} size={16} onClick={() => setDatingIndex(i)} />
               )}
-              {rows.length > 1 && i < rows.length - 1 && (
-                <CircleGlyphButton
-                  glyph="↓"
-                  label={t("Move down")}
-                  size={16}
-                  onClick={() => run((token) => moveEnclosingPlace(token, detail.handle, i, row.ref.ref, 1))}
-                />
-              )}
-              <CircleGlyphButton glyph="📅" label={t("Set date")} size={16} onClick={() => setDatingIndex(i)} />
-            </>
-          )}
-          onRemove={canEdit ? () => handleRemove(i, row) : undefined}
-        />
-      ))}
+              onRemove={canEdit ? () => handleRemove(i, row) : undefined}
+            />
+          );
+        }}
+      />
       {rows.length > 1 && canEdit && (
         <Text size="xs" c="dimmed">
           {t("Titles use the first enclosing place whose date fits (an undated one always fits).")}

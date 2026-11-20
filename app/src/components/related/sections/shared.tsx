@@ -89,7 +89,7 @@ function TypeIcon({ type }: { type: string }) {
  * `onClick`), so the same row works whether it's mounted in the top pane
  * (sets sub-selection), the bottom pane (promotes to a real view switch),
  * or bypasses navigation entirely. */
-export function RefRow({ type, handle, obj, refMeta, onNavigate, onClick, label, thumbnail, extra, onEdit, onEditRegion, onRemove }: {
+export function RefRow({ type, handle, obj, refMeta, onNavigate, onClick, label, grip, thumbnail, extra, onEdit, onEditRegion, onRemove }: {
   type: string;
   handle: string;
   obj: unknown;
@@ -106,6 +106,9 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, onClick, label,
    * FamiliesSection showing just the *other* spouse's name rather than
    * both family members). */
   label?: string;
+  /** SortableList.tsx's drag grip, rendered first in the row -- set by
+   * sections whose list order matters (Media, Children, Enclosing places). */
+  grip?: ReactNode;
   /** A small preview rendered before TypeIcon -- only MediaSection passes
    * this (a MediaThumbnail, cropped to the ref's own rect when it has one);
    * every other section has nothing worth previewing inline. */
@@ -140,6 +143,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, onClick, label,
   return (
     <Stack gap={2}>
       <Group gap={4} wrap="nowrap">
+        {grip}
         {thumbnail}
         <TypeIcon type={type} />
         {isCurrentPage(currentPage, type, handle) ? (

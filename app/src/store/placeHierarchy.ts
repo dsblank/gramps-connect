@@ -149,23 +149,23 @@ export async function removeEnclosingPlace(token: string, placeHandle: string, i
   requery();
 }
 
-/** Swaps the entry at `index` with its neighbor (`delta` -1 = up, +1 =
- * down). Order matters: with no dates to choose between them, the first
- * enclosing place is the one titles are built from. */
+/** Moves the entry at `index` to position `to`. Order matters: with no
+ * dates to choose between them, the first enclosing place is the one
+ * titles are built from. */
 export async function moveEnclosingPlace(
   token: string,
   placeHandle: string,
   index: number,
   expectedRef: string,
-  delta: -1 | 1
+  to: number
 ): Promise<void> {
   const place = await fetchPlainObject(token, PLACE_VIEW, placeHandle);
   const refs = refsOf(place);
   checkEntry(refs, index, expectedRef);
-  const target = index + delta;
-  if (target < 0 || target >= refs.length) return;
+  if (to < 0 || to >= refs.length || to === index) return;
   const next = [...refs];
-  [next[index], next[target]] = [next[target], next[index]];
+  const [entry] = next.splice(index, 1);
+  next.splice(to, 0, entry);
   await updateObject(token, PLACE_VIEW, placeHandle, withRefs(place, next));
   requery();
 }

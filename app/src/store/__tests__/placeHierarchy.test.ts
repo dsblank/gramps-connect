@@ -104,7 +104,7 @@ describe("add/remove/move/date", () => {
     await addEnclosingPlace("t", "C", "B");
     expect(refsOf("C")).toEqual(["A", "B"]);
 
-    await moveEnclosingPlace("t", "C", 1, "B", -1);
+    await moveEnclosingPlace("t", "C", 1, "B", 0);
     expect(refsOf("C")).toEqual(["B", "A"]);
 
     const date = { sortval: 5, modifier: 0, dateval: [0, 0, 1900, false] };

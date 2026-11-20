@@ -5,7 +5,7 @@ import { zipRefs } from "../../../store/objectDetail";
 import { notifications } from "@mantine/notifications";
 import { Text } from "@mantine/core";
 import { attachRefListEntries, detachRefListEntry, moveRefListEntry, patchRefListEntry } from "../../../store/refListApi";
-import { CircleGlyphButton } from "../../CircleGlyphButton";
+import { SortableList, useOptimisticOrder } from "../../SortableList";
 import { addedFilesLabel, openFilePicker, uploadMediaFiles } from "../../../store/addMedia";
 import { getViewStore } from "../../../store/registry";
 import { MEDIA_VIEW } from "../../../store/views";
@@ -37,7 +37,7 @@ import { t } from "../../../i18n/i18n";
  *
  * Order matters: the first entry is the record's own picture (its
  * thumbnail, a blog post's header image), so with more than one row each
- * can be moved up/down or straight to the top (★). Each move is one PUT
+ * can be dragged by its grip (SortableList.tsx). Each drop is one PUT
  * (moveRefListEntry), so one undoable transaction, and keeps the whole
  * MediaRef (region, citations) rather than detaching and re-attaching.
  * Rows carry their real media_list index since a place's overlays are
@@ -52,9 +52,11 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
   // A place's overlays have their own section (MapOverlaysSection.tsx);
   // the map files they were made from stay here, as ordinary media.
   const overlayTag = useOverlayTagHandle() ?? null;
-  const rows = zipRefs<{ mime?: string; tag_list?: string[] }>(detail.media_list, detail.extended?.media)
+  const savedRows = zipRefs<{ mime?: string; tag_list?: string[] }>(detail.media_list, detail.extended?.media)
     .map((row, index) => ({ ...row, index }))
     .filter(({ target }) => view.key !== "place" || !isOverlay(target, overlayTag));
+  const order = useOptimisticOrder(savedRows, detail);
+  const rows = order.rows;
   const canAttach = hasPermissions("EditObject");
   const [moving, setMoving] = useState(false);
   const [regionTarget, setRegionTarget] = useState<{ handle: string; rect?: number[] | null } | null>(null);
@@ -68,14 +70,23 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
     onRefetch?.();
   }
 
-  async function handleMove(from: number, to: number, handle: string) {
+  // `from`/`to` are positions in the visible list; the PUT moves by real
+  // media_list index (hidden overlays sit between). Moving onto row j's
+  // real index lands right after it going down, right before it going up
+  // -- the same visible result as the drop.
+  async function handleMove(from: number, to: number) {
     if (moving) return;
+    const realFrom = rows[from].index;
+    const realTo = rows[to].index;
+    const handle = rows[from].ref.ref;
+    order.move(from, to);
     setMoving(true);
     try {
       const token = await getToken();
-      await moveRefListEntry(token, view, detail.handle, "media_list", from, to, handle);
+      await moveRefListEntry(token, view, detail.handle, "media_list", realFrom, realTo, handle);
       onRefetch?.();
     } catch (err) {
+      order.revert();
       notifications.show({
         color: "red",
         title: t("Couldn't change the order of the media"),
@@ -134,49 +145,30 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
         />
       )}
     >
-      {rows.map(({ ref, target, index }, i) => (
-        <RefRow
-          key={`${index}-${ref.ref}`}
-          type="media"
-          handle={ref.ref}
-          obj={target}
-          refMeta={ref}
-          thumbnail={<MediaThumbnail handle={ref.ref} mime={target?.mime} size={40} rect={ref.rect} zoomable />}
-          onNavigate={onNavigate}
-          extra={canAttach && rows.length > 1 && (
-            <>
-              {i > 0 && (
-                <CircleGlyphButton
-                  glyph="★"
-                  label={t("Move to the top, so it's the picture shown for this record")}
-                  size={16}
-                  onClick={() => handleMove(index, 0, ref.ref)}
-                />
-              )}
-              {i > 0 && (
-                <CircleGlyphButton
-                  glyph="↑"
-                  label={t("Move up")}
-                  size={16}
-                  onClick={() => handleMove(index, rows[i - 1].index, ref.ref)}
-                />
-              )}
-              {i < rows.length - 1 && (
-                <CircleGlyphButton
-                  glyph="↓"
-                  label={t("Move down")}
-                  size={16}
-                  onClick={() => handleMove(index, rows[i + 1].index, ref.ref)}
-                />
-              )}
-            </>
-          )}
-          onEditRegion={canAttach && target?.mime?.startsWith("image/")
-            ? () => setRegionTarget({ handle: ref.ref, rect: ref.rect })
-            : undefined}
-          onRemove={canAttach ? () => handleRemove(ref.ref, target) : undefined}
-        />
-      ))}
+      <SortableList
+        keys={rows.map((row) => row.ref.ref)}
+        onMove={handleMove}
+        disabled={!canAttach}
+        gap="var(--mantine-spacing-sm)"
+        renderItem={(i, grip) => {
+          const { ref, target } = rows[i];
+          return (
+            <RefRow
+              type="media"
+              handle={ref.ref}
+              obj={target}
+              refMeta={ref}
+              grip={grip}
+              thumbnail={<MediaThumbnail handle={ref.ref} mime={target?.mime} size={40} rect={ref.rect} zoomable />}
+              onNavigate={onNavigate}
+              onEditRegion={canAttach && target?.mime?.startsWith("image/")
+                ? () => setRegionTarget({ handle: ref.ref, rect: ref.rect })
+                : undefined}
+              onRemove={canAttach ? () => handleRemove(ref.ref, target) : undefined}
+            />
+          );
+        }}
+      />
       {rows.length > 1 && canAttach && (
         <Text size="xs" c="dimmed">
           {t("The first one is the picture shown for this record.")}

@@ -6,6 +6,7 @@ import { createHandle } from "../store/objectsApi";
 import { uploadMediaFile } from "../store/jobsApi";
 import { prepareImageUploads } from "../store/imageResize";
 import { CircleGlyphButton } from "./CircleGlyphButton";
+import { SortableList } from "./SortableList";
 import { RecordPicker } from "./RecordPicker";
 import { withGrampsId } from "./related/summary";
 import { EVENT_ROLE_OPTIONS } from "./related/RefEditDialog";
@@ -144,15 +145,18 @@ interface OccupiedRefRowProps {
   /** Optional control shown between the label and the &#9998;/&minus;
    * buttons -- EventsField's per-row Role select. */
   extra?: ReactNode;
+  /** SortableList.tsx's drag grip, rendered first in the row. */
+  grip?: ReactNode;
 }
 
 /** The unified "occupied" row -- a slot or list item that currently points
  * at something, whether that something is an already-saved record or a
  * still-unsaved nested draft. Same three controls either way: a plain
  * label, &#9998; Edit, &minus; Remove. */
-export function OccupiedRefRow({ label, isNew, onEdit, onRemove, removeLabel, extra }: OccupiedRefRowProps) {
+export function OccupiedRefRow({ label, isNew, onEdit, onRemove, removeLabel, extra, grip }: OccupiedRefRowProps) {
   return (
     <Group gap="xs" wrap="nowrap">
+      {grip}
       {isNew && (
         <Text
           size="10px"
@@ -527,23 +531,20 @@ export function MediaListField({ label, refs, labels, onAddExisting, onAdded, on
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
       {refs.length === 0 && <Text size="xs" c="dimmed">{t("No media")}</Text>}
-      {refs.map((refHandle, i) => (
-        <OccupiedRefRow
-          key={`${i}-${refHandle}`}
-          label={labels[refHandle] ?? refHandle}
-          isNew={false}
-          onRemove={() => onRemove(refHandle)}
-          removeLabel="Remove"
-          extra={refs.length > 1 && (
-            <>
-              {i > 0 && <CircleGlyphButton glyph="↑" label={t("Move up")} size={16} onClick={() => onMove(i, i - 1)} />}
-              {i < refs.length - 1 && (
-                <CircleGlyphButton glyph="↓" label={t("Move down")} size={16} onClick={() => onMove(i, i + 1)} />
-              )}
-            </>
-          )}
-        />
-      ))}
+      <SortableList
+        keys={refs}
+        onMove={onMove}
+        gap={4}
+        renderItem={(i, grip) => (
+          <OccupiedRefRow
+            label={labels[refs[i]] ?? refs[i]}
+            isNew={false}
+            onRemove={() => onRemove(refs[i])}
+            removeLabel="Remove"
+            grip={grip}
+          />
+        )}
+      />
       {refs.length > 1 && orderHint !== "" && (
         <Text size="xs" c="dimmed">{orderHint ?? t("The first one is the picture shown for this record.")}</Text>
       )}

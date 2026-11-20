@@ -4,7 +4,7 @@ import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs, type RawRef } from "../../../store/objectDetail";
 import { notifications } from "@mantine/notifications";
 import { detachRefListEntry, moveRefListEntry } from "../../../store/refListApi";
-import { CircleGlyphButton } from "../../CircleGlyphButton";
+import { SortableList, useOptimisticOrder } from "../../SortableList";
 import { PERSON_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
 import { RefEditDialog } from "../RefEditDialog";
@@ -20,11 +20,13 @@ import { t } from "../../../i18n/i18n";
  * icon below (already wired) is the fix-up path for anything else, same as
  * it always has been for an existing row.
  *
- * With more than one child, ↑/↓ reorder them (Gramps' own Children tab
- * buttons) -- one PUT per move via moveRefListEntry, so each is one
+ * With more than one child, each can be dragged by its grip
+ * (SortableList.tsx) to reorder them, like Gramps' own Children tab
+ * ↑/↓ -- one PUT per drop via moveRefListEntry, so each is one
  * undoable transaction and keeps the ChildRef's frel/mrel/citations. */
 export function ChildrenSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
-  const rows = zipRefs(detail.child_ref_list, detail.extended?.children);
+  const order = useOptimisticOrder(zipRefs(detail.child_ref_list, detail.extended?.children), detail);
+  const rows = order.rows;
   const [editingRef, setEditingRef] = useState<RawRef | null>(null);
   const canEdit = hasPermissions("EditObject");
   const [moving, setMoving] = useState(false);
@@ -38,14 +40,17 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
     onRefetch?.();
   }
 
-  async function handleMove(from: number, to: number, handle: string) {
+  async function handleMove(from: number, to: number) {
     if (moving) return;
+    const handle = rows[from].ref.ref;
+    order.move(from, to);
     setMoving(true);
     try {
       const token = await getToken();
       await moveRefListEntry(token, view, detail.handle, "child_ref_list", from, to, handle);
       onRefetch?.();
     } catch (err) {
+      order.revert();
       notifications.show({
         color: "red",
         title: t("Couldn't change the order of the children"),
@@ -72,28 +77,27 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
         />
       )}
     >
-      {rows.map(({ ref, target }, i) => (
-        <RefRow
-          key={`${i}-${ref.ref}`}
-          type="person"
-          handle={ref.ref}
-          obj={target}
-          refMeta={ref}
-          onNavigate={onNavigate}
-          extra={canEdit && rows.length > 1 && (
-            <>
-              {i > 0 && (
-                <CircleGlyphButton glyph="↑" label={t("Move up")} size={16} onClick={() => handleMove(i, i - 1, ref.ref)} />
-              )}
-              {i < rows.length - 1 && (
-                <CircleGlyphButton glyph="↓" label={t("Move down")} size={16} onClick={() => handleMove(i, i + 1, ref.ref)} />
-              )}
-            </>
-          )}
-          onEdit={canEdit ? () => setEditingRef(ref) : undefined}
-          onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
-        />
-      ))}
+      <SortableList
+        keys={rows.map((row) => row.ref.ref)}
+        onMove={handleMove}
+        disabled={!canEdit}
+        gap="var(--mantine-spacing-sm)"
+        renderItem={(i, grip) => {
+          const { ref, target } = rows[i];
+          return (
+            <RefRow
+              type="person"
+              handle={ref.ref}
+              obj={target}
+              refMeta={ref}
+              grip={grip}
+              onNavigate={onNavigate}
+              onEdit={canEdit ? () => setEditingRef(ref) : undefined}
+              onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
+            />
+          );
+        }}
+      />
       {editingRef && (
         <RefEditDialog
           opened

@@ -13,7 +13,7 @@ import {
   type EventRefLite,
 } from "./RefPickerField";
 import type { DraftEntry, DraftType } from "../store/draftStack";
-import { CircleGlyphButton } from "./CircleGlyphButton";
+import { SortableList } from "./SortableList";
 import { t } from "../i18n/i18n";
 
 // FamilyRelType's built-in values (gramps/gen/lib/familyreltype.py) as plain
@@ -127,53 +127,51 @@ function ChildrenField({
     <Stack gap={4}>
       <Text size="sm" fw={500}>{t("Children")}</Text>
       {refs.length === 0 && <Text size="xs" c="dimmed">{t("No children")}</Text>}
-      {refs.map((ref, i) => {
-        const nestedDraft = childDraftsByHandle.get(ref.ref) ?? findChildEditDraft(ref.ref);
-        const moveButtons = refs.length > 1 && (
-          <>
-            {i > 0 && <CircleGlyphButton glyph="↑" label={t("Move up")} size={16} onClick={() => onMove(i, i - 1)} />}
-            {i < refs.length - 1 && (
-              <CircleGlyphButton glyph="↓" label={t("Move down")} size={16} onClick={() => onMove(i, i + 1)} />
-            )}
-          </>
-        );
-        const row = nestedDraft ? (
-          <OccupiedRefRow
-            label={nestedDraftLabel(nestedDraft)}
-            isNew={nestedDraft.mode === "new"}
-            onEdit={() => onReopenChildDraft(nestedDraft.handle)}
-            onRemove={() => onRemoveChildDraft(nestedDraft.handle)}
-            removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
-            extra={moveButtons}
-          />
-        ) : (
-          <OccupiedRefRow
-            label={labels[ref.ref] ?? ref.ref}
-            isNew={false}
-            onEdit={() => onOpenEditChildDraft(ref.ref)}
-            onRemove={() => onRemove(ref.ref)}
-            removeLabel="Remove child"
-            extra={moveButtons}
-          />
-        );
-        return (
-          <Stack key={ref.ref} gap={2}>
-            {row}
-            <Group gap="sm" pl="md">
-              <ChildRelSelect
-                label={t("Father")}
-                value={ref.frel || "Birth"}
-                onChange={(frel) => onRelChange(ref.ref, { frel })}
-              />
-              <ChildRelSelect
-                label={t("Mother")}
-                value={ref.mrel || "Birth"}
-                onChange={(mrel) => onRelChange(ref.ref, { mrel })}
-              />
-            </Group>
-          </Stack>
-        );
-      })}
+      <SortableList
+        keys={refs.map((r) => r.ref)}
+        onMove={onMove}
+        gap={4}
+        renderItem={(i, grip) => {
+          const ref = refs[i];
+          const nestedDraft = childDraftsByHandle.get(ref.ref) ?? findChildEditDraft(ref.ref);
+          const row = nestedDraft ? (
+            <OccupiedRefRow
+              label={nestedDraftLabel(nestedDraft)}
+              isNew={nestedDraft.mode === "new"}
+              onEdit={() => onReopenChildDraft(nestedDraft.handle)}
+              onRemove={() => onRemoveChildDraft(nestedDraft.handle)}
+              removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
+              grip={grip}
+            />
+          ) : (
+            <OccupiedRefRow
+              label={labels[ref.ref] ?? ref.ref}
+              isNew={false}
+              onEdit={() => onOpenEditChildDraft(ref.ref)}
+              onRemove={() => onRemove(ref.ref)}
+              removeLabel="Remove child"
+              grip={grip}
+            />
+          );
+          return (
+            <Stack gap={2}>
+              {row}
+              <Group gap="sm" pl="md">
+                <ChildRelSelect
+                  label={t("Father")}
+                  value={ref.frel || "Birth"}
+                  onChange={(frel) => onRelChange(ref.ref, { frel })}
+                />
+                <ChildRelSelect
+                  label={t("Mother")}
+                  value={ref.mrel || "Birth"}
+                  onChange={(mrel) => onRelChange(ref.ref, { mrel })}
+                />
+              </Group>
+            </Stack>
+          );
+        }}
+      />
       <Stack gap={4}>
         <SearchOrCreate
           view={PERSON_VIEW}
