@@ -450,6 +450,9 @@ export function FamilyEditDialog({
   function handleEventRemove(handle: string) {
     onChange({ event_ref_list: eventRefs.filter((r) => r.ref !== handle) });
   }
+  function handleEventRoleChange(handle: string, role: string) {
+    onChange({ event_ref_list: eventRefs.map((r) => (r.ref === handle ? { ...r, role } : r)) });
+  }
 
   const title = draft.mode === "edit" ? "Edit Family" : "New Family";
 
@@ -637,6 +640,8 @@ export function FamilyEditDialog({
               onAdd={handleEventAddExisting}
               onAddNew={handleAddNewEvent}
               onRemove={handleEventRemove}
+              onRoleChange={handleEventRoleChange}
+              defaultRole="Family"
               onOpenEditDraft={(h) => openEditListItem("event", EVENT_EDIT_FIELD_PREFIX, h)}
               onReopenDraft={onShowDraft}
               onCancelDraft={onCloseDraft}

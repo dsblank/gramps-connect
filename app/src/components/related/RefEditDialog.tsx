@@ -17,10 +17,9 @@ import { t } from "../../i18n/i18n";
 // built-in values, no reason to duplicate the list for a second "new
 // ChildRef" spot rather than an "edit an existing one" dialog.
 export const CHILD_REL_OPTIONS = ["Birth", "Adopted", "Stepchild", "Sponsored", "Foster", "Unknown"];
-// Exported for RefPickerField.tsx's own EventsField (Person/Family's own
-// "+ New Event"/"select existing" Role Select) -- same built-in values, no
-// reason to duplicate the list for a second "new EventRef" spot rather
-// than an "edit an existing one" dialog.
+// Exported for RefPickerField.tsx's own EventsField (the per-row Role
+// select in the Person/Family editors) -- same built-in values, no reason
+// to keep a second copy of the list.
 export const EVENT_ROLE_OPTIONS = [
   "Primary", "Clergy", "Celebrant", "Aide", "Bride", "Groom", "Witness", "Family",
   "Informant", "Godparent", "Father", "Mother", "Parent", "Child", "Multiple birth",

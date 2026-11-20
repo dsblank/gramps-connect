@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, Group, Select, Stack, Text } from "@mantine/core";
 import { FileButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
@@ -141,13 +141,16 @@ interface OccupiedRefRowProps {
    * an existing pick's own nested edit draft is in progress -- same nuance
    * ReferenceField already drew before this was generalized. */
   removeLabel: string;
+  /** Optional control shown between the label and the &#9998;/&minus;
+   * buttons -- EventsField's per-row Role select. */
+  extra?: ReactNode;
 }
 
 /** The unified "occupied" row -- a slot or list item that currently points
  * at something, whether that something is an already-saved record or a
  * still-unsaved nested draft. Same three controls either way: a plain
  * label, &#9998; Edit, &minus; Remove. */
-export function OccupiedRefRow({ label, isNew, onEdit, onRemove, removeLabel }: OccupiedRefRowProps) {
+export function OccupiedRefRow({ label, isNew, onEdit, onRemove, removeLabel, extra }: OccupiedRefRowProps) {
   return (
     <Group gap="xs" wrap="nowrap">
       {isNew && (
@@ -165,6 +168,7 @@ export function OccupiedRefRow({ label, isNew, onEdit, onRemove, removeLabel }: 
         </Text>
       )}
       <Text size="sm" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</Text>
+      {extra}
       {onEdit && <CircleGlyphButton glyph="✎" label={t("Edit")} onClick={onEdit} size={16} />}
       <CircleGlyphButton glyph="−" label={removeLabel} onClick={onRemove} size={16} />
     </Group>
@@ -562,18 +566,40 @@ interface EventsFieldProps {
   onAdd: (item: QueryItem, role: string) => void;
   onAddNew: (role: string) => void;
   onRemove: (handle: string) => void;
+  onRoleChange: (handle: string, role: string) => void;
+  /** Role a newly added link starts with: "Primary" for a Person, "Family"
+   * for a Family (Gramps' own EditPerson/EditFamily defaults). */
+  defaultRole: string;
   onOpenEditDraft: (refHandle: string) => void;
   onReopenDraft: (draftHandle: string) => void;
   onCancelDraft: (draftHandle: string) => void;
 }
 
+/** One row's Role select. A custom role already stored on the ref (not one
+ * of the built-ins) is kept as an option so it still shows. */
+function EventRoleSelect({ role, onChange }: { role: string; onChange: (role: string) => void }) {
+  const values = EVENT_ROLE_OPTIONS.includes(role) ? EVENT_ROLE_OPTIONS : [...EVENT_ROLE_OPTIONS, role];
+  return (
+    <Select
+      aria-label={t("Role")}
+      data={values.map((v) => ({ value: v, label: t(v) }))}
+      value={role}
+      onChange={(next) => { if (next) onChange(next); }}
+      allowDeselect={false}
+      size="xs"
+      w={120}
+      style={{ flexShrink: 0 }}
+      comboboxProps={{ withinPortal: true }}
+    />
+  );
+}
+
 /** Person/Family's own Events -- unlike Notes/Citations/Tags, an EventRef
- * carries its own `role` (Primary/Witness/...), set *before* adding, same
- * pattern as a ChildRef's frel/mrel or a PersonRef's rel (and the same MVP
- * scope: not editable on an already-added event from here either -- fixing
- * a wrong role after the fact is still ParticipantsSection.tsx's own
- * &#9998;, viewed from the Event's side, same as ChildrenSection.tsx's own
- * frel/mrel &#9998; survives for exactly this reason). Genealogically most
+ * carries its own `role` (Primary/Witness/...). A new link starts with
+ * `defaultRole` and each row has its own Role select to change it after
+ * adding, rather than a Role chosen up front: almost every event added
+ * here is the person's (or family's) own, and choosing a role before
+ * "+ New Event" read as a step about the event itself. Genealogically most
  * Events are made fresh for one Person/Family rather than picked from a
  * shared pool, but nothing stops two people from sharing one (a census
  * record, a joint anniversary) -- so this still gets the full "select
@@ -583,10 +609,9 @@ interface EventsFieldProps {
  * FamilyEditDialog.tsx (no such filtering -- Family has no birth/death
  * concept). */
 export function EventsField({
-  refs, labels, newDraftsByHandle: newDrafts, findEditDraft: findEdit, onAdd, onAddNew, onRemove, onOpenEditDraft,
-  onReopenDraft, onCancelDraft,
+  refs, labels, newDraftsByHandle: newDrafts, findEditDraft: findEdit, onAdd, onAddNew, onRemove, onRoleChange,
+  defaultRole, onOpenEditDraft, onReopenDraft, onCancelDraft,
 }: EventsFieldProps) {
-  const [role, setRole] = useState("Primary");
   const pickedHandles = new Set(refs.map((r) => r.ref));
 
   return (
@@ -595,11 +620,15 @@ export function EventsField({
       {refs.length === 0 && <Text size="xs" c="dimmed">{t("No events")}</Text>}
       {refs.map((ref) => {
         const nestedDraft = newDrafts.get(ref.ref) ?? findEdit(ref.ref);
+        const roleSelect = (
+          <EventRoleSelect role={ref.role || defaultRole} onChange={(r) => onRoleChange(ref.ref, r)} />
+        );
         if (nestedDraft) {
           return (
             <OccupiedRefRow
               key={ref.ref}
               label={nestedDraftLabel(nestedDraft)}
+              extra={roleSelect}
               isNew={nestedDraft.mode === "new"}
               onEdit={() => onReopenDraft(nestedDraft.handle)}
               onRemove={() => onCancelDraft(nestedDraft.handle)}
@@ -611,7 +640,8 @@ export function EventsField({
         return (
           <OccupiedRefRow
             key={ref.ref}
-            label={ref.role ? `${label} (${ref.role})` : label}
+            label={label}
+            extra={roleSelect}
             isNew={false}
             onEdit={() => onOpenEditDraft(ref.ref)}
             onRemove={() => onRemove(ref.ref)}
@@ -620,16 +650,6 @@ export function EventsField({
         );
       })}
       <Stack gap={4}>
-        <Select
-          label={t("Role")}
-          data={EVENT_ROLE_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
-          value={role}
-          onChange={(next) => setRole(next ?? "Primary")}
-          allowDeselect={false}
-          size="xs"
-          w={150}
-          comboboxProps={{ withinPortal: true }}
-        />
         <SearchOrCreate
           view={EVENT_VIEW}
           searchField="gramps_id"
@@ -637,9 +657,9 @@ export function EventsField({
           renderLabel={(item) => pickerResultLabel("event", item)}
           placeholder={EVENT_VIEW.simpleSearch?.placeholder}
           onPick={(item) => {
-            if (!pickedHandles.has(item.handle)) onAdd(item, role);
+            if (!pickedHandles.has(item.handle)) onAdd(item, defaultRole);
           }}
-          onOpenNew={() => onAddNew(role)}
+          onOpenNew={() => onAddNew(defaultRole)}
           createLabel="Event"
         />
       </Stack>

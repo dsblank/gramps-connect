@@ -644,6 +644,9 @@ export function PersonEditDialog({
   function handleEventRemove(handle: string) {
     onChange(withReindexedBirthDeath(fullEventRefs.filter((r) => r.ref !== handle)));
   }
+  function handleEventRoleChange(handle: string, role: string) {
+    onChange({ event_ref_list: fullEventRefs.map((r) => (r.ref === handle ? { ...r, role } : r)) });
+  }
 
   // Computed rather than three separate early `return`s -- draft.status
   // cycles back through "loading" on a re-Edit of an already-cancelled
@@ -859,6 +862,8 @@ export function PersonEditDialog({
               onAdd={handleEventAddExisting}
               onAddNew={handleAddNewEvent}
               onRemove={handleEventRemove}
+              onRoleChange={handleEventRoleChange}
+              defaultRole="Primary"
               onOpenEditDraft={(h) => openEditListItem("event", EVENT_EDIT_FIELD_PREFIX, h)}
               onReopenDraft={onShowDraft}
               onCancelDraft={onCloseDraft}
