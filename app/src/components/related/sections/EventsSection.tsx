@@ -41,8 +41,10 @@ export function EventsSection({ view, detail, onNavigate, onRefetch }: SectionPr
           targetHandle={detail.handle}
           pickerView={EVENT_VIEW}
           listField="event_ref_list"
-          buildEntry={(handle) => ({ _class: "EventRef", ref: handle, role: "Primary" })}
+          // Gramps' own default role: "Family" for a family's events.
+          buildEntry={(handle) => ({ _class: "EventRef", ref: handle, role: view.key === "family" ? "Family" : "Primary" })}
           itemLabel="an event"
+          createType="event"
           onAttached={() => onRefetch?.()}
         />
       )}

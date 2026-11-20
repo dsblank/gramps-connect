@@ -111,6 +111,7 @@ export function ParentsSection({ type, view, detail, onNavigate, onRefetch }: Se
               pickerView={PERSON_VIEW}
               field="father_handle"
               itemLabel="a father"
+              createType="person"
               onSet={() => onRefetch?.()}
             />
           ) : null}
@@ -129,6 +130,7 @@ export function ParentsSection({ type, view, detail, onNavigate, onRefetch }: Se
               pickerView={PERSON_VIEW}
               field="mother_handle"
               itemLabel="a mother"
+              createType="person"
               onSet={() => onRefetch?.()}
             />
           ) : null}

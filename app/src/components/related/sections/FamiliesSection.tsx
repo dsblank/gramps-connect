@@ -13,6 +13,8 @@ import { SectionShell, RefRow } from "./shared";
 import { withGrampsId } from "../summary";
 import type { SectionProps } from "../types";
 import { t } from "../../../i18n/i18n";
+import { useDraftStackContext } from "../../../store/draftStackContext";
+import { createViaDraft } from "../AttachControl";
 
 /** Person.family_list -- families this person is a spouse/parent in (as
  * opposed to ParentsSection's parent_family_list, families they're a
@@ -37,14 +39,36 @@ interface FamilyProfile {
  * relying on FAMILY_VIEW's query-list columns, and fills whichever of
  * father_handle/mother_handle is empty -- father first if both are, since
  * neither slot is gender-enforced and a specific assignment is always
- * available afterward from that family's own edit dialog. Creating a
- * brand-new family from here is out of scope (see the plan this
- * implements) -- that's nested-draft-shaped work, not a live PUT; this
- * only attaches to a family that already exists. */
-function AddFamilyControl({ personHandle, onAdded }: { personHandle: string; onAdded: () => void }) {
+ * available afterward from that family's own edit dialog.
+ *
+ * "Create family" opens a New Family dialog; once it's saved, this person
+ * goes in as mother if female, otherwise father (a new family has nothing
+ * to go by but the person's own gender) -- unless they were already put in
+ * a slot in that dialog. */
+function AddFamilyControl({ personHandle, gender, onAdded }: {
+  personHandle: string;
+  /** Person.gender: 0 female, 1 male, 2 unknown, 3 other. */
+  gender: number | undefined;
+  onAdded: () => void;
+}) {
   const [opened, setOpened] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const draftStack = useDraftStackContext();
   if (!hasPermissions("EditObject")) return null;
+
+  const createNew = createViaDraft(draftStack, "family", undefined, "person", async (familyHandle) => {
+    const token = await getToken();
+    const fam = await fetchPlainObject(token, FAMILY_VIEW, familyHandle);
+    if (fam.father_handle === personHandle || fam.mother_handle === personHandle) {
+      onAdded();
+      return;
+    }
+    const order = gender === 0 ? (["mother_handle", "father_handle"] as const) : (["father_handle", "mother_handle"] as const);
+    const field = order.find((f) => !fam[f]);
+    if (!field) throw new Error("The new family already has both a father and a mother.");
+    await setRefField(token, FAMILY_VIEW, familyHandle, field, personHandle);
+    onAdded();
+  });
 
   async function handlePick(item: QueryItem) {
     setError(null);
@@ -81,6 +105,8 @@ function AddFamilyControl({ personHandle, onAdded }: { personHandle: string; onA
             renderLabel={(item) => pickerResultLabel("family", item)}
             onPick={handlePick}
             confirmWithButton
+            createLabel="family"
+            onCreateNew={createNew ? (query) => { setOpened(false); createNew(query); } : undefined}
           />
         </Stack>
       </Modal>
@@ -107,7 +133,11 @@ export function FamiliesSection({ type, detail, onNavigate, onRefetch }: Section
   return (
     <SectionShell
       label={t("Families")}
-      action={canEdit && <AddFamilyControl personHandle={detail.handle} onAdded={() => onRefetch?.()} />}
+      action={canEdit && <AddFamilyControl
+        personHandle={detail.handle}
+        gender={detail.gender as number | undefined}
+        onAdded={() => onRefetch?.()}
+      />}
     >
       {families.map((fam) => {
         // Show the *other* member of the family (the spouse), not both --

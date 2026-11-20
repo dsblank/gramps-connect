@@ -7,6 +7,35 @@ import { RecordPicker, type ExtraCreateAction } from "../RecordPicker";
 import { pickerResultLabel } from "../RefPickerField";
 import type { QueryItem } from "../../store/api";
 import type { ViewConfig } from "../../store/views";
+import { DRAFT_TYPE_LABELS, type DraftType, type UseDraftStack } from "../../store/draftStack";
+import { useDraftStackContext } from "../../store/draftStackContext";
+
+const PERM_ADD_OBJ = "AddObject";
+
+/** The picker's "Create <type>" for a `createType`: opens a top-level New
+ * <type> dialog, and saving it also runs `link` with the new handle
+ * (draftStack.ts's DraftEntry.afterSave). Undefined -- no Create option --
+ * outside App (no draft stack) or without permission to add records. */
+export function createViaDraft(
+  draftStack: UseDraftStack | null,
+  createType: DraftType | undefined,
+  createData: ((query: string) => Record<string, unknown>) | undefined,
+  targetLabel: string,
+  link: (handle: string) => Promise<void>,
+): ((query: string) => void) | undefined {
+  if (!createType || !draftStack || !hasPermissions(PERM_ADD_OBJ)) return undefined;
+  return (query) => {
+    draftStack.openDraft(createType, undefined, {
+      data: createData?.(query),
+      afterSave: { run: link, failureText: `add it to this ${targetLabel}` },
+    });
+  };
+}
+
+/** Lowercase type name for the picker's "Create X"/"Select existing X". */
+export function typeLabel(type: DraftType | undefined): string | undefined {
+  return type && DRAFT_TYPE_LABELS[type].toLowerCase();
+}
 
 interface AttachControlProps {
   /** The currently-displayed record's own view -- attach PUTs back to
@@ -63,6 +92,16 @@ interface AttachControlProps {
   /** RecordPicker.tsx's own `extraCreateAction` -- closes this dialog first,
    * like `onCreateNew`. */
   extraCreateAction?: ExtraCreateAction;
+  /** Offers "Create <type>" in the picker: a New <type> dialog whose save
+   * also appends the new record to `listField` here (built with
+   * `buildEntry`, same as a pick). Shown only to someone who may add
+   * records; ignored when `onCreateNew` is given. */
+  createType?: DraftType;
+  /** For `createType`: fields the new record starts with, from the text
+   * typed in the search box -- e.g. a Tag's name. */
+  createData?: (query: string) => Record<string, unknown>;
+  /** RecordPicker.tsx's own `createButtonLabel`, e.g. "Upload files". */
+  createButtonLabel?: string;
 }
 
 /** A small, bare circled "+" trigger (CircleGlyphButton.tsx -- meant for a
@@ -96,10 +135,20 @@ interface AttachControlProps {
  * SetFieldControl below for the singular-ref-field counterpart. */
 export function AttachControl({
   targetView, targetHandle, pickerView, listField, buildEntry, itemLabel, onAttached,
-  buildExpr, onPick, onCreateNew, createLabel, extraCreateAction,
+  buildExpr, onPick, onCreateNew, createLabel, extraCreateAction, createType, createData, createButtonLabel,
 }: AttachControlProps) {
   const [opened, setOpened] = useState(false);
+  const draftStack = useDraftStackContext();
   if (!hasPermissions("EditObject")) return null;
+
+  const createNew = onCreateNew ?? createViaDraft(
+    draftStack, createType, createData, targetView.key,
+    async (handle) => {
+      const token = await getToken();
+      await attachRefListEntry(token, targetView, targetHandle, listField, buildEntry ? buildEntry(handle) : handle);
+      onAttached?.();
+    },
+  );
 
   async function defaultPick(item: QueryItem) {
     const token = await getToken();
@@ -129,8 +178,9 @@ export function AttachControl({
           renderLabel={(item) => pickerResultLabel(pickerView.key, item)}
           onPick={handlePick}
           confirmWithButton
-          createLabel={createLabel}
-          onCreateNew={onCreateNew ? (query) => { setOpened(false); onCreateNew(query); } : undefined}
+          createLabel={createLabel ?? typeLabel(createType)}
+          createButtonLabel={createButtonLabel}
+          onCreateNew={createNew ? (query) => { setOpened(false); createNew(query); } : undefined}
           extraCreateAction={extraCreateAction && {
             ...extraCreateAction,
             onClick: () => { setOpened(false); extraCreateAction.onClick(); },
@@ -163,6 +213,9 @@ interface SetFieldControlProps {
    * father" text -- ParentsSection's father/mother slots sit *in* the
    * pair layout as placeholders, where the text says which slot is which. */
   iconOnly?: boolean;
+  /** Same as AttachControl's: "Create <type>" in the picker, whose save
+   * also sets `field` here to the new record. */
+  createType?: DraftType;
 }
 
 /** AttachControl's counterpart for a *singular* ref field (Family's
@@ -174,10 +227,17 @@ interface SetFieldControlProps {
  * clear, where the field isn't required) instead of this control, same as
  * every list section shows existing rows above its own AttachControl. */
 export function SetFieldControl({
-  targetView, targetHandle, pickerView, field, itemLabel, onSet, iconOnly,
+  targetView, targetHandle, pickerView, field, itemLabel, onSet, iconOnly, createType,
 }: SetFieldControlProps) {
   const [opened, setOpened] = useState(false);
+  const draftStack = useDraftStackContext();
   if (!hasPermissions("EditObject")) return null;
+
+  const createNew = createViaDraft(draftStack, createType, undefined, targetView.key, async (handle) => {
+    const token = await getToken();
+    await setRefField(token, targetView, targetHandle, field, handle);
+    onSet();
+  });
 
   async function handlePick(item: QueryItem) {
     setOpened(false);
@@ -203,6 +263,8 @@ export function SetFieldControl({
           renderLabel={(item) => pickerResultLabel(pickerView.key, item)}
           onPick={handlePick}
           confirmWithButton
+          createLabel={typeLabel(createType)}
+          onCreateNew={createNew ? (query) => { setOpened(false); createNew(query); } : undefined}
         />
       </Modal>
     </>

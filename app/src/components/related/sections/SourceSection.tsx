@@ -29,6 +29,7 @@ export function SourceSection({ view, detail, onNavigate, onRefetch }: SectionPr
           pickerView={SOURCE_VIEW}
           field="source_handle"
           itemLabel="a source"
+          createType="source"
           onSet={() => onRefetch?.()}
           iconOnly
         />

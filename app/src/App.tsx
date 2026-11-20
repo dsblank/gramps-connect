@@ -56,6 +56,7 @@ import { LargeImageDialogHost } from "./components/LargeImageDialogHost";
 import { jobsPollCallbacks } from "./store/jobsCallbacks";
 import { notifyBrowser } from "./store/browserNotifications";
 import { useDraftStack } from "./store/draftStack";
+import { DraftStackContext } from "./store/draftStackContext";
 import { EditDialogs } from "./components/EditDialogs";
 import { ForeignTreeDialog } from "./components/ForeignTreeDialog";
 import { useMediaDrop } from "./hooks/useMediaDrop";
@@ -476,7 +477,7 @@ function AuthenticatedApp() {
   }, []);
 
   return (
-    <>
+    <DraftStackContext.Provider value={draftStack}>
       <AppShell
         header={{ height: stacked ? HEADER_HEIGHT_STACKED : HEADER_HEIGHT }}
         // breakpoint 0 on both = never let AppShell switch them into its own
@@ -725,6 +726,6 @@ function AuthenticatedApp() {
       <ConfirmDialogHost />
       <ForeignTreeDialog link={foreignTree} currentTreeName={treeName} onClose={dismissForeignTree} />
       <LargeImageDialogHost />
-    </>
+    </DraftStackContext.Provider>
   );
 }

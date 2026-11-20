@@ -44,6 +44,7 @@ export function PlaceSection({ view, detail, onNavigate, onRefetch }: SectionPro
           pickerView={PLACE_VIEW}
           field="place"
           itemLabel="a place"
+          createType="place"
           onSet={() => onRefetch?.()}
           iconOnly
         />

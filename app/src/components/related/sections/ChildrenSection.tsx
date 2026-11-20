@@ -42,6 +42,7 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
           listField="child_ref_list"
           buildEntry={(handle) => ({ _class: "ChildRef", ref: handle, frel: "Birth", mrel: "Birth" })}
           itemLabel="a child"
+          createType="person"
           onAttached={() => onRefetch?.()}
         />
       )}

@@ -13,6 +13,9 @@ import { summaryLine } from "../summary";
 import { SectionShell, RefRow } from "./shared";
 import type { SectionProps } from "../types";
 import { t } from "../../../i18n/i18n";
+import { useDraftStackContext } from "../../../store/draftStackContext";
+import type { DraftType } from "../../../store/draftStack";
+import { createViaDraft, typeLabel } from "../AttachControl";
 
 interface EditingParticipant {
   view: ViewConfig;
@@ -25,9 +28,11 @@ interface EditingParticipant {
  * person/family's own event_ref_list, not on this Event, so `eventHandle`
  * (the attach target) and `pickerView`/`itemLabel` (what's being searched)
  * are two different things, unlike AttachControl where they're the same
- * object. Defaults role to "Primary", same as EventsSection's own forward-
- * direction attach -- fixing it after the fact is this section's existing
- * edit icon (RefEditDialog refType="event"), unchanged by this. */
+ * object. Defaults role to "Primary" for a person and "Family" for a
+ * family, same as EventsSection's own forward-direction attach -- fixing
+ * it after the fact is this section's existing edit icon (RefEditDialog
+ * refType="event"), unchanged by this. "Create person/family" makes a new
+ * one and, once saved, adds this event to it the same way. */
 function AddParticipantControl({ pickerView, eventHandle, itemLabel, shortLabel, onAdded }: {
   pickerView: ViewConfig;
   eventHandle: string;
@@ -39,16 +44,24 @@ function AddParticipantControl({ pickerView, eventHandle, itemLabel, shortLabel,
   onAdded: () => void;
 }) {
   const [opened, setOpened] = useState(false);
+  const draftStack = useDraftStackContext();
   if (!hasPermissions("EditObject")) return null;
 
-  async function handlePick(item: QueryItem) {
-    setOpened(false);
+  async function addEventTo(handle: string) {
     const token = await getToken();
-    await attachRefListEntry(token, pickerView, item.handle, "event_ref_list", {
-      _class: "EventRef", ref: eventHandle, role: "Primary",
+    await attachRefListEntry(token, pickerView, handle, "event_ref_list", {
+      _class: "EventRef", ref: eventHandle, role: pickerView.key === "family" ? "Family" : "Primary",
     });
     onAdded();
   }
+
+  async function handlePick(item: QueryItem) {
+    setOpened(false);
+    await addEventTo(item.handle);
+  }
+
+  const createType = pickerView.key as DraftType;
+  const createNew = createViaDraft(draftStack, createType, undefined, "event", addEventTo);
 
   return (
     <>
@@ -67,6 +80,8 @@ function AddParticipantControl({ pickerView, eventHandle, itemLabel, shortLabel,
           renderLabel={(item) => pickerResultLabel(pickerView.key, item)}
           onPick={handlePick}
           confirmWithButton
+          createLabel={typeLabel(createType)}
+          onCreateNew={createNew ? (query) => { setOpened(false); createNew(query); } : undefined}
         />
       </Modal>
     </>

@@ -36,6 +36,7 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
           pickerView={CITATION_VIEW}
           listField="citation_list"
           itemLabel="a citation"
+          createType="citation"
           onAttached={() => onRefetch?.()}
         />
       )}

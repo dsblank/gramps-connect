@@ -48,6 +48,10 @@ interface RecordPickerProps {
    * rendered whenever `onCreateNew` is given (see that prop's own doc
    * comment) -- with or without a typed query. */
   createLabel?: string;
+  /** Replaces the "Create <createLabel>" button text, e.g. Media's
+   * "Upload files" -- the "Select existing <createLabel>" heading keeps
+   * createLabel. */
+  createButtonLabel?: string;
   /** Opts this picker into leading with a "(+) Create X" button (an "or"
    * divider, then "Select existing X" above the ordinary search box) -- a
    * search that doesn't turn up the right record shouldn't be a dead end
@@ -88,7 +92,7 @@ export interface ExtraCreateAction {
  * to pick from the moment this opens. */
 export function RecordPicker({
   view, searchField, placeholder, onPick, buildExpr, renderLabel, confirmWithButton, createLabel, onCreateNew,
-  extraCreateAction,
+  extraCreateAction, createButtonLabel,
 }: RecordPickerProps) {
   const [query, setQuery] = useState("");
   const nameGroupsVersion = useNameGroupsVersion();
@@ -170,8 +174,8 @@ export function RecordPicker({
           <Group gap="md">
             <CircleGlyphButton
               glyph="+"
-              label={`Create ${createLabel}`}
-              textLabel={`Create ${createLabel}`}
+              label={createButtonLabel ?? `Create ${createLabel}`}
+              textLabel={createButtonLabel ?? `Create ${createLabel}`}
               onClick={() => onCreateNew(query.trim())}
             />
             {extraCreateAction && (

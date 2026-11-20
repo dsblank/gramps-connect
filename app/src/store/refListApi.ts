@@ -41,6 +41,21 @@ export async function attachRefListEntry(
   await updateObject(token, view, objectHandle, obj);
 }
 
+/** attachRefListEntry for several entries at once -- one PUT, so one
+ * transaction, e.g. every file of a multi-file upload. */
+export async function attachRefListEntries(
+  token: string,
+  view: ViewConfig,
+  objectHandle: string,
+  listField: string,
+  entries: RefListEntry[]
+): Promise<void> {
+  const obj = await fetchPlainObject(token, view, objectHandle);
+  const list = ((obj[listField] as RefListEntry[] | undefined) ?? []) as RefListEntry[];
+  obj[listField] = [...list, ...entries];
+  await updateObject(token, view, objectHandle, obj);
+}
+
 /** Removes whichever entry of `objectHandle`'s `listField` points at
  * `targetHandle` (comparing bare handles or a wrapped ref's `.ref`). */
 export async function detachRefListEntry(

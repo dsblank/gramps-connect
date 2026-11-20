@@ -153,6 +153,7 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
               pickerView={NOTE_VIEW}
               listField="note_list"
               itemLabel="a note"
+              createType="note"
               onAttached={() => onRefetch?.()}
             />
           )}

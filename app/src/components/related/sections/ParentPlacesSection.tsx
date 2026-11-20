@@ -19,6 +19,8 @@ import { SectionShell, RefRow, LINK_STYLE } from "./shared";
 import type { OnNavigate } from "../types";
 import type { SectionProps } from "../types";
 import { t } from "../../../i18n/i18n";
+import { useDraftStackContext } from "../../../store/draftStackContext";
+import { createViaDraft } from "../AttachControl";
 
 type Row = { ref: RawRef; target: unknown };
 
@@ -41,7 +43,22 @@ export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionPr
   const [adding, setAdding] = useState(false);
   const [datingIndex, setDatingIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const draftStack = useDraftStackContext();
   if (rows.length === 0 && !canEdit) return null;
+
+  // "Create place": a New Place dialog, and once it's saved the new place
+  // goes where the add dialog said (between, or alongside when null).
+  const canCreate = !!draftStack && hasPermissions("AddObject");
+  function handleCreate(insertAt: number | null) {
+    const between = insertAt == null ? null : rows[insertAt].ref.ref;
+    setAdding(false);
+    createViaDraft(draftStack, "place", undefined, "place", async (handle) => {
+      const token = await getToken();
+      if (insertAt == null || between == null) await addEnclosingPlace(token, detail.handle, handle);
+      else await insertEnclosingLevel(token, detail.handle, insertAt, between, handle);
+      onRefetch?.();
+    })?.("");
+  }
 
   async function run(action: (token: string) => Promise<void>) {
     if (busy) return;
@@ -120,6 +137,7 @@ export function ParentPlacesSection({ detail, onNavigate, onRefetch }: SectionPr
           rows={rows}
           busy={busy}
           onClose={() => setAdding(false)}
+          onCreate={canCreate ? handleCreate : undefined}
           onAdd={async (picked, insertAt) => {
             await run((token) =>
               insertAt == null
@@ -270,13 +288,17 @@ function PlaceHierarchyTree({ detail, onNavigate }: { detail: SectionProps["deta
  * adding a missing level (a county under an existing state) is the common
  * reason to be here; one choice per existing enclosing place, so a place
  * with several (historical boundary changes) can pick which one. */
-function AddEnclosingPlaceDialog({ rows, busy, onClose, onAdd }: {
+function AddEnclosingPlaceDialog({ rows, busy, onClose, onAdd, onCreate }: {
   rows: Row[];
   busy: boolean;
   onClose: () => void;
   onAdd: (picked: string, insertAt: number | null) => Promise<void>;
+  /** "Create place" -- opens a New Place dialog that adds it at
+   * `insertAt` (as onAdd) once saved. Omitted without permission. */
+  onCreate?: (insertAt: number | null) => void;
 }) {
-  const [picked, setPicked] = useState<QueryItem | null>(null);
+  // "new": Create place was chosen, and where it goes is asked next.
+  const [picked, setPicked] = useState<QueryItem | "new" | null>(null);
   const [choice, setChoice] = useState("0");
 
   function handlePick(item: QueryItem) {
@@ -287,7 +309,7 @@ function AddEnclosingPlaceDialog({ rows, busy, onClose, onAdd }: {
     setPicked(item);
   }
 
-  const pickedLabel = picked ? pickerResultLabel("place", picked) : "";
+  const pickedLabel = picked === "new" ? t("the new place") : picked ? pickerResultLabel("place", picked) : "";
 
   return (
     <Modal opened onClose={onClose} title={t("Adding an enclosing place")} size="md">
@@ -300,6 +322,8 @@ function AddEnclosingPlaceDialog({ rows, busy, onClose, onAdd }: {
           renderLabel={(item) => pickerResultLabel("place", item)}
           onPick={handlePick}
           confirmWithButton
+          createLabel="place"
+          onCreateNew={onCreate && (() => (rows.length === 0 ? onCreate(null) : setPicked("new")))}
         />
       ) : (
         <Stack gap="sm">
@@ -329,9 +353,13 @@ function AddEnclosingPlaceDialog({ rows, busy, onClose, onAdd }: {
             <Button variant="default" onClick={() => setPicked(null)}>{t("Back")}</Button>
             <Button
               loading={busy}
-              onClick={() => void onAdd(picked.handle, choice === "alongside" ? null : Number(choice))}
+              onClick={() => {
+                const insertAt = choice === "alongside" ? null : Number(choice);
+                if (picked === "new") onCreate?.(insertAt);
+                else void onAdd(picked.handle, insertAt);
+              }}
             >
-              {t("Add")}
+              {picked === "new" ? t("Next") : t("Add")}
             </Button>
           </Group>
         </Stack>

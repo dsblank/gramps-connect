@@ -41,6 +41,7 @@ export function RepositoriesSection({ view, detail, onNavigate, onRefetch }: Sec
           listField="reporef_list"
           buildEntry={(handle) => ({ _class: "RepoRef", ref: handle, call_number: "", media_type: "" })}
           itemLabel="a repository"
+          createType="repository"
           onAttached={() => onRefetch?.()}
         />
       )}

@@ -44,6 +44,7 @@ export function AssociationsSection({ view, detail, onNavigate, onRefetch }: Sec
           listField="person_ref_list"
           buildEntry={(handle) => ({ _class: "PersonRef", ref: handle, rel: "" })}
           itemLabel="an association"
+          createType="person"
           onAttached={() => onRefetch?.()}
         />
       )}

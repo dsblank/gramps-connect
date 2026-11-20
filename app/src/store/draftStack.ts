@@ -123,6 +123,14 @@ export interface DraftEntry {
    * dialog clear that field back out on its parent, and lets saveAll()
    * order the array so this draft precedes the parent that references it. */
   openedFrom?: { handle: string; field: string };
+  /** For a top-level "new" draft opened from a Related Pane "+" (see
+   * AttachControl.tsx): links the just-created object to the record it was
+   * created from, run by saveAll() once the object itself is saved. A
+   * separate request (POST /api/objects/ refuses an existing handle, so the
+   * link can't ride along in the create), so it's its own transaction; a
+   * failure leaves the new object saved but unlinked, and is reported as
+   * exactly that rather than failing the save. */
+  afterSave?: AfterSave;
   /** False once Cancelled -- excluded from saveAll(), but the entry stays
    * in `stack` (rather than being removed) for the reason EditDialogs.tsx
    * never stops rendering a discarded draft's Modal either: see this
@@ -239,6 +247,19 @@ function stableStringify(value: unknown): string {
  * summary-building code (store/ stays free of that import direction; see
  * jobsCallbacks.ts for the precedent of a *callback's* home showing
  * notifications directly, which EditDialogs.tsx's handler now follows). */
+export interface AfterSave {
+  /** Gets the new object's handle. */
+  run: (handle: string) => Promise<void>;
+  /** Finishes "Saved the new note, but couldn't ..." -- e.g. "add it here". */
+  failureText: string;
+}
+
+export interface OpenDraftOptions {
+  /** Merged over the type's default blank data, e.g. a new Tag's name. */
+  data?: Record<string, unknown>;
+  afterSave?: AfterSave;
+}
+
 export interface SavedDraft {
   type: DraftType;
   mode: "new" | "edit";
@@ -255,7 +276,7 @@ export interface UseDraftStack {
   stack: DraftEntry[];
   /** Which drafts currently show as an open (vs. hidden) dialog. */
   openHandles: string[];
-  openDraft: (type: DraftType, openedFrom?: DraftEntry["openedFrom"]) => string;
+  openDraft: (type: DraftType, openedFrom?: DraftEntry["openedFrom"], options?: OpenDraftOptions) => string;
   /** Opens a draft for editing an existing object: fetches its current
    * plain (non-extended) dict and fills the draft in once it lands.
    * `openedFrom`, when given, nests this edit the same way `openDraft`'s
@@ -312,11 +333,11 @@ export function useDraftStack(): UseDraftStack {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function openDraft(type: DraftType, openedFrom?: DraftEntry["openedFrom"]): string {
+  function openDraft(type: DraftType, openedFrom?: DraftEntry["openedFrom"], options?: OpenDraftOptions): string {
     const handle = createHandle();
     const entry: DraftEntry = {
-      handle, type, mode: "new", status: "ready", data: defaultDataFor(type, handle), openedFrom, active: true,
-      extraCreate: [], extraUpdate: [], session: 0,
+      handle, type, mode: "new", status: "ready", data: { ...defaultDataFor(type, handle), ...options?.data },
+      openedFrom, afterSave: options?.afterSave, active: true, extraCreate: [], extraUpdate: [], session: 0,
     };
     setStack((prev) => {
       const next = [...prev, entry];
@@ -484,6 +505,23 @@ export function useDraftStack(): UseDraftStack {
           await updateObject(token, VIEW_BY_TYPE[upd.type], upd.handle, upd.data);
         }
         await updateObject(token, VIEW_BY_TYPE[draft.type], draft.handle, draft.data);
+      }
+
+      // Every object is saved by now; link the ones created from a Related
+      // Pane "+" (see DraftEntry.afterSave). Still inside `saving`, so
+      // RelatedPanel's saving -> done refetch shows the new link.
+      for (const draft of newDrafts) {
+        if (!draft.afterSave) continue;
+        try {
+          await draft.afterSave.run(draft.handle);
+        } catch (err: any) {
+          notifications.show({
+            color: "red",
+            autoClose: false,
+            title: `Saved the new ${DRAFT_TYPE_LABELS[draft.type].toLowerCase()}, but couldn't ${draft.afterSave.failureText}`,
+            message: err.message ?? String(err),
+          });
+        }
       }
 
       // Immediate feedback for the author, rather than waiting on

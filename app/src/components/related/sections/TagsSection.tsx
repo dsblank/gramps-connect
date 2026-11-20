@@ -70,6 +70,8 @@ export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProp
               pickerView={TAG_VIEW}
               listField="tag_list"
               itemLabel="a tag"
+              createType="tag"
+              createData={(query) => (query ? { name: query } : {})}
               onAttached={() => onRefetch?.()}
             />
           )}

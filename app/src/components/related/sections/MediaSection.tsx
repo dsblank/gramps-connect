@@ -2,7 +2,10 @@ import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs } from "../../../store/objectDetail";
-import { detachRefListEntry, patchRefListEntry } from "../../../store/refListApi";
+import { notifications } from "@mantine/notifications";
+import { attachRefListEntries, detachRefListEntry, patchRefListEntry } from "../../../store/refListApi";
+import { addedFilesLabel, openFilePicker, uploadMediaFiles } from "../../../store/addMedia";
+import { getViewStore } from "../../../store/registry";
 import { MEDIA_VIEW } from "../../../store/views";
 import { isOverlay } from "../../../store/mapOverlays";
 import { useOverlayTagHandle } from "../../../hooks/useOverlayTagHandle";
@@ -59,6 +62,30 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
     onRefetch?.();
   }
 
+  // "+" > Upload files: each file becomes a new Media object (its own
+  // upload request), then all of them are linked here in one update.
+  async function uploadAndAttach(files: File[]) {
+    const uploaded = await uploadMediaFiles(files);
+    if (uploaded.length === 0) return;
+    getViewStore("media").requeryDebounced();
+    const label = addedFilesLabel(uploaded.length);
+    try {
+      const token = await getToken();
+      await attachRefListEntries(
+        token, view, detail.handle, "media_list", uploaded.map((ref) => ({ _class: "MediaRef", ref })),
+      );
+      notifications.show({ color: "green", title: `${label} added`, message: t("Added here and to the Media list") });
+    } catch (err: any) {
+      notifications.show({
+        color: "red",
+        autoClose: false,
+        title: `${label} uploaded, but couldn't add ${uploaded.length > 1 ? "them" : "it"} here`,
+        message: `${err.message ?? String(err)}. ${t("Find it in the Media list and use + to add it here.")}`,
+      });
+    }
+    onRefetch?.();
+  }
+
   return (
     <SectionShell
       label={t("Media")}
@@ -70,6 +97,9 @@ export function MediaSection({ view, detail, onNavigate, onRefetch }: SectionPro
           listField="media_list"
           buildEntry={(handle) => ({ _class: "MediaRef", ref: handle })}
           itemLabel="media"
+          createLabel="media"
+          createButtonLabel={t("Upload files")}
+          onCreateNew={hasPermissions("AddObject") ? () => openFilePicker((files) => void uploadAndAttach(files)) : undefined}
           onAttached={() => onRefetch?.()}
         />
       )}
