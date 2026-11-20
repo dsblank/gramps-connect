@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { notifications } from "@mantine/notifications";
+import { openFilePicker, uploadMediaFiles } from "../../../store/addMedia";
+import { getViewStore } from "../../../store/registry";
 import { Button, Modal } from "@mantine/core";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { confirmDialog } from "../../../store/confirmDialog";
@@ -92,6 +95,28 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
     onRefetch?.();
   }
 
+  // "+" > Upload image: the file becomes a new Media record, then the two
+  // are linked as a comparison. Not attached anywhere else the original
+  // is -- it's reachable from here and from the Media list.
+  async function uploadAndCompare(files: File[]) {
+    const [uploaded] = await uploadMediaFiles(files);
+    if (!uploaded) return;
+    getViewStore("media").requeryDebounced();
+    try {
+      const token = await getToken();
+      await attachComparison(token, detail.handle, uploaded);
+      notifications.show({ color: "green", title: t("Image added"), message: t("Ready to compare") });
+    } catch (err: any) {
+      notifications.show({
+        color: "red",
+        autoClose: false,
+        title: t("Image uploaded, but couldn't add it as a comparison"),
+        message: `${err.message ?? String(err)}. ${t("Find it in the Media list and use + to add it here.")}`,
+      });
+    }
+    onRefetch?.();
+  }
+
   async function handleRemove(targetHandle: string) {
     if (!(await confirmDialog("Remove this comparison? This does not delete either media item."))) return;
     const token = await getToken();
@@ -118,6 +143,12 @@ export function ComparisonsSection({ type, detail, onNavigate, onRefetch }: Sect
               renderLabel={(item) => pickerResultLabel(MEDIA_VIEW.key, item)}
               onPick={handlePick}
               confirmWithButton
+              createLabel="image"
+              createButtonLabel={t("Upload image")}
+              onCreateNew={hasPermissions("AddObject") ? () => {
+                setPickerOpened(false);
+                openFilePicker((files) => void uploadAndCompare(files), "image/*", false);
+              } : undefined}
             />
           </Modal>
         </>

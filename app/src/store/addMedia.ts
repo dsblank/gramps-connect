@@ -47,11 +47,12 @@ export async function addMediaFiles(files: File[]): Promise<void> {
  * to a user gesture. The input is attached to the document while the
  * picker is open (as Mantine's FileButton does), since some embedded
  * webviews ignore a click on a detached one. `accept` is the input's own
- * attribute, e.g. mapFileMime.ts's MAP_FILE_ACCEPT. */
-export function openFilePicker(onFiles: (files: File[]) => void, accept?: string): void {
+ * attribute, e.g. mapFileMime.ts's MAP_FILE_ACCEPT. `multiple` false allows
+ * only one file (e.g. a comparison's second image). */
+export function openFilePicker(onFiles: (files: File[]) => void, accept?: string, multiple = true): void {
   const input = document.createElement("input");
   input.type = "file";
-  input.multiple = true;
+  input.multiple = multiple;
   if (accept) input.accept = accept;
   input.style.display = "none";
   const cleanup = () => input.remove();
