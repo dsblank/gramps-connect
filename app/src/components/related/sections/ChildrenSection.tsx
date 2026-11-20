@@ -2,7 +2,9 @@ import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { confirmDialog } from "../../../store/confirmDialog";
 import { zipRefs, type RawRef } from "../../../store/objectDetail";
-import { detachRefListEntry } from "../../../store/refListApi";
+import { notifications } from "@mantine/notifications";
+import { detachRefListEntry, moveRefListEntry } from "../../../store/refListApi";
+import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { PERSON_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
 import { RefEditDialog } from "../RefEditDialog";
@@ -16,11 +18,16 @@ import { t } from "../../../i18n/i18n";
  * PersonDetail.tsx discarded entirely. Attach (AttachControl,
  * refListApi.ts) defaults a new child's frel/mrel to "Birth" -- the edit
  * icon below (already wired) is the fix-up path for anything else, same as
- * it always has been for an existing row. */
+ * it always has been for an existing row.
+ *
+ * With more than one child, ↑/↓ reorder them (Gramps' own Children tab
+ * buttons) -- one PUT per move via moveRefListEntry, so each is one
+ * undoable transaction and keeps the ChildRef's frel/mrel/citations. */
 export function ChildrenSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
   const rows = zipRefs(detail.child_ref_list, detail.extended?.children);
   const [editingRef, setEditingRef] = useState<RawRef | null>(null);
   const canEdit = hasPermissions("EditObject");
+  const [moving, setMoving] = useState(false);
   if (rows.length === 0 && !canEdit) return null;
 
   async function handleRemove(handle: string, target: unknown) {
@@ -29,6 +36,24 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
     const token = await getToken();
     await detachRefListEntry(token, view, detail.handle, "child_ref_list", handle);
     onRefetch?.();
+  }
+
+  async function handleMove(from: number, to: number, handle: string) {
+    if (moving) return;
+    setMoving(true);
+    try {
+      const token = await getToken();
+      await moveRefListEntry(token, view, detail.handle, "child_ref_list", from, to, handle);
+      onRefetch?.();
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: t("Couldn't change the order of the children"),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setMoving(false);
+    }
   }
 
   return (
@@ -47,14 +72,24 @@ export function ChildrenSection({ view, detail, onNavigate, onRefetch }: Section
         />
       )}
     >
-      {rows.map(({ ref, target }) => (
+      {rows.map(({ ref, target }, i) => (
         <RefRow
-          key={ref.ref}
+          key={`${i}-${ref.ref}`}
           type="person"
           handle={ref.ref}
           obj={target}
           refMeta={ref}
           onNavigate={onNavigate}
+          extra={canEdit && rows.length > 1 && (
+            <>
+              {i > 0 && (
+                <CircleGlyphButton glyph="↑" label={t("Move up")} size={16} onClick={() => handleMove(i, i - 1, ref.ref)} />
+              )}
+              {i < rows.length - 1 && (
+                <CircleGlyphButton glyph="↓" label={t("Move down")} size={16} onClick={() => handleMove(i, i + 1, ref.ref)} />
+              )}
+            </>
+          )}
           onEdit={canEdit ? () => setEditingRef(ref) : undefined}
           onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
         />

@@ -13,6 +13,7 @@ import {
   type EventRefLite,
 } from "./RefPickerField";
 import type { DraftEntry, DraftType } from "../store/draftStack";
+import { CircleGlyphButton } from "./CircleGlyphButton";
 import { t } from "../i18n/i18n";
 
 // FamilyRelType's built-in values (gramps/gen/lib/familyreltype.py) as plain
@@ -65,6 +66,10 @@ interface ChildrenFieldProps {
   onAdd: (item: QueryItem, frel: string, mrel: string) => void;
   onRemove: (handle: string) => void;
   onRelChange: (handle: string, patch: { frel?: string; mrel?: string }) => void;
+  /** Moves the child at `from` to `to` (indexes into `refs`) -- the
+   * children's order in charts, reports and the family's own pages, same
+   * as Gramps' Children tab ↑/↓. */
+  onMove: (from: number, to: number) => void;
   /** Active "new"-mode Person drafts opened from this Family's children
    * (see FamilyEditDialog's handleAddNewChildPerson) -- keyed by handle, so
    * a child row whose Person hasn't been saved yet renders from the draft
@@ -113,7 +118,7 @@ function ChildRelSelect({ label, value, onChange }: { label: string; value: stri
  * This dialog's own &#9998; opens a nested edit of the child Person
  * itself, not the ChildRef. */
 function ChildrenField({
-  refs, labels, onAdd, onRemove, onRelChange, childDraftsByHandle, findChildEditDraft, onAddNewPerson,
+  refs, labels, onAdd, onRemove, onRelChange, onMove, childDraftsByHandle, findChildEditDraft, onAddNewPerson,
   onOpenEditChildDraft, onReopenChildDraft, onRemoveChildDraft,
 }: ChildrenFieldProps) {
   const pickedHandles = new Set(refs.map((r) => r.ref));
@@ -122,8 +127,16 @@ function ChildrenField({
     <Stack gap={4}>
       <Text size="sm" fw={500}>{t("Children")}</Text>
       {refs.length === 0 && <Text size="xs" c="dimmed">{t("No children")}</Text>}
-      {refs.map((ref) => {
+      {refs.map((ref, i) => {
         const nestedDraft = childDraftsByHandle.get(ref.ref) ?? findChildEditDraft(ref.ref);
+        const moveButtons = refs.length > 1 && (
+          <>
+            {i > 0 && <CircleGlyphButton glyph="↑" label={t("Move up")} size={16} onClick={() => onMove(i, i - 1)} />}
+            {i < refs.length - 1 && (
+              <CircleGlyphButton glyph="↓" label={t("Move down")} size={16} onClick={() => onMove(i, i + 1)} />
+            )}
+          </>
+        );
         const row = nestedDraft ? (
           <OccupiedRefRow
             label={nestedDraftLabel(nestedDraft)}
@@ -131,6 +144,7 @@ function ChildrenField({
             onEdit={() => onReopenChildDraft(nestedDraft.handle)}
             onRemove={() => onRemoveChildDraft(nestedDraft.handle)}
             removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
+            extra={moveButtons}
           />
         ) : (
           <OccupiedRefRow
@@ -139,6 +153,7 @@ function ChildrenField({
             onEdit={() => onOpenEditChildDraft(ref.ref)}
             onRemove={() => onRemove(ref.ref)}
             removeLabel="Remove child"
+            extra={moveButtons}
           />
         );
         return (
@@ -539,6 +554,7 @@ export function FamilyEditDialog({
           onRelChange={(handle, patch) =>
             onChange({ child_ref_list: childRefs.map((r) => (r.ref === handle ? { ...r, ...patch } : r)) })
           }
+          onMove={(from, to) => onChange({ child_ref_list: moveItem(childRefs, from, to) })}
           childDraftsByHandle={childDraftsByHandle}
           findChildEditDraft={findChildEditDraft}
           onAddNewPerson={handleAddNewChildPerson}
