@@ -30,6 +30,7 @@ const DEFS = {
   largeImageChoice: { key: `${P}largeImageChoice`, tag: "setting" },
   asideWidths: { key: `${P}asideWidths`, tag: "setting" },
   columnWidths: { key: `${P}columnWidths`, tag: "setting" },
+  columnLayouts: { key: `${P}columnLayouts`, tag: "setting" },
   mapViewport: { key: `${P}mapViewport`, tag: "setting" },
   externalSearchWindowGeometry: { key: `${P}externalSearchWindowGeometry`, tag: "setting" },
   relationshipWindowGeometry: { key: `${P}relationshipWindowGeometry`, tag: "setting" },

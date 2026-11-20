@@ -35,9 +35,18 @@ export interface ColumnConfig {
    * toSelectEntry in sql.ts). */
   key: string;
   label: string;
-  /** A plain secondary-column name, or a path into the record, sent as
-   * GOQL's path string with `as <key>` added (toSelectEntry in sql.ts). */
-  select: string | { json_path: (string | number)[] };
+  /** Show `label` as written rather than through t(): a user's own title
+   * or expression (columnSettings.ts), which isn't a translatable string
+   * -- t() would also drop its first "_", Gramps' keyboard-shortcut mark. */
+  literalLabel?: boolean;
+  /** A plain secondary-column name; a path into the record, sent as
+   * GOQL's path string with `as <key>` added; or any GOQL select
+   * expression (`len(citations)`, `birth.place.title`), likewise sent with
+   * `as <key>` (toSelectEntry in sql.ts) -- what a list's custom columns
+   * use (columnSettings.ts). Like a json_path column, a `goql` column isn't
+   * sortable: ordering by anything inside a record reads every row on the
+   * server (seconds per page on a big tree). */
+  select: string | { json_path: (string | number)[] } | { goql: string };
   sqlType: "TEXT" | "INTEGER";
   /** API response value -> value to store in local SQLite. Default:
    * stored as-is. `item` is the row's full (pre-toSql) API response, for a

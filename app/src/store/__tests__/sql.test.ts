@@ -17,6 +17,11 @@ describe("toSelectEntry", () => {
       .toBe("primary_name.surname_list[0].surname as birth_date");
   });
 
+  it("sends a goql expression with an `as` alias from the column key", () => {
+    const column = { key: "goql_x", label: "", select: { goql: "len(citations)" }, sqlType: "TEXT" as const };
+    expect(toSelectEntry(column)).toBe("len(citations) as goql_x");
+  });
+
   it("sends only strings, for every column of every view", () => {
     for (const view of VIEWS) {
       for (const column of view.columns) expect(typeof toSelectEntry(column)).toBe("string");

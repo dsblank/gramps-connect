@@ -4,7 +4,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
 import { getViewStore } from "../store/registry";
-import { headerSortColumn, visibleColumns, type ViewConfig } from "../store/views";
+import { headerSortColumn, type ViewConfig } from "../store/views";
+import { layoutColumns, useColumnSettingsVersion } from "../store/columnSettings";
 import { useDisplayFormatVersion } from "../store/placeIndex";
 import { t } from "../i18n/i18n";
 import classes from "./DataTable.module.css";
@@ -47,7 +48,11 @@ export function DataTable({ view }: DataTableProps) {
   // a getRows() row, which is still indexed by the column's `index` into the
   // full list, since that's the order the cache table and its SELECT are
   // built in.
-  const columns = useMemo(() => visibleColumns(view), [view]);
+  // In the Columns dialog's order, without the columns it hides; its
+  // custom columns are in view.columns (columnSettings.ts), so a settings
+  // change re-renders through useColumnSettingsVersion().
+  const settingsVersion = useColumnSettingsVersion();
+  const columns = useMemo(() => layoutColumns(view), [view, settingsVersion]);
   // Stored-value lookup by column key, for toDisplay's `row` accessor (see
   // views.ts ColumnConfig.toDisplay). getRows() appends `handle` after the
   // columns.
@@ -55,7 +60,7 @@ export function DataTable({ view }: DataTableProps) {
     const map = new Map(view.columns.map((column, index) => [column.key, index]));
     map.set("handle", view.columns.length);
     return map;
-  }, [view]);
+  }, [view, settingsVersion]);
   // Dates and place titles format per the tree's display settings at render
   // time; this re-renders the table when those (or the Places cache that
   // automatic titles read) change.
@@ -65,10 +70,13 @@ export function DataTable({ view }: DataTableProps) {
   // (see App.tsx's key={`table-${...}`}), so the initial value is read back
   // from localStorage (see columnWidths.ts) rather than always starting at
   // DEFAULT_COLUMN_WIDTH, and startResize's onUp below writes it back out.
-  const [colWidths, setColWidths] = useState<number[]>(() => {
-    const saved = getColumnWidths(view.key);
-    return columns.map(({ column }) => saved?.[column.key] ?? DEFAULT_COLUMN_WIDTH);
-  });
+  // Kept by column key, so the Columns dialog reordering, hiding or adding
+  // columns doesn't move a width onto a different column.
+  const [widthByKey, setWidthByKey] = useState<Record<string, number>>(() => getColumnWidths(view.key) ?? {});
+  const colWidths = useMemo(
+    () => columns.map(({ column }) => widthByKey[column.key] ?? DEFAULT_COLUMN_WIDTH),
+    [columns, widthByKey],
+  );
 
   // The sticky header is a normal-flow sibling *inside* the same scroll
   // container as the virtualized rows (see classes.header's doc comment on
@@ -226,9 +234,10 @@ export function DataTable({ view }: DataTableProps) {
     const handle = e.currentTarget;
     handle.setPointerCapture(e.pointerId);
 
+    const key = columns[index].column.key;
     function onMove(ev: PointerEvent) {
       finalWidth = Math.max(MIN_COLUMN_WIDTH, startWidth + (ev.clientX - startX));
-      setColWidths((prev) => (prev[index] === finalWidth ? prev : prev.map((w, i) => (i === index ? finalWidth : w))));
+      setWidthByKey((prev) => (prev[key] === finalWidth ? prev : { ...prev, [key]: finalWidth }));
     }
     function onUp(ev: PointerEvent) {
       handle.releasePointerCapture(ev.pointerId);
@@ -236,11 +245,11 @@ export function DataTable({ view }: DataTableProps) {
       handle.removeEventListener("pointerup", onUp);
       // Persist on drag end, not per onMove frame, mirroring gramps-web's
       // immediate-but-not-per-frame settings writes.
-      const widths = colWidths.map((w, i) => (i === index ? finalWidth : w));
-      saveColumnWidths(
-        view.key,
-        Object.fromEntries(columns.map(({ column }, i) => [column.key, widths[i]])),
-      );
+      saveColumnWidths(view.key, {
+        ...widthByKey,
+        ...Object.fromEntries(columns.map(({ column }, i) => [column.key, colWidths[i]])),
+        [key]: finalWidth,
+      });
     }
     handle.addEventListener("pointermove", onMove);
     handle.addEventListener("pointerup", onUp);
@@ -275,7 +284,7 @@ export function DataTable({ view }: DataTableProps) {
               className={`${classes.cell} ${classes.headerCell} ${sortColumn ? classes.sortable : ""}`}
               onClick={sortColumn ? () => store.setSort(sortColumn).catch(() => {}) : undefined}
             >
-              <span>{t(col.label)}</span>
+              <span>{col.literalLabel ? col.label : t(col.label)}</span>
               {isSorted && <span className={classes.sortArrow}>{activeSort.direction === "asc" ? "▲" : "▼"}</span>}
               <div
                 className={classes.resizeHandle}

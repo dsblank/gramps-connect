@@ -225,3 +225,16 @@ export async function fetchByHandle(view: ViewConfig, token: string, handle: str
   const { page } = await fetchPage(view, token, null, false, `handle == "${handle}"`);
   return page.items[0] ?? null;
 }
+
+/** Tries one GOQL `select` expression against `view`'s endpoint (a single
+ * row): null when the server accepts it, else its error message. For the
+ * Columns dialog's check before saving, and for finding which custom
+ * column broke a list's query. */
+export async function testGoqlSelect(view: ViewConfig, token: string, expr: string): Promise<string | null> {
+  const res = await apiFetch(`${API_BASE}${view.endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ select: ["handle", `${expr} as value`], limit: 1, where_expr: view.baseFilter || undefined }),
+  });
+  return res.ok ? null : parseErrorMessage(res);
+}

@@ -11,7 +11,10 @@
 // render (a pull, not a push), same as the original's renderVisible().
 import type { Database, SqlJsStatic } from "sql.js";
 import { getToken } from "../auth/auth";
-import { fetchByHandle, fetchPage } from "./api";
+import { fetchByHandle, fetchPage, testGoqlSelect } from "./api";
+import { notifications } from "@mantine/notifications";
+import { appliedCustomColumns, applyColumnSettings, markBroken } from "./columnSettings";
+import { t } from "../i18n/i18n";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } from "./cacheMeta";
 import { createTableSql, insertSql, upsertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
@@ -922,6 +925,9 @@ export class ViewStore {
    * the caller just reads the current snapshot/rows. */
   async ensureLoaded(): Promise<void> {
     if (this.db) return;
+    // This tree's custom columns (columnSettings.ts) are part of the cache's
+    // shape, so they're added before the cache is checked or built.
+    applyColumnSettings(this.view);
     // A settings-driven default order (People's name format) has to be
     // known before the cache is checked or built: the cache is stamped
     // with the order its rows are in (cacheMeta.ts's schemaSignature).
@@ -1179,6 +1185,12 @@ export class ViewStore {
       stmt.free();
       newDb.close();
       if (myGeneration !== this.queryGeneration) return;
+      // A custom column the server rejects shouldn't take the whole list
+      // down: set it aside and try again without it.
+      if (await this.setAsideBrokenColumns(token)) {
+        if (myGeneration !== this.queryGeneration) return;
+        return this.runQuery(whereExpr, persist, options);
+      }
       this.status = "error";
       this.error = err.message ?? String(err);
       this.emit();
@@ -1349,11 +1361,11 @@ export class ViewStore {
    * record, not the one actually selected. */
   private async runQueryPreservingSelection(
     whereExpr: string | null,
-    options?: { pickerExpr?: string | null },
+    { persist = false, ...options }: { pickerExpr?: string | null; persist?: boolean } = {},
   ): Promise<void> {
     const handle = this.selectedHandle;
     if (handle === null) {
-      await this.runQuery(whereExpr, false, options);
+      await this.runQuery(whereExpr, persist, options);
       return;
     }
     const pickerExpr = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.pickerExpr;
@@ -1361,12 +1373,12 @@ export class ViewStore {
     if (index === null) {
       // No longer matches -- the ordinary wipe-and-default-select every
       // other new dataset gets is exactly right here too.
-      await this.runQuery(whereExpr, false, options);
+      await this.runQuery(whereExpr, persist, options);
       return;
     }
     this.suppressSelectionClear = true;
     try {
-      await this.runQuery(whereExpr, false, { ...options, pendingSelection: { index, handle } });
+      await this.runQuery(whereExpr, persist, { ...options, pendingSelection: { index, handle } });
     } finally {
       this.suppressSelectionClear = false;
     }
@@ -1527,6 +1539,60 @@ export class ViewStore {
         this.suppressSelectionClear = false;
         this.emit();
       });
+  }
+
+  /** The Columns dialog saved: re-applies this tree's column settings
+   * (columnSettings.ts) to the view, and when that changed what's cached
+   * -- a custom column added, removed or given a new expression --
+   * refetches the list, keeping the selection. Until the new rows arrive
+   * the current ones stay, with the new columns blank. Order, visibility
+   * and titles alone change nothing here (DataTable redraws). */
+  async applyColumnChange(): Promise<void> {
+    if (!applyColumnSettings(this.view)) return;
+    // An in-flight fill would insert rows of the old shape: stop it.
+    this.queryGeneration += 1;
+    await clearOpfs(this.view.opfsFilename);
+    if (!this.db) return;
+    for (const db of [this.db, this.unfilteredDb]) if (db) this.addMissingColumns(db);
+    this.emit();
+    const unfiltered = this.whereExpr === null && this.pickerExpr === null;
+    await this.runQueryPreservingSelection(this.whereExpr, { persist: unfiltered });
+  }
+
+  /** ALTER TABLE ADD COLUMN for every view column `db` lacks -- so reads
+   * and live patches keep working on the rows already shown while a
+   * column change refetches. Columns no longer in the view just stay. */
+  private addMissingColumns(db: Database): void {
+    const res = db.exec(`PRAGMA table_info(${this.view.key});`);
+    const existing = new Set((res[0]?.values ?? []).map((row) => row[1] as string));
+    for (const column of this.view.columns) {
+      if (!existing.has(column.key)) db.run(`ALTER TABLE ${this.view.key} ADD COLUMN ${column.key} ${column.sqlType};`);
+    }
+  }
+
+  /** After a failed query: tries each custom column's expression on its
+   * own and sets aside those the server rejects (columnSettings.ts's
+   * markBroken), so the rest of the list still loads -- an expression saved
+   * on one tree can fail on another, or on a different server. True when
+   * any was set aside (the caller retries). */
+  private async setAsideBrokenColumns(token: string): Promise<boolean> {
+    const custom = appliedCustomColumns(this.view);
+    let any = false;
+    for (const column of custom) {
+      if (typeof column.select !== "object" || !("goql" in column.select)) continue;
+      const message = await testGoqlSelect(this.view, token, column.select.goql).catch(() => null);
+      if (message) {
+        markBroken(this.view.key, column.key, message);
+        notifications.show({
+          color: "orange",
+          title: `${t("Column left out")}: ${column.label}`,
+          message: `${message} ${t("Fix it with the list's Columns button.")}`,
+        });
+        any = true;
+      }
+    }
+    if (any) applyColumnSettings(this.view);
+    return any;
   }
 
   /** Copies a filtered query's rows into unfilteredDb (see there), fresh

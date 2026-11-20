@@ -9,6 +9,7 @@ import type { ColumnConfig, OrderBy, ViewConfig } from "./views";
  * the column key ("birth.date as birth_date"). */
 export function toSelectEntry(column: ColumnConfig): string {
   if (typeof column.select === "string") return column.select;
+  if ("goql" in column.select) return `${column.select.goql} as ${column.key}`;
   const path = column.select.json_path
     .map((seg, i) => (typeof seg === "number" ? `[${seg}]` : i === 0 ? seg : `.${seg}`))
     .join("");

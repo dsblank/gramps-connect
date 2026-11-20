@@ -1469,3 +1469,42 @@ describe("ViewStore.applyLiveChangesFiltered (live sync while a search is typed 
     expect(store.getSnapshot().loadedCount).toBe(1);
   });
 });
+
+describe("ViewStore.applyColumnChange (Columns dialog)", () => {
+  beforeEach(async () => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+  });
+
+  it("keeps showing the cached rows with the new column blank, then fills it from a refetch", async () => {
+    const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
+    const store = await loadedStore([tagRow("H1"), tagRow("H2")]);
+    store.clearSelection();
+    let resolvePage!: (value: Awaited<ReturnType<typeof fetchPage>>) => void;
+    vi.mocked(fetchPage).mockReturnValueOnce(new Promise((resolve) => (resolvePage = resolve)));
+
+    setColumnLayout("tag", { custom: [{ id: "goql_t", expr: "len(backlinks)" }], order: [], hidden: [] });
+    const done = store.applyColumnChange();
+    await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2));
+    const keyIndex = TAG_VIEW.columns.findIndex((c) => c.key === "goql_t");
+    expect(keyIndex).toBeGreaterThan(-1);
+    expect(store.getRows(0, 2).map((row) => row[keyIndex])).toEqual([null, null]);
+
+    resolvePage({ page: { items: [tagRow("H1", { goql_t: 4 }), tagRow("H2", { goql_t: 0 })], next_after: null }, totalCount: 2 });
+    await done;
+    await vi.waitFor(() => expect(store.getRows(0, 2).map((row) => row[keyIndex])).toEqual(["4", "0"]));
+
+    setColumnLayout("tag", null);
+    applyColumnSettings(TAG_VIEW);
+  });
+
+  it("refetches nothing when only order or visibility changed", async () => {
+    const { setColumnLayout } = await import("../columnSettings");
+    const store = await loadedStore([tagRow("H1")]);
+    setColumnLayout("tag", { custom: [], order: ["color", "name"], hidden: ["priority"] });
+    await store.applyColumnChange();
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+    setColumnLayout("tag", null);
+  });
+});

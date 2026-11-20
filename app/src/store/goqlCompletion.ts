@@ -415,6 +415,20 @@ function walk(
   return context;
 }
 
+/** What a plain path (`birth.date`, `primary_name.surname_list[0]`) reaches
+ * in `namespace`: a whole record (across a relationship, or the path is
+ * just one), a JSON field's vocabulary node, or null when the vocabulary
+ * doesn't know it. */
+export function resolveGoqlPath(
+  namespace: string,
+  chain: string,
+): { kind: "record"; namespace: string } | { kind: "field"; node: FieldNode } | null {
+  if (!GOQL_VOCABULARIES[namespace]) return null;
+  const context = walk(GOQL_VOCABULARIES, namespace, segments(chain), new Map());
+  if (!context) return null;
+  return context.kind === "namespace" ? { kind: "record", namespace: context.namespace } : context;
+}
+
 /** Comprehension variables in `source` (`for e in events`) and what each
  * iterates over, in source order so a later one can use an earlier one. */
 function bindingsIn(vocabs: Vocabs, root: string, source: string): Map<string, Context | null> {

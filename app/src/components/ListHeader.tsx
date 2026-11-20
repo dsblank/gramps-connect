@@ -13,18 +13,22 @@ import { formatHash } from "../hash";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
 import { FilterPickerDialog } from "./FilterPickerDialog";
+import { ColumnSettingsDialog } from "./ColumnSettingsDialog";
+import { goqlNamespaceForEndpoint } from "../store/goqlCompletion";
 
 /** Row above FilterBar's search box, spanning just the list panel (App.tsx
  * mounts this inside the same Box as FilterBar/DataTable, not the aside) --
  * the view's plural label (e.g. "People", "Places"), plus a "Filters"
  * trigger right after it for any view whose GOQL namespace has presets
  * (see gqlFilterPresets.ts's namespaceForViewKey). People also gets a
- * "Go to home person" button at the far right (HomePersonButton below).
+ * "Go to home person" button at the far right (HomePersonButton below),
+ * and every list a gear after it for its Columns dialog.
  * The per-type "Add a Person"/"Start a discussion" action used to live
  * here too; it now lives beside RelatedPanel's own Edit/Delete/etc row
  * instead (see related/AddButton.tsx's own doc comment for why). */
 export function ListHeader({ view }: { view: ViewConfig }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   // Bumped by handleClear() below purely to force a re-render after it
   // updates filterPickerState.ts (a plain module-level Map, not itself
   // reactive) -- same reason clicking a dialog Apply/close already forces
@@ -92,7 +96,11 @@ export function ListHeader({ view }: { view: ViewConfig }) {
           </Tooltip>
         )}
       </Group>
-      {view.key === "person" && <HomePersonButton />}
+      <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+        {view.key === "person" && <HomePersonButton />}
+        {goqlNamespaceForEndpoint(view.endpoint) && <ColumnsButton onClick={() => setColumnsOpen(true)} />}
+      </Group>
+      <ColumnSettingsDialog view={view} opened={columnsOpen} onClose={() => setColumnsOpen(false)} />
       {namespace && (
         <FilterPickerDialog
           opened={filtersOpen}
@@ -103,6 +111,22 @@ export function ListHeader({ view }: { view: ViewConfig }) {
         />
       )}
     </Group>
+  );
+}
+
+/** Opens the list's Columns dialog (ColumnSettingsDialog.tsx). */
+function ColumnsButton({ onClick }: { onClick: () => void }) {
+  const label = t("Columns");
+  return (
+    <Tooltip label={label} openDelay={400}>
+      <ActionIcon variant="subtle" color="gray" onClick={onClick} aria-label={label}>
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </ActionIcon>
+    </Tooltip>
   );
 }
 
