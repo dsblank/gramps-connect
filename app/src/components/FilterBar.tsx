@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Stack, Group, TextInput, CloseButton, Text, Tooltip, Checkbox } from "@mantine/core";
+import { Stack, Group, TextInput, CloseButton, Text, Tooltip, Checkbox, Combobox } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import { getSearchHelp } from "../store/searchHelp";
@@ -10,6 +10,8 @@ import { SearchHelpDialog } from "./SearchHelpDialog";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
 import { logActivity } from "../store/activityLog";
+import { goqlNamespaceForEndpoint } from "../store/goqlCompletion";
+import { GoqlCompletionDropdown, useGoqlCompletion } from "./goqlCompletion/useGoqlCompletion";
 
 interface FilterBarProps {
   view: ViewConfig;
@@ -61,6 +63,19 @@ export function FilterBar({ view }: FilterBarProps) {
   // simpleSearch modes -- Person's help text still needs editing to cover
   // plain-text mode too (see getSearchHelp's PERSON_HELP).
   const help = getSearchHelp(view);
+
+  // Tab completion, in GOQL mode only -- see useGoqlCompletion. The whole
+  // box is the expression.
+  const goqlActive = !view.simpleSearch || useGoql;
+  const goqlNamespace = goqlNamespaceForEndpoint(view.endpoint);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const completion = useGoqlCompletion({
+    value: input,
+    setValue: handleTextChange,
+    fieldRef: inputRef,
+    locate: (value) =>
+      goqlActive && goqlNamespace ? { namespace: goqlNamespace, source: value, offset: 0 } : null,
+  });
 
   // The store's filter can also be cleared from outside this component --
   // a person link in PersonDetail drops it before jumping to the target
@@ -180,13 +195,28 @@ export function FilterBar({ view }: FilterBarProps) {
     <Stack gap={4} mb="sm">
       <Group gap="xs" wrap="nowrap">
         <Text size="sm" ff="monospace" c="dimmed">{t("Search:")}</Text>
+        <Combobox
+          store={completion.combobox}
+          onOptionSubmit={completion.accept}
+          position="bottom-start"
+          width={320}
+          withinPortal
+        >
+        <Combobox.Target withKeyboardNavigation={false}>
         <TextInput
+          ref={inputRef}
           id="where-expr"
           size="sm"
           ff="monospace"
           style={{ flex: 1 }}
           value={input}
-          placeholder={view.simpleSearch && !useGoql ? view.simpleSearch.placeholder : view.wherePlaceholder}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={
+            view.simpleSearch && !useGoql
+              ? view.simpleSearch.placeholder
+              : [view.wherePlaceholder, goqlNamespace && t("<Tab> completes")].filter(Boolean).join(" · ")
+          }
           disabled={applying}
           // A very light blue background while `input` matches what's
           // actually applied -- plain (no background) whenever it's dirty,
@@ -196,8 +226,14 @@ export function FilterBar({ view }: FilterBarProps) {
           // tint RefPickerField.tsx uses for its "new" badge, so this stays
           // subtle (and still legible) in dark mode too.
           styles={{ input: { backgroundColor: dirty ? undefined : "var(--mantine-color-blue-light)" } }}
-          onChange={(e) => handleTextChange(e.currentTarget.value)}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            handleTextChange(value);
+            completion.handleChange(value, e.currentTarget.selectionStart ?? value.length);
+          }}
+          onBlur={completion.close}
           onKeyDown={(e) => {
+            if (completion.handleKeyDown(e)) return;
             if (e.key === "Enter") submit();
           }}
           rightSection={
@@ -214,6 +250,9 @@ export function FilterBar({ view }: FilterBarProps) {
             )
           }
         />
+        </Combobox.Target>
+        <GoqlCompletionDropdown completions={completion.completions} />
+        </Combobox>
         {view.simpleSearch && (
           <Tooltip label={t("Use Gramps Object Query Language")} withArrow>
             <Checkbox

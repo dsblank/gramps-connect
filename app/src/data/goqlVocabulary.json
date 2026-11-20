@@ -1,0 +1,6148 @@
+{
+ "goql_version": "0.5.12",
+ "vocabularies": {
+  "Citation": {
+   "collections": {
+    "backlinks": null,
+    "media": "Media",
+    "notes": "Note",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "change": "integer",
+    "confidence": "integer",
+    "gramps_id": "string",
+    "handle": "string",
+    "page": "string",
+    "private": "boolean",
+    "source_handle": "string"
+   },
+   "columns": [
+    "change",
+    "confidence",
+    "gramps_id",
+    "handle",
+    "page",
+    "private",
+    "source_handle"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "attribute_list": {
+     "items": {
+      "fields": {
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "SrcAttributeType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "value": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "confidence": {
+     "constants": {
+      "class": "Citation",
+      "prefix": "CONF_"
+     },
+     "type": "integer"
+    },
+    "date": {
+     "fields": {
+      "calendar": {
+       "constants": {
+        "class": "Date",
+        "prefix": "CAL_"
+       },
+       "type": "integer"
+      },
+      "dateval": {
+       "items": {
+        "type": [
+         "integer",
+         "boolean"
+        ]
+       },
+       "type": "array"
+      },
+      "format": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "modifier": {
+       "constants": {
+        "class": "Date",
+        "prefix": "MOD_"
+       },
+       "type": "integer"
+      },
+      "newyear": {
+       "constants": {
+        "class": "Date",
+        "prefix": "NEWYEAR_"
+       },
+       "type": "integer"
+      },
+      "quality": {
+       "constants": {
+        "class": "Date",
+        "prefix": "QUAL_"
+       },
+       "type": "integer"
+      },
+      "sortval": {
+       "type": "integer"
+      },
+      "text": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "media_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "rect": {
+        "type": null
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "page": {
+     "type": "string"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "source_handle": {
+     "type": "string"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Citation",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {
+    "source": "Source"
+   }
+  },
+  "Event": {
+   "collections": {
+    "backlinks": null,
+    "citations": "Citation",
+    "media": "Media",
+    "notes": "Note",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "change": "integer",
+    "description": "string",
+    "gramps_id": "string",
+    "handle": "string",
+    "place": "string",
+    "private": "boolean"
+   },
+   "columns": [
+    "change",
+    "description",
+    "gramps_id",
+    "handle",
+    "place",
+    "private"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "attribute_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "AttributeType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "value": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "citation_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "date": {
+     "fields": {
+      "calendar": {
+       "constants": {
+        "class": "Date",
+        "prefix": "CAL_"
+       },
+       "type": "integer"
+      },
+      "dateval": {
+       "items": {
+        "type": [
+         "integer",
+         "boolean"
+        ]
+       },
+       "type": "array"
+      },
+      "format": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "modifier": {
+       "constants": {
+        "class": "Date",
+        "prefix": "MOD_"
+       },
+       "type": "integer"
+      },
+      "newyear": {
+       "constants": {
+        "class": "Date",
+        "prefix": "NEWYEAR_"
+       },
+       "type": "integer"
+      },
+      "quality": {
+       "constants": {
+        "class": "Date",
+        "prefix": "QUAL_"
+       },
+       "type": "integer"
+      },
+      "sortval": {
+       "type": "integer"
+      },
+      "text": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "description": {
+     "type": "string"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "media_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "rect": {
+        "type": null
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "place": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "type": {
+     "fields": {
+      "string": {
+       "type": "string"
+      },
+      "value": {
+       "constants": {
+        "class": "EventType",
+        "prefix": ""
+       },
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Event",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {
+    "place": "Place"
+   }
+  },
+  "Family": {
+   "collections": {
+    "backlinks": null,
+    "children": "Person",
+    "citations": "Citation",
+    "events": "Event",
+    "media": "Media",
+    "notes": "Note",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "change": "integer",
+    "father_handle": "string",
+    "gramps_id": "string",
+    "handle": "string",
+    "mother_handle": "string",
+    "private": "boolean"
+   },
+   "columns": [
+    "change",
+    "father_handle",
+    "gramps_id",
+    "handle",
+    "mother_handle",
+    "private"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "attribute_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "AttributeType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "value": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "child_ref_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "frel": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "ChildRefType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "mrel": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "ChildRefType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "citation_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "complete": {
+     "type": "integer"
+    },
+    "event_ref_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "ref": {
+        "type": "string"
+       },
+       "role": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "EventRoleType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "father_handle": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "lds_ord_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "date": {
+        "fields": {
+         "calendar": {
+          "constants": {
+           "class": "Date",
+           "prefix": "CAL_"
+          },
+          "type": "integer"
+         },
+         "dateval": {
+          "items": {
+           "type": [
+            "integer",
+            "boolean"
+           ]
+          },
+          "type": "array"
+         },
+         "format": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "modifier": {
+          "constants": {
+           "class": "Date",
+           "prefix": "MOD_"
+          },
+          "type": "integer"
+         },
+         "newyear": {
+          "constants": {
+           "class": "Date",
+           "prefix": "NEWYEAR_"
+          },
+          "type": "integer"
+         },
+         "quality": {
+          "constants": {
+           "class": "Date",
+           "prefix": "QUAL_"
+          },
+          "type": "integer"
+         },
+         "sortval": {
+          "type": "integer"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "famc": {
+        "type": [
+         "null",
+         "string"
+        ]
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "place": {
+        "type": "string"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "status": {
+        "type": "integer"
+       },
+       "temple": {
+        "type": "string"
+       },
+       "type": {
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "media_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "rect": {
+        "type": null
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "mother_handle": {
+     "type": [
+      "string",
+      "null"
+     ]
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "type": {
+     "fields": {
+      "string": {
+       "type": "string"
+      },
+      "value": {
+       "constants": {
+        "class": "FamilyRelType",
+        "prefix": ""
+       },
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Family",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {
+    "father": "Person",
+    "mother": "Person"
+   }
+  },
+  "Media": {
+   "collections": {
+    "backlinks": null,
+    "citations": "Citation",
+    "notes": "Note",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "change": "integer",
+    "checksum": "string",
+    "desc": "string",
+    "gramps_id": "string",
+    "handle": "string",
+    "mime": "string",
+    "path": "string",
+    "private": "boolean"
+   },
+   "columns": [
+    "change",
+    "checksum",
+    "desc",
+    "gramps_id",
+    "handle",
+    "mime",
+    "path",
+    "private"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "attribute_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "AttributeType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "value": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "checksum": {
+     "type": "string"
+    },
+    "citation_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "date": {
+     "fields": {
+      "calendar": {
+       "constants": {
+        "class": "Date",
+        "prefix": "CAL_"
+       },
+       "type": "integer"
+      },
+      "dateval": {
+       "items": {
+        "type": [
+         "integer",
+         "boolean"
+        ]
+       },
+       "type": "array"
+      },
+      "format": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "modifier": {
+       "constants": {
+        "class": "Date",
+        "prefix": "MOD_"
+       },
+       "type": "integer"
+      },
+      "newyear": {
+       "constants": {
+        "class": "Date",
+        "prefix": "NEWYEAR_"
+       },
+       "type": "integer"
+      },
+      "quality": {
+       "constants": {
+        "class": "Date",
+        "prefix": "QUAL_"
+       },
+       "type": "integer"
+      },
+      "sortval": {
+       "type": "integer"
+      },
+      "text": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "desc": {
+     "type": "string"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "mime": {
+     "type": "string"
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "path": {
+     "type": "string"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "thumb": {
+     "type": [
+      "string",
+      "null"
+     ]
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Media",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {}
+  },
+  "Note": {
+   "collections": {
+    "backlinks": null,
+    "tags": "Tag"
+   },
+   "column_types": {
+    "change": "integer",
+    "format": "integer",
+    "gramps_id": "string",
+    "handle": "string",
+    "private": "boolean"
+   },
+   "columns": [
+    "change",
+    "format",
+    "gramps_id",
+    "handle",
+    "private"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "change": {
+     "type": "integer"
+    },
+    "format": {
+     "constants": {
+      "class": "Note",
+      "prefix": ""
+     },
+     "type": "integer"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "text": {
+     "fields": {
+      "string": {
+       "type": "string"
+      },
+      "tags": {
+       "items": {
+        "fields": {
+         "name": {
+          "fields": {
+           "string": {
+            "type": "string"
+           },
+           "value": {
+            "constants": {
+             "class": "StyledTextTagType",
+             "prefix": ""
+            },
+            "type": "integer"
+           }
+          },
+          "type": "object"
+         },
+         "ranges": {
+          "items": {
+           "items": {
+            "type": "integer"
+           },
+           "type": "array"
+          },
+          "type": "array"
+         },
+         "value": {
+          "type": [
+           "null",
+           "string",
+           "integer"
+          ]
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      }
+     },
+     "type": "object"
+    },
+    "type": {
+     "fields": {
+      "string": {
+       "type": "string"
+      },
+      "value": {
+       "constants": {
+        "class": "NoteType",
+        "prefix": ""
+       },
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Note",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {}
+  },
+  "Person": {
+   "collections": {
+    "associations": "Person",
+    "backlinks": null,
+    "child_refs": null,
+    "citations": "Citation",
+    "events": "Event",
+    "families": "Family",
+    "media": "Media",
+    "notes": "Note",
+    "parent_families": "Family",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "birth_ref_index": "integer",
+    "change": "integer",
+    "death_ref_index": "integer",
+    "gender": "integer",
+    "given_name": "string",
+    "gramps_id": "string",
+    "handle": "string",
+    "private": "boolean",
+    "surname": "string"
+   },
+   "columns": [
+    "birth_ref_index",
+    "change",
+    "death_ref_index",
+    "gender",
+    "given_name",
+    "gramps_id",
+    "handle",
+    "private",
+    "surname"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "address_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "city": {
+        "type": "string"
+       },
+       "country": {
+        "type": "string"
+       },
+       "county": {
+        "type": "string"
+       },
+       "date": {
+        "fields": {
+         "calendar": {
+          "constants": {
+           "class": "Date",
+           "prefix": "CAL_"
+          },
+          "type": "integer"
+         },
+         "dateval": {
+          "items": {
+           "type": [
+            "integer",
+            "boolean"
+           ]
+          },
+          "type": "array"
+         },
+         "format": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "modifier": {
+          "constants": {
+           "class": "Date",
+           "prefix": "MOD_"
+          },
+          "type": "integer"
+         },
+         "newyear": {
+          "constants": {
+           "class": "Date",
+           "prefix": "NEWYEAR_"
+          },
+          "type": "integer"
+         },
+         "quality": {
+          "constants": {
+           "class": "Date",
+           "prefix": "QUAL_"
+          },
+          "type": "integer"
+         },
+         "sortval": {
+          "type": "integer"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "locality": {
+        "type": "string"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "phone": {
+        "type": "string"
+       },
+       "postal": {
+        "type": "string"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "state": {
+        "type": "string"
+       },
+       "street": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "alternate_names": {
+     "items": {
+      "fields": {
+       "call": {
+        "type": "string"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "date": {
+        "fields": {
+         "calendar": {
+          "constants": {
+           "class": "Date",
+           "prefix": "CAL_"
+          },
+          "type": "integer"
+         },
+         "dateval": {
+          "items": {
+           "type": [
+            "integer",
+            "boolean"
+           ]
+          },
+          "type": "array"
+         },
+         "format": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "modifier": {
+          "constants": {
+           "class": "Date",
+           "prefix": "MOD_"
+          },
+          "type": "integer"
+         },
+         "newyear": {
+          "constants": {
+           "class": "Date",
+           "prefix": "NEWYEAR_"
+          },
+          "type": "integer"
+         },
+         "quality": {
+          "constants": {
+           "class": "Date",
+           "prefix": "QUAL_"
+          },
+          "type": "integer"
+         },
+         "sortval": {
+          "type": "integer"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "display_as": {
+        "type": "integer"
+       },
+       "famnick": {
+        "type": "string"
+       },
+       "first_name": {
+        "type": "string"
+       },
+       "group_as": {
+        "type": "string"
+       },
+       "nick": {
+        "type": "string"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "sort_as": {
+        "type": "integer"
+       },
+       "suffix": {
+        "type": "string"
+       },
+       "surname_list": {
+        "items": {
+         "fields": {
+          "connector": {
+           "type": "string"
+          },
+          "origintype": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "NameOriginType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "prefix": {
+           "type": "string"
+          },
+          "primary": {
+           "type": "boolean"
+          },
+          "surname": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "title": {
+        "type": "string"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "NameType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "attribute_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "AttributeType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "value": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "birth_ref_index": {
+     "type": "integer"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "citation_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "death_ref_index": {
+     "type": "integer"
+    },
+    "event_ref_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "ref": {
+        "type": "string"
+       },
+       "role": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "EventRoleType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "family_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "gender": {
+     "constants": {
+      "class": "Person",
+      "prefix": ""
+     },
+     "type": "integer"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "lds_ord_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "date": {
+        "fields": {
+         "calendar": {
+          "constants": {
+           "class": "Date",
+           "prefix": "CAL_"
+          },
+          "type": "integer"
+         },
+         "dateval": {
+          "items": {
+           "type": [
+            "integer",
+            "boolean"
+           ]
+          },
+          "type": "array"
+         },
+         "format": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "modifier": {
+          "constants": {
+           "class": "Date",
+           "prefix": "MOD_"
+          },
+          "type": "integer"
+         },
+         "newyear": {
+          "constants": {
+           "class": "Date",
+           "prefix": "NEWYEAR_"
+          },
+          "type": "integer"
+         },
+         "quality": {
+          "constants": {
+           "class": "Date",
+           "prefix": "QUAL_"
+          },
+          "type": "integer"
+         },
+         "sortval": {
+          "type": "integer"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "famc": {
+        "type": [
+         "null",
+         "string"
+        ]
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "place": {
+        "type": "string"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "status": {
+        "type": "integer"
+       },
+       "temple": {
+        "type": "string"
+       },
+       "type": {
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "media_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "rect": {
+        "type": null
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "parent_family_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "person_ref_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "ref": {
+        "type": "string"
+       },
+       "rel": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "primary_name": {
+     "fields": {
+      "call": {
+       "type": "string"
+      },
+      "citation_list": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "date": {
+       "fields": {
+        "calendar": {
+         "constants": {
+          "class": "Date",
+          "prefix": "CAL_"
+         },
+         "type": "integer"
+        },
+        "dateval": {
+         "items": {
+          "type": [
+           "integer",
+           "boolean"
+          ]
+         },
+         "type": "array"
+        },
+        "format": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "modifier": {
+         "constants": {
+          "class": "Date",
+          "prefix": "MOD_"
+         },
+         "type": "integer"
+        },
+        "newyear": {
+         "constants": {
+          "class": "Date",
+          "prefix": "NEWYEAR_"
+         },
+         "type": "integer"
+        },
+        "quality": {
+         "constants": {
+          "class": "Date",
+          "prefix": "QUAL_"
+         },
+         "type": "integer"
+        },
+        "sortval": {
+         "type": "integer"
+        },
+        "text": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "display_as": {
+       "type": "integer"
+      },
+      "famnick": {
+       "type": "string"
+      },
+      "first_name": {
+       "type": "string"
+      },
+      "group_as": {
+       "type": "string"
+      },
+      "nick": {
+       "type": "string"
+      },
+      "note_list": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "private": {
+       "type": "boolean"
+      },
+      "sort_as": {
+       "type": "integer"
+      },
+      "suffix": {
+       "type": "string"
+      },
+      "surname_list": {
+       "items": {
+        "fields": {
+         "connector": {
+          "type": "string"
+         },
+         "origintype": {
+          "fields": {
+           "string": {
+            "type": "string"
+           },
+           "value": {
+            "constants": {
+             "class": "NameOriginType",
+             "prefix": ""
+            },
+            "type": "integer"
+           }
+          },
+          "type": "object"
+         },
+         "prefix": {
+          "type": "string"
+         },
+         "primary": {
+          "type": "boolean"
+         },
+         "surname": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": "array"
+      },
+      "title": {
+       "type": "string"
+      },
+      "type": {
+       "fields": {
+        "string": {
+         "type": "string"
+        },
+        "value": {
+         "constants": {
+          "class": "NameType",
+          "prefix": ""
+         },
+         "type": "integer"
+        }
+       },
+       "type": "object"
+      }
+     },
+     "type": "object"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "urls": {
+     "items": {
+      "fields": {
+       "desc": {
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "UrlType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Person",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {
+    "birth": "Event",
+    "death": "Event"
+   }
+  },
+  "Place": {
+   "collections": {
+    "backlinks": null,
+    "citations": "Citation",
+    "enclosing_places": "Place",
+    "media": "Media",
+    "notes": "Note",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "change": "integer",
+    "code": "string",
+    "enclosed_by": "string",
+    "gramps_id": "string",
+    "handle": "string",
+    "lat": "string",
+    "long": "string",
+    "private": "boolean",
+    "title": "string"
+   },
+   "columns": [
+    "change",
+    "code",
+    "enclosed_by",
+    "gramps_id",
+    "handle",
+    "lat",
+    "long",
+    "private",
+    "title"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "alt_loc": {
+     "items": {
+      "fields": {
+       "city": {
+        "type": "string"
+       },
+       "country": {
+        "type": "string"
+       },
+       "county": {
+        "type": "string"
+       },
+       "locality": {
+        "type": "string"
+       },
+       "parish": {
+        "type": "string"
+       },
+       "phone": {
+        "type": "string"
+       },
+       "postal": {
+        "type": "string"
+       },
+       "state": {
+        "type": "string"
+       },
+       "street": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "alt_names": {
+     "items": {
+      "fields": {
+       "date": {
+        "fields": {
+         "calendar": {
+          "constants": {
+           "class": "Date",
+           "prefix": "CAL_"
+          },
+          "type": "integer"
+         },
+         "dateval": {
+          "items": {
+           "type": [
+            "integer",
+            "boolean"
+           ]
+          },
+          "type": "array"
+         },
+         "format": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "modifier": {
+          "constants": {
+           "class": "Date",
+           "prefix": "MOD_"
+          },
+          "type": "integer"
+         },
+         "newyear": {
+          "constants": {
+           "class": "Date",
+           "prefix": "NEWYEAR_"
+          },
+          "type": "integer"
+         },
+         "quality": {
+          "constants": {
+           "class": "Date",
+           "prefix": "QUAL_"
+          },
+          "type": "integer"
+         },
+         "sortval": {
+          "type": "integer"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "lang": {
+        "type": "string"
+       },
+       "value": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "citation_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "code": {
+     "type": "string"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "lat": {
+     "type": "string"
+    },
+    "long": {
+     "type": "string"
+    },
+    "media_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "rect": {
+        "type": null
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "name": {
+     "fields": {
+      "date": {
+       "fields": {
+        "calendar": {
+         "constants": {
+          "class": "Date",
+          "prefix": "CAL_"
+         },
+         "type": "integer"
+        },
+        "dateval": {
+         "items": {
+          "type": [
+           "integer",
+           "boolean"
+          ]
+         },
+         "type": "array"
+        },
+        "format": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "modifier": {
+         "constants": {
+          "class": "Date",
+          "prefix": "MOD_"
+         },
+         "type": "integer"
+        },
+        "newyear": {
+         "constants": {
+          "class": "Date",
+          "prefix": "NEWYEAR_"
+         },
+         "type": "integer"
+        },
+        "quality": {
+         "constants": {
+          "class": "Date",
+          "prefix": "QUAL_"
+         },
+         "type": "integer"
+        },
+        "sortval": {
+         "type": "integer"
+        },
+        "text": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "lang": {
+       "type": "string"
+      },
+      "value": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "place_type": {
+     "fields": {
+      "string": {
+       "type": "string"
+      },
+      "value": {
+       "constants": {
+        "class": "PlaceType",
+        "prefix": ""
+       },
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "placeref_list": {
+     "items": {
+      "fields": {
+       "date": {
+        "fields": {
+         "calendar": {
+          "constants": {
+           "class": "Date",
+           "prefix": "CAL_"
+          },
+          "type": "integer"
+         },
+         "dateval": {
+          "items": {
+           "type": [
+            "integer",
+            "boolean"
+           ]
+          },
+          "type": "array"
+         },
+         "format": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "modifier": {
+          "constants": {
+           "class": "Date",
+           "prefix": "MOD_"
+          },
+          "type": "integer"
+         },
+         "newyear": {
+          "constants": {
+           "class": "Date",
+           "prefix": "NEWYEAR_"
+          },
+          "type": "integer"
+         },
+         "quality": {
+          "constants": {
+           "class": "Date",
+           "prefix": "QUAL_"
+          },
+          "type": "integer"
+         },
+         "sortval": {
+          "type": "integer"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "title": {
+     "type": "string"
+    },
+    "urls": {
+     "items": {
+      "fields": {
+       "desc": {
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "UrlType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Place",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {
+    "enclosed_by": "Place"
+   }
+  },
+  "Repository": {
+   "collections": {
+    "backlinks": null,
+    "notes": "Note",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "change": "integer",
+    "gramps_id": "string",
+    "handle": "string",
+    "name": "string",
+    "private": "boolean"
+   },
+   "columns": [
+    "change",
+    "gramps_id",
+    "handle",
+    "name",
+    "private"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "address_list": {
+     "items": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "city": {
+        "type": "string"
+       },
+       "country": {
+        "type": "string"
+       },
+       "county": {
+        "type": "string"
+       },
+       "date": {
+        "fields": {
+         "calendar": {
+          "constants": {
+           "class": "Date",
+           "prefix": "CAL_"
+          },
+          "type": "integer"
+         },
+         "dateval": {
+          "items": {
+           "type": [
+            "integer",
+            "boolean"
+           ]
+          },
+          "type": "array"
+         },
+         "format": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "modifier": {
+          "constants": {
+           "class": "Date",
+           "prefix": "MOD_"
+          },
+          "type": "integer"
+         },
+         "newyear": {
+          "constants": {
+           "class": "Date",
+           "prefix": "NEWYEAR_"
+          },
+          "type": "integer"
+         },
+         "quality": {
+          "constants": {
+           "class": "Date",
+           "prefix": "QUAL_"
+          },
+          "type": "integer"
+         },
+         "sortval": {
+          "type": "integer"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "locality": {
+        "type": "string"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "phone": {
+        "type": "string"
+       },
+       "postal": {
+        "type": "string"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "state": {
+        "type": "string"
+       },
+       "street": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "name": {
+     "type": "string"
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "type": {
+     "fields": {
+      "string": {
+       "type": "string"
+      },
+      "value": {
+       "constants": {
+        "class": "RepositoryType",
+        "prefix": ""
+       },
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "urls": {
+     "items": {
+      "fields": {
+       "desc": {
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "UrlType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Repository",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {}
+  },
+  "Source": {
+   "collections": {
+    "backlinks": null,
+    "media": "Media",
+    "notes": "Note",
+    "repositories": "Repository",
+    "tags": "Tag"
+   },
+   "column_types": {
+    "abbrev": "string",
+    "author": "string",
+    "change": "integer",
+    "gramps_id": "string",
+    "handle": "string",
+    "private": "boolean",
+    "pubinfo": "string",
+    "title": "string"
+   },
+   "columns": [
+    "abbrev",
+    "author",
+    "change",
+    "gramps_id",
+    "handle",
+    "private",
+    "pubinfo",
+    "title"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "abbrev": {
+     "type": "string"
+    },
+    "attribute_list": {
+     "items": {
+      "fields": {
+       "private": {
+        "type": "boolean"
+       },
+       "type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "SrcAttributeType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "value": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "author": {
+     "type": "string"
+    },
+    "change": {
+     "type": "integer"
+    },
+    "gramps_id": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "media_list": {
+     "items": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "rect": {
+        "type": null
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "note_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "private": {
+     "type": "boolean"
+    },
+    "pubinfo": {
+     "type": "string"
+    },
+    "reporef_list": {
+     "items": {
+      "fields": {
+       "call_number": {
+        "type": "string"
+       },
+       "media_type": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "SourceMediaType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "tag_list": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "title": {
+     "type": "string"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Source",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {}
+  },
+  "Tag": {
+   "collections": {
+    "backlinks": null
+   },
+   "column_types": {
+    "change": "integer",
+    "color": "string",
+    "handle": "string",
+    "name": "string",
+    "priority": "integer"
+   },
+   "columns": [
+    "change",
+    "color",
+    "handle",
+    "name",
+    "priority"
+   ],
+   "constants": {
+    "AttributeType": [
+     "AGE",
+     "AGENCY",
+     "CASTE",
+     "CAUSE",
+     "CUSTOM",
+     "DESCRIPTION",
+     "FATHER_AGE",
+     "ID",
+     "MOTHER_AGE",
+     "NATIONAL",
+     "NICKNAME",
+     "NUM_CHILD",
+     "OCCUPATION",
+     "SSN",
+     "TIME",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "ChildRefType": [
+     "ADOPTED",
+     "BIRTH",
+     "CUSTOM",
+     "FOSTER",
+     "NONE",
+     "SPONSORED",
+     "STEPCHILD",
+     "UNKNOWN"
+    ],
+    "Citation": [
+     "CONF_HIGH",
+     "CONF_LOW",
+     "CONF_NORMAL",
+     "CONF_VERY_HIGH",
+     "CONF_VERY_LOW"
+    ],
+    "Date": [
+     "CAL_FRENCH",
+     "CAL_GREGORIAN",
+     "CAL_HEBREW",
+     "CAL_ISLAMIC",
+     "CAL_JULIAN",
+     "CAL_PERSIAN",
+     "CAL_SWEDISH",
+     "MOD_ABOUT",
+     "MOD_AFTER",
+     "MOD_BEFORE",
+     "MOD_FROM",
+     "MOD_NONE",
+     "MOD_RANGE",
+     "MOD_SPAN",
+     "MOD_TEXTONLY",
+     "MOD_TO",
+     "NEWYEAR_JAN1",
+     "NEWYEAR_MAR1",
+     "NEWYEAR_MAR25",
+     "NEWYEAR_SEP1",
+     "QUAL_CALCULATED",
+     "QUAL_ESTIMATED",
+     "QUAL_NONE"
+    ],
+    "EventRoleType": [
+     "AIDE",
+     "BRIDE",
+     "CELEBRANT",
+     "CHILD",
+     "CLERGY",
+     "CUSTOM",
+     "FAMILY",
+     "FATHER",
+     "FRIEND",
+     "GODPARENT",
+     "GROOM",
+     "INFORMANT",
+     "MOTHER",
+     "MULTIPLE",
+     "NEIGHBOR",
+     "OFFICIATOR",
+     "PARENT",
+     "PRIMARY",
+     "UNKNOWN",
+     "WITNESS"
+    ],
+    "EventType": [
+     "ADOPT",
+     "ADULT_CHRISTEN",
+     "ANNULMENT",
+     "BAPTISM",
+     "BAR_MITZVAH",
+     "BAS_MITZVAH",
+     "BIRTH",
+     "BLESS",
+     "BURIAL",
+     "CAUSE_DEATH",
+     "CENSUS",
+     "CHRISTEN",
+     "CONFIRMATION",
+     "CREMATION",
+     "CUSTOM",
+     "DEATH",
+     "DEGREE",
+     "DIVORCE",
+     "DIV_FILING",
+     "EDUCATION",
+     "ELECTED",
+     "EMIGRATION",
+     "ENGAGEMENT",
+     "FIRST_COMMUN",
+     "GRADUATION",
+     "IMMIGRATION",
+     "MARRIAGE",
+     "MARR_ALT",
+     "MARR_BANNS",
+     "MARR_CONTR",
+     "MARR_LIC",
+     "MARR_SETTL",
+     "MED_INFO",
+     "MILITARY_SERV",
+     "NATURALIZATION",
+     "NOB_TITLE",
+     "NUM_MARRIAGES",
+     "OCCUPATION",
+     "ORDINATION",
+     "PROBATE",
+     "PROPERTY",
+     "RELIGION",
+     "RESIDENCE",
+     "RETIREMENT",
+     "STILLBIRTH",
+     "UNKNOWN",
+     "WILL"
+    ],
+    "FamilyRelType": [
+     "CIVIL_UNION",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN",
+     "UNMARRIED"
+    ],
+    "MarkerType": [
+     "COMPLETE",
+     "CUSTOM",
+     "NONE",
+     "TODO_TYPE"
+    ],
+    "NameOriginType": [
+     "CUSTOM",
+     "FEUDAL",
+     "GIVEN",
+     "INHERITED",
+     "LOCATION",
+     "MATRILINEAL",
+     "MATRONYMIC",
+     "NONE",
+     "OCCUPATION",
+     "PATRILINEAL",
+     "PATRONYMIC",
+     "PSEUDONYM",
+     "TAKEN",
+     "UNKNOWN"
+    ],
+    "NameType": [
+     "AKA",
+     "BIRTH",
+     "CUSTOM",
+     "MARRIED",
+     "UNKNOWN"
+    ],
+    "Note": [
+     "FLOWED",
+     "FORMATTED"
+    ],
+    "NoteType": [
+     "ADDRESS",
+     "ANALYSIS",
+     "ASSOCIATION",
+     "ATTRIBUTE",
+     "CHILDREF",
+     "CITATION",
+     "CUSTOM",
+     "EVENT",
+     "EVENTREF",
+     "FAMILY",
+     "GENERAL",
+     "HTML_CODE",
+     "LDS",
+     "LINK",
+     "MEDIA",
+     "MEDIAREF",
+     "PERSON",
+     "PERSONNAME",
+     "PLACE",
+     "REPO",
+     "REPOREF",
+     "REPORT_TEXT",
+     "RESEARCH",
+     "SOURCE",
+     "SOURCEREF",
+     "SOURCE_TEXT",
+     "TODO",
+     "TRANSCRIPT",
+     "UNKNOWN"
+    ],
+    "Person": [
+     "FEMALE",
+     "MALE",
+     "OTHER",
+     "UNKNOWN"
+    ],
+    "PlaceType": [
+     "BOROUGH",
+     "BUILDING",
+     "CITY",
+     "COUNTRY",
+     "COUNTY",
+     "CUSTOM",
+     "DEPARTMENT",
+     "DISTRICT",
+     "FARM",
+     "HAMLET",
+     "LOCALITY",
+     "MUNICIPALITY",
+     "NEIGHBORHOOD",
+     "NUMBER",
+     "PARISH",
+     "PROVINCE",
+     "REGION",
+     "STATE",
+     "STREET",
+     "TOWN",
+     "UNKNOWN",
+     "VILLAGE"
+    ],
+    "RepositoryType": [
+     "ALBUM",
+     "ARCHIVE",
+     "BOOKSTORE",
+     "CEMETERY",
+     "CHURCH",
+     "COLLECTION",
+     "CUSTOM",
+     "LIBRARY",
+     "SAFE",
+     "UNKNOWN",
+     "WEBSITE"
+    ],
+    "SourceMediaType": [
+     "AUDIO",
+     "BOOK",
+     "CARD",
+     "CUSTOM",
+     "ELECTRONIC",
+     "FICHE",
+     "FILM",
+     "MAGAZINE",
+     "MANUSCRIPT",
+     "MAP",
+     "NEWSPAPER",
+     "PHOTO",
+     "TOMBSTONE",
+     "UNKNOWN",
+     "VIDEO"
+    ],
+    "SrcAttributeType": [
+     "CUSTOM",
+     "UNKNOWN"
+    ],
+    "StyledTextTagType": [
+     "BOLD",
+     "FONTCOLOR",
+     "FONTFACE",
+     "FONTSIZE",
+     "HIGHLIGHT",
+     "ITALIC",
+     "LINK",
+     "NONE_TYPE",
+     "STRIKETHROUGH",
+     "SUBSCRIPT",
+     "SUPERSCRIPT",
+     "UNDERLINE"
+    ],
+    "UrlType": [
+     "CUSTOM",
+     "EMAIL",
+     "UNKNOWN",
+     "WEB_FTP",
+     "WEB_HOME",
+     "WEB_SEARCH"
+    ]
+   },
+   "env": "Env",
+   "fields": {
+    "change": {
+     "type": "integer"
+    },
+    "color": {
+     "type": "string"
+    },
+    "handle": {
+     "type": "string"
+    },
+    "name": {
+     "type": "string"
+    },
+    "priority": {
+     "type": "integer"
+    }
+   },
+   "format_version": 3,
+   "functions": [
+    "any",
+    "count",
+    "Date",
+    "exists",
+    "len",
+    "like",
+    "regex"
+   ],
+   "keywords": [
+    "and",
+    "or",
+    "not",
+    "in",
+    "is",
+    "None",
+    "True",
+    "False",
+    "for",
+    "if"
+   ],
+   "namespace": "Tag",
+   "operators": [
+    "==",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">="
+   ],
+   "relationships": {}
+  }
+ }
+}

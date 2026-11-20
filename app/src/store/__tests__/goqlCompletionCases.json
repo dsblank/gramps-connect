@@ -1,0 +1,1140 @@
+{
+  "_comment": "Completion cases shared by every implementation of completion.complete_from_vocabularies() (this package's own, and ports to other languages that load `python -m gramps_object_query_language.vocabulary` output). `cursor` defaults to the end of `source`; Suggestions depend on the grammar position before the word (start of a condition, after an operand, after a comparison). `expect` is the exact list of names, in order; `contains`/`excludes` check membership only; `kind` maps a name to its expected kind. A name typed in full that can go on is returned with its continuation (`date.`, `dateval[`).",
+  "cases": [
+    {
+      "namespace": "Person",
+      "source": "birth.date.so",
+      "expect": [
+        "sortval"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == Person.",
+      "expect": [
+        "FEMALE",
+        "MALE",
+        "OTHER",
+        "UNKNOWN"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == Person.M",
+      "expect": [
+        "MALE"
+      ],
+      "start": 17
+    },
+    {
+      "namespace": "Person",
+      "source": "bi",
+      "expect": [
+        "birth",
+        "birth_ref_index"
+      ],
+      "kind": {
+        "birth": "relationship",
+        "birth_ref_index": "column"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.surname_list[0].",
+      "expect": [
+        "connector",
+        "origintype",
+        "prefix",
+        "primary",
+        "surname"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.surname_list.",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e. for e in events)",
+      "cursor": 6,
+      "contains": [
+        "date",
+        "description",
+        "place",
+        "type"
+      ],
+      "kind": {
+        "place": "relationship"
+      }
+    },
+    {
+      "namespace": "Family",
+      "source": "any(c.birth.da for c in children)",
+      "cursor": 14,
+      "expect": [
+        "date"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(x.surname == 'a' for x in primary_name.surname_list) and x.",
+      "expect": [
+        "connector",
+        "origintype",
+        "prefix",
+        "primary",
+        "surname"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(b. for b in backlinks)",
+      "cursor": 6,
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.date.sortval > 0 for e in events) and e",
+      "contains": [
+        "e.",
+        "events"
+      ],
+      "kind": {
+        "e.": "variable"
+      }
+    },
+    {
+      "namespace": "Family",
+      "source": "fa",
+      "expect": [
+        "father",
+        "father_handle"
+      ],
+      "kind": {
+        "father": "relationship",
+        "father_handle": "column"
+      }
+    },
+    {
+      "namespace": "Family",
+      "source": "father.birth.place.ti",
+      "expect": [
+        "title"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "pla",
+      "expect": [
+        "place"
+      ],
+      "kind": {
+        "place": "relationship"
+      }
+    },
+    {
+      "namespace": "Event",
+      "source": "type.value == EventType.BIR",
+      "expect": [
+        "BIRTH"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "Da",
+      "expect": [
+        "Date"
+      ],
+      "kind": {
+        "Date": "function"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.modifier == Date.MOD_A",
+      "expect": [
+        "MOD_ABOUT",
+        "MOD_AFTER"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "par",
+      "expect": [
+        "parent_families",
+        "parent_family_list"
+      ],
+      "kind": {
+        "parent_families": "collection",
+        "parent_family_list": "field"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "re",
+      "expect": [
+        "regex"
+      ],
+      "kind": {
+        "regex": "function"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "Env.",
+      "env": [
+        "bookmarks",
+        "home"
+      ],
+      "expect": [
+        "bookmarks",
+        "home"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "Env.",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "",
+      "contains": [
+        "any",
+        "birth",
+        "events",
+        "not"
+      ],
+      "excludes": [
+        "==",
+        "and",
+        "in",
+        "Person",
+        "None",
+        "Env"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender ",
+      "expect": [
+        "!=",
+        "<",
+        "<=",
+        "==",
+        ">",
+        ">=",
+        "and",
+        "in",
+        "is",
+        "not",
+        "or"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "g",
+      "excludes": [
+        "=="
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "surname == 'Sm",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "surname == \"it's",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "surname == 'Sm' and gi",
+      "expect": [
+        "given_name"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "f().",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "x == 1.",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "nosuch.",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.sortval > 0 and death.da",
+      "expect": [
+        "date"
+      ],
+      "start": 33
+    },
+    {
+      "namespace": "Person",
+      "source": "gender i",
+      "expect": [
+        "in",
+        "is"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender <",
+      "expect": [
+        "< ",
+        "<="
+      ],
+      "start": 7
+    },
+    {
+      "namespace": "Person",
+      "source": "gender =",
+      "expect": [
+        "=="
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "=",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == ",
+      "expect": [
+        "Person."
+      ],
+      "kind": {
+        "Person.": "constant_class"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "gender is ",
+      "contains": [
+        "not",
+        "None"
+      ],
+      "excludes": [
+        "=="
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender not ",
+      "expect": [
+        "in"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == 1 and ",
+      "contains": [
+        "birth",
+        "any",
+        "not"
+      ],
+      "excludes": [
+        "==",
+        "and",
+        "None"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "surname == 'Sm' a",
+      "expect": [
+        "and"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == Person.MALE o",
+      "expect": [
+        "or"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "(gender == 1) ",
+      "contains": [
+        "and",
+        "or"
+      ],
+      "excludes": [
+        "for",
+        "birth"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.date.sortval > 0 ",
+      "contains": [
+        "for",
+        "if",
+        "and"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.date.sortval > 0 for ",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "not ",
+      "contains": [
+        "birth",
+        "any"
+      ],
+      "excludes": [
+        "and"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "Date(",
+      "expect": [
+        "\""
+      ],
+      "kind": {
+        "\"": "punctuation"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.sortval > Date(",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "Date(birth.",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "like(sur",
+      "expect": [
+        "surname"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "like(",
+      "contains": [
+        "surname",
+        "birth",
+        "primary_name"
+      ],
+      "excludes": [
+        "any",
+        "not",
+        "events",
+        "Env"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "like(surname, ",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "regex(surname, ",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "like(surname ",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "exists(",
+      "expect": [
+        "associations",
+        "backlinks",
+        "child_refs",
+        "citations",
+        "events",
+        "families",
+        "media",
+        "notes",
+        "parent_families",
+        "tags"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "exists(birth.",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "exists(events ",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "count(events, ",
+      "contains": [
+        "birth",
+        "not",
+        "any"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "len(",
+      "contains": [
+        "[",
+        "events",
+        "address_list",
+        "birth"
+      ],
+      "excludes": [
+        "gender",
+        "surname",
+        "any"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "len(father.",
+      "contains": [
+        "attribute_list",
+        "birth"
+      ],
+      "excludes": [
+        "gender",
+        "surname"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.date.sortval > 0 for e in ",
+      "contains": [
+        "events",
+        "event_ref_list"
+      ],
+      "excludes": [
+        "gender",
+        "any",
+        "["
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(e.date.sortval > 0 for e in mother.events) and e.",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "gender in ",
+      "expect": [
+        "["
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender in [",
+      "expect": [
+        "Person."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender in [1, ",
+      "expect": [
+        "Person."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender in [1 ",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "gender in [Person.",
+      "expect": [
+        "FEMALE",
+        "MALE",
+        "OTHER",
+        "UNKNOWN"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "'Sm' in ",
+      "contains": [
+        "surname",
+        "primary_name"
+      ],
+      "excludes": [
+        "[",
+        "any",
+        "events"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == 1 and (",
+      "contains": [
+        "birth",
+        "any",
+        "not"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "len([e for e in events ",
+      "contains": [
+        "for",
+        "if"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "(gender == 1) ",
+      "excludes": [
+        "for",
+        "if"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "address_list[",
+      "expect": [
+        "0"
+      ],
+      "kind": {
+        "0": "index"
+      },
+      "start": 13
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.surname_list[",
+      "expect": [
+        "0"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "father.address_list[",
+      "expect": [
+        "0"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender[",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name[",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "address_list[0",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "address_list[0].ci",
+      "expect": [
+        "citation_list",
+        "city"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.surname_list[0].surname == 'a' ",
+      "excludes": [
+        "for",
+        "if"
+      ],
+      "contains": [
+        "and"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.date",
+      "expect": [
+        "date."
+      ],
+      "start": 13
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.date.dateval",
+      "expect": [
+        "dateval["
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "address_list",
+      "expect": [
+        "address_list["
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name",
+      "expect": [
+        "primary_name."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth",
+      "expect": [
+        "birth.",
+        "birth_ref_index"
+      ],
+      "kind": {
+        "birth.": "relationship"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "gender",
+      "expect": [
+        "gender"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.sortval",
+      "expect": [
+        "sortval"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "events",
+      "expect": [
+        "events"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == Person",
+      "expect": [
+        "Person."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "Env",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "Env",
+      "env": [
+        "home"
+      ],
+      "expect": [
+        "Env."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(s.surname == 'a' for s in primary_name.surname_list) and s",
+      "contains": [
+        "s."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any",
+      "expect": [
+        "any("
+      ],
+      "kind": {
+        "any(": "function"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "Date",
+      "expect": [
+        "Date("
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.modifier == Date",
+      "expect": [
+        "Date."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "exists",
+      "expect": [
+        "exists("
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "not",
+      "expect": [
+        "not ",
+        "note_list",
+        "notes"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender in",
+      "expect": [
+        "in "
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == 1 and",
+      "expect": [
+        "and "
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender ==",
+      "expect": [
+        "== "
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "change == None",
+      "expect": [
+        "None"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "private == True",
+      "expect": [
+        "True"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "change > ",
+      "contains": [
+        "None",
+        "True",
+        "Date",
+        "Person",
+        "EventType",
+        "birth",
+        "gender"
+      ],
+      "excludes": [
+        "==",
+        "and",
+        "any",
+        "not",
+        "Env"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "surname == ",
+      "env": [
+        "home"
+      ],
+      "contains": [
+        "Env"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "",
+      "env": [
+        "home"
+      ],
+      "contains": [
+        "Env"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender == ",
+      "env": [
+        "home"
+      ],
+      "expect": [
+        "Env",
+        "Person."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender in ",
+      "env": [
+        "home"
+      ],
+      "expect": [
+        "[",
+        "Env"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "change in [",
+      "contains": [
+        "\"",
+        "None",
+        "Person"
+      ],
+      "excludes": [
+        "Env",
+        "gender"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type.value == ",
+      "expect": [
+        "EventType."
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type.value != Ev",
+      "expect": [
+        "EventType."
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type.value == EventType.BIR",
+      "expect": [
+        "BIRTH"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.type.value == ",
+      "expect": [
+        "NameType."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "event_ref_list[0].role.value == ",
+      "expect": [
+        "EventRoleType."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.type.value == E for e in events)",
+      "cursor": 21,
+      "expect": [
+        "EventType."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.modifier == ",
+      "expect": [
+        "Date."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.modifier == Date.",
+      "expect": [
+        "MOD_ABOUT",
+        "MOD_AFTER",
+        "MOD_BEFORE",
+        "MOD_FROM",
+        "MOD_NONE",
+        "MOD_RANGE",
+        "MOD_SPAN",
+        "MOD_TEXTONLY",
+        "MOD_TO"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.quality == Date.",
+      "expect": [
+        "QUAL_CALCULATED",
+        "QUAL_ESTIMATED",
+        "QUAL_NONE"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.sortval > Date.",
+      "contains": [
+        "MOD_ABOUT",
+        "QUAL_NONE",
+        "CAL_JULIAN"
+      ]
+    },
+    {
+      "namespace": "Citation",
+      "source": "confidence >= ",
+      "expect": [
+        "Citation."
+      ]
+    },
+    {
+      "namespace": "Citation",
+      "source": "confidence >= Citation.",
+      "expect": [
+        "CONF_HIGH",
+        "CONF_LOW",
+        "CONF_NORMAL",
+        "CONF_VERY_HIGH",
+        "CONF_VERY_LOW"
+      ]
+    },
+    {
+      "namespace": "Note",
+      "source": "format == ",
+      "expect": [
+        "Note."
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "type.value == ",
+      "expect": [
+        "FamilyRelType."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "gender not in [Person.MALE, ",
+      "expect": [
+        "Person."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "surname == ",
+      "expect": [
+        "\""
+      ],
+      "kind": {
+        "\"": "punctuation"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "surname == ",
+      "env": [
+        "home"
+      ],
+      "expect": [
+        "\"",
+        "Env"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.first_name != ",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "father.surname == ",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "father.surname == mo",
+      "expect": [
+        "mother",
+        "mother_handle"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "surname in [",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "surname in ['A', ",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "description == ",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "private == ",
+      "expect": [
+        "False",
+        "True"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "private == T",
+      "expect": [
+        "True"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "private is ",
+      "contains": [
+        "not",
+        "None",
+        "True"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.date.sortval > ",
+      "contains": [
+        "Date",
+        "birth",
+        "None"
+      ]
+    }
+  ]
+}

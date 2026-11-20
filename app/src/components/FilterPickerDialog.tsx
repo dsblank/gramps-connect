@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
-  Anchor, Button, Checkbox, CloseButton, Collapse, Divider, Group, Modal, NumberInput, ScrollArea, Select,
+  Anchor, Button, Checkbox, CloseButton, Collapse, Combobox, Divider, Group, Modal, NumberInput, ScrollArea, Select,
   SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip,
 } from "@mantine/core";
 import { SelectOrEnter } from "./SelectOrEnter";
@@ -38,6 +38,8 @@ import { getViewStore } from "../store/registry";
 import { t } from "../i18n/i18n";
 import { InfoButton } from "./InfoButton";
 import { SearchHelpDialog } from "./SearchHelpDialog";
+import { GoqlCompletionDropdown, useGoqlCompletion } from "./goqlCompletion/useGoqlCompletion";
+import { maskTemplateFields } from "../store/goqlLocate";
 
 const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy", "Saved filters", "Custom"];
 
@@ -749,7 +751,7 @@ function substituteParamsForValidation(expr: string, params: GqlFilterParam[]): 
  * mode's existing, presumably-already-valid expression) so opening
  * "Edit" on an unmodified rule doesn't force an unnecessary round trip
  * before Save re-enables. */
-function CustomRuleForm({
+export function CustomRuleForm({
   namespace, initialName, initialWhereExpr, initialParams, submitLabel, onSubmit, onCancel, onNestedDialogChange,
 }: {
   namespace: GqlFilterNamespace;
@@ -778,6 +780,19 @@ function CustomRuleForm({
     onNestedDialogChange?.(open);
   }
   const help = getSearchHelp(viewForNamespace(namespace));
+
+  // Tab completion in the expression (useGoqlCompletion); `{param}`
+  // placeholders read as values.
+  const whereExprRef = useRef<HTMLTextAreaElement>(null);
+  const completion = useGoqlCompletion({
+    value: whereExpr,
+    setValue: (value) => {
+      setWhereExpr(value);
+      setQueryError(null);
+    },
+    fieldRef: whereExprRef,
+    locate: (value) => ({ namespace, source: maskTemplateFields(value), offset: 0 }),
+  });
 
   // Trimmed, with a blank label falling back to the param's own name --
   // the shape actually persisted/submitted; `params` itself keeps
@@ -872,20 +887,39 @@ function CustomRuleForm({
             />
           )}
         </Group>
-        <Textarea
-          size="xs"
-          ff="monospace"
-          autosize
-          minRows={2}
-          maxRows={6}
-          placeholder={t('e.g. like(primary_name.surname, "Smith%")')}
-          value={whereExpr}
-          onChange={(e) => {
-            setWhereExpr(e.currentTarget.value);
-            setQueryError(null);
-          }}
-          data-mantine-stop-propagation
-        />
+        <Combobox
+          store={completion.combobox}
+          onOptionSubmit={completion.accept}
+          position="bottom-start"
+          width={320}
+          withinPortal
+        >
+          <Combobox.Target withKeyboardNavigation={false}>
+            <Textarea
+              ref={whereExprRef}
+              size="xs"
+              ff="monospace"
+              autosize
+              minRows={2}
+              maxRows={6}
+              spellCheck={false}
+              placeholder={`${t('e.g. like(primary_name.surname, "Smith%")')} · ${t("<Tab> completes")}`}
+              value={whereExpr}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setWhereExpr(value);
+                setQueryError(null);
+                completion.handleChange(value, e.currentTarget.selectionStart ?? value.length);
+              }}
+              onKeyDown={(e) => {
+                completion.handleKeyDown(e);
+              }}
+              onBlur={completion.close}
+              data-mantine-stop-propagation
+            />
+          </Combobox.Target>
+          <GoqlCompletionDropdown completions={completion.completions} />
+        </Combobox>
       </Stack>
 
       <Stack gap={4}>
