@@ -215,12 +215,6 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
       <Group justify="space-between" wrap="wrap" gap="xs">
         <Text fw={600} size="lg">{index === 0 ? s.openingSlide : `${index + 1} / ${total}`}</Text>
         <Group gap={6}>
-          <Tooltip label={s.moveUp}>
-            <ActionIcon variant="default" aria-label={s.moveUp} disabled={index === 0} onClick={() => movePoint(index, index - 1)}>↑</ActionIcon>
-          </Tooltip>
-          <Tooltip label={s.moveDown}>
-            <ActionIcon variant="default" aria-label={s.moveDown} disabled={index === total - 1} onClick={() => movePoint(index, index + 1)}>↓</ActionIcon>
-          </Tooltip>
           <Button variant="default" size="xs" onClick={() => insertPoint({ ...point })}>{s.duplicateSlide}</Button>
           <Button variant="default" size="xs" color="red" disabled={total <= 1} onClick={() => removePoint(index)}>{s.deleteSlide}</Button>
         </Group>
@@ -280,6 +274,7 @@ export function StoryEditor({ spec, onChange, previewStackId }: {
         selected={index}
         onSelect={setSelected}
         onMove={movePoint}
+        strings={s}
         getKey={(_, i) => String(i)}
         renderItem={(p, i) => <SlideRow point={p} index={i} info={info} />}
       />

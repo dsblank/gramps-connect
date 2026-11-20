@@ -3,7 +3,7 @@
 // reorder and remove them. Each is a reference to a Media object, so its
 // caption and description stay the tree's own.
 import { useState } from "react";
-import { ActionIcon, Box, Button, FileButton, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
+import { Box, Button, FileButton, Group, Loader, Stack, Text } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import type { QueryItem } from "../../store/api";
 import { uploadMediaFile } from "../../store/jobsApi";
@@ -12,6 +12,7 @@ import { MEDIA_VIEW } from "../../store/views";
 import { pickerResultLabel } from "../RefPickerField";
 import { RecordPicker } from "../RecordPicker";
 import { MediaThumbnail } from "../related/MediaThumbnail";
+import { SortableList } from "../SortableList";
 import { t } from "../../i18n/i18n";
 import { storyWords } from "./storyStrings";
 
@@ -101,35 +102,36 @@ export function StoryPhotosField({ photos, info, onChange, onAdd, onPicked }: {
       {photos.length === 0 && (
         <Text size="xs" c="dimmed">{say("No photos yet. A slide can show several, one after another.")}</Text>
       )}
-      {photos.map((handle, i) => {
-        const photo = info[handle];
-        const notImage = photo?.mime !== undefined && !photo.mime.startsWith("image/");
-        return (
-          <Group key={handle} gap="sm" wrap="nowrap">
-            <Box
-              w={64} h={64}
-              style={{ flex: "none", borderRadius: 6, overflow: "hidden", background: "var(--mantine-color-default-hover)" }}
-            >
-              {photo && <MediaThumbnail handle={handle} mime={photo.mime} size={64} />}
-            </Box>
-            <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-              <Text size="sm" truncate dir="auto">{photo?.label ?? handle}</Text>
-              {notImage && <Text size="xs" c="dimmed">{say("Not shown: only images appear on a slide.")}</Text>}
-            </Stack>
-            <Group gap={4} wrap="nowrap">
-              <Tooltip label={s.movePhotoUp}>
-                <ActionIcon size="sm" variant="default" aria-label={s.movePhotoUp} disabled={i === 0} onClick={() => move(i, i - 1)}>↑</ActionIcon>
-              </Tooltip>
-              <Tooltip label={s.movePhotoDown}>
-                <ActionIcon size="sm" variant="default" aria-label={s.movePhotoDown} disabled={i === photos.length - 1} onClick={() => move(i, i + 1)}>↓</ActionIcon>
-              </Tooltip>
-              <Button variant="subtle" size="compact-xs" color="red" onClick={() => onChange(photos.filter((_, j) => j !== i))}>
-                {s.removePhoto}
-              </Button>
-            </Group>
-          </Group>
-        );
-      })}
+      {photos.length > 0 && (
+        <SortableList
+          keys={photos}
+          onMove={move}
+          gap="var(--mantine-spacing-sm)"
+          renderItem={(i, grip) => {
+            const handle = photos[i];
+            const photo = info[handle];
+            const notImage = photo?.mime !== undefined && !photo.mime.startsWith("image/");
+            return (
+              <Group gap="sm" wrap="nowrap">
+                {grip}
+                <Box
+                  w={64} h={64}
+                  style={{ flex: "none", borderRadius: 6, overflow: "hidden", background: "var(--mantine-color-default-hover)" }}
+                >
+                  {photo && <MediaThumbnail handle={handle} mime={photo.mime} size={64} />}
+                </Box>
+                <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="sm" truncate dir="auto">{photo?.label ?? handle}</Text>
+                  {notImage && <Text size="xs" c="dimmed">{say("Not shown: only images appear on a slide.")}</Text>}
+                </Stack>
+                <Button variant="subtle" size="compact-xs" color="red" onClick={() => onChange(photos.filter((_, j) => j !== i))}>
+                  {s.removePhoto}
+                </Button>
+              </Group>
+            );
+          }}
+        />
+      )}
     </Stack>
   );
 }
