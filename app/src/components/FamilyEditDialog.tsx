@@ -64,6 +64,7 @@ interface ChildrenFieldProps {
   labels: Record<string, string>;
   onAdd: (item: QueryItem, frel: string, mrel: string) => void;
   onRemove: (handle: string) => void;
+  onRelChange: (handle: string, patch: { frel?: string; mrel?: string }) => void;
   /** Active "new"-mode Person drafts opened from this Family's children
    * (see FamilyEditDialog's handleAddNewChildPerson) -- keyed by handle, so
    * a child row whose Person hasn't been saved yet renders from the draft
@@ -78,24 +79,43 @@ interface ChildrenFieldProps {
   onRemoveChildDraft: (handle: string) => void;
 }
 
+/** One child row's "Father"/"Mother" relationship select. A custom value
+ * already stored on the ref (not a built-in) is kept as an option so it
+ * still shows. */
+function ChildRelSelect({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const values = CHILD_REL_OPTIONS.includes(value) ? CHILD_REL_OPTIONS : [...CHILD_REL_OPTIONS, value];
+  return (
+    <Group gap={4} wrap="nowrap">
+      <Text size="xs" c="dimmed">{label}</Text>
+      <Select
+        aria-label={label}
+        data={values.map((v) => ({ value: v, label: t(v) }))}
+        value={value}
+        onChange={(next) => { if (next) onChange(next); }}
+        allowDeselect={false}
+        size="xs"
+        w={110}
+        comboboxProps={{ withinPortal: true }}
+      />
+    </Group>
+  );
+}
+
 /** Family.child_ref_list -- add an existing Person (search) or a brand-new
  * one (nested "New Person" draft, same pattern as the parent slots' own
  * "+ New Person" -- see FamilyEditDialog's handleAddNewChildPerson for how
  * a *list* of these coexists with draftStack's single-field `openedFrom`,
  * which father_handle/mother_handle use directly since they're each just
- * one field). frel/mrel (relationship to father/mother) are set *before*
- * adding -- the two Selects below, defaulting to Gramps' own default
- * ("Birth") -- rather than only afterward via a child row's own "✎ Edit"
- * (RefEditDialog, still there for changing one later, on frel/mrel
- * specifically -- this dialog's own &#9998; opens a nested edit of the
- * child Person itself). Not shown per existing-child row here, same MVP
- * scope as the parent slots not showing every ChildRef field either. */
+ * one field). A child is added as "Birth" to both parents (Gramps' own
+ * default), and each row has its own Father/Mother relationship selects
+ * underneath to change that, same as EventsField's per-row Role -- rather
+ * than two Selects above the picker that had to be set before adding.
+ * This dialog's own &#9998; opens a nested edit of the child Person
+ * itself, not the ChildRef. */
 function ChildrenField({
-  refs, labels, onAdd, onRemove, childDraftsByHandle, findChildEditDraft, onAddNewPerson, onOpenEditChildDraft,
-  onReopenChildDraft, onRemoveChildDraft,
+  refs, labels, onAdd, onRemove, onRelChange, childDraftsByHandle, findChildEditDraft, onAddNewPerson,
+  onOpenEditChildDraft, onReopenChildDraft, onRemoveChildDraft,
 }: ChildrenFieldProps) {
-  const [frel, setFrel] = useState("Birth");
-  const [mrel, setMrel] = useState("Birth");
   const pickedHandles = new Set(refs.map((r) => r.ref));
 
   return (
@@ -104,21 +124,16 @@ function ChildrenField({
       {refs.length === 0 && <Text size="xs" c="dimmed">{t("No children")}</Text>}
       {refs.map((ref) => {
         const nestedDraft = childDraftsByHandle.get(ref.ref) ?? findChildEditDraft(ref.ref);
-        if (nestedDraft) {
-          return (
-            <OccupiedRefRow
-              key={ref.ref}
-              label={nestedDraftLabel(nestedDraft)}
-              isNew={nestedDraft.mode === "new"}
-              onEdit={() => onReopenChildDraft(nestedDraft.handle)}
-              onRemove={() => onRemoveChildDraft(nestedDraft.handle)}
-              removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
-            />
-          );
-        }
-        return (
+        const row = nestedDraft ? (
           <OccupiedRefRow
-            key={ref.ref}
+            label={nestedDraftLabel(nestedDraft)}
+            isNew={nestedDraft.mode === "new"}
+            onEdit={() => onReopenChildDraft(nestedDraft.handle)}
+            onRemove={() => onRemoveChildDraft(nestedDraft.handle)}
+            removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
+          />
+        ) : (
+          <OccupiedRefRow
             label={labels[ref.ref] ?? ref.ref}
             isNew={false}
             onEdit={() => onOpenEditChildDraft(ref.ref)}
@@ -126,30 +141,25 @@ function ChildrenField({
             removeLabel="Remove child"
           />
         );
+        return (
+          <Stack key={ref.ref} gap={2}>
+            {row}
+            <Group gap="sm" pl="md">
+              <ChildRelSelect
+                label={t("Father")}
+                value={ref.frel || "Birth"}
+                onChange={(frel) => onRelChange(ref.ref, { frel })}
+              />
+              <ChildRelSelect
+                label={t("Mother")}
+                value={ref.mrel || "Birth"}
+                onChange={(mrel) => onRelChange(ref.ref, { mrel })}
+              />
+            </Group>
+          </Stack>
+        );
       })}
       <Stack gap={4}>
-        <Group gap="xs">
-          <Select
-            label={t("Relationship to father")}
-            data={CHILD_REL_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
-            value={frel}
-            onChange={(next) => setFrel(next ?? "Birth")}
-            allowDeselect={false}
-            size="xs"
-            w={150}
-            comboboxProps={{ withinPortal: true }}
-          />
-          <Select
-            label={t("Relationship to mother")}
-            data={CHILD_REL_OPTIONS.map((v) => ({ value: v, label: t(v) }))}
-            value={mrel}
-            onChange={(next) => setMrel(next ?? "Birth")}
-            allowDeselect={false}
-            size="xs"
-            w={150}
-            comboboxProps={{ withinPortal: true }}
-          />
-        </Group>
         <SearchOrCreate
           view={PERSON_VIEW}
           searchField="gramps_id"
@@ -157,9 +167,9 @@ function ChildrenField({
           renderLabel={personLabel}
           placeholder={PERSON_VIEW.simpleSearch?.placeholder}
           onPick={(item) => {
-            if (!pickedHandles.has(item.handle)) onAdd(item, frel, mrel);
+            if (!pickedHandles.has(item.handle)) onAdd(item, "Birth", "Birth");
           }}
-          onOpenNew={() => onAddNewPerson(frel, mrel)}
+          onOpenNew={() => onAddNewPerson("Birth", "Birth")}
           createLabel="Person"
         />
       </Stack>
@@ -526,6 +536,9 @@ export function FamilyEditDialog({
             });
           }}
           onRemove={(handle) => onChange({ child_ref_list: childRefs.filter((r) => r.ref !== handle) })}
+          onRelChange={(handle, patch) =>
+            onChange({ child_ref_list: childRefs.map((r) => (r.ref === handle ? { ...r, ...patch } : r)) })
+          }
           childDraftsByHandle={childDraftsByHandle}
           findChildEditDraft={findChildEditDraft}
           onAddNewPerson={handleAddNewChildPerson}
