@@ -13,7 +13,10 @@ import type { Database, SqlJsStatic } from "sql.js";
 import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage, testGoqlSelect } from "./api";
 import { notifications } from "@mantine/notifications";
-import { appliedCustomColumns, applyColumnSettings, columnExpression, columnSortKeys, markBroken } from "./columnSettings";
+import {
+  appliedCustomColumns, applyColumnSettings, columnExpression, columnSortKeys, expressionDependencies, markBroken,
+} from "./columnSettings";
+import { goqlNamespaceForEndpoint } from "./goqlCompletion";
 import { t } from "../i18n/i18n";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } from "./cacheMeta";
@@ -671,6 +674,18 @@ export class ViewStore {
       if (!totalCount) return null;
     }
     return this.globalRankOfItem(item, token, whereExpr, pickerExpr);
+  }
+
+  /** Whether the current sort reads a value through a link or another
+   * record (`birth.date.sortval`, `count(events, ...)`), so an edit to a
+   * linked record can change a row's position. */
+  private sortReadsLinks(): boolean {
+    const namespace = goqlNamespaceForEndpoint(this.view.endpoint);
+    if (!namespace) return false;
+    return this.orderBy.some((o) => {
+      const { links, untracked } = expressionDependencies(namespace, o.column);
+      return links.length > 0 || untracked;
+    });
   }
 
   /** The column with a `sortLimit` the current sort is by, if any. */
@@ -1772,6 +1787,14 @@ export class ViewStore {
     }
     const rows = [...new Set(deps.flatMap((d) => this.dependentRowHandles(d.via!, handles)))];
     if (rows.length === 0) return "none";
+    // Sorted by a value read through a link (Birth's date, a custom
+    // column's): the patched rows may belong somewhere else now, so the
+    // list is refetched in order instead. Such a sort only runs on lists of
+    // at most SORT_ROW_LIMIT rows, so that's a few pages.
+    if (this.sortReadsLinks()) {
+      this.requeryDebounced(cursor);
+      return "requery";
+    }
     if (rows.length > MAX_DEPENDENT_REFRESH) {
       this.requeryDebounced(cursor);
       return "requery";

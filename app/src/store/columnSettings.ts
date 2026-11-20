@@ -206,38 +206,86 @@ function withoutStrings(expr: string): string {
 
 const CHAIN_RE = /(?<![A-Za-z0-9_.])[A-Za-z_][A-Za-z0-9_]*(?:\[[0-9]+\])*(?:\.[A-Za-z_][A-Za-z0-9_]*(?:\[[0-9]+\])*)*/g;
 
-/** How to keep `expr`'s column fresh in `namespace` ("Person", ...):
- * the links it reads through, and whether it also reads something no
- * cached handle can track -- another record's references to this one
- * (`backlinks`), or a collection's records (`count(events, ...)`), which
- * then only update when this record itself changes or the list reloads. */
+/** Where each GOQL collection's handles are stored on the record, and the
+ * table they're in -- GOQL's own `_COLLECTIONS` (query.py). `child_refs`
+ * (a person's own ChildRef in each parent family) lives in those families,
+ * found through parent_family_list. `backlinks` isn't here: other records'
+ * references to this one aren't stored on it. */
+const COLLECTION_LIST: Record<string, { field: string; table: string }> = {
+  events: { field: "event_ref_list", table: "event" },
+  citations: { field: "citation_list", table: "citation" },
+  media: { field: "media_list", table: "media" },
+  notes: { field: "note_list", table: "note" },
+  tags: { field: "tag_list", table: "tag" },
+  families: { field: "family_list", table: "family" },
+  parent_families: { field: "parent_family_list", table: "family" },
+  child_refs: { field: "parent_family_list", table: "family" },
+  children: { field: "child_ref_list", table: "person" },
+  associations: { field: "person_ref_list", table: "person" },
+  enclosing_places: { field: "placeref_list", table: "place" },
+  repositories: { field: "reporef_list", table: "repository" },
+};
+
+const COUNT_CALL_RE = /^(?:len|count)\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,([\s\S]*))?\)$/;
+const COUNT_COMPREHENSION_RE =
+  /^len\(\s*\[([\s\S]*)\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+([A-Za-z_][A-Za-z0-9_]*)\b([\s\S]*)\]\s*\)$/;
+
+/** How to keep `expr`'s column fresh in `namespace` ("Person", ...): the
+ * links it reads through, and whether it also reads something no cached
+ * handle can track -- another record's references to this one
+ * (`backlinks`), or, inside a collection's condition, a further link or
+ * collection of those records (`count(events, place.title == "x")`: the
+ * events are watched, their places aren't). An untracked column is only
+ * brought up to date when its own row is refetched. */
 export function expressionDependencies(namespace: string, expr: string): { links: LinkDependency[]; untracked: boolean } {
   const vocab = GOQL_VOCABULARIES[namespace];
   if (!vocab) return { links: [], untracked: false };
+  const text = withoutStrings(expr).trim();
+
+  // A count over one of this record's collections.
+  const call = COUNT_CALL_RE.exec(text);
+  const comprehension = call ? null : COUNT_COMPREHENSION_RE.exec(text);
+  const collection = call?.[1] ?? comprehension?.[3];
+  if (collection && collection in vocab.collections) {
+    const list = COLLECTION_LIST[collection];
+    if (!list) return { links: [], untracked: true }; // backlinks
+    const condition = call ? call[2] ?? "" : `${comprehension![1]} ${comprehension![4]}`;
+    // No condition: it counts the refs stored on this record itself.
+    if (!condition.trim()) return { links: [], untracked: false };
+    const target = vocab.collections[collection];
+    const targetVocab = target ? GOQL_VOCABULARIES[target] : undefined;
+    const bound = comprehension?.[2];
+    let deeper = false;
+    for (const match of condition.matchAll(CHAIN_RE)) {
+      let segments = match[0].split(".").map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
+      if (bound && segments[0] === bound) segments = segments.slice(1);
+      if (segments.length === 0 || !targetVocab) continue; // child_refs: ChildRef fields only
+      if (segments[0] in targetVocab.relationships || segments[0] in targetVocab.collections) deeper = true;
+    }
+    return { links: [{ select: list.field, table: list.table }], untracked: deeper };
+  }
+
+  // A path, possibly through links.
   const links = new Map<string, LinkDependency>();
   let untracked = false;
-  const text = withoutStrings(expr);
-  const ownListCount = /^\s*len\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*$/.exec(text)?.[1];
   for (const match of text.matchAll(CHAIN_RE)) {
-    const segments = match[0].split(".").map((s) => s.replace(/\[[0-9]+\]/g, ""));
+    const segments = match[0].split(".").map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
     if (segments[0] in vocab.collections) {
-      // len(<collection>) of one of this record's own lists counts refs
-      // stored on this record; anything else reads other records.
-      if (segments[0] === "backlinks" || segments[0] !== ownListCount) untracked = true;
+      untracked = true; // a collection used some other way
       continue;
     }
     let ns = namespace;
     for (let i = 0; i < segments.length; i += 1) {
-      const target = GOQL_VOCABULARIES[ns]?.relationships[segments[i]];
-      if (!target) break;
+      const linkTarget = GOQL_VOCABULARIES[ns]?.relationships[segments[i]];
+      if (!linkTarget) break;
       const field = LINK_HANDLE_FIELD[`${ns}.${segments[i]}`];
       if (!field) {
         untracked = true;
         break;
       }
       const select = [...segments.slice(0, i), field].join(".");
-      links.set(select, { select, table: target.toLowerCase() });
-      ns = target;
+      links.set(select, { select, table: linkTarget.toLowerCase() });
+      ns = linkTarget;
     }
   }
   return { links: [...links.values()], untracked };

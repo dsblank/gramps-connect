@@ -1677,3 +1677,31 @@ describe("ViewStore sorting by a custom name column", () => {
     );
   });
 });
+
+describe("ViewStore re-sorting after a linked record changes", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  async function peopleStore(): Promise<ViewStore> {
+    vi.mocked(fetchPage).mockResolvedValue({
+      page: { items: [personRow("P1", { event_refs: [{ ref: "E1" }] }), personRow("P2", { event_refs: [{ ref: "E2" }] })], next_after: null },
+      totalCount: 2,
+    });
+    const store = new ViewStore(PERSON_VIEW, getSql);
+    await store.runQuery(null, false);
+    return store;
+  }
+
+  it("refetches the list when sorted by birth date and a birth event changes", async () => {
+    const store = await peopleStore();
+    await store.setSort("birth.date.sortval");
+    expect(await store.refreshDependents("event", ["E1"])).toBe("requery");
+  });
+
+  it("only patches the row in the default (name) order", async () => {
+    const store = await peopleStore();
+    expect(await store.refreshDependents("event", ["E1"])).toBe("patched");
+  });
+});

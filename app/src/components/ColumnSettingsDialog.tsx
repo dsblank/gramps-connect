@@ -303,7 +303,7 @@ function CustomColumnFields({
       </Group>
       {untracked && (
         <Text size="xs" c="dimmed">
-          {t("Reads other records this list can't watch, so it may lag behind their edits until the list reloads.")}
+          {t("Reads records this list can't watch (references from other records, or a link inside the condition). After those are edited, this column can stay out of date, even after reloading the page, until the list is next fetched from the server: when you search, sort or save columns, or when this record changes.")}
         </Text>
       )}
     </Stack>

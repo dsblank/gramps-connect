@@ -138,13 +138,34 @@ describe("expressionDependencies", () => {
     expect(expressionDependencies("Person", "len(citations)")).toEqual({ links: [], untracked: false });
   });
 
+  it("watches a collection's records through the list stored on the record", () => {
+    expect(expressionDependencies("Person", "count(events, type.value == 12)")).toEqual({
+      links: [{ select: "event_ref_list", table: "event" }], untracked: false,
+    });
+    expect(expressionDependencies("Person", "len([e for e in events if e.description == 'x'])")).toEqual({
+      links: [{ select: "event_ref_list", table: "event" }], untracked: false,
+    });
+    expect(expressionDependencies("Family", "count(children, gender == 1)").links).toEqual([
+      { select: "child_ref_list", table: "person" },
+    ]);
+    expect(expressionDependencies("Person", "count(child_refs, frel.value == 1)")).toEqual({
+      links: [{ select: "parent_family_list", table: "family" }], untracked: false,
+    });
+  });
+
   it("flags what can't be watched", () => {
     expect(expressionDependencies("Person", "len(backlinks)").untracked).toBe(true);
-    expect(expressionDependencies("Person", "count(events, type.value == 12)").untracked).toBe(true);
+    // The events are watched; their places aren't.
+    expect(expressionDependencies("Person", 'count(events, place.title == "Chicago")')).toEqual({
+      links: [{ select: "event_ref_list", table: "event" }], untracked: true,
+    });
+    expect(expressionDependencies("Person", "count(events, len(citations) > 0)").untracked).toBe(true);
   });
 
   it("ignores words inside strings", () => {
-    expect(expressionDependencies("Person", 'count(citations, page == "birth.place")').links).toEqual([]);
+    expect(expressionDependencies("Person", 'count(citations, page == "birth.place")')).toEqual({
+      links: [{ select: "citation_list", table: "citation" }], untracked: false,
+    });
   });
 });
 
