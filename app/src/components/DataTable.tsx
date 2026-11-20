@@ -275,7 +275,10 @@ export function DataTable({ view }: DataTableProps) {
           // it names what to sort by (`sortKeys`/`sortBy` -- see
           // ViewConfig.orderBy for why each such path is opted into
           // individually rather than by default).
-          const sortColumn = headerSortColumn(col);
+          // A custom column sorts only while the list is small enough for
+          // the server to sort cheaply (ColumnConfig.sortLimit).
+          const overLimit = col.sortLimit !== undefined && snapshot.totalCount > col.sortLimit;
+          const sortColumn = overLimit ? null : headerSortColumn(col);
           const activeSort = snapshot.orderBy;
           const isSorted = sortColumn !== null && activeSort.column === sortColumn;
           return (
@@ -283,6 +286,13 @@ export function DataTable({ view }: DataTableProps) {
               key={col.key}
               className={`${classes.cell} ${classes.headerCell} ${sortColumn ? classes.sortable : ""}`}
               onClick={sortColumn ? () => store.setSort(sortColumn).catch(() => {}) : undefined}
+              title={
+                overLimit
+                  ? t("Sorts when the list has at most {n} rows. Search or filter it to fewer first.").replace(
+                      "{n}", col.sortLimit!.toLocaleString(),
+                    )
+                  : undefined
+              }
             >
               <span>{col.literalLabel ? col.label : t(col.label)}</span>
               {isSorted && <span className={classes.sortArrow}>{activeSort.direction === "asc" ? "▲" : "▼"}</span>}

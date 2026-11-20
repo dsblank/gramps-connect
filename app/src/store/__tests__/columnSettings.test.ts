@@ -236,3 +236,51 @@ describe("applyColumnSettings and structured values", () => {
     expect(PERSON_VIEW.columns.some((c) => c.key === "goql_s")).toBe(false);
   });
 });
+
+describe("sortable custom columns", () => {
+  it("sorts a value by itself, a date by its sortval, a name by its parts, and not a type", async () => {
+    const { customSortKeys } = await import("../columnSettings");
+    const keys = (namespace: string, expr: string) => customSortKeys(namespace, expr)?.() ?? null;
+    expect(keys("Person", "birth.place.title")).toEqual(["birth.place.title"]);
+    expect(keys("Person", "len(citations)")).toEqual(["len(citations)"]);
+    expect(keys("Person", "birth.date")).toEqual(["birth.date.sortval"]);
+    // The default name format, "Surname, Given".
+    expect(keys("Family", "father.primary_name")).toEqual([
+      "father.primary_name.surname_list[0].surname", "father.primary_name.first_name",
+    ]);
+    expect(keys("Event", "type")).toBeNull();
+    expect(keys("Person", "birth")).toBeNull();
+  });
+
+  it("gives a sortable name column its name keys, not a single sort key", async () => {
+    const { customColumnConfig, SORT_ROW_LIMIT } = await import("../columnSettings");
+    const column = customColumnConfig({ id: "goql_n", expr: "father.primary_name", sortable: true }, "Family");
+    expect(column.sortBy).toBeUndefined();
+    expect(column.sortLimit).toBe(SORT_ROW_LIMIT);
+    expect(column.sortKeys?.()[0]).toBe("father.primary_name.surname_list[0].surname");
+  });
+
+  it("caches a value's own sort key, with the row limit", async () => {
+    const { customColumnConfig, SORT_ROW_LIMIT } = await import("../columnSettings");
+    expect(customColumnConfig({ id: "goql_a", expr: "len(citations)", sortable: true }, "Person")).toMatchObject({
+      sortBy: "len(citations)", orderPath: "len(citations)", sortLimit: SORT_ROW_LIMIT,
+    });
+    expect(customColumnConfig({ id: "goql_a", expr: "len(citations)" }, "Person").sortBy).toBeUndefined();
+  });
+
+  it("sorts a date by the sortval inside the cached date, at no refetch", async () => {
+    const { layoutChangesCache } = await import("../columnSettings");
+    localStorage.clear();
+    resetViews();
+    const layout = (sortable: boolean) => ({ custom: [{ id: "goql_b", expr: "birth.date", sortable }], order: [], hidden: [] });
+    setColumnLayout("person", layout(true));
+    applyColumnSettings(PERSON_VIEW);
+    const visible = PERSON_VIEW.columns.find((c) => c.key === "goql_b")!;
+    expect(visible.sortBy).toBe("birth.date.sortval");
+    expect(visible.orderPath).toBeUndefined();
+    // No hidden sort column (only birth's link-dependency ones).
+    expect(PERSON_VIEW.columns.some((c) => c.key.startsWith("goql_b_") && !c.key.startsWith("goql_b_d"))).toBe(false);
+    expect(layoutChangesCache(PERSON_VIEW, layout(false), layout(true))).toBe(false);
+    resetViews();
+  });
+});

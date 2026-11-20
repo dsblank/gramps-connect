@@ -13,12 +13,12 @@ import type { Database, SqlJsStatic } from "sql.js";
 import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage, testGoqlSelect } from "./api";
 import { notifications } from "@mantine/notifications";
-import { appliedCustomColumns, applyColumnSettings, markBroken } from "./columnSettings";
+import { appliedCustomColumns, applyColumnSettings, columnExpression, columnSortKeys, markBroken } from "./columnSettings";
 import { t } from "../i18n/i18n";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } from "./cacheMeta";
 import { createTableSql, insertSql, upsertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
-import { defaultOrderBy, type OrderBy, type ViewConfig } from "./views";
+import { defaultOrderBy, type ColumnConfig, type OrderBy, type ViewConfig } from "./views";
 import { loadDisplaySettings, subscribeDisplaySettings } from "./displaySettings";
 import type { TreeChangeNotification } from "./historyPoll";
 import { getHomePersonHandle } from "./homePersonPreference";
@@ -127,6 +127,20 @@ const EMPTY_SNAPSHOT_BASE = {
   selectionIsDefault: false,
   selectedRevision: 0,
 };
+
+/** `value` walked down `segments` ("surname_list[0]", "surname"), or
+ * undefined where a step is missing. */
+function walkPath(value: unknown, segments: string[]): unknown {
+  for (const segment of segments) {
+    const match = /^([^[]*)((?:\[\d+\])*)$/.exec(segment);
+    if (!match) return undefined;
+    if (match[1]) value = (value as Record<string, unknown> | null | undefined)?.[match[1]];
+    for (const index of match[2].matchAll(/\[(\d+)\]/g)) {
+      value = Array.isArray(value) ? value[Number(index[1])] : undefined;
+    }
+  }
+  return value;
+}
 
 export class ViewStore {
   readonly view: ViewConfig;
@@ -637,6 +651,7 @@ export class ViewStore {
     pickerExpr: string | null = this.pickerExpr,
   ): Promise<number | null> {
     const token = await getToken();
+    await this.enforceSortLimit(token, whereExpr, pickerExpr);
     const item = await fetchByHandle(this.view, token, handle);
     if (!item) return null;
     // fetchByHandle() above ignores whatever's currently filtering the view
@@ -656,6 +671,35 @@ export class ViewStore {
       if (!totalCount) return null;
     }
     return this.globalRankOfItem(item, token, whereExpr, pickerExpr);
+  }
+
+  /** The column with a `sortLimit` the current sort is by, if any. */
+  private limitedSortColumn(): ColumnConfig | undefined {
+    return this.view.columns.find((c) => c.sortLimit !== undefined && columnSortKeys(c).some((key) => this.orderBy.some((o) => o.column === key)));
+  }
+
+  /** If the current sort is by a column with a `sortLimit` (a list's
+   * custom column) and the list under `whereExpr`/`pickerExpr` has more
+   * rows than that, falls back to the default order, with a notice --
+   * before any query sorts that many rows by it. One cheap count query,
+   * only while such a sort is active. True when the order changed. */
+  private async enforceSortLimit(token: string, whereExpr: string | null, pickerExpr: string | null): Promise<boolean> {
+    const limited = this.limitedSortColumn();
+    if (!limited) return false;
+    const { totalCount } = await fetchPage(
+      this.view, token, null, true, this.combinedFilter(whereExpr, pickerExpr), defaultOrderBy(this.view), 1, [],
+    );
+    if ((totalCount ?? 0) <= limited.sortLimit!) return false;
+    this.orderBy = defaultOrderBy(this.view);
+    notifications.show({
+      color: "blue",
+      title: `${t("Back to the usual order")}`,
+      message: t("This list has too many rows to sort by {column}. Search or filter it to fewer first.").replace(
+        "{column}", limited.label,
+      ),
+    });
+    this.emit();
+    return true;
   }
 
   /** The 0-based rank `item` occupies among every row on the server under
@@ -688,18 +732,58 @@ export class ViewStore {
     // gramps-object-query-language's query_lang.py) -- JSON's string
     // escaping is a safe subset of Python's, so JSON.stringify doubles as
     // a correct, injection-safe Python string literal here.
-    // An order_by key is a flat column (cached under its own name) or a
-    // GOQL path, cached by whichever column declares it as `orderPath`.
-    const columnFor = (column: string) =>
-      this.view.columns.find((c) => c.orderPath === column) ?? this.view.columns.find((c) => c.key === column);
+    // An order_by key is a flat column (cached under its own name), a GOQL
+    // path cached by whichever column declares it as `orderPath`, or a path
+    // inside a column that caches a whole structure -- a date's `sortval`
+    // inside the cached date (`birth.date.sortval` in Birth's
+    // `birth.date`), walked as `rest`.
+    const locate = (column: string): { cached: ColumnConfig; rest: string[] } | undefined => {
+      const exact =
+        this.view.columns.find((c) => c.orderPath === column) ?? this.view.columns.find((c) => c.key === column);
+      if (exact) return { cached: exact, rest: [] };
+      // The column that sorts by this key first (a custom name column, not
+      // Family's built-in Father reading the same name), then any.
+      const inside = (c: ColumnConfig) => typeof c.select === "object" && column.startsWith(`${columnExpression(c)}.`);
+      const within =
+        this.view.columns.find((c) => inside(c) && columnSortKeys(c).includes(column)) ?? this.view.columns.find(inside);
+      return within ? { cached: within, rest: column.slice(columnExpression(within).length + 1).split(".") } : undefined;
+    };
+    const columnFor = (column: string) => locate(column)?.cached;
     const literalFor = (column: string, value: unknown) => {
       const sqlType = columnFor(column)?.sqlType;
-      return sqlType === "INTEGER" ? String(value) : JSON.stringify(String(value ?? ""));
+      if (sqlType === "INTEGER" || typeof value === "number") return String(value);
+      if (typeof value === "boolean") return value ? "True" : "False";
+      return JSON.stringify(String(value ?? ""));
+    };
+    // A list's custom columns (`goql` selects, columnSettings.ts) and the
+    // dates (a person with no birth) can be empty, which GOQL sorts as the
+    // smallest value -- "before" and "tied" have to say so. The other
+    // built-in sort keys are never missing.
+    const nullable = (column: string) => {
+      const cached = columnFor(column);
+      if (!cached) return false;
+      return cached.sortLimit !== undefined || (typeof cached.select === "object" && "goql" in cached.select);
+    };
+    const tie = (column: string) => {
+      const value = valueFor(column);
+      return nullable(column) && (value === null || value === undefined)
+        ? `${column} is None`
+        : `${column} == ${literalFor(column, value)}`;
+    };
+    // Null: nothing sorts strictly before a missing value (ascending), so
+    // that clause is left out.
+    const before = (key: OrderBy): string | null => {
+      const value = valueFor(key.column);
+      const cmp = key.direction === "desc" ? ">" : "<";
+      if (!nullable(key.column)) return `${key.column} ${cmp} ${literalFor(key.column, value)}`;
+      if (value === null || value === undefined) return key.direction === "desc" ? `${key.column} is not None` : null;
+      const strictly = `${key.column} ${cmp} ${literalFor(key.column, value)}`;
+      return key.direction === "desc" ? strictly : `(${key.column} is None or ${strictly})`;
     };
     const valueFor = (column: string) => {
       if (column === "handle") return item.handle;
-      const cached = columnFor(column);
-      if (cached) return item[cached.key];
+      const found = locate(column);
+      if (found) return walkPath(item[found.cached.key], found.rest);
       // A path no column caches on its own (People's name-format keys,
       // e.g. "primary_name.nick"): walk it inside the column that selects
       // its first segment whole -- `primary_name`'s JSON here.
@@ -714,11 +798,10 @@ export class ViewStore {
     // surname -- landing selectAt() on a different row than the one
     // actually selected. item's own row (equal on every key, itself
     // included) never matches any clause, so this correctly excludes it.
-    const clauses = keys.map((key, i) => {
-      const cmp = key.direction === "desc" ? ">" : "<";
-      const ties = keys.slice(0, i).map((k) => `${k.column} == ${literalFor(k.column, valueFor(k.column))}`);
-      const thisKey = `${key.column} ${cmp} ${literalFor(key.column, valueFor(key.column))}`;
-      return [...ties, thisKey].join(" and ");
+    // handle (the last key) is never missing, so at least one clause stays.
+    const clauses = keys.flatMap((key, i) => {
+      const strictly = before(key);
+      return strictly === null ? [] : [[...keys.slice(0, i).map((k) => tie(k.column)), strictly].join(" and ")];
     });
     const beforeExpr = clauses.map((c) => `(${c})`).join(" or ");
     // ANDed with the *actual* currently active filter (baseFilter,
@@ -1107,6 +1190,20 @@ export class ViewStore {
       pendingSelection?: { index: number; handle: string };
     }
   ): Promise<void> {
+    // A sort the list has outgrown (see enforceSortLimit()) goes back to
+    // the default order first. A selection position worked out for the
+    // old order no longer applies, so it's dropped for the default one.
+    if (this.limitedSortColumn()) {
+      const newPicker = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.pickerExpr;
+      if (await this.enforceSortLimit(await getToken(), whereExpr, newPicker) && options?.pendingSelection) {
+        const { pendingSelection: _dropped, ...rest } = options;
+        options = rest;
+        this.selectedIndex = null;
+        this.selectedHandle = null;
+        this.selectedHandles = [];
+        this.selectedIndices = [];
+      }
+    }
     const preserve = options?.preserveDisplayUntilCaughtUp ?? false;
     // `pickerExpr` absent entirely (the overwhelming majority of calls --
     // FilterBar submitting a search, setSort(), startRequery()) means
@@ -1548,15 +1645,28 @@ export class ViewStore {
    * the current ones stay, with the new columns blank. Order, visibility
    * and titles alone change nothing here (DataTable redraws). */
   async applyColumnChange(): Promise<void> {
-    if (!applyColumnSettings(this.view)) return;
+    const customSortKeys = () => new Set(this.view.columns.filter((c) => c.sortLimit).flatMap((c) => columnSortKeys(c)));
+    const before = customSortKeys();
+    const changed = applyColumnSettings(this.view);
+    // Sorted by a custom column that's gone (removed, or no longer
+    // sortable): back to the default order.
+    const after = customSortKeys();
+    const sortGone = this.orderBy.some((o) => before.has(o.column) && !after.has(o.column));
+    if (sortGone) this.orderBy = defaultOrderBy(this.view);
+    if (!changed) {
+      if (sortGone && this.db) await this.runQueryPreservingSelection(this.whereExpr);
+      return;
+    }
     // An in-flight fill would insert rows of the old shape: stop it.
     this.queryGeneration += 1;
     await clearOpfs(this.view.opfsFilename);
     if (!this.db) return;
     for (const db of [this.db, this.unfilteredDb]) if (db) this.addMissingColumns(db);
     this.emit();
-    const unfiltered = this.whereExpr === null && this.pickerExpr === null;
-    await this.runQueryPreservingSelection(this.whereExpr, { persist: unfiltered });
+    // Saved for the next load only as that load would build it: the whole
+    // list, in the default order (the cache is stamped with that order).
+    const persist = this.whereExpr === null && this.pickerExpr === null && this.isDefaultOrder();
+    await this.runQueryPreservingSelection(this.whereExpr, { persist });
   }
 
   /** ALTER TABLE ADD COLUMN for every view column `db` lacks -- so reads

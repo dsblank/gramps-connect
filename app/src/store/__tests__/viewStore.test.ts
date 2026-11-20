@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import type { TreeChangeNotification } from "../historyPoll";
-import { EVENT_VIEW, PERSON_VIEW, PLACE_VIEW, TAG_VIEW } from "../views";
+import { EVENT_VIEW, FAMILY_VIEW, PERSON_VIEW, PLACE_VIEW, TAG_VIEW } from "../views";
 
 vi.mock("../api", () => ({
   fetchPage: vi.fn(),
@@ -1506,5 +1506,174 @@ describe("ViewStore.applyColumnChange (Columns dialog)", () => {
     await store.applyColumnChange();
     expect(fetchPage).toHaveBeenCalledTimes(1);
     setColumnLayout("tag", null);
+  });
+});
+
+describe("ViewStore sorting by a custom column", () => {
+  const EXPR = "len(backlinks)";
+
+  beforeEach(async () => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+    const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
+    setColumnLayout("tag", { custom: [{ id: "goql_t", expr: EXPR, sortable: true }], order: [], hidden: [] });
+    applyColumnSettings(TAG_VIEW);
+  });
+
+  afterEach(async () => {
+    const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
+    setColumnLayout("tag", null);
+    applyColumnSettings(TAG_VIEW);
+  });
+
+  function lastRankExpr(): string {
+    const exprs = vi.mocked(fetchPage).mock.calls.map((call) => call[4] as string).filter((expr) => expr?.includes("handle <"));
+    return exprs[exprs.length - 1];
+  }
+
+  async function sortedStore(): Promise<ViewStore> {
+    vi.mocked(fetchPage).mockResolvedValue({ page: { items: [tagRow("H1", { goql_t: 2 })], next_after: null }, totalCount: 1 });
+    const store = new ViewStore(TAG_VIEW, getSql);
+    await store.runQuery(null, false);
+    await store.setSort(EXPR);
+    expect(store.getSnapshot().orderBy).toEqual({ column: EXPR, direction: "asc" });
+    return store;
+  }
+
+  it("ranks a value after every missing one, compared as a number", async () => {
+    const store = await sortedStore();
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1", { goql_t: 3 }));
+    await store.applyLiveChange({ table: "tag", handle: "H1", op: "UPDATE", changedBy: null });
+    expect(lastRankExpr()).toContain(`(${EXPR} is None or ${EXPR} < 3)`);
+    expect(lastRankExpr()).toContain(`${EXPR} == 3 and handle < "H1"`);
+  });
+
+  it("ranks a missing value only among the other missing ones", async () => {
+    const store = await sortedStore();
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1", { goql_t: null }));
+    await store.applyLiveChange({ table: "tag", handle: "H1", op: "UPDATE", changedBy: null });
+    expect(lastRankExpr()).toBe(`(${EXPR} is None and handle < "H1")`);
+  });
+
+  it("goes back to the default order when the list grows past the limit", async () => {
+    const { SORT_ROW_LIMIT } = await import("../columnSettings");
+    const store = await sortedStore();
+    vi.mocked(fetchPage).mockResolvedValue({ page: { items: [], next_after: null }, totalCount: SORT_ROW_LIMIT + 1 });
+    await store.applyWhereExpr('name == "x"');
+    expect(store.getSnapshot().orderBy).toEqual({ column: "name", direction: "asc" });
+    // No query sorted that many rows by the custom column.
+    const sortedCalls = vi.mocked(fetchPage).mock.calls.filter((call) =>
+      (call[5] as { column: string }[] | undefined)?.some((o) => o.column === EXPR),
+    );
+    expect(sortedCalls.every((call) => (call[4] as string | null) !== 'name == "x"')).toBe(true);
+  });
+
+  it("goes back to the default order when its column is removed", async () => {
+    const { setColumnLayout } = await import("../columnSettings");
+    const store = await sortedStore();
+    setColumnLayout("tag", null);
+    await store.applyColumnChange();
+    expect(store.getSnapshot().orderBy).toEqual({ column: "name", direction: "asc" });
+  });
+});
+
+describe("ViewStore sorting by a built-in date", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+  });
+
+  function eventRow(handle: string, sortval: number | null) {
+    return { handle, gramps_id: handle, date: sortval === null ? null : { _class: "Date", sortval, dateval: [0, 0, 1900, false] } };
+  }
+
+  async function sortedByDate(): Promise<ViewStore> {
+    vi.mocked(fetchPage).mockResolvedValue({ page: { items: [eventRow("E1", 2415021)], next_after: null }, totalCount: 1 });
+    const store = new ViewStore(EVENT_VIEW, getSql);
+    await store.runQuery(null, false);
+    await store.setSort("date.sortval");
+    expect(store.getSnapshot().orderBy).toEqual({ column: "date.sortval", direction: "asc" });
+    return store;
+  }
+
+  function lastRankExpr(): string {
+    const exprs = vi.mocked(fetchPage).mock.calls.map((call) => call[4] as string).filter((expr) => expr?.includes("handle <"));
+    return exprs[exprs.length - 1];
+  }
+
+  it("ranks by the sortval read from inside the cached date", async () => {
+    const store = await sortedByDate();
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(eventRow("E1", 2415021));
+    await store.applyLiveChange({ table: "event", handle: "E1", op: "UPDATE", changedBy: null });
+    expect(lastRankExpr()).toBe(
+      '((date.sortval is None or date.sortval < 2415021)) or (date.sortval == 2415021 and handle < "E1")',
+    );
+  });
+
+  it("ranks an event with no date first", async () => {
+    const store = await sortedByDate();
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(eventRow("E1", null));
+    await store.applyLiveChange({ table: "event", handle: "E1", op: "UPDATE", changedBy: null });
+    expect(lastRankExpr()).toBe('(date.sortval is None and handle < "E1")');
+  });
+
+  it("doesn't sort a list over the limit by date", async () => {
+    const { SORT_ROW_LIMIT } = await import("../views");
+    const store = await sortedByDate();
+    vi.mocked(fetchPage).mockResolvedValue({ page: { items: [], next_after: null }, totalCount: SORT_ROW_LIMIT + 1 });
+    await store.applyWhereExpr('description == "x"');
+    expect(store.getSnapshot().orderBy).toEqual({ column: "gramps_id", direction: "asc" });
+  });
+});
+
+describe("ViewStore sorting by a custom name column", () => {
+  const NAME = "father.primary_name";
+  const SURNAME = `${NAME}.surname_list[0].surname`;
+  const GIVEN = `${NAME}.first_name`;
+
+  beforeEach(async () => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+    const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
+    setColumnLayout("family", { custom: [{ id: "goql_f", expr: NAME, sortable: true }], order: [], hidden: [] });
+    applyColumnSettings(FAMILY_VIEW);
+  });
+
+  afterEach(async () => {
+    const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
+    setColumnLayout("family", null);
+    applyColumnSettings(FAMILY_VIEW);
+  });
+
+  function familyRow(handle: string, father: { surname: string; given: string } | null) {
+    return {
+      handle,
+      gramps_id: handle,
+      goql_f: father && { _class: "Name", first_name: father.given, surname_list: [{ surname: father.surname }] },
+    };
+  }
+
+  function lastRankExpr(): string {
+    const exprs = vi.mocked(fetchPage).mock.calls.map((call) => call[4] as string).filter((expr) => expr?.includes("handle <"));
+    return exprs[exprs.length - 1];
+  }
+
+  it("sorts by surname then given name, both at the clicked direction", async () => {
+    vi.mocked(fetchPage).mockResolvedValue({ page: { items: [familyRow("F1", null)], next_after: null }, totalCount: 1 });
+    const store = new ViewStore(FAMILY_VIEW, getSql);
+    await store.runQuery(null, false);
+    await store.setSort(SURNAME);
+    const orderBy = vi.mocked(fetchPage).mock.calls[vi.mocked(fetchPage).mock.calls.length - 1][5];
+    expect(orderBy).toEqual([{ column: SURNAME, direction: "asc" }, { column: GIVEN, direction: "asc" }]);
+
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(familyRow("F1", { surname: "Smith", given: "Ann" }));
+    await store.applyLiveChange({ table: "family", handle: "F1", op: "UPDATE", changedBy: null });
+    expect(lastRankExpr()).toBe(
+      `((${SURNAME} is None or ${SURNAME} < "Smith")) or ` +
+        `(${SURNAME} == "Smith" and (${GIVEN} is None or ${GIVEN} < "Ann")) or ` +
+        `(${SURNAME} == "Smith" and ${GIVEN} == "Ann" and handle < "F1")`,
+    );
   });
 });

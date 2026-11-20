@@ -10,7 +10,8 @@ import { getToken } from "../auth/auth";
 import { testGoqlSelect } from "../store/api";
 import {
   brokenMessage, builtinColumns, clearBroken, columnExpression, expressionDependencies, getColumnLayout,
-  newCustomColumnId, setColumnLayout, structuredValueError, type ColumnLayout,
+  customSortKeys, layoutChangesCache, newCustomColumnId, setColumnLayout, SORT_ROW_LIMIT, structuredValueError,
+  type ColumnLayout,
 } from "../store/columnSettings";
 import { goqlNamespaceForEndpoint } from "../store/goqlCompletion";
 import { getViewStore } from "../store/registry";
@@ -26,6 +27,8 @@ interface Row {
   expr: string;
   title: string;
   visible: boolean;
+  /** A custom column's header sorts (CustomColumn.sortable). */
+  sortable: boolean;
   error: string | null;
 }
 
@@ -37,7 +40,7 @@ function shownBuiltins(view: ViewConfig) {
 
 function defaultRows(view: ViewConfig): Row[] {
   return shownBuiltins(view).map((c) => ({
-    key: c.key, builtinLabel: c.label, expr: columnExpression(c), title: "", visible: true, error: null,
+    key: c.key, builtinLabel: c.label, expr: columnExpression(c), title: "", visible: true, sortable: false, error: null,
   }));
 }
 
@@ -47,7 +50,7 @@ function rowsFromLayout(view: ViewConfig, layout: ColumnLayout): Row[] {
   const rows: Row[] = [
     ...defaultRows(view),
     ...layout.custom.map((c) => ({
-      key: c.id, builtinLabel: null, expr: c.expr, title: c.title ?? "", visible: true,
+      key: c.id, builtinLabel: null, expr: c.expr, title: c.title ?? "", visible: true, sortable: !!c.sortable,
       error: structuredValueError(namespace, c.expr) ?? brokenMessage(view.key, c.id) ?? null,
     })),
   ].map((row) => ({ ...row, visible: !hidden.has(row.key) }));
@@ -61,7 +64,12 @@ function rowsFromLayout(view: ViewConfig, layout: ColumnLayout): Row[] {
 function layoutFromRows(view: ViewConfig, rows: Row[]): ColumnLayout | null {
   const custom = rows
     .filter((r) => r.builtinLabel === null)
-    .map((r) => (r.title.trim() ? { id: r.key, expr: r.expr.trim(), title: r.title.trim() } : { id: r.key, expr: r.expr.trim() }));
+    .map((r) => ({
+      id: r.key,
+      expr: r.expr.trim(),
+      ...(r.title.trim() ? { title: r.title.trim() } : {}),
+      ...(r.sortable ? { sortable: true } : {}),
+    }));
   const order = rows.map((r) => r.key);
   const hidden = rows.filter((r) => !r.visible).map((r) => r.key);
   const defaultOrder = shownBuiltins(view).map((c) => c.key);
@@ -86,10 +94,8 @@ function ColumnSettingsBody({ view, onClose }: { view: ViewConfig; onClose: () =
   const namespace = goqlNamespaceForEndpoint(view.endpoint) ?? "";
 
   const savedExprs = new Map(saved.custom.map((c) => [c.id, c.expr.trim()]));
-  const customRows = rows.filter((r) => r.builtinLabel === null);
   // Anything that changes what's fetched (not order/visibility/titles).
-  const refetches =
-    customRows.length !== saved.custom.length || customRows.some((r) => savedExprs.get(r.key) !== r.expr.trim());
+  const refetches = layoutChangesCache(view, saved, layoutFromRows(view, rows));
 
   function update(key: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -106,7 +112,10 @@ function ColumnSettingsBody({ view, onClose }: { view: ViewConfig; onClose: () =
   }
 
   function addColumn() {
-    setRows((prev) => [...prev, { key: newCustomColumnId(), builtinLabel: null, expr: "", title: "", visible: true, error: null }]);
+    setRows((prev) => [
+      ...prev,
+      { key: newCustomColumnId(), builtinLabel: null, expr: "", title: "", visible: true, sortable: false, error: null },
+    ]);
   }
 
   async function save() {
@@ -230,6 +239,11 @@ function CustomColumnFields({
     fieldRef: exprRef,
     locate: (value) => ({ namespace, source: value, offset: 0 }),
   });
+  // Gramps types are stored as numbers whose order isn't their names'.
+  const canSort = row.expr.trim() === "" || customSortKeys(namespace, row.expr) !== null;
+  const sortHelp = canSort
+    ? t("Click the header to sort, while the list has at most {n} rows.").replace("{n}", SORT_ROW_LIMIT.toLocaleString())
+    : t("Types such as an event's type can't be sorted.");
   const untracked = useMemo(
     () => row.expr.trim() !== "" && expressionDependencies(namespace, row.expr).untracked,
     [namespace, row.expr],
@@ -271,6 +285,16 @@ function CustomColumnFields({
           value={row.title}
           onChange={(e) => onChange({ title: e.currentTarget.value })}
         />
+        <Tooltip label={sortHelp} openDelay={400} multiline w={280}>
+          <Checkbox
+            mt={6}
+            size="xs"
+            label={t("Sortable")}
+            disabled={!canSort}
+            checked={row.sortable && canSort}
+            onChange={(e) => onChange({ sortable: e.currentTarget.checked })}
+          />
+        </Tooltip>
         <Tooltip label={t("Remove this column")} openDelay={400}>
           <ActionIcon variant="subtle" color="gray" mt={2} onClick={onRemove} aria-label={t("Remove this column")}>
             ✕

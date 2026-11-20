@@ -77,6 +77,11 @@ export interface ColumnConfig {
    * column must cache via `orderPath`. Makes a json_path-backed column
    * sortable. */
   sortBy?: string;
+  /** Header sorting is off while the list has more rows than this (a
+   * sort the server can't do cheaply -- dates and a list's custom
+   * columns, SORT_ROW_LIMIT); a sort already in place falls
+   * back to the default order when the list grows past it. */
+  sortLimit?: number;
   /** This column caches the value of GOQL path `orderPath`, so that path
    * can be an order_by key (see ViewConfig.orderBy). */
   orderPath?: string;
@@ -112,6 +117,13 @@ export function visibleColumns(view: ViewConfig): { column: ColumnConfig; index:
     .map((column, index) => ({ column, index }))
     .filter(({ column }) => !column.hidden);
 }
+
+/** The most rows a list may have to sort by a value read from inside each
+ * record (a date, a list's custom column -- ColumnConfig.sortLimit).
+ * Nothing indexes inside a record, so the server sorts every row of the
+ * list for each page (seconds per page on a 100k tree); at this size
+ * that's at most a few pages over a few thousand rows. */
+export const SORT_ROW_LIMIT = 5000;
 
 export interface OrderBy {
   column: string;
@@ -395,10 +407,12 @@ export const PERSON_VIEW: ViewConfig = {
     {
       key: "birth_date", label: "Birth", select: { json_path: ["birth", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
+      sortBy: "birth.date.sortval", sortLimit: SORT_ROW_LIMIT,
     },
     {
       key: "death_date", label: "Death", select: { json_path: ["death", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
+      sortBy: "death.date.sortval", sortLimit: SORT_ROW_LIMIT,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
     // Hidden, for the Map/Timeline's subject scoping (store/visualScope.ts).
@@ -543,6 +557,7 @@ export const EVENT_VIEW: ViewConfig = {
       // json_path, since date isn't a flat secondary column) select.
       key: "date", label: "Date", select: { json_path: ["date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
+      sortBy: "date.sortval", sortLimit: SORT_ROW_LIMIT,
     },
     {
       key: "place_title", label: "Place", select: { json_path: ["place", "title"] }, sqlType: "TEXT",

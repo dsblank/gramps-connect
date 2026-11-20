@@ -13,9 +13,10 @@ import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getTreeId } from "../auth/auth";
 import { GRAMPS_TYPE_TABLES, type GrampsTypeTable } from "../data/grampsTypeTables";
 import { GOQL_VOCABULARIES, goqlNamespaceForEndpoint, resolveGoqlPath, type FieldNode } from "./goqlCompletion";
+import { displayNameSortKeys } from "./nameDisplay";
 import { formatDisplayDate } from "./placeIndex";
 import { STORAGE_KEYS } from "./storageKeys";
-import { displayName, formatChange, formatChangeTitle, type ColumnConfig, type ViewConfig } from "./views";
+import { displayName, formatChange, formatChangeTitle, SORT_ROW_LIMIT, type ColumnConfig, type ViewConfig } from "./views";
 
 const STORAGE_KEY = STORAGE_KEYS.columnLayouts;
 
@@ -28,7 +29,12 @@ export interface CustomColumn {
   expr: string;
   /** Header text; the expression itself when absent. */
   title?: string;
+  /** Clicking the header sorts by it -- while the list has at most
+   * SORT_ROW_LIMIT rows (see customSortKeys). */
+  sortable?: boolean;
 }
+
+export { SORT_ROW_LIMIT };
 
 export interface ColumnLayout {
   custom: CustomColumn[];
@@ -270,8 +276,58 @@ function isChangeTime(expr: string): boolean {
   return /(^|\.)change$/.test(expr.trim());
 }
 
-export function customColumnConfig(column: CustomColumn): ColumnConfig {
+/** A name's sort keys under `path` (`father.primary_name`): its parts in
+ * the order the tree's name format writes them, as the People list's Name
+ * column sorts (nameDisplay.ts's nameSortKeys) -- read on each sort, so a
+ * name format change applies. The surname is the first in its list, which
+ * is the primary one for nearly everyone. */
+function nameSortKeysAt(path: string): string[] {
+  return displayNameSortKeys().map((key) =>
+    key === "surname"
+      ? `${path}.surname_list[0].surname`
+      : key === "given_name"
+        ? `${path}.first_name`
+        : key.replace(/^primary_name\./, `${path}.`),
+  );
+}
+
+/** What sorting by `expr` sorts by, most significant first: the expression
+ * itself for a single value or a count, a date's `sortval`, a name's parts
+ * (nameSortKeysAt); null for a Gramps type, which is stored as a number
+ * whose order isn't its name's (Marriage before Birth), or a whole record. */
+export function customSortKeys(namespace: string, expr: string): (() => string[]) | null {
+  const text = expr.trim();
+  if (!PLAIN_PATH_RE.test(text)) return () => [text]; // len(...)/count(...)
+  const resolved = resolveGoqlPath(namespace, text);
+  if (!resolved) return () => [text]; // unknown to the vocabulary: the server decides
+  if (resolved.kind === "record") return null;
+  const fields = resolved.node.fields;
+  if (!fields) return () => [text];
+  if ("dateval" in fields && "sortval" in fields) return () => [`${text}.sortval`];
+  if ("first_name" in fields && "surname_list" in fields) return () => nameSortKeysAt(text);
+  return null;
+}
+
+/** Every key a column sorts by (sortKeys, else sortBy). */
+export function columnSortKeys(column: ColumnConfig): string[] {
+  return column.sortKeys?.() ?? (column.sortBy ? [column.sortBy] : []);
+}
+
+/** A custom column's config. A sortable one sorts by its sort keys
+ * (customSortKeys). ViewStore's rank query compares against the row's
+ * value for each key: this column's own value when the key is its
+ * expression (`orderPath`), else read from inside it (a date's `sortval`,
+ * a name's parts). */
+export function customColumnConfig(column: CustomColumn, namespace = ""): ColumnConfig {
   const changeTime = isChangeTime(column.expr);
+  const sortKeys = column.sortable ? customSortKeys(namespace, column.expr) : null;
+  const keys = sortKeys?.() ?? [];
+  const expr = column.expr.trim();
+  const sorting: Partial<ColumnConfig> = !sortKeys
+    ? {}
+    : keys.length === 1
+      ? { sortBy: keys[0], sortLimit: SORT_ROW_LIMIT, ...(keys[0] === expr ? { orderPath: expr } : {}) }
+      : { sortKeys, sortLimit: SORT_ROW_LIMIT };
   return {
     key: column.id,
     label: column.title?.trim() || column.expr,
@@ -281,7 +337,21 @@ export function customColumnConfig(column: CustomColumn): ColumnConfig {
     toSql: (value) => (value === undefined || value === null ? null : JSON.stringify(value)),
     toDisplay: changeTime ? (stored) => formatChange(parseStored(stored)) : formatGoqlValue,
     toTitle: changeTime ? (stored) => formatChangeTitle(parseStored(stored)) : undefined,
+    ...sorting,
   };
+}
+
+/** Whether going from layout `before` to `after` changes what `view`
+ * caches (so saving refetches the list) -- for the dialog's warning. */
+export function layoutChangesCache(view: ViewConfig, before: ColumnLayout, after: ColumnLayout | null): boolean {
+  const namespace = goqlNamespaceForEndpoint(view.endpoint) ?? "";
+  const signature = (layout: ColumnLayout | null) =>
+    columnSignature(
+      (layout?.custom ?? [])
+        .filter((c) => c.expr.trim() && !structuredValueError(namespace, c.expr))
+        .map((c) => customColumnConfig(c, namespace)),
+    );
+  return signature(before) !== signature(after);
 }
 
 function columnSignature(columns: ColumnConfig[]): string {
@@ -299,7 +369,11 @@ export function applyColumnSettings(view: ViewConfig): boolean {
     (c) => c.expr.trim() && !brokenMessage(view.key, c.id) && !structuredValueError(namespace, c.expr),
   );
   const deps = custom.map((c) => dependencyColumns(view, c));
-  const next = [...base.columns, ...custom.map(customColumnConfig), ...deps.flatMap((d) => d.columns)];
+  const next = [
+    ...base.columns,
+    ...custom.map((c) => customColumnConfig(c, namespace)),
+    ...deps.flatMap((d) => d.columns),
+  ];
   const changed = columnSignature(next) !== columnSignature(view.columns);
   view.columns = next;
   const dependsOn = [...(base.dependsOn ?? []), ...deps.flatMap((d) => d.dependsOn)];
