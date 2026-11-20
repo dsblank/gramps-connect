@@ -1,5 +1,5 @@
 {
- "goql_version": "0.5.12",
+ "goql_version": "0.5.13",
  "vocabularies": {
   "Citation": {
    "collections": {
