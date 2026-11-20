@@ -1,5 +1,6 @@
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { confirmDialog } from "../../../store/confirmDialog";
+import { sortByEventDate } from "../../../store/eventOrder";
 import { zipRefs } from "../../../store/objectDetail";
 import { detachRefListEntry } from "../../../store/refListApi";
 import { EVENT_VIEW } from "../../../store/views";
@@ -18,9 +19,13 @@ import { t } from "../../../i18n/i18n";
  * already accepted -- fixing a wrong role after the fact is still
  * ParticipantsSection.tsx's own &#9998;, viewed from the Event's own page
  * (the reverse direction: editing the *participant's* event_ref_list, not
- * this record's). */
+ * this record's).
+ *
+ * Shown in date order (sortByEventDate), not stored order: new events are
+ * always appended, so a baptism added after a death would otherwise list
+ * after it. The stored event_ref_list is left as is. */
 export function EventsSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
-  const rows = zipRefs(detail.event_ref_list, detail.extended?.events);
+  const rows = sortByEventDate(zipRefs(detail.event_ref_list, detail.extended?.events));
   const canEdit = hasPermissions("EditObject");
   if (rows.length === 0 && !canEdit) return null;
 
