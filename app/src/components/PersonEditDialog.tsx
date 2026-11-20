@@ -65,23 +65,23 @@ interface AssociationsFieldProps {
   onAdd: (item: QueryItem, rel: string) => void;
   onAddNew: (rel: string) => void;
   onRemove: (handle: string) => void;
+  onRelChange: (handle: string, rel: string) => void;
   onOpenEditDraft: (refHandle: string) => void;
   onReopenDraft: (draftHandle: string) => void;
   onCancelDraft: (draftHandle: string) => void;
 }
 
 /** Person.person_ref_list -- associations to other people (godparent,
- * witness, ...), each carrying its own free-text `rel` description. Same
- * shape as FamilyEditDialog.tsx's ChildrenField (a list, plus one extra
- * per-entry field set *before* adding, same as frel/mrel there) -- kept as
- * its own small component rather than folded into the generic
- * RefListField, since Notes/Citations/Tags have no such extra field at
- * all. `rel` isn't editable on an already-added association from here, same
- * MVP scope ChildrenField's own frel/mrel already accepted. */
+ * witness, ...), each carrying its own free-text `rel` description. The
+ * description is typed on each association's own row after adding, same
+ * as EventsField's per-row Role, rather than in a box above the picker
+ * that read as a step about the person being picked. Kept as its own
+ * small component rather than folded into the generic RefListField,
+ * since Notes/Citations/Tags have no such extra field at all. */
 function AssociationsField({
-  refs, labels, newDrafts, findEdit, onAdd, onAddNew, onRemove, onOpenEditDraft, onReopenDraft, onCancelDraft,
+  refs, labels, newDrafts, findEdit, onAdd, onAddNew, onRemove, onRelChange, onOpenEditDraft, onReopenDraft,
+  onCancelDraft,
 }: AssociationsFieldProps) {
-  const [rel, setRel] = useState("");
   const pickedHandles = new Set(refs.map((r) => r.ref));
 
   return (
@@ -90,11 +90,23 @@ function AssociationsField({
       {refs.length === 0 && <Text size="xs" c="dimmed">{t("No associations")}</Text>}
       {refs.map((ref) => {
         const nestedDraft = newDrafts.get(ref.ref) ?? findEdit(ref.ref);
+        const relInput = (
+          <TextInput
+            aria-label={t("Relationship")}
+            placeholder={t("e.g. Godfather")}
+            size="xs"
+            w={140}
+            style={{ flexShrink: 0 }}
+            value={ref.rel ?? ""}
+            onChange={(e) => onRelChange(ref.ref, e.currentTarget.value)}
+          />
+        );
         if (nestedDraft) {
           return (
             <OccupiedRefRow
               key={ref.ref}
               label={nestedDraftLabel(nestedDraft)}
+              extra={relInput}
               isNew={nestedDraft.mode === "new"}
               onEdit={() => onReopenDraft(nestedDraft.handle)}
               onRemove={() => onCancelDraft(nestedDraft.handle)}
@@ -106,7 +118,8 @@ function AssociationsField({
         return (
           <OccupiedRefRow
             key={ref.ref}
-            label={ref.rel ? `${label} — ${ref.rel}` : label}
+            label={label}
+            extra={relInput}
             isNew={false}
             onEdit={() => onOpenEditDraft(ref.ref)}
             onRemove={() => onRemove(ref.ref)}
@@ -115,13 +128,6 @@ function AssociationsField({
         );
       })}
       <Stack gap={4}>
-        <TextInput
-          label={t("Relationship")}
-          placeholder={t("e.g. Godfather")}
-          size="xs"
-          value={rel}
-          onChange={(e) => setRel(e.currentTarget.value)}
-        />
         <SearchOrCreate
           view={PERSON_VIEW}
           searchField="gramps_id"
@@ -129,9 +135,9 @@ function AssociationsField({
           renderLabel={personLabel}
           placeholder={PERSON_VIEW.simpleSearch?.placeholder}
           onPick={(item) => {
-            if (!pickedHandles.has(item.handle)) onAdd(item, rel);
+            if (!pickedHandles.has(item.handle)) onAdd(item, "");
           }}
-          onOpenNew={() => onAddNew(rel)}
+          onOpenNew={() => onAddNew("")}
           createLabel="Person"
         />
       </Stack>
@@ -628,6 +634,9 @@ export function PersonEditDialog({
   function handleAssocRemove(handle: string) {
     onChange({ person_ref_list: assocRefs.filter((r) => r.ref !== handle) });
   }
+  function handleAssocRelChange(handle: string, rel: string) {
+    onChange({ person_ref_list: assocRefs.map((r) => (r.ref === handle ? { ...r, rel } : r)) });
+  }
 
   function handleEventAddExisting(item: QueryItem, role: string) {
     setPickedLabels((prev) => ({ ...prev, [item.handle]: pickerResultLabel("event", item) }));
@@ -780,6 +789,7 @@ export function PersonEditDialog({
               onAdd={handleAssocAddExisting}
               onAddNew={handleAddNewAssociation}
               onRemove={handleAssocRemove}
+              onRelChange={handleAssocRelChange}
               onOpenEditDraft={(h) => openEditListItem("person", ASSOC_EDIT_FIELD_PREFIX, h)}
               onReopenDraft={onShowDraft}
               onCancelDraft={onCloseDraft}
