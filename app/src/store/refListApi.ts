@@ -71,6 +71,33 @@ export async function detachRefListEntry(
   await updateObject(token, view, objectHandle, obj);
 }
 
+/** Moves the entry at `from` to position `to` in `objectHandle`'s
+ * `listField`, keeping the whole entry (a MediaRef's region, citations,
+ * etc.) -- one PUT, so one undoable transaction. Order matters for
+ * media_list: the first entry is the record's own picture. `expectedRef`
+ * guards against the list having changed since it was shown (someone
+ * else's edit): the move is refused rather than moving the wrong entry. */
+export async function moveRefListEntry(
+  token: string,
+  view: ViewConfig,
+  objectHandle: string,
+  listField: string,
+  from: number,
+  to: number,
+  expectedRef: string
+): Promise<void> {
+  const obj = await fetchPlainObject(token, view, objectHandle);
+  const list = [...(((obj[listField] as RefListEntry[] | undefined) ?? []) as RefListEntry[])];
+  if (from < 0 || from >= list.length || entryHandle(list[from]) !== expectedRef) {
+    throw new Error("This list was changed by someone else. Reload it and try again.");
+  }
+  if (to < 0 || to >= list.length || to === from) return;
+  const [entry] = list.splice(from, 1);
+  list.splice(to, 0, entry);
+  obj[listField] = list;
+  await updateObject(token, view, objectHandle, obj);
+}
+
 /** Merges `fieldPatch` onto whichever entry of `objectHandle`'s `listField`
  * points at `targetHandle` -- e.g. changing a ChildRef's frel/mrel or an
  * EventRef's role, as opposed to attach/detach's whole-entry add/remove.

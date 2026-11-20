@@ -457,6 +457,17 @@ export function RefListField({
   );
 }
 
+/** A copy of `list` with the item at `from` moved to `to` -- MediaListField's
+ * onMove for an editor's draft list (whole entries, so a MediaRef keeps its
+ * region/citations). */
+export function moveItem<T>(list: T[], from: number, to: number): T[] {
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
 interface MediaListFieldProps {
   label: string;
   refs: string[];
@@ -473,6 +484,12 @@ interface MediaListFieldProps {
    * this app; nothing before this field could create Media at all). */
   onAdded: (handle: string, label: string) => void;
   onRemove: (handle: string) => void;
+  /** Moves the entry at `from` to `to` (indexes into `refs`). The first
+   * one is the record's own picture, so order matters here. */
+  onMove: (from: number, to: number) => void;
+  /** Says what the first entry is used for, shown with more than one; ""
+   * hides it (a caller with its own hint nearby). */
+  orderHint?: string;
 }
 
 /** Person's (and, from phase 4 on, every other type's) Media field. Rows
@@ -483,7 +500,7 @@ interface MediaListFieldProps {
  * fields) for a &#9998; button to open. "+ New Media" swaps SearchOrCreate's
  * usual nested-dialog trigger for a plain file picker, since a file is
  * the thing being created here, not a form. */
-export function MediaListField({ label, refs, labels, onAddExisting, onAdded, onRemove }: MediaListFieldProps) {
+export function MediaListField({ label, refs, labels, onAddExisting, onAdded, onRemove, onMove, orderHint }: MediaListFieldProps) {
   const [searching, setSearching] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -510,15 +527,26 @@ export function MediaListField({ label, refs, labels, onAddExisting, onAdded, on
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
       {refs.length === 0 && <Text size="xs" c="dimmed">{t("No media")}</Text>}
-      {refs.map((refHandle) => (
+      {refs.map((refHandle, i) => (
         <OccupiedRefRow
-          key={refHandle}
+          key={`${i}-${refHandle}`}
           label={labels[refHandle] ?? refHandle}
           isNew={false}
           onRemove={() => onRemove(refHandle)}
           removeLabel="Remove"
+          extra={refs.length > 1 && (
+            <>
+              {i > 0 && <CircleGlyphButton glyph="↑" label={t("Move up")} size={16} onClick={() => onMove(i, i - 1)} />}
+              {i < refs.length - 1 && (
+                <CircleGlyphButton glyph="↓" label={t("Move down")} size={16} onClick={() => onMove(i, i + 1)} />
+              )}
+            </>
+          )}
         />
       ))}
+      {refs.length > 1 && orderHint !== "" && (
+        <Text size="xs" c="dimmed">{orderHint ?? t("The first one is the picture shown for this record.")}</Text>
+      )}
       {searching ? (
         <RecordPicker
           view={MEDIA_VIEW}

@@ -18,7 +18,7 @@ import { NameEditDialog } from "./NameEditDialog";
 import { EventPlaceField, type EventPlaceValue } from "./EventPlaceField";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import {
-  EventsField, MediaListField, OccupiedRefRow, RefListField, SearchOrCreate, cancelledNewDraftHandles, findEditDraft,
+  EventsField, MediaListField, moveItem, OccupiedRefRow, RefListField, SearchOrCreate, cancelledNewDraftHandles, findEditDraft,
   nestedDraftLabel, newDraftsByHandle, openNewListItemPatch, personLabel, pickerResultLabel, type EventRefLite,
 } from "./RefPickerField";
 
@@ -842,6 +842,7 @@ export function PersonEditDialog({
               onAddExisting={handleMediaAddExisting}
               onAdded={handleMediaAdded}
               onRemove={handleMediaRemove}
+              onMove={(from, to) => onChange({ media_list: moveItem(mediaRefsRaw, from, to) })}
             />
 
             <RefListField

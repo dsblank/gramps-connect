@@ -8,7 +8,7 @@ import { CITATION_VIEW, EVENT_VIEW, MEDIA_VIEW, NOTE_VIEW, PERSON_VIEW, TAG_VIEW
 import type { ViewConfig } from "../store/views";
 import { CHILD_REL_OPTIONS } from "./related/RefEditDialog";
 import {
-  EventsField, MediaListField, OccupiedRefRow, RefListField, RefSlot, SearchOrCreate, cancelledNewDraftHandles,
+  EventsField, MediaListField, moveItem, OccupiedRefRow, RefListField, RefSlot, SearchOrCreate, cancelledNewDraftHandles,
   findEditDraft, nestedDraftLabel, newDraftsByHandle, openNewListItemPatch, personLabel, pickerResultLabel,
   type EventRefLite,
 } from "./RefPickerField";
@@ -623,6 +623,7 @@ export function FamilyEditDialog({
               onAddExisting={handleMediaAddExisting}
               onAdded={handleMediaAdded}
               onRemove={handleMediaRemove}
+              onMove={(from, to) => onChange({ media_list: moveItem(mediaRefsRaw, from, to) })}
             />
 
             <RefListField

@@ -9,7 +9,7 @@ import { CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, PLACE_VIEW, SOURCE_VIEW, TAG_VIEW
 import { DRAFT_TYPE_LABELS, type DraftEntry, type DraftType } from "../store/draftStack";
 import { DateInput } from "./DateInput";
 import {
-  MediaListField, RefListField, RefSlot, cancelledNewDraftHandles, findEditDraft, newDraftsByHandle,
+  MediaListField, moveItem, RefListField, RefSlot, cancelledNewDraftHandles, findEditDraft, newDraftsByHandle,
   openNewListItemPatch, pickerResultLabel,
 } from "./RefPickerField";
 import { withGrampsId } from "./related/summary";
@@ -777,6 +777,7 @@ export function ObjectEditDialog({
               onChange({ [f.key]: [...refsRaw, { _class: "MediaRef", ref: handle }] });
             }}
             onRemove={(h) => onChange({ [f.key]: refsRaw.filter((r) => r.ref !== h) })}
+            onMove={(from, to) => onChange({ [f.key]: moveItem(refsRaw, from, to) })}
           />
         );
       }

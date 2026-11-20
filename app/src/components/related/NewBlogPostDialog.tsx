@@ -20,7 +20,7 @@ import { confirmDialog } from "../../store/confirmDialog";
 import type { StyledText } from "../../store/styledText";
 import { NoteEditor } from "../notes/NoteEditor";
 import { BlogArticle } from "../BlogPostView";
-import { MediaListField, pickerResultLabel } from "../RefPickerField";
+import { MediaListField, moveItem, pickerResultLabel } from "../RefPickerField";
 import { t } from "../../i18n/i18n";
 import { blogDraftKey } from "../../store/storageKeys";
 
@@ -213,6 +213,8 @@ export function NewBlogPostButton() {
                       update({ media: [...draft.media, { handle, label, mime: mimeFromName(label) }] })
                     }
                     onRemove={(handle) => update({ media: draft.media.filter((m) => m.handle !== handle) })}
+                    onMove={(from, to) => update({ media: moveItem(draft.media, from, to) })}
+                    orderHint=""
                   />
                   <Text size="xs" c="dimmed">
                     {t("The first image leads the post; the rest are shown under the text. Use the editor's image button to place a picture inside the story.")}
