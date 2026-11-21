@@ -43,6 +43,29 @@ the wiki are the record of what shipped.
   height. The ancestor side (`SiblingGroupWithAncestry`) doesn't have this
   bug.
 
+## Performance
+
+- **Notes list is slow on large PostgreSQL trees** (about 2 minutes to load
+  305k notes through the API). Notes is the only main list with a
+  `baseFilter`: it hides topic, topic-message and story notes by
+  `type.string`, which lives only in each note's JSON. A filter has to run
+  before a page's `LIMIT`, and the list's order (`gramps_id ASC NULLS
+  FIRST, handle`) can't use SharedPostgreSQL's `(treeid, gramps_id)` index,
+  whose ascending order puts NULLs last. So every 1,000-row page re-parses
+  the JSON of every note ahead of the cursor: about 320 ms per page near
+  the start, against 9 ms with the index declared `NULLS FIRST` (measured
+  on a PostgreSQL 16 copy of the 100k tree). Fix belongs in the
+  SharedPostgreSQL addon (gramps-project/addons-source): declare its text
+  indexes `NULLS FIRST` (GOQL always sorts NULLs first, to match SQLite)
+  and rebuild them when an existing database is opened. Also helps any
+  list while a search or filter is active, and a little for the plain big
+  lists (Events first page 70 to 26 ms). Don't filter those notes
+  client-side instead: server counts and rank queries would then include
+  rows the list doesn't show. The desktop (SQLite) Notes list is also slow
+  (about 95 s); probably the same thing, since GOQL sorts text with
+  `COLLATE NOCASE` and the plain `gramps_id` index can't serve it, but
+  that plan hasn't been checked.
+
 ## Editing gaps
 
 - **Person / Family** — LDS ordinances are fully read-only: no edit, add or
