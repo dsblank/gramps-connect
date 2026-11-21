@@ -3,6 +3,12 @@
 A faster, real-time-collaborative web frontend for
 [Gramps](https://gramps-project.org/), the free genealogy software.
 
+<p>
+  <a href="https://dsblank.github.io/gramps-connect/tour/"><img alt="Watch the tour" src="https://img.shields.io/badge/%E2%96%B6%20Watch%20the%20tour-1c6fd1?style=for-the-badge"></a>
+  <a href="https://github.com/dsblank/gramps-connect/wiki/Installing"><img alt="Download" src="https://img.shields.io/badge/Download-2b8a3e?style=for-the-badge"></a>
+  <a href="https://dsblank.github.io/gramps-connect/"><img alt="Home page" src="https://img.shields.io/badge/Home%20page-495057?style=for-the-badge"></a>
+</p>
+
 ## Overview
 
 [Gramps](https://gramps-project.org/) is free, open-source genealogy
