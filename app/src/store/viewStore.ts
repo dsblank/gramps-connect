@@ -167,6 +167,19 @@ export class ViewStore {
   private whereExpr: string | null = null;
   /** See ViewSnapshot.pickerExpr's doc comment. */
   private pickerExpr: string | null = null;
+  /** The whereExpr/pickerExpr the latest filter change is moving to, set
+   * the moment that change starts. whereExpr/pickerExpr above only change
+   * when a query's rows land, and the changes that keep the selected row
+   * (clearFilter(), clearPickerFilter(), applyWhereExpr(), ...) make a
+   * server round trip before their query even starts. A second change
+   * started in that gap builds on these, not on the old committed values:
+   * otherwise a search typed right after clicking the Filters picker's ×
+   * re-sent the old picker filter, and its query (the newer one) cancelled
+   * the clear's, leaving the list filtered with the button showing none.
+   * A change that finds its own target overwritten after its round trip
+   * has been superseded and doesn't run its query. */
+  private wantedWhereExpr: string | null = null;
+  private wantedPickerExpr: string | null = null;
   /** Current sort actually sent to the server -- defaults to the view's
    * default (defaultOrderBy(): People's follows the tree's name format, see
    * onDefaultOrderChange()), changed otherwise only via setSort(). Kept
@@ -257,7 +270,7 @@ export class ViewStore {
     if (!wasDefault) return;
     this.orderBy = next;
     if (this.db) {
-      this.runQueryPreservingSelection(this.whereExpr).catch((err) => {
+      this.runQueryPreservingSelection(undefined).catch((err) => {
         console.error(`[${this.view.label}] re-sort after a name format change failed`, err);
       });
     } else {
@@ -522,12 +535,17 @@ export class ViewStore {
     const dropWhereExpr = options?.dropWhereExpr ?? true;
     const dropPickerFilter = options?.dropPickerFilter ?? true;
     const isFiltered =
-      (dropWhereExpr && this.whereExpr !== null) || (dropPickerFilter && this.pickerExpr !== null);
+      (dropWhereExpr && (this.whereExpr !== null || this.wantedWhereExpr !== null)) ||
+      (dropPickerFilter && (this.pickerExpr !== null || this.wantedPickerExpr !== null));
     if (!isFiltered) {
       return this.reselectIfStillVisible(handle);
     }
-    const targetWhereExpr = dropWhereExpr ? null : this.whereExpr;
-    const targetPickerExpr = dropPickerFilter ? null : this.pickerExpr;
+    // The side being dropped is wanted null from now on; the side being
+    // kept is whatever it's on its way to (see wantedWhereExpr).
+    if (dropWhereExpr) this.wantedWhereExpr = null;
+    if (dropPickerFilter) this.wantedPickerExpr = null;
+    const targetWhereExpr = this.wantedWhereExpr;
+    const targetPickerExpr = this.wantedPickerExpr;
     // Resolved *before* dropping the filter(s), against these explicit
     // target values rather than `this.whereExpr`/`this.pickerExpr` (still
     // the pre-drop ones at this point) -- a pure, side-effect-free server
@@ -544,18 +562,30 @@ export class ViewStore {
     // reoccurring "wrong row highlighted" bug, just moved one level down
     // (see [[project_selection_preserving_search_sort_fix]]).
     const index = await this.findGlobalIndex(handle, targetWhereExpr, targetPickerExpr);
-    const pickerOption = dropPickerFilter ? { pickerExpr: targetPickerExpr } : {};
+    // A newer change set a filter on a side this one drops: it's been
+    // superseded, and that change's own query shows its result.
+    if ((dropWhereExpr && this.wantedWhereExpr !== null) || (dropPickerFilter && this.wantedPickerExpr !== null)) {
+      return true;
+    }
+    const pickerOption = dropPickerFilter ? { pickerExpr: null } : {};
+    const whereArg = dropWhereExpr ? null : undefined; // undefined: keep whatever it's on its way to
     if (index === null) {
       // Doesn't resolve even once the filter(s) are dropped (deleted, or a
       // dangling reference) -- the drop itself still has to happen, just
       // with the ordinary wipe-and-default-select every other "selection
       // didn't survive" case gets.
-      await this.runQuery(targetWhereExpr, false, pickerOption);
+      await this.runQuery(whereArg, false, pickerOption);
       return false;
+    }
+    if (this.wantedWhereExpr !== targetWhereExpr || this.wantedPickerExpr !== targetPickerExpr) {
+      // A kept side changed during the round trip, so `index` was worked
+      // out for rows this query won't show: default selection instead.
+      await this.runQuery(whereArg, false, pickerOption);
+      return true;
     }
     this.suppressSelectionClear = true;
     try {
-      await this.runQuery(targetWhereExpr, false, { ...pickerOption, pendingSelection: { index, handle } });
+      await this.runQuery(whereArg, false, { ...pickerOption, pendingSelection: { index, handle } });
     } finally {
       this.suppressSelectionClear = false;
     }
@@ -598,14 +628,16 @@ export class ViewStore {
    * explicit click while filtered always wins, though: that's a real
    * choice, not something to override. */
   async clearFilter(): Promise<void> {
-    if (this.whereExpr === null) return; // nothing active to clear
+    if (this.whereExpr === null && this.wantedWhereExpr === null) return; // nothing active or on its way to clear
     const handle = this.selectionIsDefault ? (this.preFilterHandle ?? this.selectedHandle) : this.selectedHandle;
     this.preFilterHandle = null;
     // dropPickerFilter: false -- clearing the typed search box must leave
     // an active "Filters" picker selection exactly as it was; see
     // navigateToHandle's own doc comment.
-    if (handle === null || !(await this.navigateToHandle(handle, { dropPickerFilter: false }))) {
+    if (handle === null) {
       await this.runQuery(null, false);
+    } else {
+      await this.navigateToHandle(handle, { dropPickerFilter: false });
     }
   }
 
@@ -624,11 +656,13 @@ export class ViewStore {
    * `whereExpr` (FilterBar's own box) untouched. See
    * ViewSnapshot.pickerExpr's doc comment on why the two stay independent. */
   async clearPickerFilter(): Promise<void> {
-    if (this.pickerExpr === null) return; // nothing active to clear
+    if (this.pickerExpr === null && this.wantedPickerExpr === null) return; // nothing active or on its way to clear
     const handle = this.selectionIsDefault ? (this.preFilterHandle ?? this.selectedHandle) : this.selectedHandle;
     this.preFilterHandle = null;
-    if (handle === null || !(await this.navigateToHandle(handle, { dropWhereExpr: false }))) {
+    if (handle === null) {
       await this.setPickerFilter(null);
+    } else {
+      await this.navigateToHandle(handle, { dropWhereExpr: false });
     }
   }
 
@@ -1094,8 +1128,8 @@ export class ViewStore {
         if (!dependents) advanceCursor();
         this.db = db;
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
-        this.whereExpr = null;
-        this.pickerExpr = null;
+        this.whereExpr = this.wantedWhereExpr = null;
+        this.pickerExpr = this.wantedPickerExpr = null;
         this.orderBy = defaultOrderBy(this.view);
         this.status = "ready";
         this.applyDefaultSelection();
@@ -1203,7 +1237,7 @@ export class ViewStore {
    * least as many rows as were already showing (or finishes entirely),
    * then swaps in atomically -- same eventual data, no visible dip. */
   async runQuery(
-    whereExpr: string | null,
+    whereExprArg: string | null | undefined,
     persist: boolean,
     options?: {
       preserveDisplayUntilCaughtUp?: boolean;
@@ -1223,12 +1257,25 @@ export class ViewStore {
       pendingSelection?: { index: number; handle: string };
     }
   ): Promise<void> {
+    // `whereExprArg` undefined (requeries, re-sorts, picker changes) and
+    // `pickerExpr` absent entirely (the overwhelming majority of calls --
+    // FilterBar submitting a search, setSort(), startRequery()) mean
+    // "leave it as it is"; present (even as `null`, from
+    // setPickerFilter()/clearFilter()/navigateToHandle()) means "this is
+    // the new value" -- a plain `options?.pickerExpr ?? ...` would wrongly
+    // fall back for an explicit `null` too. "As it is" is the value it's
+    // on its way to, not the committed one: see wantedWhereExpr. Resolved
+    // before the first await, so a change started after this call can't
+    // be undone by it.
+    const whereExpr = whereExprArg === undefined ? this.wantedWhereExpr : whereExprArg;
+    const newPickerExpr = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.wantedPickerExpr;
+    this.wantedWhereExpr = whereExpr;
+    this.wantedPickerExpr = newPickerExpr;
     // A sort the list has outgrown (see enforceSortLimit()) goes back to
     // the default order first. A selection position worked out for the
     // old order no longer applies, so it's dropped for the default one.
     if (this.limitedSortColumn()) {
-      const newPicker = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.pickerExpr;
-      if (await this.enforceSortLimit(await getToken(), whereExpr, newPicker) && options?.pendingSelection) {
+      if (await this.enforceSortLimit(await getToken(), whereExpr, newPickerExpr) && options?.pendingSelection) {
         const { pendingSelection: _dropped, ...rest } = options;
         options = rest;
         this.selectedIndex = null;
@@ -1238,14 +1285,6 @@ export class ViewStore {
       }
     }
     const preserve = options?.preserveDisplayUntilCaughtUp ?? false;
-    // `pickerExpr` absent entirely (the overwhelming majority of calls --
-    // FilterBar submitting a search, setSort(), startRequery()) means
-    // "leave it exactly as it is"; present (even as `null`, from
-    // setPickerFilter()/clearFilter()/navigateToHandle()) means "this is
-    // the new value" -- a plain `options?.pickerExpr ?? this.pickerExpr`
-    // would wrongly fall back to the current value for an explicit `null`
-    // too, since `null` and "absent" are otherwise indistinguishable here.
-    const newPickerExpr = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.pickerExpr;
     const previousLoadedCount = this.loadedCount;
     const myGeneration = ++this.queryGeneration;
     // Captured once per call, not read fresh off `this.orderBy` later --
@@ -1490,25 +1529,43 @@ export class ViewStore {
    * selectedIndex now landed on among the *new* rows -- some unrelated
    * record, not the one actually selected. */
   private async runQueryPreservingSelection(
-    whereExpr: string | null,
+    whereExprArg: string | null | undefined,
     { persist = false, ...options }: { pickerExpr?: string | null; persist?: boolean } = {},
   ): Promise<void> {
+    // undefined / an absent pickerExpr: keep that side as it is, or as
+    // it's on its way to (see wantedWhereExpr).
+    const setsPicker = "pickerExpr" in options;
+    if (whereExprArg !== undefined) this.wantedWhereExpr = whereExprArg;
+    if (setsPicker) this.wantedPickerExpr = options.pickerExpr ?? null;
+    const whereExpr = this.wantedWhereExpr;
+    const pickerExpr = this.wantedPickerExpr;
     const handle = this.selectedHandle;
     if (handle === null) {
-      await this.runQuery(whereExpr, persist, options);
+      await this.runQuery(whereExprArg, persist, options);
       return;
     }
-    const pickerExpr = options && "pickerExpr" in options ? options.pickerExpr ?? null : this.pickerExpr;
     const index = await this.findGlobalIndex(handle, whereExpr, pickerExpr);
+    // Superseded by a newer change to the side this one sets: let that
+    // one's query stand.
+    if ((whereExprArg !== undefined && this.wantedWhereExpr !== whereExprArg) ||
+        (setsPicker && this.wantedPickerExpr !== (options.pickerExpr ?? null))) {
+      return;
+    }
+    if (index !== null && (this.wantedWhereExpr !== whereExpr || this.wantedPickerExpr !== pickerExpr)) {
+      // The other side changed during the round trip, so `index` was
+      // worked out for rows this query won't show: default selection.
+      await this.runQuery(whereExprArg, persist, options);
+      return;
+    }
     if (index === null) {
       // No longer matches -- the ordinary wipe-and-default-select every
       // other new dataset gets is exactly right here too.
-      await this.runQuery(whereExpr, persist, options);
+      await this.runQuery(whereExprArg, persist, options);
       return;
     }
     this.suppressSelectionClear = true;
     try {
-      await this.runQuery(whereExpr, persist, { ...options, pendingSelection: { index, handle } });
+      await this.runQuery(whereExprArg, persist, { ...options, pendingSelection: { index, handle } });
     } finally {
       this.suppressSelectionClear = false;
     }
@@ -1524,7 +1581,7 @@ export class ViewStore {
    * position-preserving reselect (the same "stay on this record" treatment
    * clearFilter() gives the typed search box). */
   setPickerFilter(expr: string | null): Promise<void> {
-    return this.runQueryPreservingSelection(this.whereExpr, { pickerExpr: expr });
+    return this.runQueryPreservingSelection(undefined, { pickerExpr: expr });
   }
 
   /** Clears backgroundFillActive and, if a requeryDebounced() trigger
@@ -1593,7 +1650,7 @@ export class ViewStore {
     this.orderBy = keys
       ? keys.map((key) => ({ column: key, direction }))
       : secondary ? [{ column, direction }, { column: secondary, direction }] : [{ column, direction }];
-    return this.runQueryPreservingSelection(this.whereExpr);
+    return this.runQueryPreservingSelection(undefined);
   }
 
   /** Live-sync reaction for a view with a fixed `baseFilter` (see
@@ -1657,7 +1714,7 @@ export class ViewStore {
 
   private startRequery(cursor?: number): void {
     this.suppressSelectionClear = true;
-    this.runQuery(this.whereExpr, false, { preserveDisplayUntilCaughtUp: true })
+    this.runQuery(undefined, false, { preserveDisplayUntilCaughtUp: true })
       .then(() => {
         this.reconcileSelection();
         if (cursor !== undefined) this.persistLiveState(cursor);
@@ -1687,7 +1744,7 @@ export class ViewStore {
     const sortGone = this.orderBy.some((o) => before.has(o.column) && !after.has(o.column));
     if (sortGone) this.orderBy = defaultOrderBy(this.view);
     if (!changed) {
-      if (sortGone && this.db) await this.runQueryPreservingSelection(this.whereExpr);
+      if (sortGone && this.db) await this.runQueryPreservingSelection(undefined);
       return;
     }
     // An in-flight fill would insert rows of the old shape: stop it.
@@ -1698,8 +1755,8 @@ export class ViewStore {
     this.emit();
     // Saved for the next load only as that load would build it: the whole
     // list, in the default order (the cache is stamped with that order).
-    const persist = this.whereExpr === null && this.pickerExpr === null && this.isDefaultOrder();
-    await this.runQueryPreservingSelection(this.whereExpr, { persist });
+    const persist = this.wantedWhereExpr === null && this.wantedPickerExpr === null && this.isDefaultOrder();
+    await this.runQueryPreservingSelection(undefined, { persist });
   }
 
   /** ALTER TABLE ADD COLUMN for every view column `db` lacks -- so reads
