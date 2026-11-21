@@ -1194,6 +1194,54 @@
       "namespace": "Person",
       "source": "len([e for e in father",
       "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "[a for a in attribute_list if a.type.value == AttributeType.OCCUPATION][0].va",
+      "expect": [
+        "value"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "[a.type for a in attribute_list][0].str",
+      "expect": [
+        "string"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "[f for f in parent_families if f.father.surname == \"X\"][0].mo",
+      "expect": [
+        "mother",
+        "mother_handle"
+      ],
+      "kind": {
+        "mother": "relationship"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "[f for f in parent_families][1].mother.pri",
+      "expect": [
+        "primary_name",
+        "private"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "[a.value for a in attribute_list if a.type.value == AttributeType.OCCUPATION][",
+      "expect": [
+        "0"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "[a.value for a in attribute_list][0] ",
+      "contains": [
+        "==",
+        "and"
+      ]
     }
   ]
 }

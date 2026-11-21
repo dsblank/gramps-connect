@@ -153,6 +153,30 @@ describe("expressionDependencies", () => {
     ]);
   });
 
+  it("follows one entry of a list comprehension", () => {
+    // A list on the record: nothing outside the row.
+    expect(
+      expressionDependencies("Person", "[a.value for a in attribute_list if a.type.value == AttributeType.OCCUPATION][0]"),
+    ).toEqual({ links: [], untracked: false });
+    // A collection: its list, then the chosen record's own links.
+    expect(
+      expressionDependencies("Person", "[f for f in parent_families if f.type.value == FamilyRelType.MARRIED][1].mother.primary_name"),
+    ).toEqual({
+      links: [
+        { select: "parent_family_list", table: "family" },
+        { select: "[f for f in parent_families if f.type.value == FamilyRelType.MARRIED][1].mother_handle", table: "person" },
+      ],
+      untracked: false,
+    });
+    // A link inside the condition isn't watched.
+    const picked = expressionDependencies("Person", "[f.mother.surname for f in parent_families if f.father.surname == 'X'][0]");
+    expect(picked.untracked).toBe(true);
+    expect(picked.links).toEqual([
+      { select: "parent_family_list", table: "family" },
+      { select: "[f for f in parent_families if f.father.surname == 'X'][0].mother_handle", table: "person" },
+    ]);
+  });
+
   it("needs nothing for the record's own fields and lists", () => {
     expect(expressionDependencies("Person", "primary_name.first_name")).toEqual({ links: [], untracked: false });
     expect(expressionDependencies("Person", "len(citations)")).toEqual({ links: [], untracked: false });
@@ -257,6 +281,9 @@ describe("structuredValueError", () => {
   it("refuses a whole record, a list, or another structure, suggesting a value", () => {
     expect(structuredValueError("Person", "birth")).toMatch(/whole record.*birth\.gramps_id/);
     expect(structuredValueError("Person", "parent_families[0].father")).toMatch(/whole record/);
+    expect(structuredValueError("Person", "[f for f in parent_families][0].father")).toMatch(/whole record/);
+    expect(structuredValueError("Person", "[a for a in attribute_list if a.private][0]")).toMatch(/several values.*\]\[0\]\./);
+    expect(structuredValueError("Person", "[a.value for a in attribute_list if a.private][0]")).toBeNull();
     expect(structuredValueError("Person", "tag_list")).toMatch(/list.*len\(tag_list\)/);
     expect(structuredValueError("Person", "primary_name.surname_list")).toMatch(/list/);
     expect(structuredValueError("Person", "address_list[0]")).toMatch(/several values.*address_list\[0\]\./);

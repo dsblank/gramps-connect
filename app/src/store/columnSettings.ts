@@ -12,7 +12,7 @@ import { useSyncExternalStore, type ReactNode } from "react";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getTreeId } from "../auth/auth";
 import { GRAMPS_TYPE_TABLES, type GrampsTypeTable } from "../data/grampsTypeTables";
-import { GOQL_VOCABULARIES, goqlNamespaceForEndpoint, resolveGoqlPath, type FieldNode } from "./goqlCompletion";
+import { GOQL_VOCABULARIES, goqlNamespaceForEndpoint, resolveGoqlPath, splitGoqlPick, type FieldNode } from "./goqlCompletion";
 import { displayNameSortKeys } from "./nameDisplay";
 import { formatDisplayDate } from "./placeIndex";
 import { STORAGE_KEYS } from "./storageKeys";
@@ -265,44 +265,102 @@ export function expressionDependencies(namespace: string, expr: string): { links
     return { links: [{ select: list.field, table: list.table }], untracked: deeper };
   }
 
+  // One entry of a list comprehension (`[f for f in parent_families if
+  // ...][0].mother.primary_name`).
+  const picked = pickDependencies(namespace, text, expr.trim());
+  if (picked) return picked;
+
   // A path, possibly through links.
   const links = new Map<string, LinkDependency>();
   let untracked = false;
   for (const match of text.matchAll(CHAIN_RE)) {
     const raw = match[0].split(".");
-    const segments = raw.map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
-    const indexed = raw.map((seg) => seg.includes("["));
-    if (segments[0] in vocab.collections && !indexed[0]) {
+    if (raw[0].replace(/\[[0-9]+\]/g, "") in vocab.collections && !raw[0].includes("[")) {
       untracked = true; // a collection used some other way
       continue;
     }
-    let ns = namespace;
-    for (let i = 0; i < segments.length; i += 1) {
-      const nsVocab = GOQL_VOCABULARIES[ns];
-      // One entry of a collection (`parent_families[0].father`) is a link
-      // too; the whole list is watched, so any of its records changing
-      // refreshes the row.
-      const collectionTarget = indexed[i] ? nsVocab?.collections[segments[i]] : null;
-      const collectionList = collectionTarget ? COLLECTION_LIST[segments[i]] : undefined;
-      if (collectionTarget && collectionList) {
-        const select = [...raw.slice(0, i), collectionList.field].join(".");
-        links.set(select, { select, table: collectionList.table });
-        ns = collectionTarget;
-        continue;
-      }
-      const linkTarget = nsVocab?.relationships[segments[i]];
-      if (!linkTarget) break;
-      const field = LINK_HANDLE_FIELD[`${ns}.${segments[i]}`];
-      if (!field) {
-        untracked = true;
-        break;
-      }
-      const select = [...raw.slice(0, i), field].join(".");
-      links.set(select, { select, table: linkTarget.toLowerCase() });
-      ns = linkTarget;
-    }
+    if (followLinks(namespace, [], raw, links)) untracked = true;
   }
   return { links: [...links.values()], untracked };
+}
+
+const PICK_RE = new RegExp(
+  "^\\[\\s*([A-Za-z_][A-Za-z0-9_.\\[\\]]*?)\\s+for\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+in\\s+([A-Za-z_][A-Za-z0-9_]*)\\b([\\s\\S]*)\\]$",
+);
+
+/** expressionDependencies for one entry of a list comprehension, or null if
+ * `text` isn't one. From a list on the record itself (`attribute_list`),
+ * nothing outside the row is read, unless the path after it crosses a
+ * link; from a collection (`parent_families`), its list is watched, then
+ * the path on from the chosen record is followed like any other. `text` is
+ * `original` with its strings blanked out (same length), for reading the
+ * structure; the hidden select keeps `original`'s strings. */
+function pickDependencies(
+  namespace: string,
+  text: string,
+  original: string,
+): { links: LinkDependency[]; untracked: boolean } | null {
+  const pick = splitGoqlPick(text);
+  if (!pick) return null;
+  const m = PICK_RE.exec(pick.comprehension);
+  if (!m) return { links: [], untracked: true };
+  const [, collected, bound, source, condition] = m;
+  const vocab = GOQL_VOCABULARIES[namespace];
+  const after = [...collected.split(".").slice(1), ...pick.rest.split(".").filter(Boolean)];
+  const target = vocab.collections[source];
+  const list = COLLECTION_LIST[source];
+  if (!(source in vocab.collections)) {
+    // A list on the record: the entry's own fields, read from this row.
+    return { links: [], untracked: false };
+  }
+  if (!target || !list) return { links: [], untracked: true }; // backlinks, child_refs
+  const links = new Map<string, LinkDependency>([[list.field, { select: list.field, table: list.table }]]);
+  // A link inside the condition reads records nothing here watches.
+  let untracked = false;
+  const targetVocab = GOQL_VOCABULARIES[target];
+  for (const chain of condition.matchAll(CHAIN_RE)) {
+    const segments = chain[0].split(".").map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
+    if (segments[0] !== bound || segments.length < 2 || !targetVocab) continue;
+    if (segments[1] in targetVocab.relationships || segments[1] in targetVocab.collections) untracked = true;
+  }
+  // The chosen record, by the same comprehension with no projection. The
+  // condition sits just before the comprehension's closing `]`.
+  const end = pick.comprehension.length - 1;
+  const originalCondition = original.slice(end - condition.length, end);
+  const base = `[${bound} for ${bound} in ${source}${originalCondition}][${pick.index}]`;
+  if (followLinks(target, [base], after, links)) untracked = true;
+  return { links: [...links.values()], untracked };
+}
+
+/** Add to `links` each link the path `raw` (segments, `[n]` kept) crosses
+ * from `namespace`, written after `prefix` in each hidden select. True if
+ * it crosses one no cached handle can track. */
+function followLinks(namespace: string, prefix: string[], raw: string[], links: Map<string, LinkDependency>): boolean {
+  const segments = raw.map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
+  const indexed = raw.map((seg) => seg.includes("["));
+  let ns = namespace;
+  for (let i = 0; i < segments.length; i += 1) {
+    const nsVocab = GOQL_VOCABULARIES[ns];
+    // One entry of a collection (`parent_families[0].father`) is a link
+    // too; the whole list is watched, so any of its records changing
+    // refreshes the row.
+    const collectionTarget = indexed[i] ? nsVocab?.collections[segments[i]] : null;
+    const collectionList = collectionTarget ? COLLECTION_LIST[segments[i]] : undefined;
+    if (collectionTarget && collectionList) {
+      const select = [...prefix, ...raw.slice(0, i), collectionList.field].join(".");
+      links.set(select, { select, table: collectionList.table });
+      ns = collectionTarget;
+      continue;
+    }
+    const linkTarget = nsVocab?.relationships[segments[i]];
+    if (!linkTarget) break;
+    const field = LINK_HANDLE_FIELD[`${ns}.${segments[i]}`];
+    if (!field) return true;
+    const select = [...prefix, ...raw.slice(0, i), field].join(".");
+    links.set(select, { select, table: linkTarget.toLowerCase() });
+    ns = linkTarget;
+  }
+  return false;
 }
 
 /** Handle(s) out of a link field's value: a handle string, or a list of
@@ -359,7 +417,7 @@ function nameSortKeysAt(path: string): string[] {
  * whose order isn't its name's (Marriage before Birth), or a whole record. */
 export function customSortKeys(namespace: string, expr: string): (() => string[]) | null {
   const text = expr.trim();
-  if (!PLAIN_PATH_RE.test(text)) return () => [text]; // len(...)/count(...)
+  if (!isValuePath(text)) return () => [text]; // len(...)/count(...)
   const resolved = resolveGoqlPath(namespace, text);
   if (!resolved) return () => [text]; // unknown to the vocabulary: the server decides
   if (resolved.kind === "record") return null;
@@ -490,12 +548,19 @@ function nodeShape(node: FieldNode): "value" | "readable" | "structured" {
 
 const PLAIN_PATH_RE = /^[A-Za-z_][A-Za-z0-9_]*(?:\[[0-9]+\])*(?:\.[A-Za-z_][A-Za-z0-9_]*(?:\[[0-9]+\])*)*$/;
 
+/** A path, or one entry of a list comprehension read on like one
+ * (`[a.value for a in attribute_list if ...][0]`): something whose value's
+ * shape the vocabulary can tell, unlike a count. */
+function isValuePath(text: string): boolean {
+  return PLAIN_PATH_RE.test(text) || splitGoqlPick(text) !== null;
+}
+
 /** Why `expr` can't be a column -- it reaches a whole record, a list or
  * some other structure -- or null when it shows a single value (or the
  * vocabulary can't tell, which the server's own check on Save settles). */
 export function structuredValueError(namespace: string, expr: string): string | null {
   const text = expr.trim();
-  if (!PLAIN_PATH_RE.test(text)) return null; // len(...)/count(...): a number
+  if (!isValuePath(text)) return null; // len(...)/count(...): a number
   const resolved = resolveGoqlPath(namespace, text);
   if (!resolved) return null;
   if (resolved.kind === "record") {

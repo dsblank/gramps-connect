@@ -109,6 +109,12 @@ const PARTIAL_OPERATOR_RE = /[=!<>]+$/;
 const COMPARED_RE = new RegExp(`(?<![A-Za-z0-9_.\\])])(${CHAIN})\\s*(?:==|!=|<=|>=|<|>)\\s*$`);
 const LISTED_RE = new RegExp(`(?<![A-Za-z0-9_.\\])])(${CHAIN})\\s+(?:not\\s+)?in\\s*\\[[^\\[\\]]*$`);
 const INDEXED_RE = new RegExp(`(?<![A-Za-z0-9_.\\])])(${CHAIN})\\[$`);
+// After a list comprehension taken by index: `[...][0].` then a path and a
+// (possibly empty) word -- and `[...][`, its index.
+const PICKED_RE = new RegExp(`\\]\\[[0-9]+\\]((?:\\.${SEGMENT})*)\\.(${NAME})?$`);
+const PICK_INDEX_RE = /\]\[$/;
+// A comprehension's own text: what it collects, then `for x in`.
+const COMPREHENSION_RE = new RegExp(`^\\s*(${CHAIN})\\s+for\\s+${NAME}\\s+in\\b`);
 const TOKEN_RE = new RegExp(
   "\\s+" +
     "|(?<string>'(?:\\\\.|[^'\\\\])*'|\"(?:\\\\.|[^\"\\\\])*\")" +
@@ -436,6 +442,30 @@ function walk(
   return context;
 }
 
+const PICKED_PATH_RE = new RegExp(`\\]\\[([0-9]+)\\]((?:\\.${SEGMENT})*)$`);
+
+/** A whole expression that is one entry of a list comprehension, read on
+ * or not (`[f for f in parent_families if ...][0].mother.primary_name`):
+ * the comprehension's text up to its `]`, the index, and the path after;
+ * null for anything else. */
+export function splitGoqlPick(text: string): { comprehension: string; index: number; rest: string } | null {
+  const trimmed = text.trim();
+  const m = PICKED_PATH_RE.exec(trimmed);
+  if (!m || !trimmed.startsWith("[")) return null;
+  const comprehension = trimmed.slice(0, m.index + 1);
+  // The `]` must close the `[` the expression starts with.
+  let depth = 0;
+  for (let position = 0; position < comprehension.length; position++) {
+    if (comprehension[position] === "[") depth += 1;
+    else if (comprehension[position] === "]") {
+      depth -= 1;
+      if (depth === 0 && position !== comprehension.length - 1) return null;
+    }
+  }
+  if (comprehensionEnding(comprehension) === null) return null;
+  return { comprehension, index: Number(m[1]), rest: m[2] };
+}
+
 /** What a plain path (`birth.date`, `primary_name.surname_list[0]`) reaches
  * in `namespace`: a whole record (across a relationship, or the path is
  * just one), a JSON field's vocabulary node, or null when the vocabulary
@@ -445,7 +475,10 @@ export function resolveGoqlPath(
   chain: string,
 ): { kind: "record"; namespace: string } | { kind: "field"; node: FieldNode } | null {
   if (!GOQL_VOCABULARIES[namespace]) return null;
-  const context = walk(GOQL_VOCABULARIES, namespace, segments(chain), new Map());
+  const pick = splitGoqlPick(chain);
+  const context = pick
+    ? pickedContext(GOQL_VOCABULARIES, namespace, pick.comprehension, pick.rest, bindingsIn(GOQL_VOCABULARIES, namespace, chain))
+    : walk(GOQL_VOCABULARIES, namespace, segments(chain), new Map());
   if (!context) return null;
   return context.kind === "namespace" ? { kind: "record", namespace: context.namespace } : context;
 }
@@ -461,6 +494,45 @@ function bindingsIn(vocabs: Vocabs, root: string, source: string): Map<string, C
 }
 
 type Candidate = [name: string, kind: CompletionKind, detail: Completion["detail"]];
+
+/** What a list comprehension ending at `text`'s final `]` collects (`a.value`
+ * in `[a.value for a in attribute_list if ...]`), or null if that `]`
+ * doesn't close one. */
+function comprehensionEnding(text: string): string | null {
+  let depth = 0;
+  for (let position = text.length - 1; position >= 0; position--) {
+    const char = text[position];
+    if (char === "]") {
+      depth += 1;
+    } else if (char === "[") {
+      depth -= 1;
+      if (depth === 0) {
+        const m = COMPREHENSION_RE.exec(text.slice(position + 1, -1));
+        return m ? m[1] : null;
+      }
+    }
+  }
+  return null;
+}
+
+/** Where `[x.f for x in rel if ...][n]<rest>` leads: what the comprehension
+ * collects (`text` ends at its `]`), walked on by `rest` (`.mother`). */
+function pickedContext(
+  vocabs: Vocabs,
+  namespace: string,
+  text: string,
+  rest: string,
+  bindings: Map<string, Context | null>,
+): Context | null {
+  const collected = comprehensionEnding(text);
+  if (collected === null) return null;
+  let context = walk(vocabs, namespace, segments(collected), bindings);
+  for (const [name, indexes] of segments(rest)) {
+    if (!context) return null;
+    context = stepIndexed(vocabs, context, name, indexes);
+  }
+  return context;
+}
 
 function namesAt(vocabs: Vocabs, context: Context): Candidate[] {
   if (context.kind === "field") {
@@ -509,6 +581,19 @@ export function completeFromVocabularies(
       .sort()
       .filter((name) => name.startsWith(typed))
       .map((name) => ({ name: name === typed ? `${name} ` : name, kind: "operator", detail: null, start }));
+  }
+  const picked = PICKED_RE.exec(before);
+  if (picked && comprehensionEnding(before.slice(0, picked.index + 1)) !== null) {
+    // `[a for a in attribute_list if ...][0].`: the entry's own names.
+    const prefix = picked[2] ?? "";
+    const bindings = bindingsIn(vocabs, namespace, source);
+    const context = pickedContext(vocabs, namespace, before.slice(0, picked.index + 1), picked[1], bindings);
+    const candidates = context ? [...namesAt(vocabs, context), ...indexableCollections(vocabs, context)] : [];
+    return results(candidates, prefix, cursor - prefix.length, bindings, envList);
+  }
+  if (PICK_INDEX_RE.test(before) && comprehensionEnding(before.slice(0, -1)) !== null) {
+    // `[a for a in attribute_list if ...][`: which matching entry.
+    return [{ name: "0", kind: "index", detail: "first item", start: cursor }];
   }
   const match = AT_CURSOR_RE.exec(before);
   if (!match) return [];
@@ -628,8 +713,19 @@ export function completeFromVocabularies(
     }
   }
 
+  return results(candidates, prefix, start, bindings, envList);
+}
+
+/** The candidates that complete `prefix`, as sorted completions. */
+function results(
+  candidates: Candidate[],
+  prefix: string,
+  start: number,
+  bindings: Map<string, Context | null>,
+  envList: string[],
+): Completion[] {
   const seen = new Set<string>();
-  const results: Completion[] = [];
+  const found: Completion[] = [];
   for (const [candidate, kind, detail] of candidates) {
     if (!candidate.startsWith(prefix)) continue;
     // Already typed in full: offer what continues it instead, so Tab shows
@@ -642,10 +738,10 @@ export function completeFromVocabularies(
         : candidate;
     if (seen.has(name)) continue;
     seen.add(name);
-    results.push({ name, kind, detail, start });
+    found.push({ name, kind, detail, start });
   }
-  results.sort((a, b) => compareNames(a.name, b.name));
-  return results;
+  found.sort((a, b) => compareNames(a.name, b.name));
+  return found;
 }
 
 /** Completions for `source` at `cursor`, for a where_expr on GOQL type
