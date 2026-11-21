@@ -218,6 +218,28 @@ runs in multi-tree mode like every deployment. Still open:
   executable or a real existing install, and not on Windows/macOS (media
   move via `shutil.move`; the `tree-id` marker file).
 
+## GOQL
+
+- **Whole lists one link away** — a comprehension can't go through a
+  collection reached across a relationship: `any(e.type.value ==
+  EventType.CENSUS for e in father.events)` and `len([n for n in
+  father.notes])` are rejected ("can't reach a collection through a
+  relationship hop yet"). A list stored on the linked record works
+  (`father.attribute_list`), and so does one entry (`father.families[0]`),
+  so this is the collection subquery correlated to a hop's row instead of
+  the main one, the way `CollectionPick` already takes its owner's alias.
+  Would let the Families list filter or count by a parent's events, notes
+  or citations. The Columns dialog's refresh tracking (`expressionDependencies`)
+  and Tab completion need to follow it too.
+- **Backlinks that test the referring record** — `any(bl._class ==
+  'Person' and bl.surname == 'Smith' for bl in backlinks)` is rejected:
+  a `backlinks` condition can only test `_class`. The referrer can be any
+  of the ten record types, so each field test has to be checked per class
+  (GOQL's ROADMAP "Reverse relationships"). The concrete payoff: Home's
+  Anniversaries card filters "Only living" in the browser, from each
+  event's participants, because GOQL can't ask "an event whose person has
+  no death"; with this it could run on the server.
+
 ## Feature ideas / backlog
 
 Roughly by value, most first:
