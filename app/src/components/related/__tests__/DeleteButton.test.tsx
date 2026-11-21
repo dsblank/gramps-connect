@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders, screen } from "../../../testUtils/renderWithProviders";
 import type { ObjectDetail } from "../../../store/objectDetail";
-import { NOTE_VIEW, TOPICS_VIEW } from "../../../store/views";
+import { GENERATED_VIEW, NOTE_VIEW, TOPICS_VIEW } from "../../../store/views";
 
 vi.mock("../../../auth/auth", () => ({
   getToken: vi.fn(async () => "tok"),
@@ -13,11 +13,16 @@ vi.mock("../../../store/objectsApi", () => ({ deleteObject: vi.fn(async () => {}
 vi.mock("../../../store/topicsApi", () => ({ deleteAllTopicMessages: vi.fn(async () => {}) }));
 vi.mock("../../../store/topicWindows", () => ({ closeTopicWindow: vi.fn() }));
 vi.mock("../../../store/registry", () => ({ getViewStore: vi.fn(() => ({ requeryDebounced: vi.fn() })) }));
+vi.mock("../../../store/jobsApi", () => ({
+  findJobReportNotes: vi.fn(async () => ["RN1"]),
+  deleteNote: vi.fn(async () => {}),
+}));
 vi.mock("../../../store/placeReconnect", () => ({ reconnectPlaceChildren: vi.fn(async () => {}) }));
 
 import { deleteObject } from "../../../store/objectsApi";
 import { deleteAllTopicMessages } from "../../../store/topicsApi";
 import { closeTopicWindow } from "../../../store/topicWindows";
+import { deleteNote, findJobReportNotes } from "../../../store/jobsApi";
 import { DeleteButton } from "../DeleteButton";
 
 function detailFor(title: string): ObjectDetail {
@@ -63,5 +68,21 @@ describe("DeleteButton", () => {
     await vi.waitFor(() => expect(deleteObject).toHaveBeenCalledWith("tok", NOTE_VIEW, "N1"));
     expect(deleteAllTopicMessages).not.toHaveBeenCalled();
     expect(closeTopicWindow).not.toHaveBeenCalled();
+  });
+
+  // Output rows used to have no header Delete at all -- only the "Don't
+  // save" prompt after a Download -- so an item you hadn't just downloaded
+  // couldn't be deleted.
+  it("offers Delete on an Output item and removes its report note too", async () => {
+    const user = userEvent.setup();
+    const detail = { handle: "M1", desc: "Export — tree.gramps", note_list: ["RN1"] } as unknown as ObjectDetail;
+    renderWithProviders(<DeleteButton view={GENERATED_VIEW} detail={detail} />);
+
+    await user.click(screen.getByRole("button", { name: "Delete this output" }));
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+
+    await vi.waitFor(() => expect(deleteNote).toHaveBeenCalledWith("tok", "RN1"));
+    expect(findJobReportNotes).toHaveBeenCalledWith("tok", ["RN1"]);
+    expect(deleteObject).toHaveBeenCalledWith("tok", GENERATED_VIEW, "M1");
   });
 });

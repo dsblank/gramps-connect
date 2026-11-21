@@ -5,6 +5,7 @@ import { getViewStore } from "../../store/registry";
 import { deleteObject } from "../../store/objectsApi";
 import { reconnectPlaceChildren } from "../../store/placeReconnect";
 import { deleteAllTopicMessages } from "../../store/topicsApi";
+import { deleteNote, findJobReportNotes } from "../../store/jobsApi";
 import { closeTopicWindow } from "../../store/topicWindows";
 import type { ObjectDetail } from "../../store/objectDetail";
 import type { ViewConfig } from "../../store/views";
@@ -42,10 +43,11 @@ import { t } from "../../i18n/i18n";
  * below runs topicsApi.ts's deleteAllTopicMessages first to actually clean
  * these up, confirmed by name in the dialog's own copy.
  *
- * Excludes "generated" -- it already has its own delete affordance inline
- * in the body (GeneratedItemActions.tsx), predating this button; adding a
- * second one in the header would just be a redundant control. Everywhere
- * else, any user holding DeleteObject gets it (including Discussions -- a
+ * Output ("generated") rows get it too: GeneratedItemActions.tsx's
+ * "Don't save" prompt only appears right after a Download, so without this
+ * there was no way to delete an Output item you hadn't just downloaded.
+ * Like that prompt, it also deletes the export's own report Note(s).
+ * Any user holding DeleteObject gets it (including Discussions -- a
  * Topic has no done/open concept the way the old board messages did, so
  * there's nothing bespoke here for it to duplicate) -- unlike EditButton,
  * there's no EDITABLE_TYPES restriction, since every real object type is
@@ -60,15 +62,14 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const eligible = view.key !== "generated";
-  if (!eligible || !hasPermissions("DeleteObject")) return null;
+  if (!hasPermissions("DeleteObject")) return null;
 
   // Every other view.key already reads as a singular noun ("person",
   // "event", ... "story"); "topics" is the one plural key (it doubles as
   // the URL segment and sidebar label's basis), so it's the one exception
   // worth spelling out here rather than baking a whole singularization
   // table into this generic button for just one caller.
-  const singularKind = view.key === "topics" ? "discussion" : view.key;
+  const singularKind = view.key === "topics" ? "discussion" : view.key === "generated" ? "output" : view.key;
   const label = `Delete this ${singularKind}`;
   const summary = summaryLine(view.key, detail) || view.label;
 
@@ -104,7 +105,19 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
         // by either.
         await deleteAllTopicMessages(token, detail.handle);
       }
+      // An export's report Note (jobsPromote.ts's promoteJob) is about this
+      // file only, and Gramps never cascades a Media delete to its notes --
+      // same cleanup as GeneratedItemActions.tsx's "Don't save". Looked up
+      // before the delete, while note_list still points at it.
+      const reportNotes =
+        view.key === "generated"
+          ? await findJobReportNotes(token, (detail.note_list as string[] | undefined) ?? [])
+          : [];
       await deleteObject(token, view, detail.handle);
+      for (const note of reportNotes) {
+        // Best-effort: the item itself is already gone.
+        await deleteNote(token, note).catch((err) => console.error(`report note ${note} delete failed`, err));
+      }
       if (view.key === "topics") {
         // A discussion's own floating window (topicWindows.ts) is a
         // separate, independent mounting from this button's own panel --
@@ -145,6 +158,9 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
             )}
             {view.key === "topics" && (
               <> {t("Every message in it is deleted too, not just the discussion itself.")}</>
+            )}
+            {view.key === "generated" && (
+              <> {t("You can generate it again from the tree at any time.")}</>
             )}{" "}
             {t("This cannot be undone from here.")}
           </Text>
