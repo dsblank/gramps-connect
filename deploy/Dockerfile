@@ -83,7 +83,7 @@ FROM dmstraub/gramps-webapi:latest
 # base image shipped. Bump the version here when a newer GOQL release is
 # needed (see .github/workflows/build-standalone.yml and
 # deploy/Dockerfile.slim for the same pin on the other builds).
-RUN pip install --no-cache-dir "gramps-object-query-language>=0.5.16"
+RUN pip install --no-cache-dir "gramps-object-query-language>=0.5.17"
 
 COPY --from=frontend-build /src/app/dist /app/static
 
