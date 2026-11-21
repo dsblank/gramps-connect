@@ -1,6 +1,6 @@
 // How two people are related, outside a Gramplet: the sentence ("Xena is
 // Hal's first cousin once removed") and the same chart relationship_chart()
-// draws: the full sentence, with Relationship opening the Relationship window
+// draws: the full sentence, with Graph opening the Relationship window
 // (above the selected person or people, SelectionDetailView.tsx), or with
 // the chart below it (that window itself, and the Graphs view).
 import { Anchor, Box, Group, Loader, Text } from "@mantine/core";
@@ -35,7 +35,7 @@ const LINE_H = 24;
 /** The sentence for two people: `to` described in terms of `from` (for
  * two selected people, the one selected first). `chart="window"`: one
  * line of fixed height, cut short with the whole sentence on hover, and
- * Relationship opening the Relationship window on the two -- for above a
+ * Graph opening the Relationship window on the two -- for above a
  * pane, padded by the caller. `chart="always"`: the sentence wraps and the
  * chart is drawn below, filling the space. `delayMs` waits before
  * searching, so moving through a list only searches where it stops. With
@@ -90,7 +90,7 @@ export function RelationshipBetween({
         </Text>
         {paths.length > 0 && (
           <Anchor component="button" size="sm" style={{ flex: "none" }} onClick={() => openRelationshipWindow(from, to)}>
-            {t("Relationship")}
+            {t("Graph")}
           </Anchor>
         )}
       </Group>
