@@ -133,6 +133,26 @@ describe("expressionDependencies", () => {
     expect(expressionDependencies("Citation", "source.title").links).toEqual([{ select: "source_handle", table: "source" }]);
   });
 
+  it("follows one entry of a collection like a link", () => {
+    expect(expressionDependencies("Person", "parent_families[0].father.primary_name")).toEqual({
+      links: [
+        { select: "parent_family_list", table: "family" },
+        { select: "parent_families[0].father_handle", table: "person" },
+      ],
+      untracked: false,
+    });
+    expect(expressionDependencies("Person", "families[0].children[0].birth.date").links).toEqual([
+      { select: "family_list", table: "family" },
+      { select: "families[0].child_ref_list", table: "person" },
+      { select: "families[0].children[0].event_ref_list", table: "event" },
+    ]);
+    expect(expressionDependencies("Family", "father.parent_families[0].mother.surname").links).toEqual([
+      { select: "father_handle", table: "person" },
+      { select: "father.parent_family_list", table: "family" },
+      { select: "father.parent_families[0].mother_handle", table: "person" },
+    ]);
+  });
+
   it("needs nothing for the record's own fields and lists", () => {
     expect(expressionDependencies("Person", "primary_name.first_name")).toEqual({ links: [], untracked: false });
     expect(expressionDependencies("Person", "len(citations)")).toEqual({ links: [], untracked: false });
@@ -227,6 +247,7 @@ describe("structuredValueError", () => {
     for (const expr of [
       "gramps_id", "gender", "primary_name.first_name", "primary_name.surname_list[0].surname",
       "birth.place.title", "birth.date", "primary_name", "len(citations)", "count(events, type.value == 12)",
+      "parent_families[0].father.primary_name", "families[0].children[0].birth.date",
     ]) {
       expect(structuredValueError("Person", expr)).toBeNull();
     }
@@ -235,6 +256,7 @@ describe("structuredValueError", () => {
 
   it("refuses a whole record, a list, or another structure, suggesting a value", () => {
     expect(structuredValueError("Person", "birth")).toMatch(/whole record.*birth\.gramps_id/);
+    expect(structuredValueError("Person", "parent_families[0].father")).toMatch(/whole record/);
     expect(structuredValueError("Person", "tag_list")).toMatch(/list.*len\(tag_list\)/);
     expect(structuredValueError("Person", "primary_name.surname_list")).toMatch(/list/);
     expect(structuredValueError("Person", "address_list[0]")).toMatch(/several values.*address_list\[0\]\./);

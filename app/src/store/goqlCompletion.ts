@@ -385,6 +385,26 @@ function collectionContext(vocabs: Vocabs, namespace: string, name: string): Con
   return target === null ? null : { kind: "namespace", namespace: target };
 }
 
+/** `step` then `index`, except that an indexed collection on a record
+ * (`parent_families[0]`) steps to the record that entry links to, the way
+ * a relationship does. */
+function stepIndexed(vocabs: Vocabs, context: Context, name: string, indexes: number): Context | null {
+  if (context.kind === "namespace" && indexes > 0) {
+    const collection = collectionContext(vocabs, context.namespace, name);
+    if (collection) return index(collection, indexes - 1);
+  }
+  return index(step(vocabs, context, name), indexes);
+}
+
+/** The collections an index can follow from a record (`families`,
+ * `citations`, ...; not `backlinks` or `child_refs`). */
+function indexableCollections(vocabs: Vocabs, context: Context): Candidate[] {
+  if (context.kind !== "namespace") return [];
+  return Object.entries(vocabs[context.namespace].collections)
+    .filter(([, target]) => target !== null)
+    .map(([name, target]): Candidate => [name, "collection", target]);
+}
+
 function walk(
   vocabs: Vocabs,
   root: string,
@@ -403,13 +423,14 @@ function walk(
       const collection = collectionContext(vocabs, root, first);
       if (collection !== undefined) return collection;
     }
-    context = index(step(vocabs, { kind: "namespace", namespace: root }, first), firstIndexes);
+    context = stepIndexed(vocabs, { kind: "namespace", namespace: root }, first, firstIndexes);
   }
   // A collection can't be reached across a relationship (mother.events) --
-  // GOQL rejects that -- so only a bare first segment can be one.
+  // GOQL rejects that -- but an indexed one can (mother.families[0]): like a
+  // relationship, it leads to the record that entry links to.
   for (const [name, indexes] of rest) {
     if (!context) return null;
-    context = index(step(vocabs, context, name), indexes);
+    context = stepIndexed(vocabs, context, name, indexes);
   }
   if (iterating && context && context.kind === "field") return index(context, 1);
   return context;
@@ -554,8 +575,19 @@ export function completeFromVocabularies(
       candidates = [];
       const indexed = INDEXED_RE.exec(before.slice(0, start));
       if (indexed) {
-        const context = walk(vocabs, namespace, segments(indexed[1]), bindings);
-        if (context && context.kind === "field" && context.node.items) candidates = [["0", "index", "first item"]];
+        const listed = segments(indexed[1]);
+        const context = walk(vocabs, namespace, listed, bindings);
+        if (context && context.kind === "field" && context.node.items) {
+          candidates = [["0", "index", "first item"]];
+        } else if (listed[listed.length - 1][1] === 0) {
+          // `parent_families[`: a collection's first entry.
+          const owner: Context | null =
+            listed.length > 1 ? walk(vocabs, namespace, listed.slice(0, -1), bindings) : { kind: "namespace", namespace };
+          const last = listed[listed.length - 1][0];
+          if (owner && indexableCollections(vocabs, owner).some(([name]) => name === last)) {
+            candidates = [["0", "index", "first item"]];
+          }
+        }
       }
     } else if (want === "literal") {
       candidates = [quote, ...literals, ...constantClasses, ...envNames];
@@ -584,6 +616,10 @@ export function completeFromVocabularies(
       const role = expected(before.slice(0, chainStart))[0];
       const context = walk(vocabs, namespace, segs, bindings);
       candidates = context ? namesAt(vocabs, context) : [];
+      if (context && ["operand", "value", "is_value"].includes(role)) {
+        // `father.families[0]...`: one entry of a collection, across a hop.
+        candidates = [...candidates, ...indexableCollections(vocabs, context)];
+      }
       if (role === "iterable") {
         candidates = candidates.filter(([, kind, detail]) => kind === "relationship" || isArray(detail));
       } else if (!["operand", "value", "is_value", "path"].includes(role)) {

@@ -1135,6 +1135,65 @@
         "birth",
         "None"
       ]
+    },
+    {
+      "namespace": "Person",
+      "source": "parent_families[",
+      "expect": [
+        "0"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "parent_families[0].fa",
+      "expect": [
+        "father",
+        "father_handle"
+      ],
+      "kind": {
+        "father": "relationship"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "parent_families[0].father.primary_name.first",
+      "expect": [
+        "first_name"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "father.parent_fa",
+      "expect": [
+        "parent_families",
+        "parent_family_list"
+      ],
+      "kind": {
+        "parent_families": "collection",
+        "parent_family_list": "field"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "citations[0].source.ti",
+      "expect": [
+        "title"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "backlinks[0].",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "child_refs[",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "len([e for e in father",
+      "expect": []
     }
   ]
 }

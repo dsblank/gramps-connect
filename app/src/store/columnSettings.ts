@@ -269,21 +269,35 @@ export function expressionDependencies(namespace: string, expr: string): { links
   const links = new Map<string, LinkDependency>();
   let untracked = false;
   for (const match of text.matchAll(CHAIN_RE)) {
-    const segments = match[0].split(".").map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
-    if (segments[0] in vocab.collections) {
+    const raw = match[0].split(".");
+    const segments = raw.map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
+    const indexed = raw.map((seg) => seg.includes("["));
+    if (segments[0] in vocab.collections && !indexed[0]) {
       untracked = true; // a collection used some other way
       continue;
     }
     let ns = namespace;
     for (let i = 0; i < segments.length; i += 1) {
-      const linkTarget = GOQL_VOCABULARIES[ns]?.relationships[segments[i]];
+      const nsVocab = GOQL_VOCABULARIES[ns];
+      // One entry of a collection (`parent_families[0].father`) is a link
+      // too; the whole list is watched, so any of its records changing
+      // refreshes the row.
+      const collectionTarget = indexed[i] ? nsVocab?.collections[segments[i]] : null;
+      const collectionList = collectionTarget ? COLLECTION_LIST[segments[i]] : undefined;
+      if (collectionTarget && collectionList) {
+        const select = [...raw.slice(0, i), collectionList.field].join(".");
+        links.set(select, { select, table: collectionList.table });
+        ns = collectionTarget;
+        continue;
+      }
+      const linkTarget = nsVocab?.relationships[segments[i]];
       if (!linkTarget) break;
       const field = LINK_HANDLE_FIELD[`${ns}.${segments[i]}`];
       if (!field) {
         untracked = true;
         break;
       }
-      const select = [...segments.slice(0, i), field].join(".");
+      const select = [...raw.slice(0, i), field].join(".");
       links.set(select, { select, table: linkTarget.toLowerCase() });
       ns = linkTarget;
     }
