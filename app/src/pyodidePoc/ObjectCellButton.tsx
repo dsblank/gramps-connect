@@ -27,6 +27,19 @@ const VISUAL_APPLICABLE: Record<string, VisualKey[]> = {
   place: ["map", "timeline"],
 };
 
+export interface ObjectMenuAction {
+  label: string;
+  onClick: () => void;
+}
+
+/** What a chart's person menus show, besides the usual Open/Map/Timeline/
+ * Tree: visuals to leave out, and items of the chart's own for the person
+ * with that handle. */
+export interface PersonMenuOptions {
+  hideVisuals?: VisualKey[];
+  actions?: (handle: string) => ObjectMenuAction[];
+}
+
 export function ObjectCellButton({ cell }: { cell: ObjectCell }) {
   return (
     <ObjectMenu objectType={cell.objectType} handle={cell.handle} label={cell.text}>
@@ -55,14 +68,22 @@ export function ObjectMenu({
   objectType,
   handle,
   label,
+  hideVisuals = [],
+  actions = [],
   children,
 }: {
   objectType: string;
   handle: string;
   label: string;
+  /** Visuals to leave out -- e.g. "tree" inside the Graphs view itself,
+   * where "See as Tree" would only re-root the chart being looked at. */
+  hideVisuals?: VisualKey[];
+  /** Items for where the menu is shown, listed first -- e.g. the Graphs
+   * view's Relationship mode's "Use as first person". */
+  actions?: ObjectMenuAction[];
   children: ReactElement;
 }) {
-  const visuals = isSubjectKey(objectType) ? VISUAL_APPLICABLE[objectType] ?? [] : [];
+  const visuals = (isSubjectKey(objectType) ? VISUAL_APPLICABLE[objectType] ?? [] : []).filter((v) => !hideVisuals.includes(v));
 
   // Called per-render (not hoisted to module scope) so a language switch
   // -- i18n.ts's t() reads current state, not a snapshot -- is reflected
@@ -100,6 +121,12 @@ export function ObjectMenu({
       <Menu.Target>{children}</Menu.Target>
       <Menu.Dropdown>
         <Menu.Label>{label}</Menu.Label>
+        {actions.map((action) => (
+          <Menu.Item key={action.label} onClick={action.onClick}>
+            {action.label}
+          </Menu.Item>
+        ))}
+        {actions.length > 0 && <Menu.Divider />}
         <Menu.Item component="a" href={formatHash({ viewKey: objectType, handle })}>
           {openLabels[objectType] ?? t("Open")}
         </Menu.Item>

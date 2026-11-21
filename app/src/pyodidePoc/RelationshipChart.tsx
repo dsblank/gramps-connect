@@ -22,7 +22,7 @@ import { getViewStore } from "../store/registry";
 import type { PathLink, PathNode, PathStep, RelationshipPath } from "../store/relationshipPath";
 import { fetchPage } from "../store/api";
 import { displayName, PERSON_VIEW } from "../store/views";
-import { ObjectMenu } from "./ObjectCellButton";
+import { ObjectMenu, type PersonMenuOptions } from "./ObjectCellButton";
 
 const CARD_W = 188;
 const CARD_H = 76; // room for a name on two lines
@@ -326,11 +326,13 @@ function PersonCard({
   info,
   dark,
   interactive,
+  menu,
 }: {
   card: PlacedCard;
   info: PersonInfo | undefined;
   dark: boolean;
   interactive: boolean;
+  menu?: PersonMenuOptions;
 }) {
   const name = info?.name || t("(unknown)");
   const years = info && (info.birth || info.death) ? `${yearOf(info.birth)}–${yearOf(info.death)}` : "";
@@ -370,7 +372,13 @@ function PersonCard({
     </UnstyledButton>
   );
   return interactive ? (
-    <ObjectMenu objectType="person" handle={card.node.handle} label={name}>
+    <ObjectMenu
+      objectType="person"
+      handle={card.node.handle}
+      label={name}
+      hideVisuals={menu?.hideVisuals}
+      actions={menu?.actions?.(card.node.handle)}
+    >
       {body}
     </ObjectMenu>
   ) : (
@@ -382,10 +390,13 @@ export function RelationshipChart({
   paths,
   startLabel,
   interactive,
+  menu,
 }: {
   paths: RelationshipPath[];
   startLabel: string | null;
   interactive: boolean;
+  /** Changes to each person card's menu (ObjectMenu). */
+  menu?: PersonMenuOptions;
 }) {
   const dark = useComputedColorScheme("light") === "dark";
   const [index, setIndex] = useState(0);
@@ -431,6 +442,7 @@ export function RelationshipChart({
               info={people.get(card.node.handle)}
               dark={dark}
               interactive={interactive}
+              menu={menu}
             />
           ))}
         </div>

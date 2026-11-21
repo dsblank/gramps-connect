@@ -1,40 +1,84 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { renderWithProviders, screen, renderHook } from "../../../testUtils/renderWithProviders";
+import { act, renderWithProviders, screen, renderHook } from "../../../testUtils/renderWithProviders";
 
 vi.mock("../../related/RelationshipBetween", () => ({
-  RelationshipBetween: ({ from, to, chart }: { from: string; to: string; chart: string }) => (
-    <div data-testid="between">{`${from}->${to} ${chart}`}</div>
+  RelationshipBetween: ({ from, to, chart, menu }: {
+    from: string; to: string; chart: string;
+    menu?: { hideVisuals?: string[]; actions?: (h: string) => { label: string; onClick: () => void }[] };
+  }) => (
+    <div>
+      <div data-testid="between">{`${from}->${to} ${chart} hide:${menu?.hideVisuals?.join(",")}`}</div>
+      {["H", "X"].map((h) => (
+        <div key={h} data-testid={`menu-${h}`}>
+          {menu?.actions?.(h).map((a) => <button key={a.label} onClick={a.onClick}>{`${h}: ${a.label}`}</button>)}
+        </div>
+      ))}
+    </div>
   ),
 }));
-vi.mock("../../RecordPicker", () => ({
-  RecordPicker: ({ onPick }: { onPick: (item: { handle: string }) => void }) => <button onClick={() => onPick({ handle: "P" })}>pick</button>,
+vi.mock("../../../pyodidePoc/RelationshipChart", () => ({
+  usePeople: (handles: string[]) => new Map(handles.map((h) => [h, { name: `Name ${h}`, birth: null, death: null }])),
 }));
 const home = vi.hoisted(() => ({ handle: "H" as string | null }));
 vi.mock("../../../store/homePersonPreference", () => ({ getHomePersonHandle: () => home.handle }));
 
-import { RelationshipGraph, useRelationshipOther } from "../RelationshipGraph";
+import { RelationshipGraph, useRelationshipPair, type RelationshipPair } from "../RelationshipGraph";
+
+const pair = (first: string | null, second: string | null): RelationshipPair => ({
+  first, second, setFirst: () => {}, setSecond: () => {}, swap: () => {},
+});
+
+describe("useRelationshipPair", () => {
+  it("starts on the Home person and the root", () => {
+    home.handle = "H";
+    const { result } = renderHook(() => useRelationshipPair("R"));
+    expect([result.current.first, result.current.second]).toEqual(["H", "R"]);
+  });
+
+  it("keeps a picked second person until the root changes, and keeps the first", () => {
+    home.handle = "H";
+    const { result, rerender } = renderHook(({ root }) => useRelationshipPair(root), { initialProps: { root: "R" } });
+    act(() => result.current.setFirst("A"));
+    act(() => result.current.setSecond("B"));
+    expect([result.current.first, result.current.second]).toEqual(["A", "B"]);
+    rerender({ root: "R2" });
+    expect([result.current.first, result.current.second]).toEqual(["A", "R2"]);
+  });
+
+  it("swaps the two", () => {
+    home.handle = "H";
+    const { result } = renderHook(() => useRelationshipPair("R"));
+    act(() => result.current.swap());
+    expect([result.current.first, result.current.second]).toEqual(["R", "H"]);
+  });
+});
 
 describe("RelationshipGraph", () => {
-  it("starts comparing with the Home person", () => {
-    home.handle = "H";
-    expect(renderHook(() => useRelationshipOther()).result.current[0]).toBe("H");
+  it("shows both people and describes the second from the first", () => {
+    renderWithProviders(<RelationshipGraph pair={pair("H", "R")} />);
+    expect(screen.getByText("Name H")).toBeTruthy();
+    expect(screen.getByText("Name R")).toBeTruthy();
+    expect(screen.getByTestId("between").textContent).toBe("H->R always hide:tree");
   });
 
-  it("charts the root described from the other person, chart always open", () => {
-    renderWithProviders(<RelationshipGraph rootHandle="R" other="H" onPickOther={() => {}} />);
-    expect(screen.getByTestId("between").textContent).toBe("H->R always");
-  });
-
-  it("asks for someone to compare with when there's no Home person, or it's the root", () => {
+  it("offers each person in the chart as the first or second person, but not where they already are", () => {
     const picked: string[] = [];
-    const { unmount } = renderWithProviders(<RelationshipGraph rootHandle="R" other={null} onPickOther={(h) => picked.push(h)} />);
-    expect(screen.getByText("No Home person is set. Pick someone to see how they're related.")).toBeTruthy();
-    screen.getByText("pick").click();
-    expect(picked).toEqual(["P"]);
+    renderWithProviders(
+      <RelationshipGraph pair={{ ...pair("H", "R"), setFirst: (h) => picked.push(`first ${h}`), setSecond: (h) => picked.push(`second ${h}`) }} />,
+    );
+    expect(screen.getByTestId("menu-H").textContent).toBe("H: Use as second person");
+    screen.getByText("X: Use as first person").click();
+    screen.getByText("X: Use as second person").click();
+    expect(picked).toEqual(["first X", "second X"]);
+  });
+
+  it("asks for a person when a box is empty or both are the same", () => {
+    const { unmount } = renderWithProviders(<RelationshipGraph pair={pair(null, "R")} />);
+    expect(screen.getByText("No Home person is set. Pick a person in the first box.")).toBeTruthy();
     unmount();
-    renderWithProviders(<RelationshipGraph rootHandle="R" other="R" onPickOther={() => {}} />);
-    expect(screen.getByText("The chart is already on this person. Pick someone else to compare with.")).toBeTruthy();
+    renderWithProviders(<RelationshipGraph pair={pair("R", "R")} />);
+    expect(screen.getByText("Both boxes hold the same person. Pick someone else in one of them.")).toBeTruthy();
     expect(screen.queryByTestId("between")).toBeNull();
   });
 });

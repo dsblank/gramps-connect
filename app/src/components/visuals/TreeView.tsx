@@ -20,7 +20,7 @@ import { FanChart, type FanChartHandle } from "./FanChart";
 import { trimTreeToDepth, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
 import { TreeChart, type TreeChartHandle } from "./TreeChart";
 import { VisualFrame } from "./VisualFrame";
-import { RelationshipGraph, RelationshipOtherPicker, useRelationshipOther } from "./RelationshipGraph";
+import { RelationshipGraph, useRelationshipPair } from "./RelationshipGraph";
 import { t } from "../../i18n/i18n";
 import { lifeEventDate } from "../../store/lifeEventDates";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
@@ -94,9 +94,9 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // re-rooting (Make root, or picking a new person) stays in whichever
   // style the user was already looking at.
   const [chartStyle, setChartStyle] = useState<"box" | "fan" | "family" | "relationship">("box");
-  // Relationship mode's other person: the Home person until another is
-  // picked, kept across re-rooting (RelationshipGraph.tsx).
-  const [relationshipOther, setRelationshipOther] = useRelationshipOther();
+  // Relationship mode's two people: the Home person and the root until
+  // others are picked (RelationshipGraph.tsx).
+  const relationshipPair = useRelationshipPair(root?.handle ?? null);
   // Fan mode's own "Show lifespan" toggle -- each wedge's own radius
   // becomes that person's actual birth/death year on a shared calendar
   // axis (fanChart.ts's own nodeRadii) instead of a fixed per-generation
@@ -776,9 +776,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         ) : undefined
       }
       status={
-        chartStyle === "relationship" ? (
-          root && relationshipOther && relationshipOther !== root.handle ? <RelationshipOtherPicker onPick={setRelationshipOther} /> : undefined
-        ) : chartStyle === "fan" ? (
+        chartStyle === "relationship" ? undefined : chartStyle === "fan" ? (
           fanTree ? (
             // A `Group` rather than a bare `Text` -- unlike box mode's own
             // status line, this one already holds a real control, and more
@@ -865,7 +863,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       }
     >
       {chartStyle === "relationship" && root && (
-        <RelationshipGraph rootHandle={root.handle} other={relationshipOther} onPickOther={setRelationshipOther} />
+        <RelationshipGraph pair={relationshipPair} />
       )}
       {chartStyle === "fan" && fanDisplayTree && (
         <FanChart

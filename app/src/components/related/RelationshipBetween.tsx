@@ -10,6 +10,7 @@ import { RelationshipChart, usePeople } from "../../pyodidePoc/RelationshipChart
 import type { RelationshipPath } from "../../store/relationshipPath";
 import { useRelationshipPaths } from "../../store/relationshipPathsApi";
 import { openRelationshipWindow } from "../../store/relationshipWindow";
+import type { PersonMenuOptions } from "../../pyodidePoc/ObjectCellButton";
 
 /** A translated pattern with {0}, {1}... replaced by text. */
 const fill = (pattern: string, parts: string[]) => pattern.replace(/\{(\d+)\}/g, (_, i: string) => parts[Number(i)] ?? "");
@@ -42,13 +43,15 @@ const LINE_H = 24;
  * `from` and `to` the same person -- the Home person selected -- it says
  * so, keeping the line in place. */
 export function RelationshipBetween({
-  from, to, revision, chart = "window", delayMs = 0,
+  from, to, revision, chart = "window", delayMs = 0, menu,
 }: {
   from: string;
   to: string;
   revision: number;
   chart?: "window" | "always";
   delayMs?: number;
+  /** Changes to the chart's person menus (ObjectMenu). */
+  menu?: PersonMenuOptions;
 }) {
   const state = useRelationshipPaths(from, to, { revision, delayMs });
   const people = usePeople([from, to]);
@@ -106,7 +109,7 @@ export function RelationshipBetween({
       </Group>
       {paths.length > 0 && (
         <Box mt="xs">
-          <RelationshipChart paths={paths} startLabel={name(from)} interactive />
+          <RelationshipChart paths={paths} startLabel={name(from)} interactive menu={menu} />
         </Box>
       )}
     </Box>
