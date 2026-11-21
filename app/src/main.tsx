@@ -8,6 +8,10 @@ import { Notifications } from "@mantine/notifications";
 import { theme } from "./theme";
 import { App } from "./App";
 import { STORAGE_KEYS } from "./store/storageKeys";
+import { captureGrampsWebLink } from "./grampsWebLinks";
+
+// Before the app reads the location: a Gramps Web link ("/media/O0123").
+captureGrampsWebLink();
 
 const colorSchemeManager = localStorageColorSchemeManager({ key: STORAGE_KEYS.colorScheme });
 

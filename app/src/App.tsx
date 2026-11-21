@@ -70,6 +70,7 @@ import { RelationshipWindow } from "./components/related/RelationshipWindow";
 import { OBJECT_QUERY_ENDPOINTS } from "./pyodidePoc/objectEndpoints";
 import logo from "./assets/icons/gramps-connect-logo.svg";
 import { STORAGE_KEYS } from "./store/storageKeys";
+import { openPendingGrampsWebLink } from "./grampsWebLinks";
 
 // Every route the app formats names the signed-in tree -- see hash.ts.
 setRouteTreeSource(getTreeId);
@@ -308,6 +309,13 @@ function AuthenticatedApp() {
         // Best-effort -- the header just falls back to the plain wordmark.
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    // A Gramps Web link ("/media/O0123") the page was opened on -- see
+    // grampsWebLinks.ts. Now that there's a session, open that record.
+    getToken()
+      .then(openPendingGrampsWebLink)
+      .catch((err) => console.error("failed to open linked record", err));
   }, []);
   // Lifted above MenuBar (rather than MenuBar calling this itself) because
   // the header below swaps between two MenuBar instances on resize --

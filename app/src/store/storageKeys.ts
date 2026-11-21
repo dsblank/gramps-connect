@@ -55,6 +55,7 @@ const DEFS = {
   clockSkewMs: { key: `${P}clockSkewMs`, tag: "excluded" },
   pendingIndexTasks: { key: `${P}pendingIndexTasks`, tag: "excluded" },
   navMax: { key: `${P}navMax`, tag: "excluded" },
+  pendingGrampsWebLink: { key: `${P}pendingGrampsWebLink`, tag: "excluded" },
 } satisfies Record<string, KeyDef>;
 
 type Name = keyof typeof DEFS;
