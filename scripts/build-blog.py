@@ -10,8 +10,12 @@ starting with a small header:
     author: Doug Blank
     ---
 
-    The post itself, in Markdown. Images can live in blog/img/ and are
-    referenced as img/name.jpg.
+    The post itself, in Markdown. Put images in blog/img/ and use them as
+
+        ![What the picture shows](img/name.jpg)
+        *An optional caption, in italics on the line right after.*
+
+    Keep screenshots around 1500 px wide, saved as JPEG.
 
 Running
 
@@ -31,6 +35,7 @@ import html
 import pathlib
 import re
 import sys
+import urllib.parse
 
 import markdown
 
@@ -41,6 +46,16 @@ SITE = "https://dsblank.github.io/gramps-connect/"
 BLOG_URL = SITE + "blog/"
 
 NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-([a-z0-9-]+)\.md$")
+
+
+# A paragraph holding just an image, optionally followed by an italic line,
+# becomes a <figure> with that line as its caption.
+FIGURE_RE = re.compile(r"<p>(<img [^>]*>)\s*(?:<em>(.*?)</em>)?</p>", re.S)
+
+
+def figure(m):
+    caption = f"<figcaption>{m.group(2)}</figcaption>" if m.group(2) else ""
+    return f"<figure>{m.group(1)}{caption}</figure>"
 
 
 def read_post(path):
@@ -59,6 +74,7 @@ def read_post(path):
     if "title" not in meta:
         sys.exit(f"{path.name}: missing 'title:' in the header")
     body = markdown.markdown(text, extensions=["extra", "sane_lists", "smarty"])
+    body = FIGURE_RE.sub(figure, body)
     return {
         "date": date,
         "slug": slug,
@@ -113,6 +129,10 @@ STYLE = """
   article h3 { font-size: 1.15rem; margin: 28px 0 8px; }
   article img { max-width: 100%; height: auto; border: 1px solid var(--border);
                 border-radius: 8px; }
+  article figure { margin: 24px 0; }
+  article figure img { display: block; }
+  article figcaption { margin-top: 6px; color: var(--muted); font-size: 0.92rem;
+                       text-align: center; }
   article pre { background: var(--bg-alt); border: 1px solid var(--border);
                 border-radius: 6px; padding: 12px 16px; overflow-x: auto; }
   article code { font-size: 0.92em; }
@@ -188,6 +208,20 @@ def build_post(post):
     return page(f"{post['title']} · Gramps Connect", post["summary"] or post["title"], body)
 
 
+RELATIVE_URL_RE = re.compile(r'(\b(?:src|href)=")([^"#][^"]*)(")')
+
+
+def absolute_urls(body, base):
+    """Feed readers show a post away from the site, so its relative links
+    and images (img/x.jpg, ../tour/) must become full addresses."""
+    def fix(m):
+        url = m.group(2)
+        if re.match(r"^[a-z][a-z0-9+.-]*:", url) or url.startswith("/"):
+            return m.group(0)
+        return m.group(1) + urllib.parse.urljoin(base, url) + m.group(3)
+    return RELATIVE_URL_RE.sub(fix, body)
+
+
 def build_feed(posts):
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     updated = f"{posts[0]['date']}T00:00:00Z" if posts else now
@@ -203,7 +237,7 @@ def build_feed(posts):
     <updated>{p['date']}T00:00:00Z</updated>
     {author}
     <summary>{html.escape(p['summary'])}</summary>
-    <content type="html">{html.escape(p['html'])}</content>
+    <content type="html">{html.escape(absolute_urls(p['html'], url))}</content>
   </entry>"""
         )
     return f"""<?xml version="1.0" encoding="utf-8"?>

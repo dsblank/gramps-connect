@@ -16,13 +16,14 @@
     <summary>A place for news about Gramps Connect, starting with a new narrated tour of the app.</summary>
     <content type="html">&lt;p&gt;Gramps Connect now has a blog. This is where new releases, new features,
 and notes on how things work behind the scenes will be posted. You can
-follow along here, or subscribe to the &lt;a href=&quot;feed.xml&quot;&gt;feed&lt;/a&gt; in any feed reader.&lt;/p&gt;
+follow along here, or subscribe to the &lt;a href=&quot;https://dsblank.github.io/gramps-connect/blog/feed.xml&quot;&gt;feed&lt;/a&gt; in any feed reader.&lt;/p&gt;
 &lt;h2&gt;Take the tour&lt;/h2&gt;
 &lt;p&gt;If you haven&amp;rsquo;t tried Gramps Connect yet, the quickest way to see what it
-does is the new &lt;a href=&quot;../tour/&quot;&gt;narrated tour&lt;/a&gt;. It walks through a real family
+does is the new &lt;a href=&quot;https://dsblank.github.io/gramps-connect/tour/&quot;&gt;narrated tour&lt;/a&gt;. It walks through a real family
 tree (Abraham Lincoln&amp;rsquo;s) and shows the main views: lists and columns,
 filters, charts, maps, stories, working together with others, and
 Gramplets.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The People list searched for &amp;quot;lincoln&amp;quot;, with Abraham Lincoln&#x27;s details on the right&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/tour-lincoln.jpg&quot; /&gt;&lt;figcaption&gt;The tour starts at Abraham Lincoln, in the People list.&lt;/figcaption&gt;&lt;/figure&gt;
 &lt;h2&gt;Where to go next&lt;/h2&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;a href=&quot;https://github.com/dsblank/gramps-connect/wiki/Installing&quot;&gt;Download Gramps Connect&lt;/a&gt;
