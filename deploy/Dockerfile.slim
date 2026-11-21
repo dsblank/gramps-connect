@@ -187,7 +187,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt gunicorn psycopg2-binary
 # gramps-object-query-language than this frontend needs -- force at least
 # this version (the same pin as deploy/Dockerfile and
 # .github/workflows/build-standalone.yml; bump all three together).
-RUN pip install --no-cache-dir "gramps-object-query-language>=0.5.14"
+RUN pip install --no-cache-dir "gramps-object-query-language>=0.5.15"
 
 # --- Stage 4: runtime ----------------------------------------------------
 FROM python:3.13-slim AS backend
