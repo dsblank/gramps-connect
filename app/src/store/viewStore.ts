@@ -1020,8 +1020,26 @@ export class ViewStore {
 
   /** Loads this view's cache if it hasn't been loaded yet this session
    * (OPFS, falling back to a fresh fetch); a no-op if already loaded --
-   * the caller just reads the current snapshot/rows. */
-  async ensureLoaded(): Promise<void> {
+   * the caller just reads the current snapshot/rows. A call while a load
+   * is already under way waits for that one instead of starting another:
+   * a second runQuery() would supersede the first, and a caller that runs
+   * again on every emit (an effect keyed on `revision`, like
+   * RelationshipChart's usePeople) then restarted the load forever, each
+   * abandoned first page held in memory until sql.js ran out. */
+  ensureLoaded(): Promise<void> {
+    if (this.db) return Promise.resolve();
+    if (!this.loading) {
+      this.loading = this.load().finally(() => {
+        this.loading = null;
+      });
+    }
+    return this.loading;
+  }
+
+  /** The ensureLoaded() in flight, if any. */
+  private loading: Promise<void> | null = null;
+
+  private async load(): Promise<void> {
     if (this.db) return;
     // This tree's custom columns (columnSettings.ts) are part of the cache's
     // shape, so they're added before the cache is checked or built.

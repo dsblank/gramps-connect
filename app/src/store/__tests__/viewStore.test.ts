@@ -1705,3 +1705,30 @@ describe("ViewStore re-sorting after a linked record changes", () => {
     expect(await store.refreshDependents("event", ["E1"])).toBe("patched");
   });
 });
+
+describe("ViewStore.ensureLoaded", () => {
+  beforeEach(() => {
+    vi.mocked(fetchPage).mockReset();
+  });
+
+  it("shares one load between calls made while it is still loading, instead of restarting it", async () => {
+    // Regression: an effect keyed on the store's revision (usePeople)
+    // called ensureLoaded() again on every emit while the first page was
+    // still on its way; each call started a new runQuery that superseded
+    // the last, so the list never finished loading and memory ran out.
+    let resolvePage!: (value: Awaited<ReturnType<typeof fetchPage>>) => void;
+    vi.mocked(fetchPage).mockReturnValueOnce(new Promise((resolve) => { resolvePage = resolve; }));
+    const store = new ViewStore(TAG_VIEW, getSql);
+    const calls = [store.ensureLoaded()];
+    const unsubscribe = store.subscribe(() => {
+      if (calls.length < 5) calls.push(store.ensureLoaded());
+    });
+    calls.push(store.ensureLoaded(), store.ensureLoaded());
+    await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(1));
+    resolvePage({ page: { items: [tagRow("H1"), tagRow("H2")], next_after: null }, totalCount: 2 });
+    await Promise.all(calls);
+    unsubscribe();
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot().loadedCount).toBe(2);
+  });
+});
