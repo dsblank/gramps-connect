@@ -18,6 +18,14 @@ voice, the timing and the progress bar all follow the text, so nothing else
 needs to change. Adding, removing or reordering steps and scenes works the
 same way.
 
+## The closing card
+
+The last scene, **Where next**, has a single step with `end: true` and no
+`img`, `cam` or `cur`. Instead of a screenshot it shows a card with the
+same links as the [home page](../index.html): download, hosting, the
+documentation, the forum and GitHub. The card's links are in `index.html`
+(`id="endcard"`); keep them in step with the home page's.
+
 ## Changing where the camera and pointer go
 
 Positions are in screenshot pixels, which are hard to guess, so the player
@@ -39,7 +47,9 @@ changes that weren't copied.
 ## Adding a screenshot
 
 Take it from the app in a browser window whose page area is 1519 × 784, so
-it lines up with the others when the frames crossfade. Move the mouse
+it lines up with the others when the frames crossfade. (A screenshot of a
+1920 × 991 page area scaled down by 1.264 comes out at exactly that size;
+Claude in Chrome's screenshots of a maximized 1080p window do this.) Move the mouse
 pointer off the page first; the player draws its own. Save it as
 `img/<name>.jpg` and use `<name>` as the step's `img`.
 

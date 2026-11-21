@@ -9,6 +9,7 @@
 //   click   true to show a click ripple when the pointer arrives
 //   type    text typed into a box at typeAt [x, y] (default [131, 95])
 //   text    the narration: shown on the right, highlighted and read aloud
+//   end     true to show the closing links card instead of a screenshot (no img, cam or cur)
 window.TOUR_SCENES = [
   { title: "Home", url: "#/home", steps: [
     { img: "home", cam: [760, 392, 1], cur: [760, 420],
@@ -32,6 +33,30 @@ window.TOUR_SCENES = [
     { img: "lincoln", cam: [1180, 545, 2.2], cur: [940, 540],
       text: "This portrait was added by dragging the file onto his record. Its caption carries the photographer and the license." },
   ]},
+  { title: "Columns", url: "#/person", steps: [
+    { img: "columns", cam: [760, 190, 1.55], cur: [510, 62],
+      text: "The gear at the top of any list opens its columns. Drag them into a different order, or untick the ones you don't need." },
+    { img: "columns", cam: [760, 270, 2], cur: [650, 266],
+      text: "Add column makes a column of your own from a short expression. birth.place.title means the place where each person was born." },
+    { img: "columns", cam: [900, 270, 2.2], cur: [972, 266],
+      text: "Give it a heading, here Born in, and tick Sortable to be able to sort by it." },
+    { img: "columns-list", cam: [560, 260, 1.6], cur: [745, 161],
+      text: "After saving, every row has its birthplace, and searching for Lincoln shows where each of them was born." },
+    { img: "columns-sorted", cam: [560, 260, 1.6], cur: [702, 139], click: true,
+      text: "Click the heading to sort by it. Each list keeps its own columns, separately for each tree, in this browser." },
+  ]},
+  { title: "Filters", url: "#/person", steps: [
+    { img: "columns-list", cam: [300, 100, 2.4], cur: [146, 68], click: true,
+      text: "Filters finds people that a name search can't, by combining rules picked from a list." },
+    { img: "filter-pick", cam: [760, 340, 1.5], cur: [600, 263],
+      text: "The rules are grouped by what they test, such as dates and properties. The first rule here asks for people born between 1800 and 1850." },
+    { img: "filter-rules", cam: [760, 340, 1.6], cur: [575, 312], click: true,
+      text: "A second rule, Females, is joined to it with AND. Underneath, the same filter is written in GOQL, the query language behind it, for anyone who'd rather type." },
+    { img: "filter-rules", cam: [880, 470, 2.2], cur: [952, 488], click: true,
+      text: "Apply runs it. Save keeps it, to use again later." },
+    { img: "filter-result", cam: [450, 210, 1.5], cur: [320, 68],
+      text: "The list now holds just the 136 women born in those fifty years. The filter's rules are shown beside it, and the × clears it." },
+  ]},
   { title: "Family", url: "#/tree", steps: [
     { img: "lincoln", cam: [1000, 200, 2.4], cur: [1008, 206], click: true,
       text: "Graphs draws the family around whoever you're looking at." },
@@ -43,6 +68,16 @@ window.TOUR_SCENES = [
       text: "The same family as a fan chart:" },
     { img: "fan", cam: [787, 413, 1.05], cur: [787, 470],
       text: "Each ring is one generation further back. You can rotate it, add generations, and shade it by lifespan." },
+  ]},
+  { title: "Relationships", url: "#/tree", steps: [
+    { img: "relationship", cam: [420, 280, 1.6], cur: [280, 77], click: true,
+      text: "Relationship, the fourth chart, says how two people are connected. Here it's open on Franklin D. Roosevelt." },
+    { img: "relationship", cam: [300, 660, 2.2], cur: [242, 656], click: true,
+      text: "It compares with the home person unless you pick someone else. Here, Compare with is set to Theodore Roosevelt." },
+    { img: "relationship", cam: [300, 140, 2.4], cur: [376, 134],
+      text: "The answer is in the same words Gramps uses: Franklin is Theodore's nephew-in-law." },
+    { img: "relationship", cam: [330, 275, 1.9], cur: [412, 362],
+      text: "Below it are the people in between: Theodore's brother Elliott, Elliott's daughter Eleanor, and the rings of her marriage to Franklin." },
   ]},
   { title: "Maps", url: "#/map", steps: [
     { img: "map", cam: [787, 420, 1], cur: [700, 470],
@@ -71,5 +106,31 @@ window.TOUR_SCENES = [
       text: "Each slide starts with words drawn from the tree, and you can rewrite any of them. This one was retitled \"Shot at Ford's Theater\" and given a sentence of its own." },
     { img: "story-ford", cam: [760, 740, 2], cur: [879, 760],
       text: "The timeline along the bottom marks every moment, so you can see the shape of a whole life at a glance." },
+    { img: "story-editor", cam: [760, 400, 1.1], cur: [565, 264],
+      text: "Edit opens the story editor. The slides run down the left, the chosen slide's title, words and photos are in the middle, and a live preview on the right shows each change as you make it. This is where the Ford's Theater slide got its new title." },
+  ]},
+  { title: "Working together", url: "#/changed", steps: [
+    { img: "changelog", cam: [640, 300, 1.4], cur: [600, 150],
+      text: "A whole family can work on one tree at once, and everyone sees each other's edits as they happen, without reloading. The Change Log lists them, newest first." },
+    { img: "changelog", cam: [930, 200, 2.2], cur: [904, 188],
+      text: "Each entry says who made the change, when, and which parts of the record it touched." },
+    { img: "history", cam: [760, 175, 1.9], cur: [604, 163], click: true,
+      text: "Every record has a History button for just its own edits. Click one to see what it was before and after." },
+    { img: "discuss", cam: [760, 180, 1.9], cur: [760, 186],
+      text: "Discuss starts a conversation about the record you're on. Invite the relatives who'd know, and it stays linked to Lincoln for anyone who comes looking later." },
+  ]},
+  { title: "Gramplets", url: "#/home", steps: [
+    { img: "store", cam: [760, 270, 1.3], cur: [598, 21], click: true,
+      text: "Gramplets are add-ons: small programs that ask the tree a question and show the answer. The Gramplet Store lists the ones people have shared." },
+    { img: "store", cam: [455, 235, 2.2], cur: [718, 210], click: true,
+      text: "The tree's owner installs one with a click, and from then on everyone in the tree can run it from the Gramplets menu." },
+    { img: "gramplet", cam: [760, 330, 1], cur: [760, 320],
+      text: "This one charts the typical age at death for each decade of birth, across the 1,016 people with both dates. It runs right in the browser, in a window of its own." },
+    { img: "gramplet-code", cam: [520, 420, 1.3], cur: [470, 480],
+      text: "Every Gramplet is real Python, and its code opens right in the app, to change it or to learn from it when writing your own." },
+  ]},
+  { title: "Where next", url: "", steps: [
+    { end: true,
+      text: "That's the tour. Gramps Connect is free and open source. Download it for your own computer, host it for your family, or read the full guide. The links are on the screen." },
   ]},
 ];

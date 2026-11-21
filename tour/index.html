@@ -126,6 +126,34 @@ h2 small { font: 600 12px var(--font-body); color: var(--faint); font-variant-nu
 .credits p { margin: 0 0 6px; }
 .credits a { color: var(--accent); }
 
+/* Closing card (a step with end: true): the landing page's links, over the screenshot */
+.endcard {
+  position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: var(--surface); overflow-y: auto; animation: endin .6s ease;
+}
+.endcard[hidden] { display: none; }
+@keyframes endin { from { opacity: 0; } to { opacity: 1; } }
+.endinner { max-width: 560px; text-align: center; }
+.endlogo { width: 56px; height: 56px; display: block; margin: 0 auto 10px; }
+.endtitle { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: -.02em; margin: 0 0 4px; display: block; }
+.endsub { color: var(--muted); margin: 0 0 20px; }
+.endlinks { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 18px; }
+.endbtn {
+  font: 600 14px var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 999px; padding: 9px 16px; text-decoration: none;
+}
+.endbtn:hover { border-color: var(--accent); color: var(--accent); }
+.endbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.endbtn.primary:hover { filter: brightness(1.08); color: #fff; }
+.endmore { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.9; }
+.endmore a { color: var(--accent); text-decoration: none; }
+.endmore a:hover { text-decoration: underline; }
+@media (max-width: 600px) {
+  .endcard { padding: 12px; } .endlogo { width: 32px; height: 32px; margin-bottom: 4px; }
+  .endtitle { font-size: 18px; } .endsub { margin-bottom: 8px; font-size: 13px; }
+  .endlinks { gap: 6px; margin-bottom: 8px; } .endbtn { font-size: 12px; padding: 5px 10px; } .endmore { font-size: 11px; line-height: 1.6; }
+}
+
 /* Edit mode (index.html?edit): click a screenshot to read its coordinates */
 .editbar { flex: none; display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px dashed var(--accent); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
 .editbar .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -172,6 +200,25 @@ body.editing .viewport { cursor: crosshair; }
             <svg width="24" height="24" viewBox="0 0 24 24"><path d="M3 2 L3 19 L7.6 14.8 L10.6 21.6 L13.6 20.3 L10.7 13.6 L17 13.6 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
           </div>
         </div>
+        <div class="endcard" id="endcard" hidden>
+          <div class="endinner">
+            <img class="endlogo" src="../app/src/assets/icons/gramps-connect-logo.svg" alt="">
+            <h2 class="endtitle">Where next?</h2>
+            <p class="endsub">Gramps Connect is free and open source.</p>
+            <div class="endlinks">
+              <a class="endbtn primary" href="https://github.com/dsblank/gramps-connect/wiki/Installing" target="_blank" rel="noopener">Download for your computer</a>
+              <a class="endbtn" href="https://github.com/dsblank/gramps-connect/wiki/Deploying" target="_blank" rel="noopener">Host it for your family</a>
+              <a class="endbtn" href="https://github.com/dsblank/gramps-connect/wiki" target="_blank" rel="noopener">Read the documentation</a>
+            </div>
+            <p class="endmore">
+              <a href="../">Gramps Connect home page</a> ·
+              <a href="https://gramps.discourse.group/c/gramps-connect/35" target="_blank" rel="noopener">Discourse forum</a> ·
+              <a href="https://github.com/dsblank/gramps-connect" target="_blank" rel="noopener">GitHub</a> ·
+              <a href="https://gramps-project.org/" target="_blank" rel="noopener">Gramps</a> ·
+              <a href="https://github.com/gramps-project/gramps-web-api" target="_blank" rel="noopener">Gramps Web API</a>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
     <div class="editbar" id="editbar" hidden>
@@ -199,13 +246,13 @@ body.editing .viewport { cursor: crosshair; }
 
   <aside class="right" id="right">
     <div class="kicker">A guided tour</div>
-    <h1>Gramps Connect, in five minutes</h1>
+    <h1>Gramps Connect, in ten minutes</h1>
     <p class="intro">Gramps Connect puts a Gramps family tree in the browser, so a whole family can look through it and add to it together. Press Play to hear it read aloud and follow along. You can also click any line below to jump to it.</p>
     <label class="voicepick" id="voicepick" hidden>Voice <select id="voiceSel"></select></label>
     <div id="script"></div>
     <div class="credits">
       <p>Shown with the US Presidents example tree. The photos on Lincoln's record were added for this tour from Wikimedia Commons: portraits of Abraham, Mary Todd and Robert Todd Lincoln (public domain); Ford's Theatre by Ingfbruno (CC BY-SA 3.0); the Lincoln Birthplace memorial by Jamie from Toronto (CC BY 2.0).</p>
-      <p><a href="https://github.com/dsblank/gramps-connect/wiki" target="_blank" rel="noopener">Read the full guide ↗</a></p>
+      <p><a href="../">Gramps Connect home page</a> · <a href="https://github.com/dsblank/gramps-connect/wiki" target="_blank" rel="noopener">Read the full guide ↗</a></p>
     </div>
   </aside>
 </div>
@@ -230,8 +277,10 @@ const SCENES_HEADER = `// Gramps Connect tour: the scenes and their narration.
 //   click   true to show a click ripple when the pointer arrives
 //   type    text typed into a box at typeAt [x, y] (default [131, 95])
 //   text    the narration: shown on the right, highlighted and read aloud
+//   end     true to show the closing links card instead of a screenshot (no img, cam or cur)
 `;
 function fmtStep(st) {
+  if (st.end) return `{ end: true,\n      text: ${JSON.stringify(st.text)} }`;
   const parts = [`img: ${JSON.stringify(st.img)}`, `cam: [${st.cam.join(", ")}]`, `cur: [${st.cur.join(", ")}]`];
   if (st.click) parts.push("click: true");
   if (st.type) parts.push(`type: ${JSON.stringify(st.type)}`);
@@ -254,7 +303,7 @@ const STEPS = []; SCENES.forEach((s, si) => s.steps.forEach((st, k) => STEPS.pus
 const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Preload
-const cache = {}; for (const s of STEPS) if (!cache[s.img]) { const im = new Image(); im.src = `img/${s.img}.jpg`; cache[s.img] = im; }
+const cache = {}; for (const s of STEPS) if (s.img && !cache[s.img]) { const im = new Image(); im.src = `img/${s.img}.jpg`; cache[s.img] = im; }
 
 let idx = 0, playing = false, timer = null, stepStart = 0, stepDur = 0, rafId = 0, finished = false, firstShow = true;
 let cam = { cx: IW / 2, cy: IH / 2, z: 1 }, cur = { x: 760, y: 420 }, curScale = 1;
@@ -424,15 +473,19 @@ function show(i, { animate = true } = {}) {
   idx = (i + STEPS.length) % STEPS.length;
   const st = STEPS[idx];
   typedEl.hidden = true;
-  setImage(st.img);
-  [cam.cx, cam.cy, cam.z] = st.cam;
+  $("endcard").hidden = !st.end;
+  cursorEl.hidden = !!st.end;
+  if (st.img) setImage(st.img);
+  if (st.cam) [cam.cx, cam.cy, cam.z] = st.cam;
+  else [cam.cx, cam.cy, cam.z] = [IW / 2, IH / 2, 1];
   applyCam(animate);
-  cur = { x: st.cur[0], y: st.cur[1] };
+  if (st.cur) cur = { x: st.cur[0], y: st.cur[1] };
   placeCursor(animate);
   const moveMs = animate && !reduce ? 1150 : 0;
   if (st.click) pending.push(setTimeout(ripple, moveMs));
   if (st.type) pending.push(setTimeout(() => typeText(st.type, st.typeAt || [131, 95]), moveMs + 250));
-  $("url").textContent = "gramps-connect.duckdns.org/#/t/…" + SCENES[st.scene].url.slice(1);
+  const sceneUrl = SCENES[st.scene].url;
+  $("url").textContent = sceneUrl ? "gramps-connect.duckdns.org/#/t/…" + sceneUrl.slice(1) : "dsblank.github.io/gramps-connect";
   updateScript();
   stepStart = performance.now(); stepDur = durationFor(st); pos = 0; finished = false;
   if (playing) startReading();
@@ -523,7 +576,8 @@ function renderEdit() {
     (picked ? `picked x ${picked[0]}, y ${picked[1]}` : "click the screenshot to pick a point");
   $("editCode").textContent = fmtStep(st);
   $("editbar").querySelectorAll("button").forEach(b => {
-    b.disabled = (b.hasAttribute("data-needs-pick") && !picked) || (b.hasAttribute("data-needs-type") && !st.type);
+    b.disabled = (st.end && !/^copy/.test(b.dataset.act)) ||
+      (b.hasAttribute("data-needs-pick") && !picked) || (b.hasAttribute("data-needs-type") && !st.type);
   });
   $("editbar").querySelector('[data-act="click"]').textContent = st.click ? "Click: on" : "Click: off";
 }
