@@ -3,7 +3,7 @@
 // window rather than a dialog, so it can stay up beside other records, and
 // across navigation, while you research the people on it. Mounted once in
 // App.tsx next to ExternalSearchWindow; opened by the "Home person's ..."
-// line on a person and by Show chart for two selected people
+// line on a person and by Relationship for two selected people
 // (store/relationshipWindow.ts). It stays on the pair it was opened for.
 import { useSyncExternalStore } from "react";
 import { t } from "../../i18n/i18n";

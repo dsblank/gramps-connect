@@ -46,16 +46,16 @@ describe("RelationshipBetween", () => {
     // One line, cut short if need be, the whole sentence on hover.
     expect(line.getAttribute("title")).toBe("Cousin, Xena is Home, Hal's first cousin.");
     expect(screen.queryByTestId("chart")).toBeNull();
-    fireEvent.click(screen.getByText("Show chart"));
+    fireEvent.click(screen.getByText("Relationship"));
     expect(opened).toEqual([["H", "X"]]);
     expect(screen.queryByTestId("chart")).toBeNull();
   });
 
-  it("draws the chart below, with no Show chart, when always open", () => {
+  it("draws the chart below, with no Relationship, when always open", () => {
     hook.state = { status: "done", paths: [COUSIN, COUSIN] };
     renderWithProviders(<RelationshipBetween from="H" to="X" revision={0} chart="always" />);
     expect(screen.getByTestId("chart").textContent).toBe("2 paths");
-    expect(screen.queryByText("Show chart")).toBeNull();
+    expect(screen.queryByText("Relationship")).toBeNull();
   });
 
   it("says when they aren't related, and shows a search in progress", () => {
@@ -70,11 +70,11 @@ describe("RelationshipBetween", () => {
 });
 
 describe("the Home person themselves", () => {
-  it("says so, with no search and no Show chart", () => {
+  it("says so, with no search and no Relationship", () => {
     hook.state = { status: "idle" };
     renderWithProviders(<RelationshipBetween from="H" to="H" revision={0} />);
     expect(screen.getByText("This is your Home person.")).toBeTruthy();
-    expect(screen.queryByText("Show chart")).toBeNull();
+    expect(screen.queryByText("Relationship")).toBeNull();
     expect(screen.queryByText("Finding how they're related...")).toBeNull();
   });
 });

@@ -127,8 +127,9 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
     // opens: ViewStore.applyDefaultSelection() selects a first row as soon
     // as one exists, so reaching here means there are no rows to select
     // (yet, or at all under the current filter).
+    const loading = snapshot.status === "idle" || snapshot.status === "loading";
     const message =
-      snapshot.status === "idle" || snapshot.status === "loading"
+      loading
         ? "Loading…"
         : snapshot.totalCount === 0
           ? "No records to show."
@@ -136,7 +137,7 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
     return (
       <Stack h={flow ? undefined : "100%"} align="center" justify="center" p="md" gap="sm">
         <Text c="dimmed" size="xl">{message}</Text>
-        <AddButton view={view} draftStack={draftStack} />
+        {!loading && <AddButton view={view} draftStack={draftStack} />}
       </Stack>
     );
   }
