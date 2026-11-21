@@ -164,6 +164,13 @@ Test only on the :5102 bench tree, undoing only ids created there.
   - record was added → revert is a delete, warn which records from the
     change refer to it; record was deleted → re-create, warn that records
     which pointed to it won't again.
+- **Deleted records in the Change Log** — View > Change Log and the Home
+  card read the search index (`ChangedView.tsx`, `fetchRecentlyChanged`
+  in `homeStats.ts`), so a deleted record just disappears from them. The
+  Changes tab above is where deletes become visible: each delete listed
+  with who/when and what was removed, linking to its Change page and its
+  Undo. `LatestChangeColumns.tsx`'s red "Deleted" badge is unreachable
+  until then.
 - **Undo after delete** — replace "This cannot be undone from here." in
   `DeleteButton.tsx` / `BulkDeleteButton.tsx` with a ~10 s notification
   carrying Undo of that delete's transaction (no dialog; a conflict falls
