@@ -129,6 +129,7 @@ const TOKEN_RE = new RegExp(
 // being typed -- see expected() and GOQL's completion.py for each one.
 type Expected =
   | "operand"
+  | "number"
   | "operator"
   | "value"
   | "is_value"
@@ -256,6 +257,8 @@ function expected(text: string): [Expected, boolean] {
     return ["in_list", comprehension];
   }
   if (last[0] === "name" && OPERAND_AFTER.has(last[1])) return ["operand", comprehension];
+  // After an arithmetic operator: something with a numeric value.
+  if (last[0] === "other" && "+-*/".includes(last[1])) return ["number", comprehension];
   if (last[0] === "operator") return ["value", comprehension];
   if (endsOperand(last)) {
     if (top && (top.values || top.subscript || SINGLE_TOKEN_ROLES.has(frameRole(top) as Expected))) {
@@ -649,6 +652,8 @@ export function completeFromVocabularies(
       candidates = [listOpen, ...envNames];
     } else if (want === "path") {
       candidates = paths;
+    } else if (want === "number") {
+      candidates = [...paths, ["len", "function", null], ...envNames];
     } else if (want === "string") {
       candidates = [quote];
     } else if (want === "collection") {
@@ -701,13 +706,13 @@ export function completeFromVocabularies(
       const role = expected(before.slice(0, chainStart))[0];
       const context = walk(vocabs, namespace, segs, bindings);
       candidates = context ? namesAt(vocabs, context) : [];
-      if (context && ["operand", "value", "is_value"].includes(role)) {
+      if (context && ["operand", "value", "is_value", "number"].includes(role)) {
         // `father.families[0]...`: one entry of a collection, across a hop.
         candidates = [...candidates, ...indexableCollections(vocabs, context)];
       }
       if (role === "iterable") {
         candidates = candidates.filter(([, kind, detail]) => kind === "relationship" || isArray(detail));
-      } else if (!["operand", "value", "is_value", "path"].includes(role)) {
+      } else if (!["operand", "value", "is_value", "path", "number"].includes(role)) {
         candidates = [];
       }
     }

@@ -177,6 +177,19 @@ describe("expressionDependencies", () => {
     ]);
   });
 
+  it("follows the links on both sides of arithmetic", () => {
+    expect(expressionDependencies("Person", "(death.date.sortval - birth.date.sortval) // 365")).toEqual({
+      links: [{ select: "event_ref_list", table: "event" }],
+      untracked: false,
+    });
+    expect(expressionDependencies("Family", "mother.birth.date.dateval[2] - father.birth.date.dateval[2]").links).toEqual([
+      { select: "mother_handle", table: "person" },
+      { select: "mother.event_ref_list", table: "event" },
+      { select: "father_handle", table: "person" },
+      { select: "father.event_ref_list", table: "event" },
+    ]);
+  });
+
   it("needs nothing for the record's own fields and lists", () => {
     expect(expressionDependencies("Person", "primary_name.first_name")).toEqual({ links: [], untracked: false });
     expect(expressionDependencies("Person", "len(citations)")).toEqual({ links: [], untracked: false });
@@ -276,6 +289,7 @@ describe("structuredValueError", () => {
       expect(structuredValueError("Person", expr)).toBeNull();
     }
     expect(structuredValueError("Event", "type")).toBeNull();
+    expect(structuredValueError("Person", "death.date.dateval[2] - birth.date.dateval[2]")).toBeNull();
   });
 
   it("refuses a whole record, a list, or another structure, suggesting a value", () => {
@@ -313,6 +327,15 @@ describe("sortable custom columns", () => {
     const keys = (namespace: string, expr: string) => customSortKeys(namespace, expr)?.() ?? null;
     expect(keys("Person", "birth.place.title")).toEqual(["birth.place.title"]);
     expect(keys("Person", "len(citations)")).toEqual(["len(citations)"]);
+    expect(keys("Person", "death.date.dateval[2] - birth.date.dateval[2]")).toEqual([
+      "death.date.dateval[2] - birth.date.dateval[2]",
+    ]);
+    expect(keys("Person", "[a.value for a in attribute_list if a.private][0]")).toEqual([
+      "[a.value for a in attribute_list if a.private][0]",
+    ]);
+    expect(keys("Person", "[f for f in parent_families][0].mother.primary_name")?.[0]).toMatch(
+      /^\[f for f in parent_families\]\[0\]\.mother\.primary_name\./,
+    );
     expect(keys("Person", "birth.date")).toEqual(["birth.date.sortval"]);
     // The default name format, "Surname, Given".
     expect(keys("Family", "father.primary_name")).toEqual([

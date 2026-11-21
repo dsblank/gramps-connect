@@ -1242,6 +1242,42 @@
         "==",
         "and"
       ]
+    },
+    {
+      "namespace": "Person",
+      "source": "death.date.dateval[2] - bi",
+      "expect": [
+        "birth",
+        "birth_ref_index"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "(death.date.sortval - birth.date.so",
+      "expect": [
+        "sortval"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "(death.date.sortval - birth.date.sortval) // ",
+      "contains": [
+        "birth",
+        "death",
+        "len"
+      ],
+      "excludes": [
+        "not",
+        "any",
+        "None"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "len(event_ref_list) * le",
+      "expect": [
+        "len"
+      ]
     }
   ]
 }
