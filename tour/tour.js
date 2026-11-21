@@ -1,0 +1,205 @@
+// The Gramps Connect tour: everything it says and shows. index.html is the player and needs no changes.
+// Everything after "window.TOUR =" is plain JSON. See README.md for what each field means.
+// To find coordinates, open index.html?edit and click on a screenshot.
+window.TOUR = {
+  "lang": "en-US",
+  "title": "Gramps Connect Walkthrough",
+  "description": "A narrated, self-playing tour of Gramps Connect, shown with the US Presidents example tree.",
+  "icon": "../app/public/favicon-32.png",
+  "kicker": "A guided tour",
+  "heading": "Gramps Connect, in ten minutes",
+  "intro": "Press Play to hear the tour read aloud and follow along, or click any line below to jump to it.",
+  "screen": [1519, 784],
+  "address": "gramps-connect.duckdns.org/#/t/…",
+  "typeAt": [131, 95],
+  "labels": {
+    "play": "Play",
+    "pause": "Pause",
+    "replay": "Replay",
+    "previous": "Previous step",
+    "next": "Next step",
+    "readAloudOn": "Read aloud (on)",
+    "readAloudOff": "Read aloud (off)",
+    "voice": "Voice",
+    "jumpTo": "Jump to {scene}",
+    "stage": "Animated walkthrough of the Gramps Connect app"
+  },
+  "credits": {
+    "paragraphs": [
+      "Shown with the US Presidents example tree. The photos on Lincoln's record were added for this tour from Wikimedia Commons: portraits of Abraham, Mary Todd and Robert Todd Lincoln (public domain); Ford's Theatre by Ingfbruno (CC BY-SA 3.0); the Lincoln Birthplace memorial by Jamie from Toronto (CC BY 2.0)."
+    ],
+    "links": [
+      { "label": "Gramps Connect home page", "href": "../" },
+      { "label": "Read the full guide ↗", "href": "https://github.com/dsblank/gramps-connect/wiki" }
+    ]
+  },
+  "scenes": [
+    { "title": "Welcome", "address": "dsblank.github.io/gramps-connect", "steps": [
+      { "card": {
+          "logo": "../app/src/assets/icons/gramps-connect-logo.svg",
+          "title": "Gramps Connect",
+          "subtitle": "Your family tree in the browser, alone or together."
+        },
+        "text": "Welcome to Gramps Connect, a family tree you can explore and build right in your web browser." },
+      { "img": "lincoln", "cam": [760, 392, 1], "cur": [950, 153], "path": "/person",
+        "text": "It's built on Gramps, the free genealogy program, and keeps the same records: people, families, events, places and sources." },
+      { "img": "lincoln", "cam": [1010, 390, 2.2], "cur": [962, 358], "path": "/person",
+        "text": "Every event, place and relative is a link, so you can follow a life from one record to the next." },
+      { "img": "changelog", "cam": [640, 300, 1.4], "cur": [313, 188], "path": "/changed",
+        "text": "Use it by yourself on your own computer, or host it online so the whole family can work on one tree together." },
+      { "img": "changelog", "cam": [880, 200, 2.6], "cur": [890, 188], "path": "/changed",
+        "text": "Everyone sees the others' changes as they happen, along with who made each one and when." },
+      { "img": "fan", "cam": [787, 413, 1.25], "cur": [787, 410], "path": "/tree",
+        "text": "This tour follows Abraham Lincoln through the US Presidents example tree, from his record to charts of his ancestors," },
+      { "img": "story-birth", "cam": [1047, 330, 1.6], "cur": [1047, 300], "path": "/story",
+        "text": "then on to maps, his life story, working together, and add-ons. It takes about ten minutes." }
+    ]},
+    { "title": "Home", "path": "/home", "steps": [
+      { "img": "home", "cam": [760, 392, 1], "cur": [760, 420],
+        "text": "Signing in opens Home, a one-page summary of the tree. This is the US Presidents example: 2,266 people, 1,117 families and nearly 4,000 events." },
+      { "img": "home", "cam": [308, 200, 2.3], "cur": [212, 163],
+        "text": "The home person is who everything else is measured from, such as how others are related and which anniversaries come up. Here it's Abraham Lincoln." },
+      { "img": "home", "cam": [780, 380, 2], "cur": [640, 282],
+        "text": "The Change Log lists the latest edits to the tree. Today's entries are the map outlines added for this tour." },
+      { "img": "home", "cam": [1253, 175, 2.3], "cur": [1146, 160],
+        "text": "Stories, discussions and bookmarks sit alongside, each one click away." }
+    ]},
+    { "title": "Finding someone", "path": "/person", "steps": [
+      { "img": "home", "cam": [380, 300, 1.4], "cur": [27, 134], "click": true,
+        "text": "The rail on the left has one icon per kind of record, the same categories Gramps uses. The first opens People." },
+      { "img": "people", "cam": [420, 120, 2.3], "cur": [300, 104], "click": true, "type": "lincoln",
+        "text": "To find someone, type part of their name, or a Gramps ID, into the search box." },
+      { "img": "lincoln", "cam": [440, 230, 1.8], "cur": [250, 162], "click": true,
+        "text": "The list narrows as you type. Abraham Lincoln is at the top." },
+      { "img": "lincoln", "cam": [1180, 330, 1.6], "cur": [990, 154],
+        "text": "His record opens beside the list: his photo, his events, his parents and his family. Pick another row and this side follows." },
+      { "img": "lincoln", "cam": [1180, 545, 2.2], "cur": [940, 540],
+        "text": "This portrait was added by dragging the file onto his record. Its caption carries the photographer and the license." }
+    ]},
+    { "title": "Columns", "path": "/person", "steps": [
+      { "img": "columns", "cam": [760, 190, 1.55], "cur": [510, 62],
+        "text": "The gear at the top of any list opens its columns. Drag them into a different order, or untick the ones you don't need." },
+      { "img": "columns", "cam": [760, 270, 2], "cur": [650, 266],
+        "text": "Add column makes a column of your own from a short expression. birth.place.title means the place where each person was born." },
+      { "img": "columns", "cam": [900, 270, 2.2], "cur": [972, 266],
+        "text": "Give it a heading, here Born in, and tick Sortable to be able to sort by it." },
+      { "img": "columns-list", "cam": [560, 260, 1.6], "cur": [745, 161],
+        "text": "After saving, every row has its birthplace, and searching for Lincoln shows where each of them was born." },
+      { "img": "columns-sorted", "cam": [560, 260, 1.6], "cur": [702, 139], "click": true,
+        "text": "Click the heading to sort by it. Each list keeps its own columns, separately for each tree, in this browser." }
+    ]},
+    { "title": "Filters", "path": "/person", "steps": [
+      { "img": "columns-list", "cam": [300, 100, 2.4], "cur": [146, 68], "click": true,
+        "text": "Filters finds people that a name search can't, by combining rules picked from a list." },
+      { "img": "filter-pick", "cam": [760, 340, 1.5], "cur": [600, 263],
+        "text": "The rules are grouped by what they test, such as dates and properties. The first rule here asks for people born between 1800 and 1850." },
+      { "img": "filter-rules", "cam": [760, 340, 1.6], "cur": [575, 312], "click": true,
+        "text": "A second rule, Females, is joined to it with AND. Underneath, the same filter is written in GOQL, the query language behind it, for anyone who'd rather type." },
+      { "img": "filter-rules", "cam": [880, 470, 2.2], "cur": [952, 488], "click": true,
+        "text": "Apply runs it. Save keeps it, to use again later." },
+      { "img": "filter-result", "cam": [450, 210, 1.5], "cur": [320, 68],
+        "text": "The list now holds just the 136 women born in those fifty years. The filter's rules are shown beside it, and the × clears it." }
+    ]},
+    { "title": "Family", "path": "/tree", "steps": [
+      { "img": "lincoln", "cam": [1000, 200, 2.4], "cur": [1008, 206], "click": true,
+        "text": "Graphs draws the family around whoever you're looking at." },
+      { "img": "tree", "cam": [760, 420, 1], "cur": [790, 410],
+        "text": "Parents and grandparents fan out to the right, children to the left. Cards show photos where the tree has them." },
+      { "img": "tree", "cam": [1200, 400, 1.6], "cur": [1267, 189], "click": true,
+        "text": "A − folds a branch away and a + opens the next generation, so a large tree stays readable." },
+      { "img": "tree", "cam": [220, 90, 2.6], "cur": [172, 77], "click": true,
+        "text": "The same family as a fan chart:" },
+      { "img": "fan", "cam": [787, 413, 1.05], "cur": [787, 470],
+        "text": "Each ring is one generation further back. You can rotate it, add generations, and shade it by lifespan." }
+    ]},
+    { "title": "Relationships", "path": "/person", "steps": [
+      { "img": "relationship-one", "cam": [900, 230, 1.5], "cur": [260, 337], "click": true,
+        "text": "Pick someone in People, and the line above their record says how they're related to the home person. Theodore Roosevelt isn't related to Lincoln at all." },
+      { "img": "relationship-two", "cam": [760, 200, 1.3], "cur": [280, 277], "click": true,
+        "text": "Ctrl-click a second person, here Franklin D. Roosevelt, and the line compares the two of them instead." },
+      { "img": "relationship-two", "cam": [1100, 100, 2.6], "cur": [1110, 97],
+        "text": "The answer is in the same words Gramps uses: Franklin is Theodore's nephew-in-law." },
+      { "img": "relationship-two", "cam": [1300, 100, 2.6], "cur": [1490, 97], "click": true,
+        "text": "Graph, at the end of the line, opens a window showing how they're connected." },
+      { "img": "relationship-window", "cam": [1120, 200, 1.7], "cur": [1124, 196],
+        "text": "The people in between are drawn out: Theodore's brother Elliott, Elliott's daughter Eleanor, and the rings of her marriage to Franklin." }
+    ]},
+    { "title": "Maps", "path": "/map", "steps": [
+      { "img": "map", "cam": [787, 420, 1], "cur": [700, 470],
+        "text": "Every place in the tree has coordinates, so every event can go on a map. This is Kentucky, where Lincoln was born." },
+      { "img": "map", "cam": [800, 410, 2.4], "cur": [793, 412],
+        "text": "The state and county outlines came from Wikidata. A lookup links a place in the tree to its Wikidata entry and brings the boundary along." },
+      { "img": "map", "cam": [1390, 180, 2.6], "cur": [1305, 176],
+        "text": "The Overlays panel lists the outlines in view. Each one can be hidden, or faded to see the map underneath." },
+      { "img": "map", "cam": [930, 80, 2.6], "cur": [966, 77], "click": true,
+        "text": "Historical swaps today's map for one of the period." },
+      { "img": "map1809", "cam": [1150, 80, 2.6], "cur": [1158, 77], "click": true,
+        "text": "Pick a year, here 1809, the year Lincoln was born:" },
+      { "img": "map1809", "cam": [800, 400, 1], "cur": [1370, 352],
+        "text": "The towns and borders are those of that year. West Virginia is still part of Virginia." }
+    ]},
+    { "title": "Stories", "path": "/story", "steps": [
+      { "img": "story", "cam": [760, 392, 1], "cur": [1047, 560],
+        "text": "Every person can have a story, a slideshow built from the tree. Lincoln's was generated with one click, including his family." },
+      { "img": "story", "cam": [1300, 392, 2], "cur": [1477, 392], "click": true,
+        "text": "Use the arrows or the keyboard to move from moment to moment." },
+      { "img": "story-birth", "cam": [760, 392, 1], "cur": [1047, 560],
+        "text": "The map moves to where each moment happened, and a photo of the place appears when the tree has one: Sinking Spring, Kentucky, 1809." },
+      { "img": "story-mary", "cam": [760, 392, 1], "cur": [1047, 580],
+        "text": "Relatives' moments are woven in. His wife Mary Todd's birth, in Lexington, shows her portrait." },
+      { "img": "story-ford", "cam": [1047, 380, 1.45], "cur": [1047, 588],
+        "text": "Each slide starts with words drawn from the tree, and you can rewrite any of them. This one was retitled \"Shot at Ford's Theater\" and given a sentence of its own." },
+      { "img": "story-ford", "cam": [760, 740, 2], "cur": [879, 760],
+        "text": "The timeline along the bottom marks every moment, so you can see the shape of a whole life at a glance." },
+      { "img": "story-editor", "cam": [760, 400, 1.1], "cur": [565, 264],
+        "text": "Edit opens the story editor. The slides run down the left, the chosen slide's title, words and photos are in the middle, and a live preview on the right shows each change as you make it. This is where the Ford's Theater slide got its new title." }
+    ]},
+    { "title": "Working together", "path": "/changed", "steps": [
+      { "img": "changelog", "cam": [640, 300, 1.4], "cur": [600, 150],
+        "text": "A whole family can work on one tree at once, and everyone sees each other's edits as they happen, without reloading. The Change Log lists them, newest first." },
+      { "img": "changelog", "cam": [930, 200, 2.2], "cur": [904, 188],
+        "text": "Each entry says who made the change, when, and which parts of the record it touched." },
+      { "img": "history", "cam": [760, 175, 1.9], "cur": [604, 163], "click": true,
+        "text": "Every record has a History button for just its own edits. Click one to see what it was before and after." },
+      { "img": "discuss", "cam": [760, 180, 1.9], "cur": [760, 186],
+        "text": "Discuss starts a conversation about the record you're on. Invite the relatives who'd know, and it stays linked to Lincoln for anyone who comes looking later." }
+    ]},
+    { "title": "Gramplets", "path": "/home", "steps": [
+      { "img": "store", "cam": [760, 270, 1.3], "cur": [598, 21], "click": true,
+        "text": "Gramplets are add-ons: small programs that ask the tree a question and show the answer. The Gramplet Store lists the ones people have shared." },
+      { "img": "store", "cam": [455, 235, 2.2], "cur": [718, 210], "click": true,
+        "text": "The tree's owner installs one with a click, and from then on everyone in the tree can run it from the Gramplets menu." },
+      { "img": "gramplet", "cam": [760, 330, 1], "cur": [760, 320],
+        "text": "This one charts the typical age at death for each decade of birth, across the 1,016 people with both dates. It runs right in the browser, in a window of its own." },
+      { "img": "gramplet-code", "cam": [520, 420, 1.3], "cur": [470, 480],
+        "text": "Every Gramplet is real Python, and its code opens right in the app, to change it or to learn from it when writing your own." }
+    ]},
+    { "title": "Where next", "address": "dsblank.github.io/gramps-connect", "steps": [
+      { "card": {
+          "logo": "../app/src/assets/icons/gramps-connect-logo.svg",
+          "title": "Where next?",
+          "subtitle": "Gramps Connect is free and open source.",
+          "buttons": [
+            {
+              "label": "Download for your computer",
+              "href": "https://github.com/dsblank/gramps-connect/wiki/Installing",
+              "primary": true
+            },
+            {
+              "label": "Host it for your family",
+              "href": "https://github.com/dsblank/gramps-connect/wiki/Deploying"
+            },
+            { "label": "Read the documentation", "href": "https://github.com/dsblank/gramps-connect/wiki" }
+          ],
+          "links": [
+            { "label": "Gramps Connect home page", "href": "../" },
+            { "label": "Discourse forum", "href": "https://gramps.discourse.group/c/gramps-connect/35" },
+            { "label": "GitHub", "href": "https://github.com/dsblank/gramps-connect" },
+            { "label": "Gramps", "href": "https://gramps-project.org/" },
+            { "label": "Gramps Web API", "href": "https://github.com/gramps-project/gramps-web-api" }
+          ]
+        },
+        "text": "That's the tour. Gramps Connect is free and open source. Download it for your own computer, host it for your family, or read the full guide. The links are on the screen." }
+    ]}
+  ]
+};

@@ -1,11 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="A narrated, self-playing tour of Gramps Connect, shown with the US Presidents example tree.">
-<link rel="icon" href="../app/public/favicon-32.png">
-<title>Gramps Connect Walkthrough</title>
+<title></title>
+<script src="tour.js"></script>
+<script>
+// Set the page's title, description, icon and language from tour.js before anything renders.
+(function (t) {
+  document.documentElement.lang = t.lang || "en";
+  document.title = t.title || "";
+  const m = document.createElement("meta"); m.name = "description"; m.content = t.description || ""; document.head.appendChild(m);
+  if (t.icon) { const l = document.createElement("link"); l.rel = "icon"; l.href = t.icon; document.head.appendChild(l); }
+})(window.TOUR);
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap">
 <style>
@@ -57,9 +65,9 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 .titlebar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; flex: none; }
 .titlebar .url { margin-left: 10px; flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--muted); background: var(--surface); border-radius: 6px; padding: 3px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .viewport { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #fff; }
-.layer { position: absolute; left: 0; top: 0; width: 1519px; height: 784px; transform-origin: 0 0; will-change: transform; }
+.layer { position: absolute; left: 0; top: 0; width: var(--iw); height: var(--ih); transform-origin: 0 0; will-change: transform; }
 .layer.anim { transition: transform 1.3s cubic-bezier(.45,.05,.25,1); }
-.layer img { position: absolute; inset: 0; width: 1519px; height: 784px; display: block; transition: opacity .7s ease; }
+.layer img { position: absolute; inset: 0; width: var(--iw); height: var(--ih); display: block; transition: opacity .7s ease; }
 .typed {
   position: absolute; font: 400 13px var(--font-body); color: #212529; white-space: pre;
   background: #fff; padding: 0 2px; line-height: 18px;
@@ -126,32 +134,33 @@ h2 small { font: 600 12px var(--font-body); color: var(--faint); font-variant-nu
 .credits p { margin: 0 0 6px; }
 .credits a { color: var(--accent); }
 
-/* Closing card (a step with end: true): the landing page's links, over the screenshot */
-.endcard {
+/* Card (a step with "card"): a title card with links, in place of a screenshot */
+.card {
   position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
-  padding: 24px; background: var(--surface); overflow-y: auto; animation: endin .6s ease;
+  padding: 24px; background: var(--surface); overflow-y: auto; animation: cardin .6s ease;
 }
-.endcard[hidden] { display: none; }
-@keyframes endin { from { opacity: 0; } to { opacity: 1; } }
-.endinner { max-width: 560px; text-align: center; }
-.endlogo { width: 56px; height: 56px; display: block; margin: 0 auto 10px; }
-.endtitle { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: -.02em; margin: 0 0 4px; display: block; }
-.endsub { color: var(--muted); margin: 0 0 20px; }
-.endlinks { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 18px; }
-.endbtn {
+.card[hidden] { display: none; }
+.card.out { opacity: 0; transition: opacity .8s ease; pointer-events: none; }
+@keyframes cardin { from { opacity: 0; } to { opacity: 1; } }
+.cardinner { max-width: 560px; text-align: center; }
+.cardlogo { width: 56px; height: 56px; display: block; margin: 0 auto 10px; }
+.cardtitle { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: -.02em; margin: 0 0 4px; display: block; }
+.cardsub { color: var(--muted); margin: 0 0 20px; }
+.cardbtns { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 18px; }
+.cardbtn {
   font: 600 14px var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line);
   border-radius: 999px; padding: 9px 16px; text-decoration: none;
 }
-.endbtn:hover { border-color: var(--accent); color: var(--accent); }
-.endbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.endbtn.primary:hover { filter: brightness(1.08); color: #fff; }
-.endmore { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.9; }
-.endmore a { color: var(--accent); text-decoration: none; }
-.endmore a:hover { text-decoration: underline; }
+.cardbtn:hover { border-color: var(--accent); color: var(--accent); }
+.cardbtn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cardbtn.primary:hover { filter: brightness(1.08); color: #fff; }
+.cardlinks { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.9; }
+.cardlinks a { color: var(--accent); text-decoration: none; }
+.cardlinks a:hover { text-decoration: underline; }
 @media (max-width: 600px) {
-  .endcard { padding: 12px; } .endlogo { width: 32px; height: 32px; margin-bottom: 4px; }
-  .endtitle { font-size: 18px; } .endsub { margin-bottom: 8px; font-size: 13px; }
-  .endlinks { gap: 6px; margin-bottom: 8px; } .endbtn { font-size: 12px; padding: 5px 10px; } .endmore { font-size: 11px; line-height: 1.6; }
+  .card { padding: 12px; } .cardlogo { width: 32px; height: 32px; margin-bottom: 4px; }
+  .cardtitle { font-size: 18px; } .cardsub { margin-bottom: 8px; font-size: 13px; }
+  .cardbtns { gap: 6px; margin-bottom: 8px; } .cardbtn { font-size: 12px; padding: 5px 10px; } .cardlinks { font-size: 11px; line-height: 1.6; }
 }
 
 /* Edit mode (index.html?edit): click a screenshot to read its coordinates */
@@ -179,7 +188,7 @@ body.editing .viewport { cursor: crosshair; }
   .app { grid-template-columns: minmax(0, 1fr); height: auto; }
   .left { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; }
   .window { flex: none; }
-  .viewport { flex: none; aspect-ratio: 1519 / 784; max-width: 100%; }
+  .viewport { flex: none; aspect-ratio: var(--iw-n) / var(--ih-n); max-width: 100%; }
   .right { overflow: visible; border-left: 0; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .track .seg span { display: none; }
 }
@@ -189,8 +198,8 @@ body.editing .viewport { cursor: crosshair; }
 <div class="app">
   <div class="left">
     <div class="window">
-      <div class="titlebar" aria-hidden="true"><i></i><i></i><i></i><div class="url" id="url">gramps-connect.duckdns.org</div></div>
-      <div class="viewport" id="viewport" aria-label="Animated walkthrough of the Gramps Connect app">
+      <div class="titlebar" aria-hidden="true"><i></i><i></i><i></i><div class="url" id="url"></div></div>
+      <div class="viewport" id="viewport">
         <div class="layer" id="layer">
           <img id="imgA" alt="">
           <img id="imgB" alt="" style="opacity:0">
@@ -200,25 +209,7 @@ body.editing .viewport { cursor: crosshair; }
             <svg width="24" height="24" viewBox="0 0 24 24"><path d="M3 2 L3 19 L7.6 14.8 L10.6 21.6 L13.6 20.3 L10.7 13.6 L17 13.6 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
           </div>
         </div>
-        <div class="endcard" id="endcard" hidden>
-          <div class="endinner">
-            <img class="endlogo" src="../app/src/assets/icons/gramps-connect-logo.svg" alt="">
-            <h2 class="endtitle">Where next?</h2>
-            <p class="endsub">Gramps Connect is free and open source.</p>
-            <div class="endlinks">
-              <a class="endbtn primary" href="https://github.com/dsblank/gramps-connect/wiki/Installing" target="_blank" rel="noopener">Download for your computer</a>
-              <a class="endbtn" href="https://github.com/dsblank/gramps-connect/wiki/Deploying" target="_blank" rel="noopener">Host it for your family</a>
-              <a class="endbtn" href="https://github.com/dsblank/gramps-connect/wiki" target="_blank" rel="noopener">Read the documentation</a>
-            </div>
-            <p class="endmore">
-              <a href="../">Gramps Connect home page</a> ·
-              <a href="https://gramps.discourse.group/c/gramps-connect/35" target="_blank" rel="noopener">Discourse forum</a> ·
-              <a href="https://github.com/dsblank/gramps-connect" target="_blank" rel="noopener">GitHub</a> ·
-              <a href="https://gramps-project.org/" target="_blank" rel="noopener">Gramps</a> ·
-              <a href="https://github.com/gramps-project/gramps-web-api" target="_blank" rel="noopener">Gramps Web API</a>
-            </p>
-          </div>
-        </div>
+        <div class="card" id="card" hidden></div>
       </div>
     </div>
     <div class="editbar" id="editbar" hidden>
@@ -231,71 +222,101 @@ body.editing .viewport { cursor: crosshair; }
         <button type="button" data-act="zin">Zoom +</button>
         <button type="button" data-act="click">Click: off</button>
         <button type="button" data-act="copy-step">Copy step</button>
-        <button type="button" data-act="copy-all">Copy scenes.js</button>
+        <button type="button" data-act="copy-all">Copy tour.js</button>
       </div>
       <code id="editCode"></code>
     </div>
     <div class="controls">
-      <button class="btn play" id="play" type="button"><svg id="playIcon" viewBox="0 0 14 14"><path d="M3 1.5v11l9.5-5.5z"/></svg><span id="playLabel">Play</span></button>
-      <button class="btn icon" id="prev" type="button" aria-label="Previous step"><svg viewBox="0 0 14 14"><path d="M2 2h2v10H2zM12.5 2v10L5 7z"/></svg></button>
-      <button class="btn icon" id="next" type="button" aria-label="Next step"><svg viewBox="0 0 14 14"><path d="M10 2h2v10h-2zM1.5 2v10L9 7z"/></svg></button>
-      <button class="btn icon" id="voice" type="button" aria-label="Read aloud" aria-pressed="true" title="Read aloud"><svg viewBox="0 0 14 14"><path d="M1.5 5h2.5l3.5-3v10L4 9H1.5z"/><path id="voiceWaves" d="M9.6 4.4a3.6 3.6 0 0 1 0 5.2M11.3 2.8a5.9 5.9 0 0 1 0 8.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path id="voiceOff" d="M9.5 5l3.5 4M13 5l-3.5 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="display:none"/></svg></button>
+      <button class="btn play" id="play" type="button"><svg id="playIcon" viewBox="0 0 14 14"><path d="M3 1.5v11l9.5-5.5z"/></svg><span id="playLabel"></span></button>
+      <button class="btn icon" id="prev" type="button" ><svg viewBox="0 0 14 14"><path d="M2 2h2v10H2zM12.5 2v10L5 7z"/></svg></button>
+      <button class="btn icon" id="next" type="button" ><svg viewBox="0 0 14 14"><path d="M10 2h2v10h-2zM1.5 2v10L9 7z"/></svg></button>
+      <button class="btn icon" id="voice" type="button" aria-pressed="true"><svg viewBox="0 0 14 14"><path d="M1.5 5h2.5l3.5-3v10L4 9H1.5z"/><path id="voiceWaves" d="M9.6 4.4a3.6 3.6 0 0 1 0 5.2M11.3 2.8a5.9 5.9 0 0 1 0 8.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path id="voiceOff" d="M9.5 5l3.5 4M13 5l-3.5 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" style="display:none"/></svg></button>
       <div class="track" id="track"></div>
     </div>
   </div>
 
   <aside class="right" id="right">
-    <div class="kicker">A guided tour</div>
-    <h1>Gramps Connect, in ten minutes</h1>
-    <p class="intro">Gramps Connect puts a Gramps family tree in the browser, so a whole family can look through it and add to it together. Press Play to hear it read aloud and follow along. You can also click any line below to jump to it.</p>
-    <label class="voicepick" id="voicepick" hidden>Voice <select id="voiceSel"></select></label>
+    <div class="kicker" id="kicker"></div>
+    <h1 id="heading"></h1>
+    <p class="intro" id="intro"></p>
+    <label class="voicepick" id="voicepick" hidden><span id="voiceLabel"></span> <select id="voiceSel"></select></label>
     <div id="script"></div>
-    <div class="credits">
-      <p>Shown with the US Presidents example tree. The photos on Lincoln's record were added for this tour from Wikimedia Commons: portraits of Abraham, Mary Todd and Robert Todd Lincoln (public domain); Ford's Theatre by Ingfbruno (CC BY-SA 3.0); the Lincoln Birthplace memorial by Jamie from Toronto (CC BY 2.0).</p>
-      <p><a href="../">Gramps Connect home page</a> · <a href="https://github.com/dsblank/gramps-connect/wiki" target="_blank" rel="noopener">Read the full guide ↗</a></p>
-    </div>
+    <div class="credits" id="credits"></div>
   </aside>
 </div>
 
-<script src="scenes.js"></script>
 <script>
-const IW = 1519, IH = 784;
+// Everything the tour says and shows comes from tour.js (window.TOUR); this file is only the player.
+const TOUR = window.TOUR, SCENES = TOUR.scenes, L = TOUR.labels || {};
+const [IW, IH] = TOUR.screen || [1519, 784];
+const LANG = TOUR.lang || "en-US";
+document.documentElement.style.cssText += `--iw:${IW}px;--ih:${IH}px;--iw-n:${IW};--ih-n:${IH}`;
 
-// The tour's content lives in scenes.js (window.TOUR_SCENES); this file is only the player.
-const SCENES = window.TOUR_SCENES;
-
-// <serialize> Writes scenes.js in its standard layout. Used by edit mode's "Copy scenes.js",
-// and the same code generated the file, so a copy round-trips exactly.
-const SCENES_HEADER = `// Gramps Connect tour: the scenes and their narration.
-// Edit this file to change the tour; index.html is the player and needs no changes.
-// To find coordinates, open index.html?edit and click on a screenshot (see README.md).
-//
-// Each step:
-//   img     screenshot in img/, without ".jpg"; every screenshot is 1519 x 784
-//   cam     [x, y, zoom]: where the camera centres, in screenshot pixels; zoom 1 shows it all
-//   cur     [x, y]: where the pointer moves to
-//   click   true to show a click ripple when the pointer arrives
-//   type    text typed into a box at typeAt [x, y] (default [131, 95])
-//   text    the narration: shown on the right, highlighted and read aloud
-//   end     true to show the closing links card instead of a screenshot (no img, cam or cur)
+// <serialize> Writes tour.js in its standard layout: one JSON object, assigned to window.TOUR.
+// Used by edit mode's "Copy tour.js"; the same code generated the file, so a copy round-trips exactly.
+const TOUR_HEADER = `// The Gramps Connect tour: everything it says and shows. index.html is the player and needs no changes.
+// Everything after "window.TOUR =" is plain JSON. See README.md for what each field means.
+// To find coordinates, open index.html?edit and click on a screenshot.
 `;
-function fmtStep(st) {
-  if (st.end) return `{ end: true,\n      text: ${JSON.stringify(st.text)} }`;
-  const parts = [`img: ${JSON.stringify(st.img)}`, `cam: [${st.cam.join(", ")}]`, `cur: [${st.cur.join(", ")}]`];
-  if (st.click) parts.push("click: true");
-  if (st.type) parts.push(`type: ${JSON.stringify(st.type)}`);
-  if (st.typeAt) parts.push(`typeAt: [${st.typeAt.join(", ")}]`);
-  return `{ ${parts.join(", ")},\n      text: ${JSON.stringify(st.text)} }`;
+// Compact JSON: a value stays on one line when that line fits in about 110 columns, otherwise
+// one entry per line. `ind` is the indent of the line the value starts on, `col` the column it starts at.
+function pretty(v, ind = 0, col = ind) {
+  const flat = JSON.stringify(v, null, 1).replace(/\n\s*/g, " ").replace(/\[ /g, "[").replace(/ \]/g, "]");
+  if (v === null || typeof v !== "object" || col + flat.length <= 110) return flat;
+  const inner = ind + 2, pad = " ".repeat(inner), arr = Array.isArray(v);
+  const items = arr ? v.map(x => pad + pretty(x, inner))
+    : Object.keys(v).map(k => { const key = JSON.stringify(k) + ": "; return pad + key + pretty(v[k], inner, inner + key.length); });
+  return (arr ? "[\n" : "{\n") + items.join(",\n") + "\n" + " ".repeat(ind) + (arr ? "]" : "}");
 }
-function serializeScenes(scenes) {
-  return SCENES_HEADER + "window.TOUR_SCENES = [\n" + scenes.map(sc =>
-    `  { title: ${JSON.stringify(sc.title)}, url: ${JSON.stringify(sc.url)}, steps: [\n` +
-    sc.steps.map(st => `    ${fmtStep(st)},\n`).join("") + "  ]},\n").join("") + "];\n";
+// A step: its staging on the first line(s), its narration last.
+function fmtStep(st, ind = 6) {
+  const { text, ...rest } = st, pad = " ".repeat(ind + 2);
+  const head = Object.keys(rest).map(k => `${JSON.stringify(k)}: ${pretty(rest[k], ind + 2, ind + 4 + k.length)}`).join(", ");
+  return `{ ${head},\n${pad}"text": ${JSON.stringify(text)} }`;
+}
+function fmtScene(sc) {
+  const { steps, ...rest } = sc;
+  return `    { ${pretty(rest).slice(1, -1).trim()}, "steps": [\n` + steps.map(st => "      " + fmtStep(st)).join(",\n") + "\n    ]}";
+}
+function serializeTour(tour) {
+  const { scenes, ...rest } = tour;
+  const top = Object.keys(rest).map(k => `  ${JSON.stringify(k)}: ${pretty(rest[k], 2, 6 + k.length)}`);
+  top.push(`  "scenes": [\n${scenes.map(fmtScene).join(",\n")}\n  ]`);
+  return TOUR_HEADER + "window.TOUR = {\n" + top.join(",\n") + "\n};\n";
 }
 // </serialize>
 
+// ---------- text from tour.js ----------
+const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const linkAttrs = (href) => `href="${esc(href)}"` + (/^https?:/i.test(href) ? ' target="_blank" rel="noopener"' : "");
+const linkRow = (links) => (links || []).map(l => `<a ${linkAttrs(l.href)}>${esc(l.label)}</a>`).join(" · ");
+const label = (key, vars = {}) => (L[key] || "").replace(/\{(\w+)\}/g, (m, k) => vars[k] ?? m);
+function fillText() {
+  $("kicker").textContent = TOUR.kicker || "";
+  $("heading").textContent = TOUR.heading || "";
+  $("intro").textContent = TOUR.intro || "";
+  $("playLabel").textContent = label("play");
+  $("voiceLabel").textContent = label("voice");
+  $("viewport").setAttribute("aria-label", label("stage"));
+  $("prev").setAttribute("aria-label", label("previous"));
+  $("next").setAttribute("aria-label", label("next"));
+  const c = TOUR.credits || {};
+  $("credits").innerHTML = (c.paragraphs || []).map(p => `<p>${esc(p)}</p>`).join("") +
+    (c.links?.length ? `<p>${linkRow(c.links)}</p>` : "");
+}
+function cardHtml(card) {
+  return `<div class="cardinner">` +
+    (card.logo ? `<img class="cardlogo" src="${esc(card.logo)}" alt="">` : "") +
+    (card.title ? `<h2 class="cardtitle">${esc(card.title)}</h2>` : "") +
+    (card.subtitle ? `<p class="cardsub">${esc(card.subtitle)}</p>` : "") +
+    (card.buttons?.length ? `<div class="cardbtns">${card.buttons.map(b =>
+      `<a class="cardbtn${b.primary ? " primary" : ""}" ${linkAttrs(b.href)}>${esc(b.label)}</a>`).join("")}</div>` : "") +
+    (card.links?.length ? `<p class="cardlinks">${linkRow(card.links)}</p>` : "") +
+    `</div>`;
+}
+
 // ---------- engine ----------
-const $ = (id) => document.getElementById(id);
+function $(id) { return document.getElementById(id); }
 const viewport = $("viewport"), layer = $("layer"), cursorEl = $("cursor"), typedEl = $("typed");
 const imgs = [$("imgA"), $("imgB")]; let front = 0;
 const STEPS = []; SCENES.forEach((s, si) => s.steps.forEach((st, k) => STEPS.push({ ...st, scene: si, k,
@@ -385,7 +406,7 @@ function speakFrom(offset) {
   speakBase = offset; gotBoundary = false; spoken = false; speakStart = 0; pos = offset;
   if (!text.trim()) { finishSpeech(token); return; }
   const u = new SpeechSynthesisUtterance(text);
-  if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-US";
+  if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = LANG;
   u.onstart = () => { if (token === speakToken) { speakStart = performance.now(); pos = Math.max(pos, speakBase + 0.5); } };
   u.onboundary = (e) => {
     if (token !== speakToken || (e.name && e.name !== "word")) return;
@@ -437,12 +458,14 @@ function setVoice(on) {
   try { localStorage.setItem("walk-voice", voiceOn ? "on" : "off"); } catch (e) {}
   const b = $("voice");
   b.setAttribute("aria-pressed", String(voiceOn));
-  b.title = voiceOn ? "Read aloud (on)" : "Read aloud (off)"; b.setAttribute("aria-label", b.title);
+  b.title = label(voiceOn ? "readAloudOn" : "readAloudOff"); b.setAttribute("aria-label", b.title);
   $("voiceWaves").style.display = voiceOn ? "" : "none";
   $("voiceOff").style.display = voiceOn ? "none" : "";
 }
+const LANG_BASE = LANG.split(/[-_]/)[0].toLowerCase();
+const sameLang = (v) => v.lang.toLowerCase().replace("_", "-").split("-")[0] === LANG_BASE;
 function rankVoice(v) {
-  let r = /^en[-_]US/i.test(v.lang) ? 4 : /^en/i.test(v.lang) ? 2 : -100;
+  let r = v.lang.toLowerCase().replace("_", "-") === LANG.toLowerCase() ? 4 : sameLang(v) ? 2 : -100;
   if (/natural|neural|premium|enhanced/i.test(v.name)) r += 8;
   if (/^Google/i.test(v.name)) r += 5;
   if (/Samantha|Aria|Jenny|Ava|Allison|Daniel|Karen|Serena/i.test(v.name)) r += 3;
@@ -452,7 +475,7 @@ function rankVoice(v) {
 }
 function loadVoices() {
   if (!synth) return;
-  let vs = synth.getVoices().filter(v => /^en/i.test(v.lang));
+  let vs = synth.getVoices().filter(sameLang);
   if (!vs.length) vs = synth.getVoices();
   if (!vs.length) return;
   vs.sort((a, b) => rankVoice(b) - rankVoice(a));
@@ -473,8 +496,15 @@ function show(i, { animate = true } = {}) {
   idx = (i + STEPS.length) % STEPS.length;
   const st = STEPS[idx];
   typedEl.hidden = true;
-  $("endcard").hidden = !st.end;
-  cursorEl.hidden = !!st.end;
+  const card = $("card");
+  if (st.card) {
+    if (card.hidden || card.dataset.i !== String(idx)) { card.innerHTML = cardHtml(st.card); card.dataset.i = idx; }
+    card.classList.remove("out"); card.hidden = false;
+  } else if (!card.hidden) {                    // fade the card away to reveal the screenshot underneath
+    if (animate && !reduce) { card.classList.add("out"); pending.push(setTimeout(() => { card.hidden = true; card.classList.remove("out"); }, 800)); }
+    else { card.hidden = true; card.classList.remove("out"); }
+  }
+  cursorEl.hidden = !!st.card;
   if (st.img) setImage(st.img);
   if (st.cam) [cam.cx, cam.cy, cam.z] = st.cam;
   else [cam.cx, cam.cy, cam.z] = [IW / 2, IH / 2, 1];
@@ -483,9 +513,11 @@ function show(i, { animate = true } = {}) {
   placeCursor(animate);
   const moveMs = animate && !reduce ? 1150 : 0;
   if (st.click) pending.push(setTimeout(ripple, moveMs));
-  if (st.type) pending.push(setTimeout(() => typeText(st.type, st.typeAt || [131, 95]), moveMs + 250));
-  const sceneUrl = SCENES[st.scene].url;
-  $("url").textContent = sceneUrl ? "gramps-connect.duckdns.org/#/t/…" + sceneUrl.slice(1) : "dsblank.github.io/gramps-connect";
+  if (st.type) pending.push(setTimeout(() => typeText(st.type, st.typeAt || TOUR.typeAt || [131, 95]), moveMs + 250));
+  const sc = SCENES[st.scene];
+  // A step's own address or path wins over its scene's.
+  $("url").textContent = st.address ?? (st.path != null ? (TOUR.address || "") + st.path
+    : sc.address ?? (TOUR.address || "") + (sc.path || ""));
   updateScript();
   stepStart = performance.now(); stepDur = durationFor(st); pos = 0; finished = false;
   if (playing) startReading();
@@ -499,7 +531,7 @@ function advance() {
 function setPlaying(p) {
   if (!p && playing) { readPos(); stopReading(); }
   playing = p;
-  $("playLabel").textContent = p ? "Pause" : finished ? "Replay" : "Play";
+  $("playLabel").textContent = label(p ? "pause" : finished ? "replay" : "play");
   $("playIcon").innerHTML = p ? '<path d="M3 1.5h3v11H3zM8 1.5h3v11H8z"/>' : '<path d="M3 1.5v11l9.5-5.5z"/>';
   if (p) { startReading(); loop(); } else cancelAnimationFrame(rafId);
   paintHighlight();
@@ -510,14 +542,14 @@ function loop() { updateTrack(); paintHighlight(); if (playing) rafId = requestA
 function buildScript() {
   let n = 0;
   $("script").innerHTML = SCENES.map((s, si) => `
-    <section class="scene"><h2><small>${si + 1}</small>${s.title}</h2>
-      ${s.steps.map(() => { const st = STEPS[n]; return `<button type="button" class="step" data-i="${n++}">${st.words.map(w => `<span class="w">${w.t}</span>`).join("")}</button>`; }).join("")}
+    <section class="scene"><h2><small>${si + 1}</small>${esc(s.title)}</h2>
+      ${s.steps.map(() => { const st = STEPS[n]; return `<button type="button" class="step" data-i="${n++}">${st.words.map(w => `<span class="w">${esc(w.t)}</span>`).join("")}</button>`; }).join("")}
     </section>`).join("");
   $("script").addEventListener("click", e => {
     const b = e.target.closest(".step"); if (!b) return;
     show(+b.dataset.i);
   });
-  $("track").innerHTML = SCENES.map((s, si) => `<button type="button" class="seg" data-s="${si}" aria-label="Jump to ${s.title}"><div class="bar"><div></div></div><span>${s.title}</span></button>`).join("");
+  $("track").innerHTML = SCENES.map((s, si) => `<button type="button" class="seg" data-s="${si}" aria-label="${esc(label("jumpTo", { scene: s.title }))}"><div class="bar"><div></div></div><span>${esc(s.title)}</span></button>`).join("");
   $("track").addEventListener("click", e => {
     const b = e.target.closest(".seg"); if (!b) return;
     show(STEPS.findIndex(st => st.scene === +b.dataset.s));
@@ -566,7 +598,7 @@ new ResizeObserver(() => applyCam(false)).observe(viewport);
 
 // ---------- edit mode (index.html?edit) ----------
 // Click a screenshot to pick a point (in screenshot pixels), apply it to the current step, preview it,
-// then "Copy scenes.js" and paste the whole file over tour/scenes.js. Nothing is saved by the page itself.
+// then "Copy tour.js" and paste the whole file over tour/tour.js. Nothing is saved by the page itself.
 var EDIT = new URLSearchParams(location.search).has("edit");
 let picked = null;
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -574,9 +606,9 @@ function renderEdit() {
   const st = STEPS[idx];
   $("editInfo").textContent = `Step ${idx + 1} of ${STEPS.length} · ${SCENES[st.scene].title} · ` +
     (picked ? `picked x ${picked[0]}, y ${picked[1]}` : "click the screenshot to pick a point");
-  $("editCode").textContent = fmtStep(st);
+  $("editCode").textContent = fmtStep(SCENES[st.scene].steps[st.k], 0);
   $("editbar").querySelectorAll("button").forEach(b => {
-    b.disabled = (st.end && !/^copy/.test(b.dataset.act)) ||
+    b.disabled = (st.card && !/^copy/.test(b.dataset.act)) ||
       (b.hasAttribute("data-needs-pick") && !picked) || (b.hasAttribute("data-needs-type") && !st.type);
   });
   $("editbar").querySelector('[data-act="click"]').textContent = st.click ? "Click: on" : "Click: off";
@@ -612,21 +644,22 @@ function initEdit() {
       case "zin": set("cam", [st.cam[0], st.cam[1], round2(st.cam[2] + 0.1)]); break;
       case "zout": set("cam", [st.cam[0], st.cam[1], Math.max(1, round2(st.cam[2] - 0.1))]); break;
       case "click": set("click", st.click ? undefined : true); break;
-      case "copy-step": copyText(fmtStep(st), b); return;
-      case "copy-all": copyText(serializeScenes(SCENES), b); return;
+      case "copy-step": copyText(fmtStep(src), b); return;
+      case "copy-all": copyText(serializeTour(TOUR), b); return;
     }
     if (playing) setPlaying(false);
     show(idx);                                  // preview the change
   });
 }
 
+fillText();
 buildScript();
 var stepEls = [...document.querySelectorAll(".step")];
 if (synth) { loadVoices(); synth.addEventListener?.("voiceschanged", loadVoices); window.addEventListener("pagehide", () => synth.cancel()); }
 else $("voice").hidden = true;
 setVoice(voiceOn);
 if (EDIT) initEdit();
-imgs[0].src = `img/${STEPS[0].img}.jpg`;
+imgs[0].src = `img/${STEPS.find(s => s.img).img}.jpg`;
 show(0, { animate: false });
 firstShow = false;
 </script>
