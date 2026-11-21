@@ -797,12 +797,10 @@ export const MEDIA_VIEW: ViewConfig = {
     { key: "mime", label: "MIME type", select: "mime", sqlType: "TEXT", hidden: true },
     // Hidden: 0 or more, feeding mediaCategory's "Gramplet" case below --
     // see grampletMedia.ts's own `any(t.name == 'Gramplet' for t in tags)`
-    // for the same tag-based detection used elsewhere. `select` entries
-    // don't support comprehension sugar (only `where` does), so this stays
-    // the direct-call form -- just the canonical `len(...)`, not `count(...)`.
+    // for the same tag-based detection used elsewhere.
     {
       key: "is_gramplet", label: "Is Gramplet",
-      select: `len(tags, name == ${JSON.stringify(GRAMPLET_TAG_NAME)}) as is_gramplet`,
+      select: `len([t for t in tags if t.name == ${JSON.stringify(GRAMPLET_TAG_NAME)}]) as is_gramplet`,
       sqlType: "INTEGER", hidden: true,
     },
     // Hidden: same shape as is_gramplet, for mapOverlays.ts's overlay tag --
@@ -810,7 +808,7 @@ export const MEDIA_VIEW: ViewConfig = {
     // overlays.
     {
       key: "is_map_overlay", label: "Is map overlay",
-      select: `len(tags, name == ${JSON.stringify(OVERLAY_TAG_NAME)}) as is_map_overlay`,
+      select: `len([t for t in tags if t.name == ${JSON.stringify(OVERLAY_TAG_NAME)}]) as is_map_overlay`,
       sqlType: "INTEGER", hidden: true,
     },
     // The MIME type column, but shown as what it means to the user

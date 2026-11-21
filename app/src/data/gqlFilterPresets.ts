@@ -700,7 +700,7 @@ const handWrittenPresets: GqlFilterPreset[] = [
     expr: "primary_name.first_name == '' or primary_name.surname_list[0].surname == ''",
     supported: true,
     notes:
-      "The core rule also checks every alternate name (and treats a name with no surname_list entries at all as incomplete too, not just an empty surname); this preset only checks the *primary* name -- alternate_names could now be reached too via any(n.first_name == '' for n in alternate_names)-style conditions (any(path, condition) shipped after this preset was written), but doing so for every field IncompleteNames itself checks is still a follow-up, not done here. Verified exact match against gramps-core's own example.gramps fixture (76/76) -- that data happens not to exercise the alternate-name gap.",
+      "The core rule also checks every alternate name (and treats a name with no surname_list entries at all as incomplete too, not just an empty surname); this preset only checks the *primary* name -- alternate_names could now be reached too via any(n.first_name == '' for n in alternate_names)-style conditions (comprehensions over a list inside the record shipped after this preset was written), but doing so for every field IncompleteNames itself checks is still a follow-up, not done here. Verified exact match against gramps-core's own example.gramps fixture (76/76) -- that data happens not to exercise the alternate-name gap.",
   },
   {
     id: "no-marriage-records",

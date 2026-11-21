@@ -19,13 +19,13 @@
 #     (filter() results only hold some fields, so they can't be changed)
 # =============================================================================
 
-# The same test as People Without Sources -- any(events, ...) follows each
-# event reference to its event, any(event_ref_list, ...) looks inside each
+# The same test as People Without Sources -- "for e in events" follows each
+# event reference to its event, "for r in event_ref_list" looks inside each
 # reference itself -- plus "still public". The server does all of it.
 NO_SOURCES = (
-    "not any(citations)"
-    " and not any(event_ref_list, any(citation_list))"
-    " and not any(events, any(citations))"
+    "not any(c for c in citations)"
+    " and not any(r for r in event_ref_list if any(c for c in r.citation_list))"
+    " and not any(e for e in events if any(c for c in e.citations))"
 )
 bar = st.progress(0, text="Finding public people with no sources...")
 unsourced = people(

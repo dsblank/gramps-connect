@@ -10,9 +10,10 @@
 #   - a Gramplet that runs as soon as its window opens (no input needed)
 #   - st.progress(): one bar, relabelled through each stage, then removed
 #     with .empty() once the result is ready
-#   - one where= clause that looks through other records: any(events, ...)
-#     follows each event reference to its event, and any(event_ref_list,
-#     ...) looks inside each reference itself -- the server does all of it
+#   - one where= clause that looks through other records: "for e in
+#     events" follows each event reference to its event, and "for r in
+#     event_ref_list" looks inside each reference itself -- the server
+#     does all of it
 #   - people(..., limit=...) for just the rows shown, plus count() for how
 #     many match in all, rather than fetching every match
 #   - get_filter("person"): the open list's filter, but only if that list
@@ -24,9 +25,9 @@
 SHOW_AT_MOST = 200
 
 NO_SOURCES = (
-    "not any(citations)"
-    " and not any(event_ref_list, any(citation_list))"
-    " and not any(events, any(citations))"
+    "not any(c for c in citations)"
+    " and not any(r for r in event_ref_list if any(c for c in r.citation_list))"
+    " and not any(e for e in events if any(c for c in e.citations))"
 )
 where = and_filters(get_filter("person"), NO_SOURCES)
 

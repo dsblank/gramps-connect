@@ -38,7 +38,7 @@ else:
         # tag yet, and people() hands them back as whole records, ready to
         # change -- one request, however many there are.
         total = count("person", where=where)
-        untagged = people(and_filters(where, f"not any(tags, handle == {tag.handle!r})"), limit=None)
+        untagged = people(and_filters(where, f"not any(t.handle == {tag.handle!r} for t in tags)"), limit=None)
         if not untagged:
             st.success(f"Everyone in the filter already has the tag {name}.")
         else:
