@@ -2,7 +2,7 @@
   "id": "bibliography",
   "name": "Bibliography",
   "description": "Every source behind the selected record -- its own citations and those of its names, events and families -- as a numbered bibliography in the tree's citation formats, ready to copy.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Gramps Connect",
   "category": "detail",
   "views": [
