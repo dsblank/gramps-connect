@@ -30,6 +30,11 @@ import classes from "./DocumentationDialog.module.css";
 interface DocumentationDialogProps {
   opened: boolean;
   onClose: () => void;
+  /** The wiki page to open at (e.g. "Citations", from a section's (i)
+   * button); Home by default. */
+  initialPage?: string;
+  /** A heading on that page to scroll to, as a "#fragment" names it. */
+  initialAnchor?: string;
 }
 
 const HOME_PAGE = "Home";
@@ -38,7 +43,7 @@ const HOME_PAGE = "Home";
  * never needs to be duplicated -- it's already what every wiki reader sees. */
 const SIDEBAR_PAGE = "_Sidebar";
 
-export function DocumentationDialog({ opened, onClose }: DocumentationDialogProps) {
+export function DocumentationDialog({ opened, onClose, initialPage, initialAnchor }: DocumentationDialogProps) {
   const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
   const [page, setPage] = useState(HOME_PAGE);
   // Language the reader picked from a page's "available in" banner (or
@@ -78,12 +83,15 @@ export function DocumentationDialog({ opened, onClose }: DocumentationDialogProp
 
   useEffect(() => {
     if (!opened) return;
-    setPage(HOME_PAGE);
+    setPage(initialPage ?? HOME_PAGE);
+    setPendingAnchor(initialAnchor ?? null);
     setDocLang(null);
     setHistory([]);
     setQuery("");
     setShowResults(false);
     setHighlight(null);
+    // initialPage/initialAnchor only matter as the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, lang]);
 
   function ensureIndex() {

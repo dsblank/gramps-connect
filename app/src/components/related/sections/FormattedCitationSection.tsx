@@ -23,6 +23,8 @@ import {
   type SourceFields,
 } from "../../../store/citationFormat";
 import { SectionShell } from "./shared";
+import { InfoButton } from "../../InfoButton";
+import { DocumentationDialog } from "../../DocumentationDialog";
 import type { SectionProps } from "../types";
 import { t } from "../../../i18n/i18n";
 
@@ -57,6 +59,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
   const settings = useDisplaySettings();
   useDisplayFormatVersion(); // dates follow the tree's date format
   const [editing, setEditing] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const source: RawSource | undefined =
     type === "citation" ? (detail.extended?.source as RawSource | undefined) : (detail as RawSource);
@@ -143,7 +146,8 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
     <SectionShell
       label={type === "citation" ? t("Formatted citation") : t("Formatted source")}
       action={
-        <Group gap={0}>
+        <Group gap={4}>
+          <InfoButton size="xs" label={t("About formatted citations")} onClick={() => setHelpOpen(true)} />
           {shown.length > 0 && (
             <CopyButton value={shown.join("\n")}>
               {({ copied, copy }) => (
@@ -202,6 +206,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
           {t("Pasted text, shown in place of the generated citation.")}
         </Text>
       )}
+      <DocumentationDialog opened={helpOpen} onClose={() => setHelpOpen(false)} initialPage="Citations" />
       {editing && (
         <PastedTextDialog
           initial={pasted}
