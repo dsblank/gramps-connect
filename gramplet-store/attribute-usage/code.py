@@ -69,10 +69,6 @@ t = st.session_state.get("selected")
 if t not in used:
     t = None
 
-if partial:
-    st.warning(f"Only the first {SCAN_LIMIT} records with attributes were checked for: "
-               + ", ".join(partial) + ". Some attribute types and counts may be missing.")
-
 if not used:
     st.info("No records have attributes.")
 else:
@@ -118,3 +114,7 @@ else:
             if more:
                 st.info(f"Showing the first {SHOW_LIMIT} of each: " + ", ".join(more)
                         + f". Filter that list view with {key} != None to see them all.")
+
+if partial:
+    st.warning(f"Only the first {SCAN_LIMIT} records with attributes were checked for: "
+               + ", ".join(partial) + ". Some attribute types and counts may be missing.")
