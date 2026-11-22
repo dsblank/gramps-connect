@@ -104,6 +104,26 @@ most useful first:
 - **`env` in `/query/`** — `{"where_expr": "handle in Env.BOOKMARKS",
   "env": {...}}` (#1164) would let Bookmarks/Visited filter on the server
   instead of matching handles in the browser.
+- **"Encloses…" / "Enclosed by…" place rules, any depth** — GOQL can only
+  walk up one level per join (`enclosed_by.enclosed_by.title ==
+  'Illinois'`), slower with each level, and can't go down at all (no
+  reverse relationship; `backlinks` tests only `_class`). The browser
+  already has every place's `placeref_list` in the Places cache
+  (`placeIndex.ts`), so it can work out the whole set either way (the
+  chain above X, or everything below it) and send it as `handle in
+  Env.PLACES` with `env`. Each handle is a bound parameter (no splicing or
+  escaping, unlike `contextPresets.ts`'s `handleListExpr()`), and the SQL
+  is a plain `IN` on the primary key. Two built-in Place rules that ask
+  for a place with a place picker (a new param type; names are
+  ambiguous), so nobody has to build a custom filter. Follow
+  `placeref_list`, not `enclosed_by` (first parent only, so a county that
+  moved between states is missed).
+  Same set gives Event `place.handle in Env.PLACES` and, through events,
+  Person ("born anywhere in Illinois"). Limits: GOQL emits one `?` per
+  value (SQLite 32,766 / Postgres 65,535), so a huge set ("Enclosed by
+  USA") needs a clear message; wait for a complete Places cache, like
+  Bookmarked waits for bookmarks; servers before 3.26 need a fallback or
+  "unavailable". Bookmarked/Home person could move to `Env` the same way.
 - **Register link on the login page** — `GET /api/register/config/`
   (no auth) says whether sign-up is open (#1175); `LoginForm.tsx` has no
   Register link at all.
