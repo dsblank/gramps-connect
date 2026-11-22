@@ -8,7 +8,7 @@ import { apiFetch } from "./apiFetch";
 import { parseErrorMessage } from "./api";
 import { formatDisplayDate } from "./placeIndex";
 import { GRAMPS_TYPE_TABLES, type GrampsTypeTable } from "../data/grampsTypeTables";
-import { parseTemplate, renderTemplate, templateExpressions } from "./citationTemplateSyntax";
+import { parseTemplate, renderTemplateRuns, templateExpressions, type TemplateRun } from "./citationTemplateSyntax";
 import { t } from "../i18n/i18n";
 
 export * from "./citationTemplateSyntax";
@@ -105,23 +105,23 @@ export async function selectForHandles(
   return result;
 }
 
-/** One line per handle of the template `source` (written against the
- * records `endpoint` lists). A handle the server didn't return (private,
- * deleted) gets "". */
+/** One line (as styled runs) per handle of the template `source`
+ * (written against the records `endpoint` lists). A handle the server
+ * didn't return (private, deleted) gets an empty line. */
 export async function renderTemplateFor(
   endpoint: string,
   source: string,
   handles: string[],
   signal?: AbortSignal,
-): Promise<Map<string, string>> {
+): Promise<Map<string, TemplateRun[]>> {
   const nodes = parseTemplate(source);
   const exprs = templateExpressions(nodes);
   const raw = await selectForHandles(endpoint, handles, exprs, signal);
   return new Map(
     handles.map((h) => {
       const values = raw.get(h);
-      if (!values) return [h, ""];
-      return [h, renderTemplate(nodes, new Map(exprs.map((e) => [e, formatTemplateValue(e, values.get(e))])))];
+      if (!values) return [h, []];
+      return [h, renderTemplateRuns(nodes, new Map(exprs.map((e) => [e, formatTemplateValue(e, values.get(e))])))];
     }),
   );
 }

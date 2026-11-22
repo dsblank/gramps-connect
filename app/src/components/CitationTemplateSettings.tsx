@@ -170,7 +170,7 @@ function TemplateEditDialog({
     <Modal opened onClose={onCancel} title={isNew ? t("New citation template") : t("Edit citation template")} size="xl">
       <Stack gap="sm">
         <Text size="sm">
-          {t("Write GOQL between backticks, as in a list column: `title`, `repositories[0].name`, `attribute_list['Film'].value`. A part in [ ] is left out when a value in it is empty, and a separator such as \", \" at its start is left out at the start of a line. Write \\[ \\] \\` for the characters themselves. <Tab> completes inside backticks.")}
+          {t("Write GOQL between backticks, as in a list column: `title`, `repositories[0].name`, `attribute_list['Film'].value`. A part in [ ] is left out when a value in it is empty, and a separator such as \", \" at its start is left out at the start of a line. *Italic* and **bold** work as in Markdown. Write \\[ \\] \\` \\* for the characters themselves. <Tab> completes inside backticks.")}
         </Text>
         <TextInput
           label={t("Name")}

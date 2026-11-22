@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, CopyButton, Group, Loader, Menu, Modal, Stack, Text, Textarea } from "@mantine/core";
+import { Alert, Button, Group, Loader, Menu, Modal, Stack, Text, Textarea } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { chooseCitationFormat, useDisplaySettings, type DisplaySettings } from "../../../store/displaySettings";
 import { useCitationTemplateLines } from "../useCitationTemplateLines";
+import { linesToText } from "../../../store/citationTemplateSyntax";
 import { useDisplayFormatVersion } from "../../../store/placeIndex";
 import { zipRefs } from "../../../store/objectDetail";
 import { fetchPlainObject, updateObject } from "../../../store/objectsApi";
@@ -23,6 +24,7 @@ import {
   type SourceFields,
 } from "../../../store/citationFormat";
 import { SectionShell } from "./shared";
+import { CitationLinesView, CopyCitationButton, plainLines } from "../CitationLines";
 import { InfoButton } from "../../InfoButton";
 import { DocumentationDialog } from "../../DocumentationDialog";
 import type { SectionProps } from "../types";
@@ -112,9 +114,9 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
   const generated = template
     ? templated.lines ?? []
     : source?.handle
-      ? formattedCitationLines(formatter, citationFields, source, repository)
+      ? plainLines(formattedCitationLines(formatter, citationFields, source, repository))
       : [];
-  const shown = pasted ? [pasted] : generated;
+  const shown = pasted ? plainLines([pasted]) : generated;
   const loading = !pasted && !!template && templated.lines === null && !templated.error;
   const canEdit = hasPermissions("EditObject");
   const canPaste = type === "citation" && canEdit;
@@ -148,15 +150,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
       action={
         <Group gap={4}>
           <InfoButton size="xs" label={t("About formatted citations")} onClick={() => setHelpOpen(true)} />
-          {shown.length > 0 && (
-            <CopyButton value={shown.join("\n")}>
-              {({ copied, copy }) => (
-                <Button size="compact-xs" variant="subtle" onClick={copy}>
-                  {copied ? t("Copied") : t("Copy")}
-                </Button>
-              )}
-            </CopyButton>
-          )}
+          {shown.length > 0 && <CopyCitationButton lines={shown} />}
           {canPaste && (
             <Button size="compact-xs" variant="subtle" onClick={() => setEditing(true)}>
               {pasted ? t("Edit text") : t("Paste your own")}
@@ -174,15 +168,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
         </Group>
       }
     >
-      {shown.length > 0 && (
-        <Stack gap={2}>
-          {shown.map((line, i) => (
-            <Text key={i} size="sm" pl={i > 0 ? "md" : undefined} style={{ userSelect: "text" }}>
-              {line}
-            </Text>
-          ))}
-        </Stack>
-      )}
+      {shown.length > 0 && <CitationLinesView lines={shown} />}
       {loading && <Loader size="xs" />}
       {!pasted && templated.error && (
         <Text size="xs" c="red">
@@ -210,7 +196,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
       {editing && (
         <PastedTextDialog
           initial={pasted}
-          generated={generated.join("\n")}
+          generated={linesToText(generated)}
           onClose={() => setEditing(false)}
           onSave={async (text) => {
             const token = await getToken();

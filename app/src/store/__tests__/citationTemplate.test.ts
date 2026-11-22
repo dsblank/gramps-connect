@@ -8,8 +8,11 @@ import {
   formatTemplateValue,
   locateTemplateExpression,
   selectErrorMessage,
+  linesToHtml,
+  linesToText,
   parseTemplate,
   renderTemplate,
+  renderTemplateRuns,
   templateExpressions,
 } from "../citationTemplate";
 import { formatCitationText, formatSourceText } from "../citationFormat";
@@ -197,5 +200,56 @@ describe("selectErrorMessage", () => {
   it("is null for other replies", async () => {
     expect(await selectErrorMessage(new Response("oops", { status: 500 }), ["a"])).toBeNull();
     expect(await selectErrorMessage(new Response(JSON.stringify({ error: { message: "x" } })), ["a"])).toBeNull();
+  });
+});
+
+describe("italic and bold", () => {
+  const runs = (template: string, values: Record<string, string>) =>
+    renderTemplateRuns(parseTemplate(template), new Map(Object.entries(values)));
+
+  it("styles the template's text and the values inside the markers", () => {
+    expect(runs("[`author`, ]*`title`*[ (`pubinfo`)]", { author: "Jane Doe", title: "Leeds", pubinfo: "London, 1890" })).toEqual([
+      { text: "Jane Doe, " },
+      { text: "Leeds", italic: true },
+      { text: " (London, 1890)" },
+    ]);
+    expect(runs("**`a`** and ***`b`***", { a: "A", b: "B" })).toEqual([
+      { text: "A", bold: true },
+      { text: " and " },
+      { text: "B", italic: true, bold: true },
+    ]);
+  });
+
+  it("never reads markers in a value, and \\* is a plain asterisk", () => {
+    expect(runs("`a` \\*", { a: "*not italic*" })).toEqual([{ text: "*not italic* *" }]);
+  });
+
+  it("keeps a GOQL * inside backticks", () => {
+    expect(templateExpressions(parseTemplate("*`a * 2`*"))).toEqual(["a * 2"]);
+  });
+
+  it("drops a whole styled part, and strips separators across styled runs", () => {
+    expect(runs('[`a`][, *"`b`"*]', { b: "B" })).toEqual([{ text: '"B"', italic: true }]);
+    expect(runs("[*`a`*][, `b`]", { b: "B" })).toEqual([{ text: "B" }]);
+  });
+
+  it.each([
+    ["*`a`", "This * is never closed", 1],
+    ["x **`a`", "This ** is never closed", 3],
+    ["[*`a`]*", "This * is never closed", 2],
+  ])("rejects %j", (template, message, column) => {
+    try {
+      parseTemplate(template);
+      expect.fail("parsed");
+    } catch (e) {
+      expect((e as TemplateError).message).toContain(message);
+      expect((e as TemplateError).column).toBe(column);
+    }
+  });
+
+  it("copies as HTML and plain text", () => {
+    const lines = [[{ text: "A & " }, { text: "<B>", italic: true }], [{ text: "p. 3", bold: true }]];
+    expect(linesToHtml(lines)).toBe("A &amp; <i>&lt;B&gt;</i><br><b>p. 3</b>");
+    expect(linesToText(lines)).toBe("A & <B>\np. 3");
   });
 });

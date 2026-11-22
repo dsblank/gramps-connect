@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import type { TreeCitationTemplate } from "../../store/displaySettings";
-import { renderTemplateFor } from "../../store/citationTemplate";
+import { renderTemplateFor, type TemplateRun } from "../../store/citationTemplate";
 import { CITATION_VIEW, SOURCE_VIEW } from "../../store/views";
 
 /** Rendered lines by endpoint + template line + handle: showing a record
  * again starts from what it showed last time (a Guest's GOQL request takes
  * about a second on a big tree), while the fresh request is under way. */
-const cache = new Map<string, string>();
+const cache = new Map<string, TemplateRun[]>();
 const CACHE_LIMIT = 200;
 
-function remember(key: string, line: string) {
+function remember(key: string, line: TemplateRun[]) {
   cache.delete(key);
   cache.set(key, line);
   if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string);
@@ -31,9 +31,9 @@ function jobsFor(template: TreeCitationTemplate | null, sourceHandle?: string, c
 
 const keyOf = (job: Job) => `${job.endpoint}\u0000${job.line}\u0000${job.handle}`;
 
-function cachedLines(jobs: Job[]): string[] | null {
+function cachedLines(jobs: Job[]): TemplateRun[][] | null {
   const lines = jobs.map((job) => cache.get(keyOf(job)));
-  return lines.every((line) => line !== undefined) ? (lines as string[]).filter(Boolean) : null;
+  return lines.every((line) => line !== undefined) ? (lines as TemplateRun[][]).filter((l) => l.length) : null;
 }
 
 /** A template's lines for one record: the source line rendered against
@@ -46,10 +46,10 @@ export function useCitationTemplateLines(
   sourceHandle: string | undefined,
   citationHandle: string | undefined,
   revision: unknown,
-): { lines: string[] | null; error: string | null } {
+): { lines: TemplateRun[][] | null; error: string | null } {
   const jobs = jobsFor(template, sourceHandle, citationHandle);
   const jobsKey = jobs.map(keyOf).join("\u0001");
-  const [state, setState] = useState<{ key: string; lines: string[] | null; error: string | null }>({
+  const [state, setState] = useState<{ key: string; lines: TemplateRun[][] | null; error: string | null }>({
     key: jobsKey,
     lines: cachedLines(jobs),
     error: null,
@@ -61,12 +61,12 @@ export function useCitationTemplateLines(
     const controller = new AbortController();
     Promise.all(
       jobs.map(async (job) => {
-        const line = (await renderTemplateFor(job.endpoint, job.line, [job.handle], controller.signal)).get(job.handle) ?? "";
+        const line = (await renderTemplateFor(job.endpoint, job.line, [job.handle], controller.signal)).get(job.handle) ?? [];
         remember(keyOf(job), line);
         return line;
       }),
     )
-      .then((lines) => setState({ key: jobsKey, lines: lines.filter(Boolean), error: null }))
+      .then((lines) => setState({ key: jobsKey, lines: lines.filter((l) => l.length), error: null }))
       .catch((e) => {
         if (controller.signal.aborted) return;
         setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e) }));

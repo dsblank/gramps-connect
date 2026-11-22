@@ -7,7 +7,8 @@ import { apiFetch } from "../store/apiFetch";
 import type { CitationFormatter } from "../store/displaySettings";
 import { useDisplayFormatVersion } from "../store/placeIndex";
 import { fetchRepositoryName, formattedCitationLines, type SourceFields } from "../store/citationFormat";
-import { renderTemplateFor, type CitationTemplate } from "../store/citationTemplate";
+import { renderTemplateFor, type CitationTemplate, type TemplateRun } from "../store/citationTemplate";
+import { CitationLinesView, plainLines } from "./related/CitationLines";
 import { CITATION_VIEW, SOURCE_VIEW } from "../store/views";
 import { t } from "../i18n/i18n";
 
@@ -48,7 +49,7 @@ export function CitationFormatPreview({
 }) {
   useDisplayFormatVersion();
   const [samples, setSamples] = useState<Sample[] | null>(null);
-  const [templated, setTemplated] = useState<{ lines: Map<string, string[]> | null; error: string | null }>({
+  const [templated, setTemplated] = useState<{ lines: Map<string, TemplateRun[][]> | null; error: string | null }>({
     lines: null,
     error: null,
   });
@@ -93,17 +94,17 @@ export function CitationFormatPreview({
       Promise.all([
         templateSource.trim()
           ? renderTemplateFor(SOURCE_VIEW.endpoint, templateSource, sourceHandles, controller.signal)
-          : Promise.resolve(new Map<string, string>()),
+          : Promise.resolve(new Map<string, TemplateRun[]>()),
         templateCitation.trim()
           ? renderTemplateFor(CITATION_VIEW.endpoint, templateCitation, samples.map((s) => s.handle), controller.signal)
-          : Promise.resolve(new Map<string, string>()),
+          : Promise.resolve(new Map<string, TemplateRun[]>()),
       ])
         .then(([sourceLines, citationLines]) =>
           setTemplated({
             lines: new Map(
               samples.map((s) => [
                 s.handle,
-                [sourceLines.get(s.source?.handle ?? "") ?? "", citationLines.get(s.handle) ?? ""].filter(Boolean),
+                [sourceLines.get(s.source?.handle ?? "") ?? [], citationLines.get(s.handle) ?? []].filter((l) => l.length),
               ]),
             ),
             error: null,
@@ -138,7 +139,7 @@ export function CitationFormatPreview({
       if (template) return { handle: s.handle, lines: templated.lines?.get(s.handle) ?? [] };
       const ref = s.source?.reporef_list?.[0];
       const repository = ref && s.repoName !== undefined ? { name: s.repoName, callNumber: ref.call_number } : null;
-      return { handle: s.handle, lines: formattedCitationLines(formatter, s, s.source?.handle ? s.source : null, repository) };
+      return { handle: s.handle, lines: plainLines(formattedCitationLines(formatter, s, s.source?.handle ? s.source : null, repository)) };
     })
     .filter((s) => s.lines.length > 0);
   if (shown.length === 0) return null;
@@ -147,13 +148,7 @@ export function CitationFormatPreview({
     <Stack gap={6}>
       <Text size="xs" c="dimmed">{t("Examples from this tree:")}</Text>
       {shown.map(({ handle, lines }) => (
-        <Stack key={handle} gap={2}>
-          {lines.map((line, i) => (
-            <Text key={i} size="sm" pl={i > 0 ? "md" : undefined}>
-              {line}
-            </Text>
-          ))}
-        </Stack>
+        <CitationLinesView key={handle} lines={lines} />
       ))}
     </Stack>
   );
