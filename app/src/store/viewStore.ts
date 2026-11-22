@@ -790,8 +790,8 @@ export class ViewStore {
       const exact =
         this.view.columns.find((c) => c.orderPath === column) ?? this.view.columns.find((c) => c.key === column);
       if (exact) return { cached: exact, rest: [] };
-      // The column that sorts by this key first (a custom name column, not
-      // Family's built-in Father reading the same name), then any.
+      // The column that sorts by this key first (a name column, not a
+      // custom column that merely selects the whole father), then any.
       const inside = (c: ColumnConfig) => typeof c.select === "object" && column.startsWith(`${columnExpression(c)}.`);
       const within =
         this.view.columns.find((c) => inside(c) && columnSortKeys(c).includes(column)) ?? this.view.columns.find(inside);

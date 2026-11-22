@@ -1648,11 +1648,10 @@ describe("ViewStore sorting by a custom name column", () => {
   });
 
   function familyRow(handle: string, father: { surname: string; given: string } | null) {
-    return {
-      handle,
-      gramps_id: handle,
-      goql_f: father && { _class: "Name", first_name: father.given, surname_list: [{ surname: father.surname }] },
-    };
+    const name = father && { _class: "Name", first_name: father.given, surname_list: [{ surname: father.surname }] };
+    // The built-in Father column reads the same name (and sorts by the same
+    // keys), so the server returns it under both.
+    return { handle, gramps_id: handle, father_name: name, goql_f: name };
   }
 
   function lastRankExpr(): string {

@@ -218,3 +218,18 @@ export function nameSortKeys(format: string): string[] {
 export function displayNameSortKeys(): string[] {
   return nameSortKeys(displayNameFormat());
 }
+
+/** A name's sort keys under `path` (`father.primary_name`): its parts in
+ * the order the tree's name format writes them, as the People list's Name
+ * column sorts (nameDisplay.ts's nameSortKeys) -- read on each sort, so a
+ * name format change applies. The surname is the first in its list, which
+ * is the primary one for nearly everyone. */
+export function nameSortKeysAt(path: string): string[] {
+  return displayNameSortKeys().map((key) =>
+    key === "surname"
+      ? `${path}.surname_list[0].surname`
+      : key === "given_name"
+        ? `${path}.first_name`
+        : key.replace(/^primary_name\./, `${path}.`),
+  );
+}

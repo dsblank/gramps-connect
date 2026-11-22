@@ -8,7 +8,7 @@
 import { createElement, type ReactNode } from "react";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
-import { displayNameSortKeys, formatDisplayName, type RawName } from "./nameDisplay";
+import { displayNameSortKeys, formatDisplayName, nameSortKeysAt, type RawName } from "./nameDisplay";
 import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
@@ -462,10 +462,14 @@ export const FAMILY_VIEW: ViewConfig = {
     {
       key: "father_name", label: "Father", select: { json_path: ["father", "primary_name"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: displayName,
+      // In the tree's name format, like People's Name -- read through the
+      // linked person, so only on a list small enough to sort that way.
+      sortKeys: () => nameSortKeysAt("father.primary_name"), sortLimit: SORT_ROW_LIMIT,
     },
     {
       key: "mother_name", label: "Mother", select: { json_path: ["mother", "primary_name"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: displayName,
+      sortKeys: () => nameSortKeysAt("mother.primary_name"), sortLimit: SORT_ROW_LIMIT,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
     // Hidden, for subject scoping -- same reasoning as Person's above.
@@ -542,7 +546,9 @@ export const EVENT_VIEW: ViewConfig = {
   wherePlaceholder: 'e.g. type.value == 12',
   simpleSearch: {
     placeholder: "Enter a Gramps ID, description, or place…",
-    buildExpr: buildSimpleSearchExpr(["gramps_id", "description", "place.title"]),
+    // place.name.value too: with desktop's "Automate Place Format" a
+    // place's stored title is empty, as in the Places list's own search.
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "description", "place.title", "place.name.value"]),
   },
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
