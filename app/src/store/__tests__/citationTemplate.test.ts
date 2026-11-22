@@ -4,6 +4,7 @@ import { parseDate } from "@gramps-connect/gramps-date";
 import {
   ENHANCED_TEMPLATE,
   LEGACY_TEMPLATE,
+  STARTER_TEMPLATES,
   TemplateError,
   formatTemplateValue,
   locateTemplateExpression,
@@ -251,5 +252,68 @@ describe("italic and bold", () => {
     const lines = [[{ text: "A & " }, { text: "<B>", italic: true }], [{ text: "p. 3", bold: true }]];
     expect(linesToHtml(lines)).toBe("A &amp; <i>&lt;B&gt;</i><br><b>p. 3</b>");
     expect(linesToText(lines)).toBe("A & <B>\np. 3");
+  });
+});
+
+describe("starter templates", () => {
+  const starter = (name: string) => STARTER_TEMPLATES.find((st) => st.name === name)!;
+  const line = (template: string, values: Record<string, string>) =>
+    renderTemplate(parseTemplate(template), new Map(Object.entries(values)));
+
+  it("all parse", () => {
+    for (const st of STARTER_TEMPLATES) {
+      expect(() => parseTemplate(st.source), st.name).not.toThrow();
+      expect(() => parseTemplate(st.citation), st.name).not.toThrow();
+    }
+  });
+
+  it("write an online record, with and without its optional parts", () => {
+    const { source, citation } = starter("Online record");
+    expect(
+      line(source, {
+        title: "England and Wales Census, 1881",
+        "attribute_list['Medium'].value": "database with images",
+        "repositories[0].name": "FamilySearch",
+      }),
+    ).toBe('"England and Wales Census, 1881," database with images, FamilySearch');
+    expect(
+      line(citation, {
+        "attribute_list['Item'].value": "John Smith household, Leeds, Yorkshire",
+        "attribute_list['URL'].value": "https://example.org/r/1",
+        "attribute_list['Accessed'].value": "22 November 2026",
+        "source.attribute_list['Original'].value": "The National Archives, Kew",
+        page: "RG11/4321, folio 56, page 7",
+      }),
+    ).toBe(
+      "John Smith household, Leeds, Yorkshire (https://example.org/r/1 : accessed 22 November 2026); citing The National Archives, Kew, RG11/4321, folio 56, page 7",
+    );
+    expect(line(citation, { "attribute_list['Item'].value": "Mary Brown, Leeds, 1890 Q2", page: "vol. 9b, p. 512" })).toBe(
+      "Mary Brown, Leeds, 1890 Q2, vol. 9b, p. 512",
+    );
+  });
+
+  it("write an archive record, a book, a newspaper and a gravestone", () => {
+    expect(
+      line(starter("Archive record").citation, {
+        "attribute_list['Item'].value": "John Smith baptism",
+        page: "p. 12, no. 96",
+        date: "3 May 1820",
+        "attribute_list['Film'].value": "1,234,567",
+      }),
+    ).toBe("John Smith baptism, p. 12, no. 96 (3 May 1820); microfilm 1,234,567");
+    expect(line(starter("Archive record").citation, { page: "RG11/4321, folio 56, page 7" })).toBe("RG11/4321, folio 56, page 7");
+    expect(
+      renderTemplateRuns(parseTemplate(starter("Book").source), new Map(Object.entries({ author: "Jane Doe", title: "A History of Leeds", pubinfo: "London: Smith & Co., 1890" }))),
+    ).toEqual([{ text: "Jane Doe, " }, { text: "A History of Leeds", italic: true }, { text: " (London: Smith & Co., 1890)" }]);
+    expect(
+      line(starter("Newspaper").citation, { "attribute_list['Item'].value": "Local News", date: "4 May 1890", page: "p. 3, col. 2" }),
+    ).toBe('"Local News," 4 May 1890, p. 3, col. 2');
+    expect(
+      line(starter("Gravestone").citation, {
+        "attribute_list['Item'].value": "John Smith gravestone",
+        page: "section B, grave 412",
+        date: "12 June 2019",
+      }),
+    ).toBe("John Smith gravestone, section B, grave 412, photographed 12 June 2019");
   });
 });

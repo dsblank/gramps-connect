@@ -14,6 +14,7 @@ import { citationFormatterLabel } from "../store/citationFormat";
 import {
   ENHANCED_TEMPLATE,
   LEGACY_TEMPLATE,
+  STARTER_TEMPLATES,
   TemplateError,
   locateTemplateExpression,
   parseTemplate,
@@ -164,7 +165,23 @@ function TemplateEditDialog({
   const sourceError = templateError(draft.source);
   const citationError = templateError(draft.citation);
   const valid = !!draft.name.trim() && !sourceError && !citationError && !serverError;
-  const startFrom = (base: CitationTemplate) => setDraft((d) => ({ ...d, ...base }));
+  const bases: Record<string, CitationTemplate & { name?: string }> = {
+    legacy: LEGACY_TEMPLATE,
+    enhanced: ENHANCED_TEMPLATE,
+    ...Object.fromEntries(STARTER_TEMPLATES.map((st) => [`starter:${st.name}`, st])),
+  };
+  // Both lines from the chosen base; a starter also names an unnamed draft.
+  const startFrom = (key: string) => {
+    const base = bases[key];
+    if (!base) return;
+    setDraft((d) => ({
+      ...d,
+      source: base.source,
+      citation: base.citation,
+      name: d.name.trim() || !key.startsWith("starter:") ? d.name : base.name ?? d.name,
+    }));
+  };
+  const descriptions = Object.fromEntries(STARTER_TEMPLATES.map((st) => [`starter:${st.name}`, st.description]));
 
   return (
     <Modal opened onClose={onCancel} title={isNew ? t("New citation template") : t("Edit citation template")} size="xl">
@@ -179,15 +196,36 @@ function TemplateEditDialog({
           value={draft.name}
           onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })}
         />
-        <Group gap="xs">
-          <Text size="xs" c="dimmed">{t("Start from:")}</Text>
-          <Button size="compact-xs" variant="default" onClick={() => startFrom(LEGACY_TEMPLATE)}>
-            {t("Legacy")}
-          </Button>
-          <Button size="compact-xs" variant="default" onClick={() => startFrom(ENHANCED_TEMPLATE)}>
-            {t("Enhanced")}
-          </Button>
-        </Group>
+        <Select
+          label={t("Start from")}
+          description={t("Replaces both lines below with a ready-made format, to adjust as you like.")}
+          placeholder={t("Choose a format to start from")}
+          value={null}
+          onChange={(key) => key && startFrom(key)}
+          data={[
+            {
+              group: t("Gramps' own"),
+              items: [
+                { value: "legacy", label: t("Legacy") },
+                { value: "enhanced", label: t("Enhanced") },
+              ],
+            },
+            {
+              group: t("Starters"),
+              items: STARTER_TEMPLATES.map((st) => ({ value: `starter:${st.name}`, label: t(st.name) })),
+            },
+          ]}
+          renderOption={({ option }) => (
+            <Stack gap={0}>
+              <Text size="sm">{option.label}</Text>
+              {descriptions[option.value] && (
+                <Text size="xs" c="dimmed">
+                  {t(descriptions[option.value])}
+                </Text>
+              )}
+            </Stack>
+          )}
+        />
         <TemplateLineInput
           label={t("Source line")}
           description={t("Written for the source: `author`, `title`, `pubinfo`, `abbrev`, `repositories[0].name`, ...")}

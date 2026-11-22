@@ -69,6 +69,53 @@ export const ENHANCED_TEMPLATE: CitationTemplate = {
   citation: LEGACY_TEMPLATE.citation,
 };
 
+/** A ready-made template to start a tree's own from. */
+export interface StarterTemplate extends CitationTemplate {
+  name: string;
+  /** What it's for, shown where it's offered. */
+  description: string;
+}
+
+/** Layered source citations for common kinds of record, offered under
+ * the template editor's "Start from". They use Gramps' own fields where
+ * there is one and these attributes for the rest (see the Citations wiki
+ * page): Place, Medium and Original on the Source; Item, URL, Accessed and
+ * Film on the Citation. */
+export const STARTER_TEMPLATES: StarterTemplate[] = [
+  {
+    name: "Online record",
+    description: "A record seen on a website: FamilySearch, Ancestry, FindMyPast, FreeBMD, Find a Grave, an online index",
+    source: "\"`title`,\"[ `attribute_list['Medium'].value`,][ *`repositories[0].name`*]",
+    citation:
+      "[`attribute_list['Item'].value`][ (`attribute_list['URL'].value`[ : accessed `attribute_list['Accessed'].value`])][; citing `source.attribute_list['Original'].value`][, `page`]",
+  },
+  {
+    name: "Archive record",
+    description: "A census, parish register or civil register seen in an archive or on microfilm",
+    source: "`title`[, `attribute_list['Place'].value`][; `repositories[0].name`][, `reporef_list[0].call_number`]",
+    citation: "[`attribute_list['Item'].value`][, `page`][ (`date`)][; microfilm `attribute_list['Film'].value`]",
+  },
+  {
+    name: "Book",
+    description: "A printed book: author, title and publication details",
+    source: "[`author`, ]*`title`*[ (`pubinfo`)]",
+    citation: "[`page`]",
+  },
+  {
+    name: "Newspaper",
+    description: "A newspaper article, in print or in an online archive",
+    source: "*`title`*[ (`attribute_list['Place'].value`)]",
+    citation:
+      "[\"`attribute_list['Item'].value`,\" ][`date`][, `page`][ (`attribute_list['URL'].value`[ : accessed `attribute_list['Accessed'].value`])]",
+  },
+  {
+    name: "Gravestone",
+    description: "A gravestone or memorial, seen or photographed",
+    source: "`title`[, `attribute_list['Place'].value`]",
+    citation: "[`attribute_list['Item'].value`][, `page`][, photographed `date`]",
+  },
+];
+
 export function parseTemplate(source: string): TemplateNode[] {
   const root: TemplateNode[] = [];
   // Each level (the line, then each open [ ]) tracks the styles turned on
