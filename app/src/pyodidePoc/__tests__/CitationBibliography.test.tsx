@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders, screen } from "../../testUtils/renderWithProviders";
 import { GrampletResultView } from "../GrampletResultView";
@@ -100,5 +101,36 @@ describe("bibliography block", () => {
       <GrampletResultView status="done" response={{ type: "blocks", runId: "e", blocks: [{ type: "bibliography", handles: ["gone"], title: null }] }} />,
     );
     expect(await screen.findByText("No citations to list.")).toBeTruthy();
+  });
+});
+
+describe("bibliography links", () => {
+  it("opens the source from its number and the citation from its letter", async () => {
+    renderWithProviders(
+      <GrampletResultView
+        status="done"
+        response={{ type: "blocks", runId: "l", blocks: [{ type: "bibliography", handles: ["C1", "C2"], title: null }] }}
+      />,
+    );
+    const number = await screen.findByRole("button", { name: /^1\. "Parish Register"/ });
+    act(() => number.click());
+    const openSource = await screen.findByText("Open in Sources");
+    expect(openSource.closest("a")?.getAttribute("href")).toContain("S1");
+    const letterB = screen.getByRole("button", { name: /^b\. p\. 2/ });
+    act(() => letterB.click());
+    const openCitation = await screen.findByText("Open in Citations");
+    expect(openCitation.closest("a")?.getAttribute("href")).toContain("C2");
+  });
+
+  it("is plain text in the editor's preview", async () => {
+    renderWithProviders(
+      <GrampletResultView
+        status="done"
+        interactive={false}
+        response={{ type: "blocks", runId: "p", blocks: [{ type: "bibliography", handles: ["C1"], title: null }] }}
+      />,
+    );
+    expect(await screen.findByText("1.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^1\./ })).toBeNull();
   });
 });

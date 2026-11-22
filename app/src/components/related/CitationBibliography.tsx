@@ -24,6 +24,8 @@ import { renderTemplateFor, selectForHandles, type TemplateRun } from "../../sto
 import { useDisplayFormatVersion } from "../../store/placeIndex";
 import { CITATION_VIEW, SOURCE_VIEW } from "../../store/views";
 import { CitationLinesView, CopyCitationButton } from "./CitationLines";
+import { ObjectMenu } from "../../pyodidePoc/ObjectCellButton";
+import { linesToText } from "../../store/citationTemplateSyntax";
 import { t } from "../../i18n/i18n";
 
 /** Handles per request -- a person with hundreds of citations still makes
@@ -105,7 +107,63 @@ function buildEntries(settings: DisplaySettings, order: string[], citations: Map
 
 const letter = (i: number) => (i < 26 ? String.fromCharCode(97 + i) : `${String.fromCharCode(97 + Math.floor(i / 26) - 1)}${String.fromCharCode(97 + (i % 26))}`);
 
-export function CitationBibliography({ handles, title }: { handles: string[]; title: string | null }) {
+/** A source's number or a citation's letter: a link to that record (the
+ * same menu a Gramplet table's record cells offer) when `interactive`,
+ * plain text otherwise (the editor's preview). The text itself stays
+ * plain, so it can be selected and copied. */
+function RecordMark({
+  text,
+  objectType,
+  handle,
+  label,
+  interactive,
+  dimmed,
+}: {
+  text: string;
+  objectType: "source" | "citation";
+  handle: string;
+  label: string;
+  interactive: boolean;
+  dimmed?: boolean;
+}) {
+  if (!interactive) {
+    return (
+      <Text size="sm" c={dimmed ? "dimmed" : undefined} style={{ flexShrink: 0 }}>
+        {text}
+      </Text>
+    );
+  }
+  return (
+    <ObjectMenu objectType={objectType} handle={handle} label={label}>
+      <Text
+        component="button"
+        size="sm"
+        aria-label={`${text} ${label}`}
+        style={{
+          flexShrink: 0,
+          cursor: "pointer",
+          background: "none",
+          border: "none",
+          padding: 0,
+          color: "var(--mantine-color-blue-6)",
+        }}
+      >
+        {text}
+      </Text>
+    </ObjectMenu>
+  );
+}
+
+export function CitationBibliography({
+  handles,
+  title,
+  interactive = false,
+}: {
+  handles: string[];
+  title: string | null;
+  /** Numbers and letters open their record (not in the editor's preview). */
+  interactive?: boolean;
+}) {
   const settings = useDisplaySettings();
   useDisplayFormatVersion();
   const [data, setData] = useState<{ citations: Map<string, CitationRow>; sources: Map<string, SourceRow> } | null>(null);
@@ -232,12 +290,19 @@ export function CitationBibliography({ handles, title }: { handles: string[]; ti
   // What's shown, and the same thing as lines for Copy.
   const blocks = entries.map((entry, i) => {
     const number = `${i + 1}.`;
-    if (entry.kind === "manual") return { number, head: [{ text: entry.text }] as TemplateRun[], subs: [] as { letter: string; line: TemplateRun[] }[] };
+    if (entry.kind === "manual") {
+      return {
+        number,
+        head: [{ text: entry.text }] as TemplateRun[],
+        target: { objectType: "citation" as const, handle: entry.row.handle },
+        subs: [] as { letter: string; line: TemplateRun[]; handle: string }[],
+      };
+    }
     const subs = entry.citations
-      .map(({ row, choice }) => citationLine(row, choice))
-      .map((line, j) => ({ letter: `${letter(j)}.`, line }))
-      .filter((sub) => sub.line.length);
-    return { number, head: sourceLine(entry), subs };
+      .map(({ row, choice }) => ({ line: citationLine(row, choice), handle: row.handle }))
+      .filter((sub) => sub.line.length)
+      .map((sub, j) => ({ ...sub, letter: `${letter(j)}.` }));
+    return { number, head: sourceLine(entry), target: { objectType: "source" as const, handle: entry.source.handle }, subs };
   });
   const INDENT = "    ";
   const copyLines: TemplateRun[][] = [
@@ -256,16 +321,27 @@ export function CitationBibliography({ handles, title }: { handles: string[]; ti
       </Group>
       {blocks.map((b) => (
         <Group key={b.number} gap="xs" wrap="nowrap" align="flex-start">
-          <Text size="sm" w="2.5em" ta="right" style={{ flexShrink: 0 }}>
-            {b.number}
-          </Text>
+          <Group w="2.5em" justify="flex-end" style={{ flexShrink: 0 }}>
+            <RecordMark
+              text={b.number}
+              objectType={b.target.objectType}
+              handle={b.target.handle}
+              label={linesToText([b.head])}
+              interactive={interactive}
+            />
+          </Group>
           <Stack gap={2} style={{ minWidth: 0 }}>
             <CitationLinesView lines={[b.head]} />
             {b.subs.map((sub) => (
               <Group key={sub.letter} gap={6} wrap="nowrap" align="flex-start">
-                <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>
-                  {sub.letter}
-                </Text>
+                <RecordMark
+                  text={sub.letter}
+                  objectType="citation"
+                  handle={sub.handle}
+                  label={linesToText([sub.line])}
+                  interactive={interactive}
+                  dimmed
+                />
                 <CitationLinesView lines={[sub.line]} />
               </Group>
             ))}

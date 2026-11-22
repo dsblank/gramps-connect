@@ -366,7 +366,7 @@ function BlockOutput({
   onWidgetEvent?: (key: string, value: unknown) => void;
 }) {
   if (block.type === "bibliography") {
-    return <CitationBibliography handles={block.handles} title={block.title} />;
+    return <CitationBibliography handles={block.handles} title={block.title} interactive={interactive} />;
   }
   if (block.type === "relationship-chart") {
     return <RelationshipChart paths={block.paths} startLabel={block.startLabel} interactive={interactive} />;
