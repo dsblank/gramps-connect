@@ -1,8 +1,8 @@
 {
   "id": "attribute-usage",
   "name": "Attribute Usage",
-  "description": "Pick an attribute type that's in use in the tree, and see every person, family, event, media, source and citation that has it, with its value.",
-  "version": "1.0.0",
+  "description": "Every attribute type in use in the tree, with how many records have it. Click one to see the people, families, events, media, sources and citations that have it, with their values.",
+  "version": "1.1.0",
   "author": "Gramps Connect",
   "category": "utility",
   "kind": "window"
