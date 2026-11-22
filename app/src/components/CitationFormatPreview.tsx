@@ -44,8 +44,11 @@ export function CitationFormatPreview({ formatter }: { formatter: CitationFormat
       if (!res.ok) return;
       type Row = Sample & { extended?: { source?: Sample["source"] } };
       const all = (await res.json()) as Row[];
-      const hasRepo = (row: Row) => !!row.extended?.source?.reporef_list?.length;
-      const rows = [...all.filter(hasRepo), ...all.filter((row) => !hasRepo(row))].slice(0, SAMPLE_COUNT);
+      // Citations whose source has a repository first, then ones with a
+      // page or date, so both Enhanced's difference and the second line show.
+      const score = (row: Row) =>
+        (row.extended?.source?.reporef_list?.length ? 2 : 0) + (row.page || row.date?.sortval ? 1 : 0);
+      const rows = [...all].sort((a, b) => score(b) - score(a)).slice(0, SAMPLE_COUNT);
       const withRepos = await Promise.all(
         rows.map(async (row) => {
           const source = row.extended?.source;
@@ -72,13 +75,13 @@ export function CitationFormatPreview({ formatter }: { formatter: CitationFormat
     <Stack gap={6}>
       <Text size="xs" c="dimmed">{t("Examples from this tree:")}</Text>
       {shown.map(({ handle, lines }) => (
-        <div key={handle}>
+        <Stack key={handle} gap={2}>
           {lines.map((line, i) => (
             <Text key={i} size="sm" pl={i > 0 ? "md" : undefined}>
               {line}
             </Text>
           ))}
-        </div>
+        </Stack>
       ))}
     </Stack>
   );

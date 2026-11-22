@@ -97,11 +97,15 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
         </Group>
       }
     >
-      {shown.map((line, i) => (
-        <Text key={i} size="sm" pl={i > 0 ? "md" : undefined} style={{ userSelect: "text" }}>
-          {line}
-        </Text>
-      ))}
+      {shown.length > 0 && (
+        <Stack gap={2}>
+          {shown.map((line, i) => (
+            <Text key={i} size="sm" pl={i > 0 ? "md" : undefined} style={{ userSelect: "text" }}>
+              {line}
+            </Text>
+          ))}
+        </Stack>
+      )}
       {pasted && (
         <Text size="xs" c="dimmed">
           {t("Pasted text, shown in place of the generated citation.")}
