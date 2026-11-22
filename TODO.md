@@ -284,11 +284,6 @@ runs in multi-tree mode like every deployment. Still open:
   including words like "accessed", "citing", "microfilm",
   "photographed", unlike Legacy/Enhanced, which use Gramps' translated
   separators. A per-language set, or translatable words inside templates.
-- **Starter rough edges** — Online record with no Medium and no repository
-  ends `"Title,"` (the comma sits inside the quotes and can't depend on
-  what follows); Newspaper with a headline but no date gives `"Local
-  News," , p. 3`. Both need a way for a separator to depend on the next
-  part, not just the previous one.
 - **Make a template from the Auto format dialog** — "Make one in
   Preferences" opens Preferences at Citations. For Owners it could open
   the template editor directly, starting from the selected card's format

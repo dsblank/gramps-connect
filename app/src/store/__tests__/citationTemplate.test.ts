@@ -317,3 +317,43 @@ describe("starter templates", () => {
     ).toBe("John Smith gravestone, section B, grave 412, photographed 12 June 2019");
   });
 });
+
+describe("cleaning up after empty fields", () => {
+  const line = (template: string, values: Record<string, string>) =>
+    renderTemplate(parseTemplate(template), new Map(Object.entries(values)));
+
+  it("fixes the starters' rough edges", () => {
+    const online = STARTER_TEMPLATES.find((st) => st.name === "Online record")!;
+    expect(line(online.source, { title: "England and Wales Census, 1881" })).toBe('"England and Wales Census, 1881"');
+    const newspaper = STARTER_TEMPLATES.find((st) => st.name === "Newspaper")!;
+    expect(line(newspaper.citation, { "attribute_list['Item'].value": "Local News", page: "p. 3" })).toBe(
+      '"Local News," p. 3',
+    );
+  });
+
+  it("drops a separator next to a bracket, and empty brackets and quotes", () => {
+    expect(line("`a` (`b`, `c`)", { a: "A", b: "Leeds" })).toBe("A (Leeds)");
+    expect(line("`a` (`b`, `c`)", { a: "A", c: "p. 3" })).toBe("A (p. 3)");
+    expect(line('`a` (`b`) "`c`" [`d`]', { a: "A" })).toBe("A");
+  });
+
+  it("collapses doubled separators and spaces", () => {
+    expect(line("`a`, `b`, `c`", { a: "A", c: "C" })).toBe("A, C");
+    expect(line("`a`; `b`, `c`", { a: "A", c: "C" })).toBe("A; C");
+    expect(line("`a`,  `b`", { a: "A", b: "B" })).toBe("A, B");
+  });
+
+  it("never changes a field's own text", () => {
+    expect(line("`a`", { a: "Smith, " })).toBe("Smith,");
+    expect(line("`a`", { a: "one , , two ()" })).toBe("one , , two ()");
+    expect(line("`a`, `b`", { a: "London,", b: "1890" })).toBe("London, 1890");
+  });
+
+  it("keeps a space a style wants before a separator", () => {
+    expect(line("(`u` : accessed `d`)", { u: "https://x", d: "1 May 2020" })).toBe("(https://x : accessed 1 May 2020)");
+  });
+
+  it("keeps the styling", () => {
+    expect(renderTemplateRuns(parseTemplate("*`a`*, `b`"), new Map([["a", "Title"]]))).toEqual([{ text: "Title", italic: true }]);
+  });
+});

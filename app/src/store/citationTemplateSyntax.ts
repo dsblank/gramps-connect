@@ -214,6 +214,101 @@ function stripLeadingSeparators(runs: TemplateRun[]): TemplateRun[] {
 /** The line `nodes` make with `values` (expression -> formatted text,
  * "" or missing for no value), as styled runs: trimmed, without empty
  * runs, neighbours in the same style merged. */
+/** A rendered piece, remembering whether its text came from a field's
+ * value (never changed by cleanUp) or from the template itself. */
+interface RenderedRun extends TemplateRun {
+  value?: boolean;
+}
+
+/** One character of a rendered line, for cleanUp. */
+interface Char {
+  ch: string;
+  italic: boolean;
+  bold: boolean;
+  /** From a field's value: cleanUp never removes it. */
+  value: boolean;
+}
+
+const SEPARATORS = ",;:";
+const CLOSING_QUOTES = "\"'”’";
+const CLOSING_BRACKETS = ")]";
+const PAIRS: Record<string, string> = { "(": ")", "[": "]", '"': '"', "“": "”" };
+
+/** Tidies the punctuation a template leaves when some of its fields are
+ * empty -- only characters the template wrote, never a field's value:
+ * - a separator (, ; :) right after another one goes, with the space
+ *   before it: '"Local News," , p. 3' -> '"Local News," p. 3';
+ * - a separator at the end of the line goes, even inside a closing
+ *   quote: '"Census, 1881,"' -> '"Census, 1881"';
+ * - a separator right after an opening bracket, or right before a
+ *   closing one, goes: '( , p. 3)' -> '(p. 3)', '(Leeds, )' -> '(Leeds)';
+ * - an empty pair of brackets or quotes goes: '()', '[]', '""';
+ * - double spaces become one. (A space before a separator stays: some
+ *   styles want one, as in "URL : accessed".)
+ * Repeats until nothing changes, since one fix can expose another. */
+export function cleanUp(chars: Char[]): Char[] {
+  let line = chars;
+  for (let pass = 0; pass < 20; pass++) {
+    const drop = new Set<number>();
+    const tplSpace = (k: number) => line[k].ch === " " && !line[k].value;
+    for (let i = 0; i < line.length; i++) {
+      if (drop.has(i)) continue;
+      const c = line[i];
+      if (c.value) continue;
+      if (SEPARATORS.includes(c.ch)) {
+        // The nearest character before, past spaces and closing quotes.
+        let back = i - 1;
+        while (back >= 0 && line[back].ch === " ") back--;
+        let prev = back;
+        while (prev >= 0 && CLOSING_QUOTES.includes(line[prev].ch)) prev--;
+        // The nearest character after, past spaces (then past quotes).
+        let fwd = i + 1;
+        while (fwd < line.length && line[fwd].ch === " ") fwd++;
+        let next = fwd;
+        while (next < line.length && CLOSING_QUOTES.includes(line[next].ch)) next++;
+        const dropSpacesBetween = (from: number, to: number) => {
+          for (let k = from; k < to; k++) if (tplSpace(k)) drop.add(k);
+        };
+        if (prev >= 0 && SEPARATORS.includes(line[prev].ch) && !drop.has(prev)) {
+          drop.add(i);
+          dropSpacesBetween(back + 1, i);
+        } else if (next >= line.length) {
+          drop.add(i);
+          dropSpacesBetween(i + 1, fwd);
+        } else if (CLOSING_BRACKETS.includes(line[fwd].ch)) {
+          drop.add(i);
+          dropSpacesBetween(back + 1, i);
+          dropSpacesBetween(i + 1, fwd);
+        } else if (back >= 0 && "([".includes(line[back].ch)) {
+          drop.add(i);
+          dropSpacesBetween(i + 1, fwd);
+        }
+        continue;
+      }
+      const closer = PAIRS[c.ch];
+      if (closer) {
+        let k = i + 1;
+        while (k < line.length && line[k].ch === " ") k++;
+        if (k < line.length && line[k].ch === closer && !line[k].value && k > i) {
+          for (let m = i; m <= k; m++) if (!line[m].value) drop.add(m);
+          continue;
+        }
+      }
+      if (c.ch === " ") {
+        const after = line[i + 1];
+        if (after && after.ch === " ") drop.add(i);
+      }
+    }
+    if (drop.size === 0) return line;
+    line = line.filter((_, k) => !drop.has(k));
+  }
+  return line;
+}
+
+/** The line `nodes` make with `values` (expression -> formatted text,
+ * "" or missing for no value), as styled runs: punctuation left by empty
+ * fields tidied (cleanUp), trimmed, without empty runs, neighbours in the
+ * same style merged. */
 export function renderTemplateRuns(nodes: TemplateNode[], values: ReadonlyMap<string, string>): TemplateRun[] {
   const value = (expr: string) => values.get(expr) ?? "";
   // Null when a group must be dropped; the top level never is. `style` is
@@ -224,39 +319,45 @@ export function renderTemplateRuns(nodes: TemplateNode[], values: ReadonlyMap<st
     before: string,
     droppable: boolean,
     start: { italic: boolean; bold: boolean },
-  ): TemplateRun[] | null => {
+  ): RenderedRun[] | null => {
     const style = { ...start };
-    const out: TemplateRun[] = [];
-    const push = (text: string) => out.push({ text, italic: style.italic, bold: style.bold });
+    const out: RenderedRun[] = [];
+    const push = (text: string, fromValue: boolean) =>
+      out.push({ text, italic: style.italic, bold: style.bold, value: fromValue });
     for (const node of list) {
-      if (node.kind === "text") push(node.text);
+      if (node.kind === "text") push(node.text, false);
       else if (node.kind === "style") style[node.style] = !style[node.style];
       else if (node.kind === "expr") {
         const v = value(node.expr);
         if (!v && droppable) return null;
-        push(v);
+        push(v, true);
       } else {
         const so_far = before + runsText(out);
-        let inner = render(node.children, so_far, true, style);
+        let inner = render(node.children, so_far, true, style) as RenderedRun[] | null;
         if (inner === null) continue;
-        if (so_far.trim() === "") inner = stripLeadingSeparators(inner);
+        if (so_far.trim() === "") inner = stripLeadingSeparators(inner) as RenderedRun[];
         out.push(...inner);
       }
     }
     return out;
   };
-  const runs = (render(nodes, "", false, { italic: false, bold: false }) ?? []).filter((r) => r.text);
-  if (runs.length) {
-    runs[0] = { ...runs[0], text: runs[0].text.trimStart() };
-    const last = runs.length - 1;
-    runs[last] = { ...runs[last], text: runs[last].text.trimEnd() };
-  }
+  const rendered = render(nodes, "", false, { italic: false, bold: false }) ?? [];
+  const chars = cleanUp(
+    rendered.flatMap((run) =>
+      [...run.text].map((ch) => ({ ch, italic: !!run.italic, bold: !!run.bold, value: !!run.value })),
+    ),
+  );
+  // Back into runs, trimmed, neighbours in the same style merged.
+  let first = 0;
+  let last = chars.length - 1;
+  while (first <= last && /\s/.test(chars[first].ch)) first++;
+  while (last >= first && /\s/.test(chars[last].ch)) last--;
   const merged: TemplateRun[] = [];
-  for (const run of runs) {
-    if (!run.text) continue;
+  for (let k = first; k <= last; k++) {
+    const c = chars[k];
     const prev = merged[merged.length - 1];
-    if (prev && !!prev.italic === !!run.italic && !!prev.bold === !!run.bold) prev.text += run.text;
-    else merged.push({ text: run.text, ...(run.italic ? { italic: true } : {}), ...(run.bold ? { bold: true } : {}) });
+    if (prev && !!prev.italic === c.italic && !!prev.bold === c.bold) prev.text += c.ch;
+    else merged.push({ text: c.ch, ...(c.italic ? { italic: true } : {}), ...(c.bold ? { bold: true } : {}) });
   }
   return merged;
 }
