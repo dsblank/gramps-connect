@@ -116,6 +116,15 @@ describe("buildImportItems / applyImport", () => {
     expect(bad.find((i) => i.key === "livingAge")!.usable).toBe(false);
   });
 
+  it("imports the citation formatter from [preferences]", () => {
+    const ini = parseGrampsIni("[preferences]\ncite-plugin='cite-enhanced'\n");
+    const item = buildImportItems(input({ ini })).find((i) => i.key === "citation")!;
+    expect([item.desktop, item.usable]).toEqual(["cite-enhanced", true]);
+    expect(applyImport(DEFAULT_DISPLAY_SETTINGS, [item], new Set(["citation"])).citation.formatter).toBe("enhanced");
+    const other = buildImportItems(input({ ini: parseGrampsIni("[preferences]\ncite-plugin='cite-csl'\n") }));
+    expect(other.find((i) => i.key === "citation")!.usable).toBe(false);
+  });
+
   it("maps the date index through the desktop language", () => {
     // French #4 is "Jour. Mois Année", not English's "Day Month Year"... which
     // happens to be the same shape; #2 is where they differ.

@@ -29,6 +29,7 @@ export type RelatedSection =
   | "urls"
   | "tags"
   | "ldsOrdinances"
+  | "formatted"
   | "backlinks";
 
 // Ordering within each type's list is a holdover from when citations/
@@ -55,8 +56,10 @@ export const RELATED_CONFIG: Record<string, RelatedSection[]> = {
   // Source has no forward citation_list of its own -- citations point *at*
   // a source via their own source_handle, so "which citations use this
   // source" only ever shows up as a backlink, not a forward ref here.
-  source: ["tags", "media", "repositories", "notes", "attributes", "backlinks"],
-  citation: ["tags", "media", "source", "notes", "attributes", "backlinks"],
+  source: ["formatted", "tags", "media", "repositories", "notes", "attributes", "backlinks"],
+  // "formatted" (FormattedCitationSection): the record written out as
+  // Gramps' chosen citation formatter would, first since it sums up the rest.
+  citation: ["formatted", "tags", "media", "source", "notes", "attributes", "backlinks"],
   media: ["tags", "comparisons", "notes", "attributes", "citations", "backlinks"],
   // The Output view (store/views.ts's GENERATED_VIEW) is Media
   // rows under a fixed tag filter, not a distinct object type -- same

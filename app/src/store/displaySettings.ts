@@ -78,7 +78,15 @@ export interface DisplaySettings {
      * read it, hence a copy here. */
     maxAge: number;
   };
+  /** Desktop's preferences.citation-formatter equivalent: how the
+   * Citation and Source panels write a citation out (citationFormat.ts). */
+  citation: { formatter: CitationFormatter };
 }
+
+/** Which of Gramps' citation formatters to imitate (citationFormat.ts):
+ * "legacy" is the one Gramps ships, "enhanced" the CiteEnhanced addon. */
+export type CitationFormatter = "legacy" | "enhanced";
+export const CITATION_FORMATTERS: CitationFormatter[] = ["legacy", "enhanced"];
 
 /** Gramps' own default for behavior.max-age-prob-alive. */
 export const DEFAULT_MAX_AGE_PROB_ALIVE = 110;
@@ -106,6 +114,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   place: { auto: true, active: 0, formats: [FULL_PLACE_FORMAT] },
   ids: Object.fromEntries(ID_TYPES.map((type) => [type, ""])) as Record<IdType, string>,
   living: { maxAge: DEFAULT_MAX_AGE_PROB_ALIVE },
+  citation: { formatter: "legacy" },
 };
 
 /** Desktop's own defaults (gen/config.py's preferences.*prefix). */
@@ -212,7 +221,10 @@ export function normalizeDisplaySettings(raw: unknown): DisplaySettings {
 
   const living = { maxAge: isValidMaxAge(r.living?.maxAge) ? r.living.maxAge : d.living.maxAge };
 
-  return { version: 1, date, name, place, ids, living };
+  const formatter = r.citation?.formatter;
+  const citation = { formatter: CITATION_FORMATTERS.includes(formatter) ? (formatter as CitationFormatter) : d.citation.formatter };
+
+  return { version: 1, date, name, place, ids, living, citation };
 }
 
 // -- Date format per language --

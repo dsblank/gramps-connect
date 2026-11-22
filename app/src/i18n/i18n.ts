@@ -113,6 +113,10 @@ const desktopStrings = [
   "Groom", "Witness", "Informant", "Godparent", "Parent", "Child", "Multiple birth",
   "Friend", "Neighbor", "Officiator", "Audio", "Book", "Card", "Electronic", "Fiche", "Film",
   "Magazine", "Manuscript", "Newspaper", "Photo", "Tombstone", "Video",
+  // Citation text (store/citationFormat.ts, ported from Gramps'
+  // plugins/cite/legacy.py, which translates these same separators and
+  // confidence levels).
+  ", ", '"%s"', "Very Low", "Low", "Normal", "High", "Very High", "Legacy",
 ];
 
 // Locale codes actually bootstrapped by scripts/bootstrap-translations.py --

@@ -16,6 +16,7 @@ import {
 import { BUILTIN_NAME_FORMATS, type CustomNameFormat, type DisplaySettings, type PlaceFormatDef } from "../store/displaySettings";
 import { formatPlaceWith, samplePlaceHandle } from "../store/placeIndex";
 import { describeDateFormat } from "./displayFormatLabels";
+import { citationFormatterLabel } from "../store/citationFormat";
 import { getI18nSnapshot, t } from "../i18n/i18n";
 
 interface ImportDesktopSettingsDialogProps {
@@ -36,6 +37,7 @@ const ROW_LABELS: Record<ImportKey, string> = {
   placeActive: "Place format in use",
   ids: "Gramps IDs for new records",
   livingAge: "Living age limit",
+  citation: "Citation formatter",
 };
 
 /** "Import from Gramps desktop…" -- a one-shot copy of the desktop display
@@ -153,6 +155,8 @@ export function ImportDesktopSettingsDialog({ opened, onClose, current, customNa
       }
       case "livingAge":
         return String(s.living.maxAge);
+      case "citation":
+        return citationFormatterLabel(s.citation.formatter);
       case "placeActive": {
         const fmt = s.place.formats[s.place.active];
         const example = fmt && sampleHandle ? formatPlaceWith(sampleHandle, fmt) : null;

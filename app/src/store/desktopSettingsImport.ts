@@ -176,7 +176,7 @@ const DESKTOP_ID_KEYS: Record<IdType, string> = {
   note: "nprefix",
 };
 
-export type ImportKey = "date" | "name" | "placeAuto" | "placeFormats" | "placeActive" | "ids" | "livingAge";
+export type ImportKey = "date" | "name" | "placeAuto" | "placeFormats" | "placeActive" | "ids" | "livingAge" | "citation";
 
 export interface ImportItem {
   key: ImportKey;
@@ -347,6 +347,23 @@ export function buildImportItems(input: ImportInput): ImportItem[] {
       reason: usable ? undefined : "Out of range",
       isDefault: maxAgeValue.isDefault,
       apply: (s) => (usable ? { ...s, living: { maxAge } } : s),
+    });
+  }
+
+  // preferences.cite-plugin is the formatter plugin's id: "cite-legacy"
+  // (Gramps' own) or "cite-enhanced" (the CiteEnhanced addon). Any other
+  // addon formatter has no counterpart here.
+  const citeValue = ini.get("preferences.cite-plugin");
+  const citePlugin = citeValue ? parsePyLiteral(citeValue.raw) : null;
+  if (citeValue && typeof citePlugin === "string") {
+    const formatter = ({ "cite-legacy": "legacy", "cite-enhanced": "enhanced" } as const)[citePlugin as "cite-legacy" | "cite-enhanced"];
+    items.push({
+      key: "citation",
+      desktop: citePlugin,
+      usable: !!formatter,
+      reason: formatter ? undefined : "Not a formatter Gramps Connect has",
+      isDefault: citeValue.isDefault,
+      apply: (s) => (formatter ? { ...s, citation: { formatter } } : s),
     });
   }
 

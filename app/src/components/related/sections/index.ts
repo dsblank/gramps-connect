@@ -26,6 +26,7 @@ import { UrlsSection } from "./UrlsSection";
 import { TagsSection } from "./TagsSection";
 import { LdsOrdinancesSection } from "./LdsOrdinancesSection";
 import { BacklinksSection } from "./BacklinksSection";
+import { FormattedCitationSection } from "./FormattedCitationSection";
 
 export const SECTION_COMPONENTS: Record<RelatedSection, ComponentType<SectionProps>> = {
   parents: ParentsSection,
@@ -48,5 +49,6 @@ export const SECTION_COMPONENTS: Record<RelatedSection, ComponentType<SectionPro
   urls: UrlsSection,
   tags: TagsSection,
   ldsOrdinances: LdsOrdinancesSection,
+  formatted: FormattedCitationSection,
   backlinks: BacklinksSection,
 };

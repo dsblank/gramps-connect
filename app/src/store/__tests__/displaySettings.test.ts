@@ -40,7 +40,15 @@ describe("normalizeDisplaySettings", () => {
       place: { auto: false, active: 1, formats: [FULL_PLACE_FORMAT, custom] },
       ids: DEFAULT_DISPLAY_SETTINGS.ids,
       living: { maxAge: 110 },
+      citation: { formatter: "legacy" },
     });
+  });
+
+  it("keeps a known citation formatter, else Legacy", () => {
+    expect(normalizeDisplaySettings({ citation: { formatter: "enhanced" } }).citation.formatter).toBe("enhanced");
+    for (const bad of ["cite-legacy", "csl", 1, null]) {
+      expect(normalizeDisplaySettings({ citation: { formatter: bad } }).citation.formatter).toBe("legacy");
+    }
   });
 
   it("keeps a whole-number living age limit from 1 to 200, else 110", () => {
