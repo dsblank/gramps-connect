@@ -8,6 +8,9 @@
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { formatDisplayDate } from "./placeIndex";
 import type { CitationFormatter } from "./displaySettings";
+import { API_BASE } from "../config";
+import { getToken } from "../auth/auth";
+import { apiFetch } from "./apiFetch";
 import { t } from "../i18n/i18n";
 
 export function citationFormatterLabel(formatter: CitationFormatter): string {
@@ -67,4 +70,62 @@ export function formatCitationText(citation: CitationFields | null | undefined):
     text += ` [${t(CONFIDENCE_LABELS[conf])}]`;
   }
   return text;
+}
+
+/** The SrcAttribute type a Citation's own pasted text is kept under --
+ * the formatted citation a website hands out (FamilySearch's "Cite this
+ * record", Ancestry, WikiTree Sourcer...). When a Citation has one, it is
+ * shown as-is instead of the formatter's text, the override Nick Hall
+ * suggested for Gramps' formatters (discourse "Citation formatter"). A
+ * plain custom attribute, so desktop Gramps keeps and shows it. */
+export const CITATION_TEXT_ATTRIBUTE = "Citation text";
+
+interface RawAttribute {
+  type?: unknown;
+  value?: unknown;
+}
+
+/** The Citation's pasted text, or "" when it has none. */
+export function pastedCitationText(attributeList: unknown): string {
+  if (!Array.isArray(attributeList)) return "";
+  const attr = (attributeList as RawAttribute[]).find((a) => a?.type === CITATION_TEXT_ATTRIBUTE);
+  return typeof attr?.value === "string" ? attr.value.trim() : "";
+}
+
+/** `attributeList` with the pasted text set to `text`: replaced in place
+ * if there is one, appended if not, removed when `text` is empty. */
+export function withPastedCitationText(attributeList: unknown, text: string): unknown[] {
+  const list = Array.isArray(attributeList) ? [...attributeList] : [];
+  const index = list.findIndex((a) => (a as RawAttribute)?.type === CITATION_TEXT_ATTRIBUTE);
+  const value = text.trim();
+  if (!value) return index < 0 ? list : list.filter((_, i) => i !== index);
+  if (index >= 0) list[index] = { ...(list[index] as object), value };
+  else list.push({ _class: "SrcAttribute", type: CITATION_TEXT_ATTRIBUTE, value, private: false });
+  return list;
+}
+
+/** What the Citation panel shows: the source line, then page/date/
+ * confidence -- the two lines of a Gramps report endnote -- with empty
+ * lines left out. */
+export function formattedCitationLines(
+  formatter: CitationFormatter,
+  citation: CitationFields | null,
+  source: SourceFields | null | undefined,
+  repository?: RepositoryFields | null,
+): string[] {
+  const lines = [formatSourceText(formatter, source, repository)];
+  if (citation) lines.push(formatCitationText(citation));
+  return lines.filter((line) => line !== "");
+}
+
+/** A repository's name, for Enhanced when only its handle is at hand. */
+export async function fetchRepositoryName(handle: string, signal?: AbortSignal): Promise<string | undefined> {
+  const token = await getToken();
+  const res = await apiFetch(`${API_BASE}/api/repositories/${encodeURIComponent(handle)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  });
+  if (!res.ok) return undefined;
+  const repo = (await res.json()) as { name?: string };
+  return repo.name ?? "";
 }

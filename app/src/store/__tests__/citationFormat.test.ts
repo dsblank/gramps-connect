@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { parseDate } from "@gramps-connect/gramps-date";
-import { formatCitationText, formatSourceText } from "../citationFormat";
+import { formatCitationText, formatSourceText, formattedCitationLines, pastedCitationText, withPastedCitationText } from "../citationFormat";
 import { formatDisplayDate } from "../placeIndex";
 
 // Expected strings follow gramps/plugins/cite/legacy.py and addons-source's
@@ -45,5 +45,32 @@ describe("formatCitationText", () => {
     expect(formatCitationText({ page: "p. 12", confidence: 4 })).toBe("p. 12 [Very High]");
     expect(formatCitationText({ page: "p. 12", confidence: 0 })).toBe("p. 12 [Very Low]");
     expect(formatCitationText({ page: "p. 12" })).toBe("p. 12");
+  });
+});
+
+describe("pasted citation text", () => {
+  const other = { _class: "SrcAttribute", type: "Note", value: "x", private: false };
+
+  it("reads the Citation text attribute, trimmed", () => {
+    expect(pastedCitationText([other, { type: "Citation text", value: "  Pasted.  " }])).toBe("Pasted.");
+    expect(pastedCitationText([other])).toBe("");
+    expect(pastedCitationText(undefined)).toBe("");
+  });
+
+  it("adds, replaces and removes it, leaving other attributes alone", () => {
+    const added = withPastedCitationText([other], "New");
+    expect(added).toEqual([other, { _class: "SrcAttribute", type: "Citation text", value: "New", private: false }]);
+    const replaced = withPastedCitationText(added, " Newer ");
+    expect(replaced).toEqual([other, { _class: "SrcAttribute", type: "Citation text", value: "Newer", private: false }]);
+    expect(withPastedCitationText(replaced, "  ")).toEqual([other]);
+    expect(withPastedCitationText([other], "")).toEqual([other]);
+  });
+});
+
+describe("formattedCitationLines", () => {
+  it("drops empty lines", () => {
+    expect(formattedCitationLines("legacy", { page: "p. 3", confidence: 2 }, { title: "T" })).toEqual(['"T"', "p. 3"]);
+    expect(formattedCitationLines("legacy", { confidence: 2 }, { title: "T" })).toEqual(['"T"']);
+    expect(formattedCitationLines("legacy", null, null)).toEqual([]);
   });
 });

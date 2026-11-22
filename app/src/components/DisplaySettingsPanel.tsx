@@ -29,6 +29,7 @@ import {
   saveDisplaySettings,
 } from "../store/displaySettings";
 import { citationFormatterLabel } from "../store/citationFormat";
+import { CitationFormatPreview } from "./CitationFormatPreview";
 import { t } from "../i18n/i18n";
 
 
@@ -322,6 +323,7 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
         onChange={(value) => value && update((d) => ({ ...d, citation: { formatter: value as CitationFormatter } }))}
         data={CITATION_FORMATTERS.map((f) => ({ value: f, label: citationFormatterLabel(f) }))}
       />
+      <CitationFormatPreview formatter={draft.citation.formatter} />
 
       <Title order={5}>{t("Living people")}</Title>
       <NumberInput
