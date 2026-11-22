@@ -1278,6 +1278,34 @@
       "expect": [
         "len"
       ]
+    },
+    {
+      "namespace": "Person",
+      "source": "attribute_list['Age'].",
+      "expect": [
+        "citation_list",
+        "note_list",
+        "private",
+        "type",
+        "value"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "attribute_list[\"Age\"].va",
+      "expect": [
+        "value"
+      ],
+      "start": 22
+    },
+    {
+      "namespace": "Citation",
+      "source": "source.attribute_list['Film'].",
+      "expect": [
+        "private",
+        "type",
+        "value"
+      ]
     }
   ]
 }

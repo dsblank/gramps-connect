@@ -95,13 +95,16 @@ export const GOQL_VOCABULARIES = (vocabularyData as unknown as { vocabularies: R
   .vocabularies;
 
 const NAME = "[A-Za-z_][A-Za-z0-9_]*";
-const SEGMENT = `${NAME}(?:\\[[0-9]+\\])*`;
+// One `[...]` after a name: a number (`[0]`), or a quoted type name
+// (`attribute_list['Age']`, the first entry of that type).
+const INDEX = `\\[(?:[0-9]+|'[^'\\\\]*'|"[^"\\\\]*")\\]`;
+const SEGMENT = `${NAME}(?:${INDEX})*`;
 const CHAIN = `${SEGMENT}(?:\\.${SEGMENT})*`;
 // The lookbehind keeps a chain from starting partway through a name,
 // number or `x[0]`/`f()` -- `1.5` or `f().x` don't complete.
 const AT_CURSOR_RE = new RegExp(`(?<![A-Za-z0-9_.\\])])(?:(${CHAIN})\\.)?(${NAME})?$`);
-const SEGMENT_RE = new RegExp(`(${NAME})((?:\\[[0-9]+\\])*)`, "g");
-const INDEX_RE = /\[([0-9]+)\]/g;
+const SEGMENT_RE = new RegExp(`(${NAME})((?:${INDEX})*)`, "g");
+const INDEX_RE = new RegExp(INDEX, "g");
 const BINDING_RE = new RegExp(`\\bfor\\s+(${NAME})\\s+in\\s+(${CHAIN})`, "g");
 const PARTIAL_OPERATOR_RE = /[=!<>]+$/;
 // The path a value is being written for: `path ==` (any comparison) or
