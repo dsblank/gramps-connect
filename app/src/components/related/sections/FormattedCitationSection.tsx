@@ -138,13 +138,13 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
     }
   }
 
-  // One line saying how the text above came about: fixed text, or auto
+  // One line saying how the text above came about: manual text, or auto
   // formatted, and with which format, chosen where.
   const chosenName = template?.name ?? citationFormatterLabel(formatter);
   const treeFormat = citationFormatterName(settings.citation);
   let status: string;
   if (pasted) {
-    status = t("Fixed text, shown exactly as entered.");
+    status = t("Written manually, shown exactly as entered.");
   } else if (unknown) {
     status = (citationAsks
       ? t('Set to "{name}" for this citation only, which this tree doesn\'t have, so it\'s auto formatted using the tree\'s format ({tree}).')
@@ -174,7 +174,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
               label={t("Type or paste the citation's text yourself, e.g. a website's own citation. It's shown exactly as entered, instead of being formatted automatically, and won't change when the source, the citation or the format does.")}
             >
               <Button size="compact-xs" variant="subtle" onClick={() => setEditing(true)}>
-                {pasted ? t("Edit fixed text") : t("Use fixed text")}
+                {pasted ? t("Edit manual text") : t("Write manually")}
               </Button>
             </Tooltip>
           )}
@@ -185,7 +185,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
               openDelay={400}
               label={
                 pasted
-                  ? t("This citation shows fixed text. Remove the fixed text to format it automatically.")
+                  ? t("This citation is written manually. Remove the manual text to format it automatically.")
                   : t("Choose the format used to write this source's citations, or this one citation, from their fields.")
               }
             >
@@ -270,7 +270,7 @@ function PastedTextDialog({ initial, generated, onClose, onSave }: {
   }
 
   return (
-    <Modal opened onClose={onClose} title={t("Fixed citation text")} size="lg">
+    <Modal opened onClose={onClose} title={t("Manual citation text")} size="lg">
       <Stack gap="sm">
         <Text size="sm">
           {t('Type the citation, or paste the one a website gives you (FamilySearch\'s "Cite this record", Ancestry\'s source citation). It\'s shown and copied exactly as entered, instead of being formatted automatically: it won\'t change when the source or citation is edited, or when a different format is chosen.')}
@@ -291,7 +291,7 @@ function PastedTextDialog({ initial, generated, onClose, onSave }: {
         <Group justify="space-between">
           {initial ? (
             <Button variant="subtle" color="red" disabled={saving} onClick={() => save("")}>
-              {t("Remove fixed text and format automatically")}
+              {t("Remove manual text and format automatically")}
             </Button>
           ) : (
             <span />
