@@ -45,7 +45,7 @@ const SIDEBAR_PAGE = "_Sidebar";
 
 export function DocumentationDialog({ opened, onClose, initialPage, initialAnchor }: DocumentationDialogProps) {
   const { lang } = useSyncExternalStore(subscribeI18n, getI18nSnapshot);
-  const [page, setPage] = useState(HOME_PAGE);
+  const [page, setPage] = useState(initialPage ?? HOME_PAGE);
   // Language the reader picked from a page's "available in" banner (or
   // reached through a link naming one), overriding the app's own language
   // until the dialog reopens or the app language changes. null = follow it.
@@ -120,17 +120,25 @@ export function DocumentationDialog({ opened, onClose, initialPage, initialAncho
 
   useEffect(() => {
     if (!opened) return;
+    // A reply for a page the dialog has since left (opening at
+    // initialPage right after Home, a quick second link) is dropped, so
+    // it can't land on top of the page now shown.
+    let current = true;
     setLoading(true);
     setError(null);
     fetchWikiPage(page, viewLang)
       .then((p) => {
+        if (!current) return;
         setContent(p.markdown);
         setContentKey(`${page}|${viewLang}`);
         setContentLang(p.lang);
       })
-      .catch((err) => setError(err.message ?? String(err)))
-      .finally(() => setLoading(false));
+      .catch((err) => current && setError(err.message ?? String(err)))
+      .finally(() => current && setLoading(false));
     contentRef.current?.scrollTo({ top: 0 });
+    return () => {
+      current = false;
+    };
   }, [opened, page, viewLang]);
 
   function navigateTo(target: string, anchor: string | null, linkLang: string | null) {
