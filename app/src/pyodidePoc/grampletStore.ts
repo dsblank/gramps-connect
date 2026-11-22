@@ -58,7 +58,10 @@ export function hashCode(text: string): string {
 export async function fetchCatalog(catalogUrl: string = DEFAULT_CATALOG_URL): Promise<CatalogEntry[]> {
   let res: Response;
   try {
-    res = await fetch(catalogUrl);
+    // no-cache: revalidate with the host every time (a cheap 304 when
+    // unchanged) instead of reusing a copy for GitHub Pages' max-age=600,
+    // so a just-published update shows up when the Store is reopened.
+    res = await fetch(catalogUrl, { cache: "no-cache" });
   } catch (err) {
     throw new Error(`Couldn't reach the Gramplet Store: ${err instanceof Error ? err.message : String(err)}`);
   }
