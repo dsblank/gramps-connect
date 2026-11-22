@@ -172,6 +172,10 @@ function GrampletStoreCheckToggle() {
 interface PreferencesDialogProps {
   opened: boolean;
   onClose: () => void;
+  /** The tab it opens on (General by default). */
+  initialTab?: "general" | "tree";
+  /** A Family tree section to scroll to, e.g. "citations". */
+  section?: string;
 }
 
 /** Edit > Preferences' counterpart, first in UserMenu.tsx for every user.
@@ -183,10 +187,14 @@ interface PreferencesDialogProps {
  *   /api/trees/-/config. Everyone can read them (they shape everything the
  *   app shows); only EditTree (Owner/Admin) can change them -- the panel
  *   goes read-only otherwise. */
-export function PreferencesDialog({ opened, onClose }: PreferencesDialogProps) {
+export function PreferencesDialog({ opened, onClose, initialTab, section }: PreferencesDialogProps) {
+  const [tab, setTab] = useState<string | null>(initialTab ?? "general");
+  useEffect(() => {
+    if (opened) setTab(initialTab ?? "general");
+  }, [opened, initialTab]);
   return (
     <Modal opened={opened} onClose={onClose} title={t("Preferences")} size="60rem">
-      <Tabs defaultValue="general" keepMounted={false}>
+      <Tabs value={tab} onChange={setTab} keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="general">{t("General")}</Tabs.Tab>
           <Tabs.Tab value="tree">{t("Family tree")}</Tabs.Tab>
@@ -204,7 +212,7 @@ export function PreferencesDialog({ opened, onClose }: PreferencesDialogProps) {
           </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="tree" pt="sm">
-          <DisplaySettingsPanel active={opened} />
+          <DisplaySettingsPanel active={opened} scrollTo={section} />
         </Tabs.Panel>
       </Tabs>
     </Modal>

@@ -53,7 +53,7 @@ const STREET_OPTIONS = [
  * them, which PUT /api/trees/-/config requires; everyone else sees the
  * same controls read-only. Edits are local until Save, which
  * writes all three sections in one PUT (see displaySettings.ts). */
-export function DisplaySettingsPanel({ active }: { active: boolean }) {
+export function DisplaySettingsPanel({ active, scrollTo }: { active: boolean; scrollTo?: string }) {
   const [saved, setSaved] = useState<DisplaySettings | null>(null);
   const [draft, setDraft] = useState<DisplaySettings | null>(null);
   const [customNameFormats, setCustomNameFormats] = useState<CustomNameFormat[]>([]);
@@ -78,6 +78,14 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
       .then(setCustomNameFormats)
       .catch(() => setCustomNameFormats([]));
   }, [active]);
+
+  // Opened to show one section (preferencesOpener.ts): once the settings
+  // have loaded and the section exists, bring it into view.
+  const loaded = draft !== null;
+  useEffect(() => {
+    if (!active || !scrollTo || !loaded) return;
+    document.getElementById(`preferences-${scrollTo}`)?.scrollIntoView({ block: "start" });
+  }, [active, scrollTo, loaded]);
 
   const nameOptions = useMemo(
     () => [
@@ -306,7 +314,7 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
         </Group>
       )}
 
-      <Title order={5}>{t("Citations")}</Title>
+      <Title order={5} id="preferences-citations">{t("Citations")}</Title>
       <CitationTemplateSettings
         citation={draft.citation}
         canEdit={canEdit}

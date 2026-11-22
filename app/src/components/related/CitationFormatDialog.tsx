@@ -3,7 +3,9 @@
 // is seeing. Nothing changes until Apply, which sets (or, for the
 // default, removes) one "Citation template" attribute.
 import { useEffect, useState } from "react";
-import { Button, Group, Loader, Modal, SegmentedControl, Stack, Text, UnstyledButton } from "@mantine/core";
+import { Anchor, Button, Group, Loader, Modal, SegmentedControl, Stack, Text, UnstyledButton } from "@mantine/core";
+import { hasPermissions } from "../../auth/auth";
+import { openPreferences } from "../../store/preferencesOpener";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import {
   CITATION_FORMATTERS,
@@ -186,6 +188,26 @@ export function CitationFormatDialog({
             );
           })}
         </Stack>
+        <Text size="xs" c="dimmed">
+          {hasPermissions("EditTree") ? (
+            <>
+              {t("Need another format?")}{" "}
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                onClick={() => {
+                  onCancel();
+                  openPreferences({ tab: "tree", section: "citations" });
+                }}
+              >
+                {t("Make one in Preferences")}
+              </Anchor>
+            </>
+          ) : (
+            t("A tree owner can add more formats in Preferences.")
+          )}
+        </Text>
         <Group justify="flex-end">
           <Button variant="default" onClick={onCancel} disabled={applying}>
             {t("Cancel")}

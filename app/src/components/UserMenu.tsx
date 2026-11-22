@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Avatar, Menu } from "@mantine/core";
 import { getApiKey, getCurrentUsername, hasPermissions, logout } from "../auth/auth";
 import { openHandoffWindow } from "../auth/windowHandoff";
@@ -7,6 +7,7 @@ import { ApiKeysDialog } from "./ApiKeysDialog";
 import { AdministrationDialog } from "./AdministrationDialog";
 import { OwnerAdministrationDialog } from "./OwnerAdministrationDialog";
 import { PreferencesDialog } from "./PreferencesDialog";
+import { subscribePreferencesRequests, type PreferencesTarget } from "../store/preferencesOpener";
 import { t } from "../i18n/i18n";
 import { displayName, getUserDirectoryVersion, subscribeUserDirectory } from "../store/userDirectory";
 import { colorForUsername, initialsFor } from "../store/userAvatar";
@@ -26,6 +27,17 @@ export function UserMenu() {
   // inside the dialog needs a session refresh token instead.
   const showApiKeys = hasPermissions("EditOwnUser") || getApiKey() !== null;
   const [preferencesOpened, setPreferencesOpened] = useState(false);
+  // Where Preferences opens when another part of the app asks for it
+  // (preferencesOpener.ts); the menu item opens it at the start.
+  const [preferencesTarget, setPreferencesTarget] = useState<PreferencesTarget | null>(null);
+  useEffect(
+    () =>
+      subscribePreferencesRequests((target) => {
+        setPreferencesTarget(target);
+        setPreferencesOpened(true);
+      }),
+    [],
+  );
   const [profileOpened, setProfileOpened] = useState(false);
   const [apiKeysOpened, setApiKeysOpened] = useState(false);
   const [adminOpened, setAdminOpened] = useState(false);
@@ -53,7 +65,14 @@ export function UserMenu() {
         </Menu.Target>
         <Menu.Dropdown>
           {username && <Menu.Label>{username}</Menu.Label>}
-          <Menu.Item onClick={() => setPreferencesOpened(true)}>{t("Preferences")}</Menu.Item>
+          <Menu.Item
+            onClick={() => {
+              setPreferencesTarget(null);
+              setPreferencesOpened(true);
+            }}
+          >
+            {t("Preferences")}
+          </Menu.Item>
           <Menu.Divider />
           {hasPermissions("EditOwnUser") && (
             <Menu.Item onClick={() => setProfileOpened(true)}>{t("Profile")}</Menu.Item>
@@ -66,7 +85,12 @@ export function UserMenu() {
           <Menu.Item onClick={logout}>{t("Sign out")}</Menu.Item>
         </Menu.Dropdown>
       </Menu>
-      <PreferencesDialog opened={preferencesOpened} onClose={() => setPreferencesOpened(false)} />
+      <PreferencesDialog
+        opened={preferencesOpened}
+        onClose={() => setPreferencesOpened(false)}
+        initialTab={preferencesTarget?.tab}
+        section={preferencesTarget?.section}
+      />
       <ProfileDialog opened={profileOpened} onClose={() => setProfileOpened(false)} />
       <ApiKeysDialog opened={apiKeysOpened} onClose={() => setApiKeysOpened(false)} />
       {isSiteAdmin ? (
