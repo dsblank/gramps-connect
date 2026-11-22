@@ -240,6 +240,47 @@ runs in multi-tree mode like every deployment. Still open:
   event's participants, because GOQL can't ask "an event whose person has
   no death"; with this it could run on the server.
 
+## Citations
+
+- **WikiTree Sourcer import** — turn a citation captured with WikiTree
+  Sourcer (64 site modules; its `CitationBuilder.getCitationObject()`
+  returns the parts as well as the text) into Gramps records, using the
+  attribute names the starter templates read (Citations wiki page, "Where
+  each part goes"): sourceTitle → Source title (match an existing one by
+  title), website → Repository, sourceReference → Citation Volume/Page,
+  record link → URL, run date → Accessed, the record's summary → Item, the
+  data string → a Note, and the Source set to the "Online record" starter.
+  Suggest, then review: an editor accepts it as one transaction (the
+  createObjects batch pattern), so History can undo it. How Sourcer's
+  output reaches the app (paste, or a browser hand-off) belongs to the
+  wider Sourcer bridge. To check first: whether Sourcer gives the
+  "original" and a short "item" on every site or only some.
+- **Suggest, then review for citation wording** — Write manually and Auto
+  format need EditObject, so Contributors and family members can't offer
+  a website's citation or a better format. They should be able to
+  propose either for an editor to accept, edit or reject.
+- **Starter templates in other languages** — the five starters
+  (`STARTER_TEMPLATES`, citationTemplateSyntax.ts) are English text,
+  including words like "accessed", "citing", "microfilm",
+  "photographed", unlike Legacy/Enhanced, which use Gramps' translated
+  separators. A per-language set, or translatable words inside templates.
+- **Starter rough edges** — Online record with no Medium and no repository
+  ends `"Title,"` (the comma sits inside the quotes and can't depend on
+  what follows); Newspaper with a headline but no date gives `"Local
+  News," , p. 3`. Both need a way for a separator to depend on the next
+  part, not just the previous one.
+- **Make a template from the Auto format dialog** — "Make one in
+  Preferences" opens Preferences at Citations. For Owners it could open
+  the template editor directly, starting from the selected card's format
+  and previewing the record the dialog was opened on (still saved with
+  Preferences).
+- **Translated wiki sidebars** — the new Citations page isn't in the
+  `_Nav.*.md` sidebars yet (`scripts/sync-wiki-translations.py report`
+  lists them as stale).
+- **Gramps GOQL addon: attribute_list['X']** — GOQL 0.5.18's shorthand and
+  its Tab completion (quoted index) need porting to the addon, alongside
+  its open completion PR (addons-source #1073).
+
 ## Feature ideas / backlog
 
 Roughly by value, most first:
