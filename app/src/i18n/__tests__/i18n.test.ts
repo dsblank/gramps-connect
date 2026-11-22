@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import bootstrappedLocales from "../../../public/lang/index.json";
-import { browserLangToLocale, setLanguage, t } from "../i18n";
+import { addDesktopTranslations, browserLangToLocale, setLanguage, t } from "../i18n";
 import { STORAGE_KEYS } from "../../store/storageKeys";
 
 // setLanguage() also asks gramps-web-api for the desktop vocabulary; these
@@ -76,5 +76,22 @@ describe("t", () => {
     await setLanguage("de");
     expect(t("Save")).toBe("Save");
     expect(t("Cancel")).toBe("Abbrechen");
+  });
+});
+
+describe("t() and underscores", () => {
+  it("strips the GTK mnemonic underscore from desktop-vocabulary strings", () => {
+    expect(t("_Preformatted")).toBe("Preformatted");
+  });
+
+  it("keeps underscores in the app's own text", () => {
+    expect(t("`attribute_list['Film'].value`")).toBe("`attribute_list['Film'].value`");
+    expect(t("Couldn't read place_formats.xml")).toBe("Couldn't read place_formats.xml");
+    expect(t("% for anything and _ for a single character")).toBe("% for anything and _ for a single character");
+  });
+
+  it("strips it from desktop strings added later, too", async () => {
+    await addDesktopTranslations(["_Some Report"]);
+    expect(t("_Some Report")).toBe("Some Report");
   });
 });

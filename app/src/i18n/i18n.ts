@@ -217,6 +217,7 @@ export async function setLanguage(newLang: string): Promise<void> {
  * current language changes -- previously-merged translations were for
  * whatever language was active at the time. */
 export async function addDesktopTranslations(strings: string[]): Promise<void> {
+  for (const s of strings) mnemonicStrings.add(s);
   const lang = snapshot.lang;
   if (lang === "en" || strings.length === 0) return;
   const extra = await fetchTranslations(strings, lang);
@@ -227,12 +228,21 @@ export async function addDesktopTranslations(strings: string[]): Promise<void> {
   emit();
 }
 
-/** Mirrors gramps-web's _(s) (GrampsJs.js:1368) exactly, including stripping
- * the desktop corpus's GTK mnemonic-accelerator underscore (e.g. "_Zurück")
- * -- translations sourced from the same gettext catalog carry the same
- * syntax, and gramps-connect has no keyboard-accelerator use for it. */
+/** Strings from the Gramps desktop vocabulary (desktopStrings, plus any
+ * added later through addDesktopTranslations) -- the only ones that can
+ * carry a GTK mnemonic underscore ("_Preformatted", "_Zurück"). */
+const mnemonicStrings = new Set<string>(desktopStrings);
+
+/** Like gramps-web's _(s) (GrampsJs.js:1368), including stripping the
+ * desktop corpus's GTK mnemonic-accelerator underscore (e.g. "_Zurück") --
+ * translations sourced from the same gettext catalog carry the same
+ * syntax, and gramps-connect has no keyboard-accelerator use for it. Only
+ * for desktop-vocabulary strings, though: the app's own text uses
+ * underscores for real (`attribute_list`, place_formats.xml, GOQL's "_
+ * for a single character"), and stripping its first one garbled those. */
 export function t(s: string): string {
   // `||`, not `??`: an untranslated entry exported as "" falls back to the
   // English instead of rendering as blank text.
-  return (snapshot.strings[s] || s).replace("_", "");
+  const out = snapshot.strings[s] || s;
+  return mnemonicStrings.has(s) ? out.replace("_", "") : out;
 }
