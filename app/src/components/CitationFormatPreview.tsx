@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Stack, Text } from "@mantine/core";
+import { Loader, Stack, Text } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
@@ -7,12 +7,17 @@ import { apiFetch } from "../store/apiFetch";
 import type { CitationFormatter } from "../store/displaySettings";
 import { useDisplayFormatVersion } from "../store/placeIndex";
 import { fetchRepositoryName, formattedCitationLines, type SourceFields } from "../store/citationFormat";
+import { renderTemplateFor, type CitationTemplate } from "../store/citationTemplate";
+import { CITATION_VIEW, SOURCE_VIEW } from "../store/views";
 import { t } from "../i18n/i18n";
 
 const SAMPLE_COUNT = 3;
 /** Citations looked through for samples -- enough that some usually have
  * a repository, so switching to Enhanced visibly changes something. */
 const CANDIDATE_COUNT = 20;
+/** Quiet time after typing in a template before the preview asks the
+ * server again. */
+const TEMPLATE_DEBOUNCE_MS = 400;
 
 interface Sample {
   handle: string;
@@ -24,14 +29,29 @@ interface Sample {
   repoName?: string;
 }
 
-/** A few of the tree's own citations written out with `formatter`, under
- * Preferences' Citation formatter choice, so switching shows the
- * difference at once. Generated text only: a citation's pasted text isn't
- * affected by the formatter. Fetched once per mount -- the repositories
- * too, though only Enhanced shows them, so switching costs no requests. */
-export function CitationFormatPreview({ formatter }: { formatter: CitationFormatter }) {
+/** A few of the tree's own citations written out with a built-in
+ * `formatter`, or with `template` when given (a tree template, possibly
+ * still being edited), so a change shows at once. Generated text only: a
+ * citation's pasted text isn't affected by the formatter. The samples are
+ * fetched once per mount, repositories too, so switching built-ins costs no
+ * requests; a template costs one request per line (all samples batched),
+ * after typing pauses. */
+export function CitationFormatPreview({
+  formatter,
+  template,
+  onError,
+}: {
+  formatter: CitationFormatter;
+  template?: CitationTemplate | null;
+  /** Told the server's error for `template` (null once it renders). */
+  onError?: (error: string | null) => void;
+}) {
   useDisplayFormatVersion();
   const [samples, setSamples] = useState<Sample[] | null>(null);
+  const [templated, setTemplated] = useState<{ lines: Map<string, string[]> | null; error: string | null }>({
+    lines: null,
+    error: null,
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,8 +82,60 @@ export function CitationFormatPreview({ formatter }: { formatter: CitationFormat
     return () => controller.abort();
   }, []);
 
+  const templateSource = template?.source ?? null;
+  const templateCitation = template?.citation ?? null;
+  useEffect(() => {
+    if (templateSource === null || templateCitation === null || !samples) return;
+    setTemplated((s) => ({ ...s, error: null }));
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const sourceHandles = [...new Set(samples.map((s) => s.source?.handle).filter((h): h is string => !!h))];
+      Promise.all([
+        templateSource.trim()
+          ? renderTemplateFor(SOURCE_VIEW.endpoint, templateSource, sourceHandles, controller.signal)
+          : Promise.resolve(new Map<string, string>()),
+        templateCitation.trim()
+          ? renderTemplateFor(CITATION_VIEW.endpoint, templateCitation, samples.map((s) => s.handle), controller.signal)
+          : Promise.resolve(new Map<string, string>()),
+      ])
+        .then(([sourceLines, citationLines]) =>
+          setTemplated({
+            lines: new Map(
+              samples.map((s) => [
+                s.handle,
+                [sourceLines.get(s.source?.handle ?? "") ?? "", citationLines.get(s.handle) ?? ""].filter(Boolean),
+              ]),
+            ),
+            error: null,
+          }),
+        )
+        .catch((e) => {
+          if (!controller.signal.aborted) setTemplated({ lines: null, error: e instanceof Error ? e.message : String(e) });
+        });
+    }, TEMPLATE_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [templateSource, templateCitation, samples]);
+
+  const templateError = template ? templated.error : null;
+  useEffect(() => {
+    onError?.(templateError);
+  }, [templateError, onError]);
+
+  if (template && templated.error) {
+    return (
+      <Text size="xs" c="red" style={{ whiteSpace: "pre-wrap" }}>
+        {templated.error}
+      </Text>
+    );
+  }
+  if (template && !templated.lines && samples?.length) return <Loader size="xs" />;
+
   const shown = (samples ?? [])
     .map((s) => {
+      if (template) return { handle: s.handle, lines: templated.lines?.get(s.handle) ?? [] };
       const ref = s.source?.reporef_list?.[0];
       const repository = ref && s.repoName !== undefined ? { name: s.repoName, callNumber: ref.call_number } : null;
       return { handle: s.handle, lines: formattedCitationLines(formatter, s, s.source?.handle ? s.source : null, repository) };

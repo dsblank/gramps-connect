@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, CopyButton, Group, Modal, Stack, Text, Textarea } from "@mantine/core";
+import { Alert, Button, CopyButton, Group, Loader, Modal, Stack, Text, Textarea } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken, hasPermissions } from "../../../auth/auth";
-import { useDisplaySettings } from "../../../store/displaySettings";
+import { activeCitationTemplate, isBuiltinFormatter, useDisplaySettings } from "../../../store/displaySettings";
+import { useCitationTemplateLines } from "../useCitationTemplateLines";
 import { useDisplayFormatVersion } from "../../../store/placeIndex";
 import { zipRefs } from "../../../store/objectDetail";
 import { fetchPlainObject, updateObject } from "../../../store/objectsApi";
@@ -24,14 +25,19 @@ interface RawSource extends SourceFields {
 }
 
 /** The record written out as a citation, in the tree's chosen formatter
- * (Preferences > Citations, store/citationFormat.ts): on a Citation, the
+ * (Preferences > Citations): a built-in (store/citationFormat.ts, from the
+ * detail already loaded) or one of the tree's templates
+ * (store/citationTemplate.ts, rendered by the server, so it loads after
+ * the rest of the panel). On a Citation, the
  * source line then the page/date/confidence line, as Gramps' report
  * endnotes print them; on a Source, just the source line. A Citation's own
  * pasted text (its "Citation text" attribute) replaces the generated
  * lines; editors set or clear it here. Copy puts what's shown on the
  * clipboard. */
 export function FormattedCitationSection({ type, view, detail, onRefetch }: SectionProps) {
-  const { citation: { formatter } } = useDisplaySettings();
+  const settings = useDisplaySettings();
+  const formatter = isBuiltinFormatter(settings.citation.formatter) ? settings.citation.formatter : "legacy";
+  const template = activeCitationTemplate(settings);
   useDisplayFormatVersion(); // dates follow the tree's date format
   const [editing, setEditing] = useState(false);
 
@@ -46,7 +52,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
   const extendedRepo =
     type === "source" ? (zipRefs(detail.reporef_list, detail.extended?.repositories)[0]?.target as { name?: string } | undefined) : undefined;
   const [fetchedRepo, setFetchedRepo] = useState<{ handle: string; name: string } | null>(null);
-  const fetchHandle = formatter === "enhanced" && type === "citation" && !pasted ? firstRef?.ref : undefined;
+  const fetchHandle = !template && formatter === "enhanced" && type === "citation" && !pasted ? firstRef?.ref : undefined;
   useEffect(() => {
     if (!fetchHandle || fetchedRepo?.handle === fetchHandle) return;
     const controller = new AbortController();
@@ -70,10 +76,21 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
           confidence: detail.confidence as number | undefined,
         }
       : null;
-  const generated = source?.handle ? formattedCitationLines(formatter, citationFields, source, repository) : [];
+  const templated = useCitationTemplateLines(
+    pasted ? null : template,
+    source?.handle,
+    type === "citation" ? detail.handle : undefined,
+    `${detail.change}:${(source as { change?: unknown } | undefined)?.change}`,
+  );
+  const generated = template
+    ? templated.lines ?? []
+    : source?.handle
+      ? formattedCitationLines(formatter, citationFields, source, repository)
+      : [];
   const shown = pasted ? [pasted] : generated;
+  const loading = !pasted && !!template && templated.lines === null && !templated.error;
   const canEdit = type === "citation" && hasPermissions("EditObject");
-  if (shown.length === 0 && !canEdit) return null;
+  if (shown.length === 0 && !canEdit && !loading && !templated.error) return null;
 
   return (
     <SectionShell
@@ -105,6 +122,12 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
             </Text>
           ))}
         </Stack>
+      )}
+      {loading && <Loader size="xs" />}
+      {!pasted && templated.error && (
+        <Text size="xs" c="red">
+          {`${t("This tree's citation template didn't work here:")} ${templated.error}`}
+        </Text>
       )}
       {pasted && (
         <Text size="xs" c="dimmed">

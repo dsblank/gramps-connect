@@ -17,6 +17,14 @@ export function citationFormatterLabel(formatter: CitationFormatter): string {
   return formatter === "enhanced" ? t("Enhanced") : t("Legacy");
 }
 
+/** The name of the formatter `citation` settings choose: a built-in's
+ * label, or the tree template's own name. */
+export function citationFormatterName(citation: { formatter: string; templates: { id: string; name: string }[] }): string {
+  const { formatter, templates } = citation;
+  if (formatter === "legacy" || formatter === "enhanced") return citationFormatterLabel(formatter);
+  return templates.find((tpl) => tpl.id === formatter)?.name ?? citationFormatterLabel("legacy");
+}
+
 export interface SourceFields {
   author?: string;
   title?: string;

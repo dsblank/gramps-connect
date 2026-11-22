@@ -22,6 +22,7 @@ import { API_BASE } from "../config";
 import { getToken } from "../auth/auth";
 import { parseErrorMessage } from "./api";
 import { apiFetch } from "./apiFetch";
+import { parseTemplate } from "./citationTemplateSyntax";
 
 /** One entry of Gramps' place_formats.xml (gen/display/place.py's
  * PlaceFormat). `levels` is desktop's slice syntax ("1:", ":-1", "p" offsets
@@ -79,14 +80,54 @@ export interface DisplaySettings {
     maxAge: number;
   };
   /** Desktop's preferences.citation-formatter equivalent: how the
-   * Citation and Source panels write a citation out (citationFormat.ts). */
-  citation: { formatter: CitationFormatter };
+   * Citation and Source panels write a citation out. `formatter` is a
+   * built-in (citationFormat.ts) or the id of one of `templates`
+   * (citationTemplate.ts). */
+  citation: { formatter: string; templates: TreeCitationTemplate[] };
 }
 
 /** Which of Gramps' citation formatters to imitate (citationFormat.ts):
  * "legacy" is the one Gramps ships, "enhanced" the CiteEnhanced addon. */
 export type CitationFormatter = "legacy" | "enhanced";
 export const CITATION_FORMATTERS: CitationFormatter[] = ["legacy", "enhanced"];
+
+export function isBuiltinFormatter(formatter: string): formatter is CitationFormatter {
+  return (CITATION_FORMATTERS as string[]).includes(formatter);
+}
+
+/** A tree's own citation template (citationTemplateSyntax.ts): a source
+ * line written against the Source, a citation line against the Citation. */
+export interface TreeCitationTemplate {
+  id: string;
+  name: string;
+  source: string;
+  citation: string;
+}
+
+/** The template `settings` format citations with, or null for a built-in. */
+export function activeCitationTemplate(settings: DisplaySettings): TreeCitationTemplate | null {
+  const { formatter, templates } = settings.citation;
+  return isBuiltinFormatter(formatter) ? null : templates.find((tpl) => tpl.id === formatter) ?? null;
+}
+
+function parses(template: string): boolean {
+  try {
+    parseTemplate(template);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeCitationTemplate(raw: unknown): TreeCitationTemplate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const { id, name, source, citation } = r;
+  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(id) || isBuiltinFormatter(id)) return null;
+  if (typeof name !== "string" || !name.trim()) return null;
+  if (typeof source !== "string" || typeof citation !== "string" || !parses(source) || !parses(citation)) return null;
+  return { id, name: name.trim(), source, citation };
+}
 
 /** Gramps' own default for behavior.max-age-prob-alive. */
 export const DEFAULT_MAX_AGE_PROB_ALIVE = 110;
@@ -114,7 +155,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   place: { auto: true, active: 0, formats: [FULL_PLACE_FORMAT] },
   ids: Object.fromEntries(ID_TYPES.map((type) => [type, ""])) as Record<IdType, string>,
   living: { maxAge: DEFAULT_MAX_AGE_PROB_ALIVE },
-  citation: { formatter: "legacy" },
+  citation: { formatter: "legacy", templates: [] },
 };
 
 /** Desktop's own defaults (gen/config.py's preferences.*prefix). */
@@ -221,8 +262,18 @@ export function normalizeDisplaySettings(raw: unknown): DisplaySettings {
 
   const living = { maxAge: isValidMaxAge(r.living?.maxAge) ? r.living.maxAge : d.living.maxAge };
 
+  const seenIds = new Set<string>();
+  const templates = (Array.isArray(r.citation?.templates) ? (r.citation.templates as unknown[]) : [])
+    .map(normalizeCitationTemplate)
+    .filter((tpl): tpl is TreeCitationTemplate => !!tpl && !seenIds.has(tpl.id) && !!seenIds.add(tpl.id));
   const formatter = r.citation?.formatter;
-  const citation = { formatter: CITATION_FORMATTERS.includes(formatter) ? (formatter as CitationFormatter) : d.citation.formatter };
+  const citation = {
+    formatter:
+      typeof formatter === "string" && (isBuiltinFormatter(formatter) || templates.some((tpl) => tpl.id === formatter))
+        ? formatter
+        : d.citation.formatter,
+    templates,
+  };
 
   return { version: 1, date, name, place, ids, living, citation };
 }

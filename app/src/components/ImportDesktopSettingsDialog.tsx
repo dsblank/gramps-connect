@@ -16,7 +16,7 @@ import {
 import { BUILTIN_NAME_FORMATS, type CustomNameFormat, type DisplaySettings, type PlaceFormatDef } from "../store/displaySettings";
 import { formatPlaceWith, samplePlaceHandle } from "../store/placeIndex";
 import { describeDateFormat } from "./displayFormatLabels";
-import { citationFormatterLabel } from "../store/citationFormat";
+import { citationFormatterName } from "../store/citationFormat";
 import { getI18nSnapshot, t } from "../i18n/i18n";
 
 interface ImportDesktopSettingsDialogProps {
@@ -156,7 +156,7 @@ export function ImportDesktopSettingsDialog({ opened, onClose, current, customNa
       case "livingAge":
         return String(s.living.maxAge);
       case "citation":
-        return citationFormatterLabel(s.citation.formatter);
+        return citationFormatterName(s.citation);
       case "placeActive": {
         const fmt = s.place.formats[s.place.active];
         const example = fmt && sampleHandle ? formatPlaceWith(sampleHandle, fmt) : null;

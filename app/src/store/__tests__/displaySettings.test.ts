@@ -40,8 +40,27 @@ describe("normalizeDisplaySettings", () => {
       place: { auto: false, active: 1, formats: [FULL_PLACE_FORMAT, custom] },
       ids: DEFAULT_DISPLAY_SETTINGS.ids,
       living: { maxAge: 110 },
-      citation: { formatter: "legacy" },
+      citation: { formatter: "legacy", templates: [] },
     });
+  });
+
+  it("keeps the tree's citation templates that parse, and a formatter naming one", () => {
+    const good = { id: "tpl-a", name: " Mine ", source: "`title`", citation: "[`page`]" };
+    const settings = normalizeDisplaySettings({
+      citation: {
+        formatter: "tpl-a",
+        templates: [
+          good,
+          { ...good }, // duplicate id
+          { id: "tpl-b", name: "Broken", source: "[`title`", citation: "" },
+          { id: "legacy", name: "Shadow", source: "", citation: "" },
+          { id: "tpl-c", name: "", source: "", citation: "" },
+          "junk",
+        ],
+      },
+    });
+    expect(settings.citation).toEqual({ formatter: "tpl-a", templates: [{ ...good, name: "Mine" }] });
+    expect(normalizeDisplaySettings({ citation: { formatter: "tpl-b", templates: [good] } }).citation.formatter).toBe("legacy");
   });
 
   it("keeps a known citation formatter, else Legacy", () => {

@@ -363,7 +363,7 @@ export function buildImportItems(input: ImportInput): ImportItem[] {
       usable: !!formatter,
       reason: formatter ? undefined : "Not a formatter Gramps Connect has",
       isDefault: citeValue.isDefault,
-      apply: (s) => (formatter ? { ...s, citation: { formatter } } : s),
+      apply: (s) => (formatter ? { ...s, citation: { ...s.citation, formatter } } : s),
     });
   }
 

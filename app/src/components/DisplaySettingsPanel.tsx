@@ -18,8 +18,6 @@ import {
   isValidIdTemplate,
   DEFAULT_MAX_AGE_PROB_ALIVE,
   isValidMaxAge,
-  CITATION_FORMATTERS,
-  type CitationFormatter,
   type IdType,
   type DisplaySettings,
   type CustomNameFormat,
@@ -28,8 +26,7 @@ import {
   loadDisplaySettings,
   saveDisplaySettings,
 } from "../store/displaySettings";
-import { citationFormatterLabel } from "../store/citationFormat";
-import { CitationFormatPreview } from "./CitationFormatPreview";
+import { CitationTemplateSettings } from "./CitationTemplateSettings";
 import { t } from "../i18n/i18n";
 
 
@@ -310,20 +307,11 @@ export function DisplaySettingsPanel({ active }: { active: boolean }) {
       )}
 
       <Title order={5}>{t("Citations")}</Title>
-      <Select
-        label={t("Citation formatter")}
-        description={
-          draft.citation.formatter === "enhanced"
-            ? t("As Legacy, but starting with the source's first repository and its call number. Shown on each citation and source.")
-            : t("Gramps' own format: author, title, publication info and abbreviation, then page, date and confidence. Shown on each citation and source.")
-        }
-        disabled={!canEdit}
-        allowDeselect={false}
-        value={draft.citation.formatter}
-        onChange={(value) => value && update((d) => ({ ...d, citation: { formatter: value as CitationFormatter } }))}
-        data={CITATION_FORMATTERS.map((f) => ({ value: f, label: citationFormatterLabel(f) }))}
+      <CitationTemplateSettings
+        citation={draft.citation}
+        canEdit={canEdit}
+        onChange={(citation) => update((d) => ({ ...d, citation }))}
       />
-      <CitationFormatPreview formatter={draft.citation.formatter} />
 
       <Title order={5}>{t("Living people")}</Title>
       <NumberInput
