@@ -110,6 +110,36 @@ export function activeCitationTemplate(settings: DisplaySettings): TreeCitationT
   return isBuiltinFormatter(formatter) ? null : templates.find((tpl) => tpl.id === formatter) ?? null;
 }
 
+/** How one citation is formatted: a built-in, or a tree template. */
+export type CitationFormatChoice =
+  | { formatter: CitationFormatter; template: null }
+  | { formatter: null; template: TreeCitationTemplate };
+
+const BUILTIN_NAMES: Record<CitationFormatter, string> = { legacy: "Legacy", enhanced: "Enhanced" };
+
+/** The format a record asks for by name (its "Citation template"
+ * attribute: a tree template's name, or Legacy/Enhanced, ignoring case
+ * and surrounding spaces), else the tree's own choice. `unknown` is the
+ * name asked for when nothing has it (a renamed or deleted template), so
+ * the panel can say why the default is used. */
+export function chooseCitationFormat(
+  settings: DisplaySettings,
+  requested: string,
+): { choice: CitationFormatChoice; unknown: string | null } {
+  const wanted = requested.trim().toLowerCase();
+  if (wanted) {
+    const template = settings.citation.templates.find((tpl) => tpl.name.trim().toLowerCase() === wanted);
+    if (template) return { choice: { formatter: null, template }, unknown: null };
+    const builtin = CITATION_FORMATTERS.find((f) => f === wanted || BUILTIN_NAMES[f].toLowerCase() === wanted);
+    if (builtin) return { choice: { formatter: builtin, template: null }, unknown: null };
+  }
+  const template = activeCitationTemplate(settings);
+  const fallback: CitationFormatChoice = template
+    ? { formatter: null, template }
+    : { formatter: isBuiltinFormatter(settings.citation.formatter) ? settings.citation.formatter : "legacy", template: null };
+  return { choice: fallback, unknown: wanted ? requested.trim() : null };
+}
+
 function parses(template: string): boolean {
   try {
     parseTemplate(template);

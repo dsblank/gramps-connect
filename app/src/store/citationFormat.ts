@@ -88,28 +88,45 @@ export function formatCitationText(citation: CitationFields | null | undefined):
  * plain custom attribute, so desktop Gramps keeps and shows it. */
 export const CITATION_TEXT_ATTRIBUTE = "Citation text";
 
+/** The SrcAttribute type naming which format a Source's citations use
+ * (or, on a Citation, which this one citation uses): a tree template's
+ * name, or "Legacy"/"Enhanced". See chooseCitationFormat in
+ * displaySettings.ts. A plain custom attribute, so desktop keeps it. */
+export const CITATION_TEMPLATE_ATTRIBUTE = "Citation template";
+
 interface RawAttribute {
   type?: unknown;
   value?: unknown;
 }
 
-/** The Citation's pasted text, or "" when it has none. */
-export function pastedCitationText(attributeList: unknown): string {
+/** The trimmed value of the first attribute of `type`, or "". */
+export function attributeText(attributeList: unknown, type: string): string {
   if (!Array.isArray(attributeList)) return "";
-  const attr = (attributeList as RawAttribute[]).find((a) => a?.type === CITATION_TEXT_ATTRIBUTE);
+  const attr = (attributeList as RawAttribute[]).find((a) => a?.type === type);
   return typeof attr?.value === "string" ? attr.value.trim() : "";
 }
 
-/** `attributeList` with the pasted text set to `text`: replaced in place
- * if there is one, appended if not, removed when `text` is empty. */
-export function withPastedCitationText(attributeList: unknown, text: string): unknown[] {
+/** `attributeList` with the attribute of `type` set to `text`: replaced
+ * in place if there is one, appended if not, removed when `text` is
+ * empty. Other attributes are left alone. */
+export function withAttributeText(attributeList: unknown, type: string, text: string): unknown[] {
   const list = Array.isArray(attributeList) ? [...attributeList] : [];
-  const index = list.findIndex((a) => (a as RawAttribute)?.type === CITATION_TEXT_ATTRIBUTE);
+  const index = list.findIndex((a) => (a as RawAttribute)?.type === type);
   const value = text.trim();
   if (!value) return index < 0 ? list : list.filter((_, i) => i !== index);
   if (index >= 0) list[index] = { ...(list[index] as object), value };
-  else list.push({ _class: "SrcAttribute", type: CITATION_TEXT_ATTRIBUTE, value, private: false });
+  else list.push({ _class: "SrcAttribute", type, value, private: false });
   return list;
+}
+
+/** The Citation's pasted text, or "" when it has none. */
+export function pastedCitationText(attributeList: unknown): string {
+  return attributeText(attributeList, CITATION_TEXT_ATTRIBUTE);
+}
+
+/** `attributeList` with the pasted text set to `text` (removed when empty). */
+export function withPastedCitationText(attributeList: unknown, text: string): unknown[] {
+  return withAttributeText(attributeList, CITATION_TEXT_ATTRIBUTE, text);
 }
 
 /** What the Citation panel shows: the source line, then page/date/

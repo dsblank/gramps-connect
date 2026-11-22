@@ -3,6 +3,7 @@ import { DateFormat, loadLocale } from "@gramps-connect/gramps-date";
 import {
   DEFAULT_DISPLAY_SETTINGS,
   FULL_PLACE_FORMAT,
+  chooseCitationFormat,
   chooseGrampsFormat,
   grampsFormatFor,
   isValidIdTemplate,
@@ -174,5 +175,29 @@ describe("nameKeywordsToCodes", () => {
   it("leaves unknown (e.g. translated) words, which then fail validation", () => {
     const converted = nameKeywordsToCodes("Nachname, Vorname");
     expect(isValidNameFormat(converted)).toBe(false);
+  });
+});
+
+
+describe("chooseCitationFormat", () => {
+  const mine = { id: "tpl-a", name: "Archive First", source: "`title`", citation: "`page`" };
+  const settings = normalizeDisplaySettings({ citation: { formatter: "enhanced", templates: [mine] } });
+
+  it("uses the tree's format when nothing is asked for", () => {
+    expect(chooseCitationFormat(settings, "")).toEqual({ choice: { formatter: "enhanced", template: null }, unknown: null });
+  });
+
+  it("finds a template or built-in by name, ignoring case and spaces", () => {
+    expect(chooseCitationFormat(settings, " archive first ").choice).toEqual({ formatter: null, template: mine });
+    expect(chooseCitationFormat(settings, "LEGACY").choice).toEqual({ formatter: "legacy", template: null });
+  });
+
+  it("falls back to the tree's format for a name it doesn't have, and says which", () => {
+    expect(chooseCitationFormat(settings, "Gone ")).toEqual({
+      choice: { formatter: "enhanced", template: null },
+      unknown: "Gone",
+    });
+    const withTemplate = normalizeDisplaySettings({ citation: { formatter: "tpl-a", templates: [mine] } });
+    expect(chooseCitationFormat(withTemplate, "Gone").choice).toEqual({ formatter: null, template: mine });
   });
 });
