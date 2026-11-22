@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citing your sources, auto formatted · Gramps Connect</title>
+<meta name="description" content="Gramps Connect 1.4 turns the sources and citations in your family tree into properly written citations, in the style that suits each kind of record, ready to copy or collect into a bibliography.">
+<link rel="icon" href="../app/public/favicon-32.png">
+<link rel="alternate" type="application/atom+xml" title="Gramps Connect blog" href="feed.xml">
+<style>
+  :root {
+    --bg: #ffffff; --bg-alt: #f5f6f8; --fg: #1f2328; --muted: #59636e;
+    --border: #d8dee4; --accent: #2f6f4f; --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16191d; --bg-alt: #1e2228; --fg: #e6e8eb; --muted: #9aa4af;
+      --border: #333a42; --accent: #5fb38a; --accent-fg: #0d1a13;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+  nav { display: flex; align-items: center; gap: 16px; padding: 20px 0;
+        border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  nav .home { display: flex; align-items: center; gap: 8px; font-weight: 700;
+              color: var(--fg); text-decoration: none; margin-right: auto; }
+  nav .home img { width: 28px; height: 28px; }
+  nav a { text-decoration: none; }
+  h1 { font-size: 2rem; line-height: 1.25; margin: 40px 0 8px; }
+  .meta { color: var(--muted); font-size: 0.95rem; margin: 0 0 32px; }
+  .post-list { list-style: none; padding: 0; margin: 0 0 48px; }
+  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border); }
+  .post-list h2 { font-size: 1.35rem; margin: 0 0 4px; }
+  .post-list h2 a { color: var(--fg); text-decoration: none; }
+  .post-list h2 a:hover { color: var(--accent); }
+  .post-list p { margin: 6px 0 0; }
+  .post-list .meta { margin: 0; }
+  article { margin-bottom: 48px; }
+  article h2 { font-size: 1.4rem; margin: 36px 0 8px; }
+  article h3 { font-size: 1.15rem; margin: 28px 0 8px; }
+  article img { max-width: 100%; height: auto; border: 1px solid var(--border);
+                border-radius: 8px; }
+  article figure { margin: 24px 0; }
+  article figure img { display: block; }
+  article figcaption { margin-top: 6px; color: var(--muted); font-size: 0.92rem;
+                       text-align: center; }
+  article pre { background: var(--bg-alt); border: 1px solid var(--border);
+                border-radius: 6px; padding: 12px 16px; overflow-x: auto; }
+  article code { font-size: 0.92em; }
+  article blockquote { margin: 16px 0; padding: 0 16px; color: var(--muted);
+                       border-left: 3px solid var(--border); }
+  .back { margin: 0 0 48px; }
+  footer { padding: 32px 0 48px; border-top: 1px solid var(--border);
+           color: var(--muted); font-size: 0.9rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <a class="home" href="../"><img src="../app/src/assets/icons/gramps-connect-logo.svg" alt="">Gramps Connect</a>
+  <a href="./">Blog</a>
+  <a href="../tour/">Tour</a>
+  <a href="https://github.com/dsblank/gramps-connect/wiki">Documentation</a>
+  <a href="feed.xml">Feed</a>
+</nav>
+<article>
+<h1>Citing your sources, auto formatted</h1>
+<p class="meta"><time datetime="2026-11-22">November 22, 2026</time> · Doug Blank</p>
+<p>Every fact in a family tree should say where it came from. A birth date
+is only as good as the record it was copied from, and a year from now
+you (or a cousin picking up your research) will want to find that record
+again and judge how much to trust it. That&rsquo;s what a citation is for.</p>
+<p>Gramps Connect 1.4 makes citations much easier to read and to share. This
+post explains how, starting with what Gramps means by a source and a
+citation, in case you&rsquo;re new to Gramps.</p>
+<h2>Sources and citations, in two minutes</h2>
+<p>Gramps, and so Gramps Connect, keeps the &ldquo;where did this come from&rdquo; part
+of your research in three kinds of record:</p>
+<ul>
+<li>A <strong>source</strong> is the thing you looked in: a census, a parish register,
+  a book, a newspaper, or a database on a website. &ldquo;England and Wales
+  Census, 1881&rdquo; is a source.</li>
+<li>A <strong>citation</strong> is the exact place in that source that supports a fact:
+  this page, this entry, this household. &ldquo;RG11/4321, folio 56, page 7&rdquo; is a
+  citation. One source has many citations, one for each record you used
+  from it, and each citation is attached to the person, event or family
+  it supports.</li>
+<li>A <strong>repository</strong> is where a source is kept: an archive, a library, or
+  a website such as FamilySearch.</li>
+</ul>
+<p>Separating them means you type a source&rsquo;s details once, and each citation
+only needs what&rsquo;s different: the page, the date, and how confident you
+are in it.</p>
+<h2>Auto formatted</h2>
+<p>Every citation in Gramps Connect now starts with its <strong>Formatted
+citation</strong>: the source and the specific record auto formatted as a
+reference, the way footnotes in a history book read.</p>
+<figure><img alt="A census citation in Gramps Connect, with its formatted citation at the top of the page" src="img/citations-formatted.jpg" /><figcaption>A citation of John Smith&rsquo;s household in the 1881 census, as seen on FamilySearch. The formatted citation at the top is written from the details below it.</figcaption></figure>
+<p><strong>Copy</strong> puts it on the clipboard, ready to paste into a story, an email
+to a cousin, or a footnote in a family history. Titles in italics stay in
+italics when you paste into a word processor.</p>
+<p>The text is written from the details you&rsquo;ve entered, so it&rsquo;s always up
+to date: correct a page number or a date and the citation follows.</p>
+<h2>Different records, different styles</h2>
+<p>A census record, a baptism in a parish register and a page in a printed
+book are usually cited differently, and a website record wants its web
+address and the date you looked at it. So each source can choose how its
+citations are written.</p>
+<p><strong>Auto format</strong> shows every style your tree offers, each with the record
+you&rsquo;re looking at already auto formatted in it. Pick one and <strong>Apply</strong>: every
+citation of that source now uses it.</p>
+<figure><img alt="The Auto format window, showing the same census citation written in six different styles" src="img/citations-auto-format.jpg" /><figcaption>The same census citation in each of the tree&rsquo;s styles. &ldquo;Online record&rdquo; is selected for this source.</figcaption></figure>
+<p>Gramps&rsquo; own style, <strong>Legacy</strong>, is the default; <strong>Enhanced</strong> adds the
+repository. A single citation can also have a style of its own, for the
+rare one that needs it. A short line under each citation always says
+which style it&rsquo;s using and why.</p>
+<h2>When a website already wrote it for you</h2>
+<p>Many websites give you a ready-made citation, like FamilySearch&rsquo;s &ldquo;Cite
+this record&rdquo;. If you&rsquo;d rather use theirs, <strong>Write manually</strong> lets you paste
+it in. It&rsquo;s then shown, and copied, exactly as you entered it.</p>
+<figure><img alt="The Manual citation text window, with FamilySearch's own citation pasted in" src="img/citations-manual.jpg" /><figcaption>Pasting the citation a website gives you. It&rsquo;s kept as written, instead of being formatted automatically.</figcaption></figure>
+<p>The difference is worth knowing: a manual citation stays exactly as
+typed, while an automatic one follows every later correction to the
+source or citation.</p>
+<h2>Ready-made styles for common records</h2>
+<p>Beyond Legacy and Enhanced, a tree&rsquo;s owner can add styles of its own. To
+make that easy, Gramps Connect comes with five ready-made ones in the
+layered style genealogists use for source citations:</p>
+<ul>
+<li><strong>Online record</strong>: a record seen on a website, such as FamilySearch,
+  Ancestry, FindMyPast, FreeBMD or Find a Grave</li>
+<li><strong>Archive record</strong>: a census, parish register or civil register seen in
+  an archive or on microfilm</li>
+<li><strong>Book</strong>: a printed book</li>
+<li><strong>Newspaper</strong>: an article, in print or in an online archive</li>
+<li><strong>Gravestone</strong>: a gravestone or memorial</li>
+</ul>
+<figure><img alt="The citation style editor, listing Gramps' own styles and the ready-made starters" src="img/citations-templates.jpg" /><figcaption>A tree owner picks a starting point in Preferences and adjusts it. The examples below the list show the tree&rsquo;s own citations in the style as it&rsquo;s being written.</figcaption></figure>
+<p>These styles use a few details Gramps has no box for, like a record&rsquo;s web
+address or the date you viewed it. You add those as <strong>attributes</strong>: a
+name and a value, such as &ldquo;Accessed: 22 November 2026&rdquo;, in the source&rsquo;s
+or citation&rsquo;s Attributes section. The
+<a href="https://github.com/dsblank/gramps-connect/wiki/Citations#where-each-part-goes">Citations</a>
+page in the documentation lists which detail goes where.</p>
+<h2>A bibliography for anyone in your tree</h2>
+<p>The new <strong>Bibliography</strong> gramplet (a small add-on from the Gramplet
+Store, under the Gramplets menu) gathers every source behind the person
+you&rsquo;ve selected: their own citations, and those on their events and
+families. It lists them the way a book&rsquo;s notes do, each source once with
+its citations underneath, in each source&rsquo;s own style, and one <strong>Copy</strong>
+for the whole list.</p>
+<figure><img alt="The Bibliography gramplet below the People list, listing John Smith's sources" src="img/citations-bibliography.jpg" /><figcaption>John Smith&rsquo;s sources: a parish register in an archive, a census seen on FamilySearch, and a local history book, each in its own style.</figcaption></figure>
+<p>Click a number or letter to jump to that source or citation.</p>
+<h2>Still your Gramps data</h2>
+<p>Everything here is stored as ordinary Gramps data. Styles chosen for a
+source, pasted citations and the extra details are all kept as
+attributes that Gramps desktop keeps and shows, so nothing is lost if you
+move between Gramps Connect and Gramps on your computer.</p>
+<h2>Try it</h2>
+<ul>
+<li>The <a href="https://github.com/dsblank/gramps-connect/wiki/Citations">Citations</a>
+  page in the documentation covers every detail. In the app, the (i) next
+  to any Formatted citation opens it.</li>
+<li><a href="https://github.com/dsblank/gramps-connect/releases/tag/v1.4.0">Download Gramps Connect 1.4</a>
+  for Windows, macOS or Linux, or take the <a href="../tour/">narrated tour</a>.</li>
+<li>We&rsquo;re also asking Gramps users what they call these extra details, so
+  the same names work everywhere. Join in on the
+  <a href="https://gramps.discourse.group/c/gramps-connect/35">Gramps Discourse forum</a>.</li>
+</ul>
+</article>
+<p class="back"><a href="./">&larr; All posts</a></p>
+<footer>
+  <!-- Generated by scripts/build-blog.py from blog/posts/; edit the .md, not this file. -->
+  Gramps Connect is free software under the AGPL-3.0-or-later licence.
+</footer>
+</div>
+</body>
+</html>
