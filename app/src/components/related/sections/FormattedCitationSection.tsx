@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Group, Loader, Menu, Modal, Stack, Text, Textarea } from "@mantine/core";
+import { Alert, Button, Group, Loader, Modal, Stack, Text, Textarea } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken, hasPermissions } from "../../../auth/auth";
-import { chooseCitationFormat, useDisplaySettings, type DisplaySettings } from "../../../store/displaySettings";
+import { chooseCitationFormat, useDisplaySettings } from "../../../store/displaySettings";
 import { useCitationTemplateLines } from "../useCitationTemplateLines";
 import { linesToText } from "../../../store/citationTemplateSyntax";
 import { useDisplayFormatVersion } from "../../../store/placeIndex";
@@ -14,7 +14,6 @@ import {
   CITATION_TEMPLATE_ATTRIBUTE,
   attributeText,
   citationFormatterLabel,
-  citationFormatterName,
   fetchRepositoryName,
   formattedCitationLines,
   pastedCitationText,
@@ -25,6 +24,7 @@ import {
 } from "../../../store/citationFormat";
 import { SectionShell } from "./shared";
 import { CitationLinesView, CopyCitationButton, plainLines } from "../CitationLines";
+import { CitationFormatDialog } from "../CitationFormatDialog";
 import { InfoButton } from "../../InfoButton";
 import { DocumentationDialog } from "../../DocumentationDialog";
 import type { SectionProps } from "../types";
@@ -62,6 +62,7 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
   useDisplayFormatVersion(); // dates follow the tree's date format
   const [editing, setEditing] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [choosing, setChoosing] = useState(false);
 
   const source: RawSource | undefined =
     type === "citation" ? (detail.extended?.source as RawSource | undefined) : (detail as RawSource);
@@ -157,13 +158,9 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
             </Button>
           )}
           {canEdit && source?.handle && (
-            <FormatMenu
-              settings={settings}
-              onCitation={type === "citation"}
-              sourceAsks={sourceAsks}
-              citationAsks={citationAsks}
-              onChoose={chooseFormat}
-            />
+            <Button size="compact-xs" variant="subtle" onClick={() => setChoosing(true)}>
+              {t("Format")}
+            </Button>
           )}
         </Group>
       }
@@ -192,6 +189,22 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
           {t("Pasted text, shown in place of the generated citation.")}
         </Text>
       )}
+      {choosing && source?.handle && (
+        <CitationFormatDialog
+          settings={settings}
+          isCitation={type === "citation"}
+          source={source}
+          citationHandle={type === "citation" ? detail.handle : undefined}
+          citationFields={citationFields}
+          sourceAsks={sourceAsks}
+          citationAsks={citationAsks}
+          onCancel={() => setChoosing(false)}
+          onApply={async (scope, name) => {
+            await chooseFormat(scope, name);
+            setChoosing(false);
+          }}
+        />
+      )}
       <DocumentationDialog opened={helpOpen} onClose={() => setHelpOpen(false)} initialPage="Citations" />
       {editing && (
         <PastedTextDialog
@@ -209,59 +222,6 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
         />
       )}
     </SectionShell>
-  );
-}
-
-/** Which format a source's citations use, and on a Citation, an override
- * for that one. Each pick sets (or, for the default, removes) a "Citation
- * template" attribute. */
-function FormatMenu({
-  settings,
-  onCitation,
-  sourceAsks,
-  citationAsks,
-  onChoose,
-}: {
-  settings: DisplaySettings;
-  onCitation: boolean;
-  sourceAsks: string;
-  citationAsks: string;
-  onChoose: (target: "source" | "citation", name: string) => void;
-}) {
-  const names = [citationFormatterLabel("legacy"), citationFormatterLabel("enhanced"), ...settings.citation.templates.map((tpl) => tpl.name)];
-  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-  const items = (target: "source" | "citation", current: string, defaultLabel: string) => (
-    <>
-      <Menu.Item onClick={() => onChoose(target, "")} leftSection={current ? null : "✓"}>
-        {defaultLabel}
-      </Menu.Item>
-      {names.map((name) => (
-        <Menu.Item key={name} onClick={() => onChoose(target, name)} leftSection={current && same(current, name) ? "✓" : null}>
-          {name}
-        </Menu.Item>
-      ))}
-    </>
-  );
-  const treeDefault = `${t("The tree's format")} (${citationFormatterName(settings.citation)})`;
-  return (
-    <Menu position="bottom-end" withinPortal>
-      <Menu.Target>
-        <Button size="compact-xs" variant="subtle">
-          {t("Format")}
-        </Button>
-      </Menu.Target>
-      <Menu.Dropdown>
-        <Menu.Label>{t("All citations of this source")}</Menu.Label>
-        {items("source", sourceAsks, treeDefault)}
-        {onCitation && (
-          <>
-            <Menu.Divider />
-            <Menu.Label>{t("Only this citation")}</Menu.Label>
-            {items("citation", citationAsks, t("Same as its source"))}
-          </>
-        )}
-      </Menu.Dropdown>
-    </Menu>
   );
 }
 
