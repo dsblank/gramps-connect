@@ -13,6 +13,7 @@ import { t } from "../i18n/i18n";
 import { ChangeSummary } from "./ChangeSummary";
 import { ObjectCellButton } from "./ObjectCellButton";
 import { RelationshipChart } from "./RelationshipChart";
+import { CitationBibliography } from "../components/related/CitationBibliography";
 import "./stWidgets.css";
 import type { GrampletBlock, GrampletOutputResponse, TableCell } from "./types";
 
@@ -364,6 +365,9 @@ function BlockOutput({
   interactive: boolean;
   onWidgetEvent?: (key: string, value: unknown) => void;
 }) {
+  if (block.type === "bibliography") {
+    return <CitationBibliography handles={block.handles} title={block.title} />;
+  }
   if (block.type === "relationship-chart") {
     return <RelationshipChart paths={block.paths} startLabel={block.startLabel} interactive={interactive} />;
   }

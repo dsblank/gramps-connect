@@ -99,10 +99,17 @@ interface RawAttribute {
   value?: unknown;
 }
 
-/** The trimmed value of the first attribute of `type`, or "". */
+/** An attribute's type name: a plain string from the REST API, or the
+ * stored `{"string": ...}` shape a GOQL select returns. */
+function attributeTypeName(type: unknown): unknown {
+  return type && typeof type === "object" ? (type as { string?: unknown }).string : type;
+}
+
+/** The trimmed value of the first attribute of `type`, or "". Takes the
+ * REST API's attribute_list or a GOQL select's (stored) one. */
 export function attributeText(attributeList: unknown, type: string): string {
   if (!Array.isArray(attributeList)) return "";
-  const attr = (attributeList as RawAttribute[]).find((a) => a?.type === type);
+  const attr = (attributeList as RawAttribute[]).find((a) => attributeTypeName(a?.type) === type);
   return typeof attr?.value === "string" ? attr.value.trim() : "";
 }
 

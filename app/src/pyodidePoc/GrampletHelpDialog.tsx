@@ -197,6 +197,12 @@ export function GrampletHelpDialog({ opened, onClose }: { opened: boolean; onClo
                   "Draws a path from db.get_relationship_paths(), or a list of them with a pager, the way a family tree shows it: a line of parents or children one column, one row per generation, the common ancestor above the two sides, marriages across with rings, and the parents above a sibling link. Names and dates come from the app; each card shows that step's 'label', so change those first to relabel anyone. start_label names the first person (\"Home person\" if left out)."
                 )}
               />
+              <SymbolRow
+                symbol="bibliography(cited, title=None)"
+                meaning={t(
+                  "Lists citations as a numbered bibliography: each source once, with its citations lettered below, every one written as its own Formatted citation shows it (manual text, or the format chosen for it, its source or the tree). cited is a citation or a list of them: Citation objects, records from citations(), or handles. Has its own Copy button."
+                )}
+              />
             </Table.Tbody>
           </Table>
           <Text size="sm" c="dimmed">

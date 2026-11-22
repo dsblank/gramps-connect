@@ -454,7 +454,12 @@ export type GrampletBlock =
   /** `relationship_chart(paths)` (pyodideWorker.ts) -- one or more paths
    * from db.get_relationship_paths(), possibly edited by the Gramplet,
    * drawn by RelationshipChart.tsx with a pager between them. */
-  | { type: "relationship-chart"; paths: RelationshipPath[]; startLabel: string | null };
+  | { type: "relationship-chart"; paths: RelationshipPath[]; startLabel: string | null }
+  /** `bibliography(cited, title=None)` (pyodideWorker.ts) -- citation
+   * handles, in the Gramplet's order without repeats, drawn by
+   * CitationBibliography.tsx as numbered sources with lettered citations,
+   * each written in the tree's citation formats. */
+  | { type: "bibliography"; handles: string[]; title: string | null };
 
 /** No `printed` field -- unlike the pre-blocks design, a Gramplet's own
  * print() calls aren't captured as a separate side channel (pyodideWorker.

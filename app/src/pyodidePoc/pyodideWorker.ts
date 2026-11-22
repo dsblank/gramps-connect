@@ -1319,6 +1319,39 @@ def relationship_chart(paths, start_label=None):
         "startLabel": None if start_label is None else str(start_label),
     })
 
+def bibliography(cited, title=None):
+    """Lists citations as a numbered bibliography, the way Gramps' reports
+    print endnotes: each source once, numbered, with its citations lettered
+    below it. Every citation is written exactly as its own Formatted
+    citation shows it: its manual text if it has some, otherwise in the
+    format chosen for it, for its source, or for the tree. The list has its
+    own Copy button.
+
+    cited is one citation or a list of them: Citation objects, records from
+    citations(), or their handles. Repeats are listed once, in the order
+    first given. title, if given, heads the list."""
+    if isinstance(cited, (str, dict)) or hasattr(cited, "handle"):
+        cited = [cited]
+    handles = []
+    for item in cited:
+        if isinstance(item, str):
+            handle = item
+        elif isinstance(item, dict):
+            handle = item.get("handle")
+        else:
+            handle = getattr(item, "handle", None)
+        if not isinstance(handle, str) or not handle:
+            raise TypeError("bibliography() takes citations: Citation objects, records from citations(), or their handles")
+        if handle not in handles:
+            handles.append(handle)
+    _flush_print()
+    _flush_table()
+    _gramplet_sink_stack[-1].append({
+        "type": "bibliography",
+        "handles": handles,
+        "title": None if title is None else str(title),
+    })
+
 def _matplotlib_figure_from(obj):
     # Never imports matplotlib itself -- only recognizes it if the
     # Gramplet's own code already did (sys.modules lookup), so a Gramplet
