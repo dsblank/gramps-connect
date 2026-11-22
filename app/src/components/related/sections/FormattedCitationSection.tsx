@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Group, Loader, Modal, Stack, Text, Textarea } from "@mantine/core";
+import { Alert, Button, Group, Loader, Modal, Stack, Text, Textarea, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken, hasPermissions } from "../../../auth/auth";
@@ -14,6 +14,7 @@ import {
   CITATION_TEMPLATE_ATTRIBUTE,
   attributeText,
   citationFormatterLabel,
+  citationFormatterName,
   fetchRepositoryName,
   formattedCitationLines,
   pastedCitationText,
@@ -137,12 +138,25 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
     }
   }
 
+  // One line saying how the text above came about: fixed text, or auto
+  // formatted, and with which format, chosen where.
   const chosenName = template?.name ?? citationFormatterLabel(formatter);
-  let origin: string | null = null;
-  if (!pasted && requested && !unknown) {
-    origin = citationAsks
-      ? t('Written as "{name}", chosen for this citation.')
-      : t('Written as "{name}", chosen for this source\'s citations.');
+  const treeFormat = citationFormatterName(settings.citation);
+  let status: string;
+  if (pasted) {
+    status = t("Fixed text, shown exactly as entered.");
+  } else if (unknown) {
+    status = (citationAsks
+      ? t('Set to "{name}" for this citation only, which this tree doesn\'t have, so it\'s auto formatted using the tree\'s format ({tree}).')
+      : t('Set to "{name}" for this source, which this tree doesn\'t have, so it\'s auto formatted using the tree\'s format ({tree}).'))
+      .replace("{name}", unknown)
+      .replace("{tree}", treeFormat);
+  } else if (citationAsks) {
+    status = t("Auto formatted using {name}, set for this citation only.").replace("{name}", chosenName);
+  } else if (sourceAsks) {
+    status = t("Auto formatted using {name}, set for this source.").replace("{name}", chosenName);
+  } else {
+    status = t("Auto formatted using the tree's format ({name}).").replace("{name}", treeFormat);
   }
 
   return (
@@ -153,14 +167,35 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
           <InfoButton size="xs" label={t("About formatted citations")} onClick={() => setHelpOpen(true)} />
           {shown.length > 0 && <CopyCitationButton lines={shown} />}
           {canPaste && (
-            <Button size="compact-xs" variant="subtle" onClick={() => setEditing(true)}>
-              {pasted ? t("Edit text") : t("Paste your own")}
-            </Button>
+            <Tooltip
+              multiline
+              w={300}
+              openDelay={400}
+              label={t("Type or paste the citation's text yourself, e.g. a website's own citation. It's shown exactly as entered, instead of being formatted automatically, and won't change when the source, the citation or the format does.")}
+            >
+              <Button size="compact-xs" variant="subtle" onClick={() => setEditing(true)}>
+                {pasted ? t("Edit fixed text") : t("Use fixed text")}
+              </Button>
+            </Tooltip>
           )}
           {canEdit && source?.handle && (
-            <Button size="compact-xs" variant="subtle" onClick={() => setChoosing(true)}>
-              {t("Format")}
-            </Button>
+            <Tooltip
+              multiline
+              w={300}
+              openDelay={400}
+              label={
+                pasted
+                  ? t("This citation shows fixed text. Remove the fixed text to format it automatically.")
+                  : t("Choose the format used to write this source's citations, or this one citation, from their fields.")
+              }
+            >
+              {/* A span, so the tooltip still shows on the disabled button. */}
+              <span>
+                <Button size="compact-xs" variant="subtle" disabled={!!pasted} onClick={() => setChoosing(true)}>
+                  {t("Auto format")}
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Group>
       }
@@ -172,21 +207,9 @@ export function FormattedCitationSection({ type, view, detail, onRefetch }: Sect
           {`${t("This tree's citation template didn't work here:")} ${templated.error}`}
         </Text>
       )}
-      {origin && (
+      {(shown.length > 0 || loading) && (
         <Text size="xs" c="dimmed">
-          {origin.replace("{name}", chosenName)}
-        </Text>
-      )}
-      {!pasted && unknown && (
-        <Text size="xs" c="dimmed">
-          {t('This {record} asks for the format "{name}", which this tree doesn\'t have, so the tree\'s own format is used.')
-            .replace("{record}", citationAsks ? t("citation") : t("source"))
-            .replace("{name}", unknown)}
-        </Text>
-      )}
-      {pasted && (
-        <Text size="xs" c="dimmed">
-          {t("Pasted text, shown in place of the generated citation.")}
+          {status}
         </Text>
       )}
       {choosing && source?.handle && (
@@ -247,10 +270,10 @@ function PastedTextDialog({ initial, generated, onClose, onSave }: {
   }
 
   return (
-    <Modal opened onClose={onClose} title={t("Citation text")} size="lg">
+    <Modal opened onClose={onClose} title={t("Fixed citation text")} size="lg">
       <Stack gap="sm">
         <Text size="sm">
-          {t('Paste the citation a website gives you, such as FamilySearch\'s "Cite this record" or Ancestry\'s source citation. It is shown here, and copied, instead of the generated text.')}
+          {t('Type the citation, or paste the one a website gives you (FamilySearch\'s "Cite this record", Ancestry\'s source citation). It\'s shown and copied exactly as entered, instead of being formatted automatically: it won\'t change when the source or citation is edited, or when a different format is chosen.')}
         </Text>
         <Textarea
           autosize
@@ -268,7 +291,7 @@ function PastedTextDialog({ initial, generated, onClose, onSave }: {
         <Group justify="space-between">
           {initial ? (
             <Button variant="subtle" color="red" disabled={saving} onClick={() => save("")}>
-              {t("Use generated text")}
+              {t("Remove fixed text and format automatically")}
             </Button>
           ) : (
             <span />

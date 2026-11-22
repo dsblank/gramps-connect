@@ -140,7 +140,7 @@ export function CitationFormatDialog({
   const changed = !same(selected, asked) || (selected === "") !== (asked === "");
 
   return (
-    <Modal opened onClose={onCancel} title={t("Citation format")} size="lg">
+    <Modal opened onClose={onCancel} title={t("Auto format")} size="lg">
       <Stack gap="sm">
         {isCitation && (
           <SegmentedControl
@@ -153,7 +153,7 @@ export function CitationFormatDialog({
           />
         )}
         <Text size="xs" c="dimmed">
-          {t("Each format is shown with this record written out in it. Pick one, then Apply.")}
+          {t("Which format writes the citation from its fields. Each one is shown with this record written out in it: pick one, then Apply.")}
         </Text>
         <Stack gap={6}>
           {options.map((option) => {
