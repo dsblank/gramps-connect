@@ -743,6 +743,11 @@ export const CITATION_VIEW: ViewConfig = {
       key: "source_title", label: "Source", select: { json_path: ["source", "title"] }, sqlType: "TEXT",
     },
     { key: "page", label: "Page", select: "page", sqlType: "TEXT" },
+    {
+      key: "date", label: "Date", select: { json_path: ["date"] }, sqlType: "TEXT",
+      toSql: toSqlJson, toDisplay: formatGrampsDateJson,
+      sortBy: "date.sortval", sortLimit: SORT_ROW_LIMIT,
+    },
     { key: "confidence", label: "Confidence", select: "confidence", sqlType: "INTEGER", toDisplay: displayConfidence },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
