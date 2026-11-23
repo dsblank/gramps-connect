@@ -61,6 +61,7 @@ export function EventsSection({ view, detail, onNavigate, onRefetch }: SectionPr
           handle={ref.ref}
           obj={target}
           refMeta={ref}
+          countTarget={target}
           onNavigate={onNavigate}
           onRemove={canEdit ? () => handleRemove(ref.ref, target) : undefined}
         />

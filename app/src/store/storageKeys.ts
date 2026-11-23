@@ -44,6 +44,7 @@ const DEFS = {
   homePerson: { key: `${P}homePerson`, tag: "setting" },
   blogDraft: { key: `${P}blogDraft:`, prefix: true, tag: "setting" },
   grampletStoreCheck: { key: `${P}grampletStoreCheck`, tag: "setting" },
+  citationsSectionOpen: { key: `${P}citationsSectionOpen`, tag: "setting" },
   // localStorage, excluded
   visited: { key: `${P}visited`, tag: "excluded" },
   activity: { key: `${P}activity`, tag: "excluded" },

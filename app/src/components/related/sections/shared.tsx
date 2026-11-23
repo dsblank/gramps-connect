@@ -3,7 +3,7 @@
 // everywhere" or "fix how a row's click target works" a one-file change
 // instead of an 18-file one.
 import type { ReactNode } from "react";
-import { Anchor, Group, Image, Stack, Text, Tooltip } from "@mantine/core";
+import { Anchor, Group, Image, Stack, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { VIEWS } from "../../../store/views";
 import { summaryLine } from "../summary";
@@ -20,11 +20,11 @@ import { t } from "../../../i18n/i18n";
 // wants the exact same look for its own onNavigate-driven rows.
 export const LINK_STYLE = { display: "inline", width: "auto", textAlign: "left" } as const;
 
-/** No collapse/expand -- every one of this file's ~18 call sites always
- * passed `defaultOpen` anyway (collapsed-by-default was never actually
- * used), and the pane this renders in already scrolls, so a toggle added
- * nothing. Just a static label over its children -- no item count either
- * (redundant now that the list underneath it is always visible).
+/** A label over its children. Normally static, with no item count (the list
+ * underneath is always visible). A section whose list costs a request to
+ * show (CitationsSection) passes `onToggle` instead: the label becomes a
+ * chevron toggle with `count` after it, and the children aren't rendered at
+ * all while closed, so a closed section costs nothing.
  *
  * `action` sits on the label's own row, right after it (not right-aligned:
  * on a wide pane that would strand it far from the label it belongs to) --
@@ -35,18 +35,34 @@ export const LINK_STYLE = { display: "inline", width: "auto", textAlign: "left" 
  * wording survives as that "+"'s own tooltip/aria-label. Children are
  * optional -- a section with nothing to list and only an `action` renders
  * as just its header row, no empty body spacing under it. */
-export function SectionShell({ label, action, children }: {
+export function SectionShell({ label, action, children, open, onToggle, count }: {
   label: string;
   action?: ReactNode;
   children?: ReactNode;
+  /** With `onToggle`: whether the body is shown. */
+  open?: boolean;
+  onToggle?: () => void;
+  /** Shown after a toggleable label, e.g. "Citations · 7". */
+  count?: number;
 }) {
+  const shown = !onToggle || open;
   return (
     <div>
       <Group gap="xs" align="center" style={{ rowGap: 4 }}>
-        <Text size="md" fw={600}>{label}</Text>
+        {onToggle ? (
+          <UnstyledButton onClick={onToggle} aria-expanded={!!open}>
+            <Group gap={4} wrap="nowrap">
+              <Text size="sm" c="dimmed" w={12} aria-hidden>{open ? "▾" : "▸"}</Text>
+              <Text size="md" fw={600}>{label}</Text>
+              {count != null && count > 0 && <Text size="sm" c="dimmed">· {count}</Text>}
+            </Group>
+          </UnstyledButton>
+        ) : (
+          <Text size="md" fw={600}>{label}</Text>
+        )}
         {action}
       </Group>
-      {hasContent(children) && <Stack gap="sm" pl="md" pt={4}>{children}</Stack>}
+      {shown && hasContent(children) && <Stack gap="sm" pl="md" pt={4}>{children}</Stack>}
     </div>
   );
 }
@@ -89,11 +105,14 @@ function TypeIcon({ type }: { type: string }) {
  * `onClick`), so the same row works whether it's mounted in the top pane
  * (sets sub-selection), the bottom pane (promotes to a real view switch),
  * or bypasses navigation entirely. */
-export function RefRow({ type, handle, obj, refMeta, onNavigate, onClick, label, grip, thumbnail, extra, onEdit, onEditRegion, onRemove }: {
+export function RefRow({ type, handle, obj, refMeta, countTarget, onNavigate, onClick, label, grip, thumbnail, extra, onEdit, onEditRegion, onRemove }: {
   type: string;
   handle: string;
   obj: unknown;
   refMeta?: RefMeta;
+  /** Also count this record's own citations/notes in the row's
+   * "2 citations, 1 note" line (EventsSection passes the event). */
+  countTarget?: unknown;
   onNavigate: OnNavigate;
   /** Overrides the default `onNavigate(type, handle, refMeta)` click
    * behavior entirely -- only NotesSection.tsx's Topics sub-list uses this,
@@ -169,7 +188,7 @@ export function RefRow({ type, handle, obj, refMeta, onNavigate, onClick, label,
         {onEditRegion && <CircleGlyphButton glyph="✂" label={t("Select region")} onClick={onEditRegion} size={16} />}
         {onRemove && <CircleGlyphButton glyph="−" label={t("Remove")} onClick={onRemove} size={16} />}
       </Group>
-      <RefMetaRow refMeta={refMeta} />
+      <RefMetaRow refMeta={refMeta} countTarget={countTarget} />
     </Stack>
   );
 }

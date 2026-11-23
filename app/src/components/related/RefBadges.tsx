@@ -50,9 +50,17 @@ function RelationBadge({ refMeta }: { refMeta?: RefMeta }) {
   );
 }
 
-function CitationNoteCounts({ refMeta }: { refMeta?: RefMeta }) {
-  const notes = refMeta?.note_list?.length ?? 0;
-  const citations = refMeta?.citation_list?.length ?? 0;
+function lengthOf(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+/** `countTarget`: the referenced record itself, when its own citations and
+ * notes belong in the count too -- an event's sources are almost always on
+ * the Event, not on the person's link to it. */
+function CitationNoteCounts({ refMeta, countTarget }: { refMeta?: RefMeta; countTarget?: unknown }) {
+  const target = countTarget as { note_list?: unknown; citation_list?: unknown } | null | undefined;
+  const notes = lengthOf(refMeta?.note_list) + lengthOf(target?.note_list);
+  const citations = lengthOf(refMeta?.citation_list) + lengthOf(target?.citation_list);
   if (notes === 0 && citations === 0) return null;
   const parts: string[] = [];
   if (citations > 0) parts.push(`${citations} citation${citations > 1 ? "s" : ""}`);
@@ -64,13 +72,13 @@ function CitationNoteCounts({ refMeta }: { refMeta?: RefMeta }) {
  * target's summary line. Renders nothing when `refMeta` is absent (plain
  * handle-list refs, e.g. Person.family_list, carry no per-item metadata at
  * all) or empty. */
-export function RefMetaRow({ refMeta }: { refMeta?: RefMeta }) {
+export function RefMetaRow({ refMeta, countTarget }: { refMeta?: RefMeta; countTarget?: unknown }) {
   if (!refMeta) return null;
   return (
     <Group gap={6} wrap="wrap">
       <PrivateBadge refMeta={refMeta} />
       <RelationBadge refMeta={refMeta} />
-      <CitationNoteCounts refMeta={refMeta} />
+      <CitationNoteCounts refMeta={refMeta} countTarget={countTarget} />
     </Group>
   );
 }

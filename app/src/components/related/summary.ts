@@ -68,9 +68,9 @@ export function summaryText(type: string, obj: any): string {
       return obj.title || "(source)";
     case "citation": {
       // Either shape, same reasoning as family's father/mother above: a
-      // directly-fetched Citation's own extended.source, or a profile-shaped
-      // reference (getBacklinks' PROFILE_RESOLVED_BACKLINK_TYPES swap, or
-      // CitationsSection's own zipRefs) whose `source` is already resolved.
+      // Citation fetched with extend (its extended.source), or a
+      // profile-shaped reference (getBacklinks' PROFILE_RESOLVED_BACKLINK_TYPES
+      // swap) whose `source` is already resolved.
       const source = obj.extended?.source ?? obj.source;
       const sourceTitle = source?.title ?? "";
       return [sourceTitle, obj.page].filter(Boolean).join(", ") || "(citation)";

@@ -8,7 +8,7 @@ import { t } from "../../../i18n/i18n";
 // is resolved to a label by the API (unlike Event.type/Family.type
 // elsewhere), lds_ord_list isn't touched by extend=all at all (confirmed
 // live: famc/place stay bare handles), so these are looked up client-side.
-const TYPE_LABELS = ["Baptism", "Endowment", "Sealed to Parents", "Sealed to Spouse", "Confirmation", "Initiatory"];
+export const LDS_TYPE_LABELS = ["Baptism", "Endowment", "Sealed to Parents", "Sealed to Spouse", "Confirmation", "Initiatory"];
 const STATUS_LABELS = [
   "", "Born in Covenant", "Canceled", "Child", "Cleared", "Completed", "Do not seal",
   "Infant", "Pre-1970", "Qualified", "Do not seal/Cancel", "Stillborn", "Submitted", "Uncleared",
@@ -37,7 +37,7 @@ export function LdsOrdinancesSection({ detail }: SectionProps) {
         const parts = [displayDate(ord.date), ord.temple, STATUS_LABELS[ord.status]].filter(Boolean);
         return (
           <Group key={i} gap={6}>
-            <Text size="md" fw={500}>{TYPE_LABELS[ord.type] ?? `Type ${ord.type}`}</Text>
+            <Text size="md" fw={500}>{LDS_TYPE_LABELS[ord.type] ?? `Type ${ord.type}`}</Text>
             {parts.length > 0 && <Text size="md" c="dimmed">{parts.join(" — ")}</Text>}
             {ord.private && <Text component="span" size="sm">🔒</Text>}
           </Group>
