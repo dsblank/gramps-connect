@@ -107,6 +107,17 @@ export async function parseErrorMessage(res: Response): Promise<string> {
     if (parsed?.error?.type === "task_locked" && typeof parsed.error.message === "string") {
       return describeTaskLocked(parsed.error.message, parsed.error.task?.id);
     }
+    // A 422 from request validation says which field and why under
+    // error.messages.json ({"where_expr": ["unknown field 'brith' on
+    // Person -- known fields: ..."]}); that beats the headline
+    // ("Invalid 'where_expr'") whenever it's there.
+    const fieldMessages = parsed?.error?.messages?.json;
+    if (fieldMessages && typeof fieldMessages === "object") {
+      for (const value of Object.values(fieldMessages)) {
+        const first = Array.isArray(value) ? value[0] : value;
+        if (typeof first === "string" && first) return first;
+      }
+    }
     if (typeof parsed?.error?.message === "string") return parsed.error.message;
     // A bare flask abort(422) etc. carries no message, just flask-smorest's
     // default {"code": 422, "status": "Unprocessable Entity"} -- a status

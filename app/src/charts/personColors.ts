@@ -281,3 +281,22 @@ export function textColorOn(fill: string): { name: string; date: string } {
     ? { name: "#0b0b0b", date: "rgba(0, 0, 0, 0.65)" }
     : { name: "#ffffff", date: "rgba(255, 255, 255, 0.8)" };
 }
+
+/** "Color by filter": people a filter matched get the palette's first slot,
+ * everyone else NO_DATA_COLOR. `label` names the filter for the tooltip. */
+export function buildFilterColoring(
+  people: readonly TreePersonRaw[],
+  matched: ReadonlySet<string>,
+  label: string,
+): PersonColoring {
+  const hits = people.filter((p) => matched.has(p.handle)).length;
+  const legend: LegendEntry[] = [
+    { color: CATEGORICAL[0], label: t("Matches"), count: hits },
+    { color: NO_DATA_COLOR, label: t("Others"), count: people.length - hits },
+  ].filter((e) => e.count > 0);
+  return {
+    colorFor: (p) => (matched.has(p.handle) ? CATEGORICAL[0] : null),
+    detailFor: (p) => (matched.has(p.handle) ? `${t("Matches:")} ${label}` : null),
+    legend,
+  };
+}

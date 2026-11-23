@@ -85,9 +85,9 @@ const GEN_COLORS: readonly (readonly [string, string])[] = [
  * threeStopGradient below. */
 const DEATH_COLORS: readonly [string, string, string] = ["#eaf1ec", "#5f97c9", "#232449"];
 
-/** "tag"/"attribute" color each person from FanChartOptions.personColoring
+/** "tag"/"attribute"/"filter" color each person from FanChartOptions.personColoring
  * (charts/personColors.ts), built by the caller from the people drawn. */
-export type FanColorScheme = "gen" | "death" | "tag" | "attribute";
+export type FanColorScheme = "gen" | "death" | "tag" | "attribute" | "filter";
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -774,7 +774,7 @@ export interface FanChartOptions {
   /** "Generation"/"Age at death" (TreeView.tsx's own SegmentedControl) --
    * see fillFor/strokeFor below. */
   colorScheme: FanColorScheme;
-  /** Required for the "tag"/"attribute" schemes; ignored otherwise. */
+  /** Required for the "tag"/"attribute"/"filter" schemes; ignored otherwise. */
   personColoring?: PersonColoring | null;
   /** The handle to animate the view onto -- components/visuals/FanChart.tsx
    * sets this to whichever wedge was just clicked, the same "target,
@@ -1016,7 +1016,7 @@ export function renderFanChart(
   // in calendar mode for the "Age at death" scheme's own reachable case
   // (both dates present, but birth >= death -- ageAtDeath's own guard).
   const NO_SCHEME_DATA = NO_DATA_COLOR;
-  const byPerson = (colorScheme === "tag" || colorScheme === "attribute") && personColoring ? personColoring : null;
+  const byPerson = colorScheme !== "gen" && colorScheme !== "death" && personColoring ? personColoring : null;
 
   // In calendar-anchored mode, a known person missing either date has no
   // real geometry to show either -- nodeRadii already fell back to the

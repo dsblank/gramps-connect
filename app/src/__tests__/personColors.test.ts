@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  NO_DATA_COLOR, OTHER_COLOR, UNCOLORED_TAG_COLOR, attributeTypesIn, buildAttributeColoring, buildTagColoring, textColorOn, toTagInfo,
+  NO_DATA_COLOR, OTHER_COLOR, UNCOLORED_TAG_COLOR, attributeTypesIn, buildAttributeColoring, buildFilterColoring, buildTagColoring, textColorOn, toTagInfo,
   type TagInfo,
 } from "../charts/personColors";
 import type { TreePersonRaw } from "../store/treeData";
@@ -158,5 +158,26 @@ describe("textColorOn", () => {
     expect(textColorOn("#86b6ef").name).toBe("#0b0b0b");
     expect(textColorOn("#0d366b").name).toBe("#ffffff");
     expect(textColorOn("#8b0000").name).toBe("#ffffff");
+  });
+});
+
+describe("buildFilterColoring", () => {
+  const people = ["a", "b", "c"].map((h) => person(h));
+  it("colors matches, leaves others for the chart's no-data look", () => {
+    const c = buildFilterColoring(people, new Set(["a", "zz"]), "No birth date");
+    expect(c.colorFor(people[0])).toBe("#2a78d6");
+    expect(c.colorFor(people[1])).toBeNull();
+    expect(c.detailFor(people[0])).toBe("Matches: No birth date");
+    expect(c.detailFor(people[1])).toBeNull();
+    expect(c.legend).toEqual([
+      { color: "#2a78d6", label: "Matches", count: 1 },
+      { color: NO_DATA_COLOR, label: "Others", count: 2 },
+    ]);
+  });
+
+  it("leaves out an empty group", () => {
+    expect(buildFilterColoring(people, new Set(), "x").legend).toEqual([
+      { color: NO_DATA_COLOR, label: "Others", count: 3 },
+    ]);
   });
 });

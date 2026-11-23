@@ -12,6 +12,16 @@ describe("parseErrorMessage", () => {
     ).toBe("Unknown report option bogus");
   });
 
+  it("prefers a validation error's field message over its headline", async () => {
+    const body = JSON.stringify({
+      error: {
+        code: 422, message: "Invalid 'where_expr'", type: "invalid_query",
+        messages: { json: { where_expr: ["unknown field 'brith' on Person -- known fields: gender"] } },
+      },
+    });
+    expect(await parseErrorMessage(res(422, body))).toBe("unknown field 'brith' on Person -- known fields: gender");
+  });
+
   it("turns a bare abort()'s envelope into a status line", async () => {
     expect(await parseErrorMessage(res(422, '{"code":422,"status":"Unprocessable Entity"}'))).toBe(
       "Request rejected by the server (422 Unprocessable Entity)"
