@@ -202,8 +202,9 @@ export function CitationsSection({ view, detail, onNavigate, onRefetch }: Sectio
   return (
     <SectionShell
       label={t("Citations")}
+      // Nothing to show or hide: a plain label (with just the "+").
       open={open}
-      onToggle={toggle}
+      onToggle={collected.length > 0 ? toggle : undefined}
       count={collected.length}
       action={canAttach && (
         <AttachControl

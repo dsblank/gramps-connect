@@ -8,7 +8,8 @@ import { STORAGE_KEYS } from "../../../store/storageKeys";
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("../../../store/apiFetch", () => ({ apiFetch }));
-vi.mock("../../../auth/auth", () => ({ getToken: async () => "tok", hasPermissions: () => false }));
+const hasPermissions = vi.hoisted(() => vi.fn(() => false));
+vi.mock("../../../auth/auth", () => ({ getToken: async () => "tok", hasPermissions }));
 
 import { CitationsSection } from "../sections/CitationsSection";
 
@@ -29,6 +30,7 @@ function personWith(handles: { own: string[]; event: string[] }): ObjectDetail {
 
 beforeEach(() => {
   localStorage.clear();
+  hasPermissions.mockReturnValue(false);
   apiFetch.mockReset().mockImplementation(async (url: string) => {
     const handles = decodeURIComponent(new URL(url, "http://x").searchParams.get("handles") ?? "").split(",");
     return new Response(JSON.stringify(handles.map((h) => CITATIONS[h]).filter(Boolean)), { status: 200 });
@@ -82,5 +84,14 @@ describe("CitationsSection", () => {
     renderWithProviders(<CitationsSection type="person" view={PERSON_VIEW} detail={detail} onNavigate={vi.fn()} />);
     expect(screen.getByText("Folio 3 · Very High")).toBeInTheDocument();
     expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("has no toggle when there are no citations, just the label and +", () => {
+    hasPermissions.mockReturnValue(true);
+    renderWithProviders(
+      <CitationsSection type="person" view={PERSON_VIEW} detail={personWith({ own: [], event: [] })} onNavigate={vi.fn()} />,
+    );
+    expect(screen.getByText("Citations")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Citations/ })).toBeNull();
   });
 });
