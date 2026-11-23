@@ -162,6 +162,14 @@ export class ViewStore {
   private unfilteredDb: Database | null = null;
   /** The unfiltered result's totalCount when unfilteredDb was kept. */
   private unfilteredTotal = 0;
+  /** The tree's whole count for a list filtered from its very first load
+   * (no unfilteredDb to read it from): one count-only query, see
+   * fetchTreeTotal(). Null until it lands, or while unfiltered. */
+  private fetchedTreeTotal: number | null = null;
+  /** Set once fetchTreeTotal() starts, so it runs once per filtered
+   * excursion (not once per render, and not again after a failure);
+   * cleared with fetchedTreeTotal when the list goes back to unfiltered. */
+  private treeTotalRequested = false;
   private loadedCount = 0;
   private totalCount = 0;
   private whereExpr: string | null = null;
@@ -1023,6 +1031,37 @@ export class ViewStore {
     return { loaded, total: Math.max(loaded, this.unfilteredTotal) };
   }
 
+  /** How many of this list's records the whole tree has, filtered list or
+   * not -- the status bar's "showing x / TOTAL". Null only while a list
+   * filtered from its first load is still waiting on fetchTreeTotal(). */
+  wholeTreeTotal(): number | null {
+    if (this.whereExpr === null && this.pickerExpr === null) return this.totalCount;
+    if (this.unfilteredDb) return this.unfilteredCounts().total;
+    if (this.fetchedTreeTotal === null) void this.fetchTreeTotal();
+    return this.fetchedTreeTotal;
+  }
+
+  /** The X-Total-Count of the view with only its baseFilter (no search,
+   * no picker filter) -- a limit-1, no-columns query, so the server only
+   * counts. */
+  private async fetchTreeTotal(): Promise<void> {
+    if (this.treeTotalRequested) return;
+    this.treeTotalRequested = true;
+    try {
+      const { totalCount } = await fetchPage(
+        this.view, await getToken(), null, true, this.combinedFilter(null, null), defaultOrderBy(this.view), 1, [],
+      );
+      // Cleared (or a whole-tree copy kept) while this was in flight:
+      // wholeTreeTotal() no longer reads it.
+      if (totalCount !== null) {
+        this.fetchedTreeTotal = totalCount;
+        this.emit();
+      }
+    } catch {
+      // Leave the total off; the status bar shows just "showing x".
+    }
+  }
+
   /** Whether an `unfiltered` read sees the whole tree's rows (possibly only
    * a prefix of them so far -- see unfilteredCounts): always while the list
    * is unfiltered, and while filtered only if a whole-tree copy was kept
@@ -1396,6 +1435,8 @@ export class ViewStore {
       if (newIsUnfiltered) {
         this.unfilteredDb?.close();
         this.unfilteredDb = null;
+        this.fetchedTreeTotal = null;
+        this.treeTotalRequested = false;
         previousDb?.close();
       } else if (wasUnfiltered && previousDb && !this.unfilteredDb) {
         // Filtering starts: keep the whole-tree copy (see unfilteredDb).

@@ -21,9 +21,8 @@ const LIVE_SYNC_COLOR: Record<LiveSyncStatus, string> = {
 
 /** "loaded x / y" while rows are still arriving; once the whole list is
  * in, "showing x / TOTAL" -- the rows in the (possibly filtered) list out
- * of the tree's whole count. TOTAL is unknown when the list was filtered
- * from its very first load (no whole-tree copy was kept, see
- * viewStore.hasWholeTreeRows), so it's left off then. */
+ * of the tree's whole count (viewStore.wholeTreeTotal; left off only for
+ * the moment a list filtered from its first load waits on that count). */
 function listCountText(key: ViewConfig["key"], snapshot: ViewSnapshot): string {
   const { loadedCount, totalCount, status } = snapshot;
   if (status === "loading" && totalCount === 0) return "loading…";
@@ -32,10 +31,10 @@ function listCountText(key: ViewConfig["key"], snapshot: ViewSnapshot): string {
   }
   if (status !== "ready") return "";
   const filtered = snapshot.whereExpr !== null || snapshot.pickerExpr !== null;
-  if (!filtered) return totalCount > 0 ? `showing ${totalCount.toLocaleString()} / ${totalCount.toLocaleString()}` : "";
-  const store = getViewStore(key);
-  if (!store.hasWholeTreeRows()) return `showing ${totalCount.toLocaleString()}`;
-  return `showing ${totalCount.toLocaleString()} / ${store.unfilteredCounts().total.toLocaleString()}`;
+  if (!filtered && totalCount === 0) return "";
+  const treeTotal = getViewStore(key).wholeTreeTotal();
+  if (treeTotal === null) return `showing ${totalCount.toLocaleString()}`;
+  return `showing ${totalCount.toLocaleString()} / ${treeTotal.toLocaleString()}`;
 }
 
 export function StatusBar({ view, liveSyncStatus }: StatusBarProps) {
