@@ -433,7 +433,9 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
 
   const personColoring = useMemo(() => {
     if (colorScheme === "tag") return tags ? buildTagColoring(fanPeople, tags) : null;
-    if (colorScheme === "attribute") return effectiveAttributeType ? buildAttributeColoring(fanPeople, effectiveAttributeType) : null;
+    // With no attribute to pick, everyone shows as "Not recorded" rather
+    // than quietly falling back to generation colors.
+    if (colorScheme === "attribute") return buildAttributeColoring(fanPeople, effectiveAttributeType ?? "");
     return null;
   }, [colorScheme, tags, fanPeople, effectiveAttributeType]);
 

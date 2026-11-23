@@ -27,6 +27,8 @@ const CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#00
  * that still clears 2:1 against the light surface. */
 const SEQUENTIAL: readonly [string, string, string] = ["#86b6ef", "#2a78d6", "#0d366b"];
 
+const NUMBER = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
+
 export interface TagInfo {
   handle: string;
   name: string;
@@ -53,17 +55,20 @@ export interface PersonColoring {
   legend: LegendEntry[];
 }
 
+/** Fill for a tag nobody picked a color for (Gramps stores black, as for
+ * its own ToDo tag). Darker than NO_DATA_COLOR, so a tagged person never
+ * looks untagged. */
+export const UNCOLORED_TAG_COLOR = OTHER_COLOR;
+
 /** A tag as the API returns it, with Gramps' 16-bit-per-channel color
- * converted. A tag with no usable color gets NO_DATA_COLOR's grey rather
- * than black, which is what Gramps stores for a tag nobody picked a color
- * for. */
+ * converted. Black or missing becomes UNCOLORED_TAG_COLOR. */
 export function toTagInfo(raw: { handle: string; name?: unknown; color?: unknown; priority?: unknown }): TagInfo {
   const css = gtkColorToCss(typeof raw.color === "string" ? raw.color : undefined);
   const valid = css && /^#[0-9a-f]{6}$/i.test(css) && css.toLowerCase() !== "#000000";
   return {
     handle: raw.handle,
     name: typeof raw.name === "string" ? raw.name : "",
-    color: valid ? css.toLowerCase() : NO_DATA_COLOR,
+    color: valid ? css.toLowerCase() : UNCOLORED_TAG_COLOR,
     priority: typeof raw.priority === "number" ? raw.priority : 0,
   };
 }
@@ -125,24 +130,37 @@ function attributeValue(person: TreePersonRaw, type: string): string | null {
 }
 
 /** Attribute types present on these people, most common first, with how
- * many people have each -- the choices for "Color by attribute". */
+ * many people have each -- the choices for "Color by attribute". Leaves
+ * out identifiers: a text attribute with a different value for every
+ * person (an imported _UID or RIN) would only color 8 arbitrary people and
+ * lump the rest into Other. Distinct numbers still shade along the ramp,
+ * so those stay. */
 export function attributeTypesIn(people: readonly TreePersonRaw[]): { type: string; count: number }[] {
+  const values = new Map<string, Set<string>>();
   const counts = new Map<string, number>();
   for (const p of people) {
-    const seen = new Set<string>();
+    const v = new Map<string, string>();
     for (const attr of p.attribute_list ?? []) {
       const name = attributeTypeName(attr);
-      if (!name || seen.has(name) || !(typeof attr.value === "string" && attr.value.trim())) continue;
-      seen.add(name);
+      const value = typeof attr.value === "string" ? attr.value.trim() : "";
+      if (name && value && !v.has(name)) v.set(name, value);
+    }
+    for (const [name, value] of v) {
       counts.set(name, (counts.get(name) ?? 0) + 1);
+      if (!values.has(name)) values.set(name, new Set());
+      values.get(name)!.add(value);
     }
   }
   return [...counts.entries()]
+    .filter(([type, count]) => {
+      const distinct = values.get(type)!;
+      const identifier = count > CATEGORICAL.length && distinct.size === count && ![...distinct].every((x) => NUMBER.test(x));
+      return !identifier;
+    })
     .map(([type, count]) => ({ type, count }))
     .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
 }
 
-const NUMBER = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
 
 export function buildAttributeColoring(people: readonly TreePersonRaw[], type: string): PersonColoring {
   const values = new Map<string, number>();

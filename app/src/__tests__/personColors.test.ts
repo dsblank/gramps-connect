@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  NO_DATA_COLOR, OTHER_COLOR, attributeTypesIn, buildAttributeColoring, buildTagColoring, textColorOn, toTagInfo,
+  NO_DATA_COLOR, OTHER_COLOR, UNCOLORED_TAG_COLOR, attributeTypesIn, buildAttributeColoring, buildTagColoring, textColorOn, toTagInfo,
   type TagInfo,
 } from "../charts/personColors";
 import type { TreePersonRaw } from "../store/treeData";
@@ -24,11 +24,12 @@ describe("toTagInfo", () => {
     expect(toTagInfo({ handle: "t", color: "#AABBCC" }).color).toBe("#aabbcc");
   });
 
-  it("treats Gramps' default black and missing colors as no color", () => {
-    expect(toTagInfo({ handle: "t", color: "#000000000000" }).color).toBe(NO_DATA_COLOR);
-    expect(toTagInfo({ handle: "t", color: "#000000" }).color).toBe(NO_DATA_COLOR);
-    expect(toTagInfo({ handle: "t" }).color).toBe(NO_DATA_COLOR);
-    expect(toTagInfo({ handle: "t", color: "red" }).color).toBe(NO_DATA_COLOR);
+  it("gives Gramps' default black and missing colors a grey distinct from untagged", () => {
+    expect(UNCOLORED_TAG_COLOR).not.toBe(NO_DATA_COLOR);
+    expect(toTagInfo({ handle: "t", color: "#000000000000" }).color).toBe(UNCOLORED_TAG_COLOR);
+    expect(toTagInfo({ handle: "t", color: "#000000" }).color).toBe(UNCOLORED_TAG_COLOR);
+    expect(toTagInfo({ handle: "t" }).color).toBe(UNCOLORED_TAG_COLOR);
+    expect(toTagInfo({ handle: "t", color: "red" }).color).toBe(UNCOLORED_TAG_COLOR);
   });
 });
 
@@ -82,6 +83,20 @@ describe("attributeTypesIn", () => {
       { type: "Caste", count: 1 },
       { type: "Nickname", count: 1 },
     ]);
+  });
+});
+
+describe("attributeTypesIn identifiers", () => {
+  it("drops text types with a different value for everyone, keeps distinct numbers", () => {
+    const people = Array.from({ length: 12 }, (_, i) =>
+      person(`p${i}`, { attribute_list: [attr("_UID", `ABC-${i}`), attr("Score", String(i)), attr("Level", String(i % 3))] }),
+    );
+    expect(attributeTypesIn(people).map((a) => a.type)).toEqual(["Level", "Score"]);
+  });
+
+  it("keeps a unique text type when few people have it", () => {
+    const people = ["a", "b", "c"].map((v) => person(v, { attribute_list: [attr("Nickname", v)] }));
+    expect(attributeTypesIn(people).map((a) => a.type)).toEqual(["Nickname"]);
   });
 });
 
