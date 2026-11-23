@@ -46,6 +46,10 @@ export interface TreePersonRaw {
     death?: { date?: string };
   };
   media_list?: { ref: string; rect?: number[] }[];
+  /** Tag handles and attributes, as sent with the full person record --
+   * read by charts/personColors.ts's "Color by tag/attribute". */
+  tag_list?: string[];
+  attribute_list?: { type?: string | { string?: string }; value?: string }[];
   extended?: {
     primary_parent_family?: { father_handle?: string; mother_handle?: string };
     families?: TreeFamilyRaw[];

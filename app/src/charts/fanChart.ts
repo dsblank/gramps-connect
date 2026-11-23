@@ -30,6 +30,7 @@ import { zoom, zoomIdentity, zoomTransform, type ZoomTransform } from "d3-zoom";
 import type { TreeNode, TreePersonRaw } from "../store/treeData";
 import { lifeEventDate } from "../store/lifeEventDates";
 import { setExportCloneHook } from "../store/chartExport/prepareSvg";
+import { NO_DATA_COLOR, textColorOn, type PersonColoring } from "./personColors";
 
 const RING = 70;
 /** The parent-inherited edge's own inset, per generation -- edgeInset's own
@@ -84,7 +85,9 @@ const GEN_COLORS: readonly (readonly [string, string])[] = [
  * threeStopGradient below. */
 const DEATH_COLORS: readonly [string, string, string] = ["#eaf1ec", "#5f97c9", "#232449"];
 
-export type FanColorScheme = "gen" | "death";
+/** "tag"/"attribute" color each person from FanChartOptions.personColoring
+ * (charts/personColors.ts), built by the caller from the people drawn. */
+export type FanColorScheme = "gen" | "death" | "tag" | "attribute";
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -771,6 +774,8 @@ export interface FanChartOptions {
   /** "Generation"/"Age at death" (TreeView.tsx's own SegmentedControl) --
    * see fillFor/strokeFor below. */
   colorScheme: FanColorScheme;
+  /** Required for the "tag"/"attribute" schemes; ignored otherwise. */
+  personColoring?: PersonColoring | null;
   /** The handle to animate the view onto -- components/visuals/FanChart.tsx
    * sets this to whichever wedge was just clicked, the same "target,
    * independent of whether this render actually animates to it" split
@@ -803,7 +808,7 @@ export function renderFanChart(
   ancestorTree: TreeNode | null,
   {
     bboxWidth, bboxHeight, initialZoom, initialRotation, onRotationChange, onSelectPerson, selectedHandle, sizeByLifespan, colorScheme,
-    centerHandle, centerOnSelect, flipLabels = true,
+    personColoring, centerHandle, centerOnSelect, flipLabels = true,
   }: FanChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 12);
@@ -1010,7 +1015,8 @@ export function renderFanChart(
   // nothing real to place them by either) -- still used in fixed mode, and
   // in calendar mode for the "Age at death" scheme's own reachable case
   // (both dates present, but birth >= death -- ageAtDeath's own guard).
-  const NO_SCHEME_DATA = "#c9c2b3";
+  const NO_SCHEME_DATA = NO_DATA_COLOR;
+  const byPerson = (colorScheme === "tag" || colorScheme === "attribute") && personColoring ? personColoring : null;
 
   // In calendar-anchored mode, a known person missing either date has no
   // real geometry to show either -- nodeRadii already fell back to the
@@ -1021,6 +1027,7 @@ export function renderFanChart(
   const fillFor = (d: Wedge): string => {
     if (!d.node?.person) return "url(#fan-hatch)";
     if (sizeByLifespan && !hasFullLifespan(d.node)) return "url(#fan-hatch)";
+    if (byPerson) return byPerson.colorFor(d.node.person) ?? NO_SCHEME_DATA;
     if (colorScheme === "death") {
       const age = ageAtDeath(d.node);
       return age != null ? deathColorFor(age) : NO_SCHEME_DATA;
@@ -1030,6 +1037,7 @@ export function renderFanChart(
   const strokeBaseFor = (d: Wedge): string => {
     if (!d.node?.person) return "var(--mantine-color-default-border)";
     if (sizeByLifespan && !hasFullLifespan(d.node)) return "var(--mantine-color-default-border)";
+    if (byPerson) return darken(byPerson.colorFor(d.node.person) ?? NO_SCHEME_DATA);
     if (colorScheme === "death") {
       const age = ageAtDeath(d.node);
       return age != null ? darken(deathColorFor(age)) : darken(NO_SCHEME_DATA);
@@ -1104,7 +1112,11 @@ export function renderFanChart(
 
   const withPerson = group.filter((d) => !!d.node?.person);
 
-  withPerson.append("title").text((d) => personTooltip(d.node!.person!));
+  withPerson.append("title").text((d) => {
+    const base = personTooltip(d.node!.person!);
+    const detail = byPerson?.detailFor(d.node!.person!);
+    return detail ? `${base}\n${detail}` : base;
+  });
 
   // Each wedge's text box, in one of two orientations, whichever gives the
   // longer line: *tangential* (each line its own arc, following the ring's
@@ -1149,6 +1161,11 @@ export function renderFanChart(
     const midR = (d.innerR + d.outerR) / 2;
     const thetaDeg = (((d.drawA0 + d.drawA1) / 2) * 180) / Math.PI;
     const curved = d.depth > 0 && !box.radial;
+    // A person-colored wedge can be any color an editor picked for a tag,
+    // so its text follows the fill; the generation/age palettes keep their
+    // existing look.
+    const fill = fillFor(d);
+    const ink = byPerson && fill.startsWith("#") ? textColorOn(fill) : null;
     const g = select(this)
       .append("g")
       .attr("class", "fan-label")
@@ -1162,7 +1179,7 @@ export function renderFanChart(
       const text = g
         .append("text")
         .attr("text-anchor", "middle")
-        .attr("fill", line.kind === "name" ? "var(--mantine-color-text)" : "rgba(0, 0, 0, 0.65)")
+        .attr("fill", line.kind === "name" ? (ink?.name ?? "var(--mantine-color-text)") : (ink?.date ?? "rgba(0, 0, 0, 0.65)"))
         .attr("font-size", line.size)
         .attr("font-weight", line.kind === "name" ? 600 : null);
       if (!curved) {

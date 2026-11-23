@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { zoomTransform, type ZoomTransform } from "d3-zoom";
 import { ActionIcon, Tooltip } from "@mantine/core";
 import { renderFanChart, resetFanRotation, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
+import type { PersonColoring } from "../../charts/personColors";
 import { t } from "../../i18n/i18n";
 import type { TreeNode } from "../../store/treeData";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
@@ -16,6 +17,8 @@ interface FanChartProps {
   sizeByLifespan: boolean;
   /** TreeView.tsx's own "Generation"/"Age at death" SegmentedControl. */
   colorScheme: FanColorScheme;
+  /** For the "tag"/"attribute" schemes (charts/personColors.ts). */
+  personColoring?: PersonColoring | null;
   /** TreeView.tsx's own "Flip labels" checkbox. */
   flipLabels: boolean;
 }
@@ -48,7 +51,7 @@ export interface FanChartHandle {
  *  - a fresh *selection* (not just this handle being still-selected across
  *    an unrelated rebuild) asks renderFanChart to animate-center on it. */
 export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanChart(
-  { ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, flipLabels },
+  { ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, personColoring, flipLabels },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -123,12 +126,13 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
       onSelectPerson,
       sizeByLifespan,
       colorScheme,
+      personColoring,
       flipLabels,
       centerHandle: selectedHandle,
       centerOnSelect: justSelected && !shouldFit,
     });
     container.replaceChildren(svg);
-  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, flipLabels, displayVersion]);
+  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, personColoring, flipLabels, displayVersion]);
 
   const wrapped = ((rotation % 360) + 360) % 360;
   const rotated = wrapped > 0.01 && wrapped < 359.99;
