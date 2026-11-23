@@ -26,7 +26,7 @@ interface Row {
   builtinLabel: string | null;
   expr: string;
   title: string;
-  /** A custom column's tiebreak (CustomColumn.thenBy). */
+  /** A custom column's second sort (CustomColumn.thenBy). */
   thenBy: string;
   visible: boolean;
   error: string | null;
@@ -347,7 +347,7 @@ function ThenByField({
           style={{ flex: 1, minWidth: 0 }}
           placeholder={t("Then sort by (optional)")}
           aria-label={t("Then sort by")}
-          title={t("When rows tie on this column, order them by this GOQL expression, then by the list's usual order.")}
+          title={t("Clicking this column's header sorts by the column, then by this GOQL expression: for example a birthplace column then birth.date, to list each place's people oldest first.")}
           spellCheck={false}
           value={row.thenBy}
           error={row.thenByError ?? undefined}

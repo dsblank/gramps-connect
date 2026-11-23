@@ -29,8 +29,10 @@ export interface CustomColumn {
   expr: string;
   /** Header text; the expression itself when absent. */
   title?: string;
-  /** A GOQL expression to break ties on when the column is sorted, before
-   * the list's default order does (ColumnConfig.thenBy). */
+  /** A second sort: a GOQL expression the column's header sorts by after
+   * the column itself, before the list's default order
+   * (ColumnConfig.thenBy) -- `birth.place.title` then `birth.date` groups
+   * people by birthplace, oldest first in each. */
   thenBy?: string;
   /** No longer read: every custom column sorts now (columnSort.ts). Kept
    * so layouts saved before stay valid. */

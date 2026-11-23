@@ -425,7 +425,7 @@ describe("a custom column's \"then by\"", () => {
     expect(hidden).toMatchObject({ hidden: true, select: { goql: "birth.place.title" } });
     expect(locateSortKey(PERSON_VIEW, "birth.place.title")?.cached.key).toBe("goql_c_t");
     // Its link to the birth event, and the event's to the place, are watched.
-    expect(PERSON_VIEW.dependsOn?.some((d) => d.via.startsWith("goql_c_t_d"))).toBe(true);
+    expect(PERSON_VIEW.dependsOn?.some((d) => d.via?.startsWith("goql_c_t_d"))).toBe(true);
     const custom = PERSON_VIEW.columns.find((c) => c.key === "goql_c")!;
     expect(columnSort(PERSON_VIEW, custom)?.keys.slice(0, 2)).toEqual(["len(citations)", "birth.place.title"]);
     expect(layoutChangesCache(PERSON_VIEW, layout(), layout("birth.place.title"))).toBe(true);

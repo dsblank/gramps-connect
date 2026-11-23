@@ -2,8 +2,8 @@
 // except a Gramps type (stored as a number whose order isn't its name's), a
 // whole record, and a column that opts out with `sortBy: null`. The keys
 // are worked out from the column's `select` unless it names them
-// (ColumnConfig.sortBy), then its `thenBy`, then the view's own default
-// order breaks ties -- all at the clicked direction.
+// (ColumnConfig.sortBy), then its `thenBy` (a second sort), then the view's own default
+// order -- all at the clicked direction.
 //
 // A key read from inside each record (a date's sortval, a linked person's
 // name, a custom column) can only be sorted cheaply on a small list:
@@ -24,7 +24,7 @@ export interface ColumnSort {
   limited: boolean;
 }
 
-/** The keys a header click sorts `column` by before any tiebreak, or null
+/** The keys a header click sorts `column` by before its `thenBy`, or null
  * when it can't be sorted. */
 export function primarySortKeys(view: ViewConfig, column: ColumnConfig): string[] | null {
   const { sortBy, select } = column;

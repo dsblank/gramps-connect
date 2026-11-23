@@ -82,9 +82,9 @@ export interface ColumnConfig {
    * Every key must be cached by some column of the view, so the list can
    * place a row (ViewStore.globalRankOfItem()) -- a unit test checks. */
   sortBy?: string | (() => string[]) | null;
-  /** A key to break ties on before the view's default order does -- a
-   * flat column or GOQL path, at the clicked direction (Citations' Source
-   * by Page). */
+  /** A second sort, after the column's own keys and before the view's
+   * default order -- a flat column or GOQL path, at the clicked direction
+   * (Citations' Source, then Page). */
   thenBy?: string;
 }
 
@@ -162,7 +162,7 @@ export interface ViewConfig {
    * Output, a fixed-filter window onto other views' own Media rows). */
   sidebarSeparatorBefore?: boolean;
   /** Default sort, used until the user clicks a column header (see
-   * ViewStore.setSort), and the tiebreak after any column a header click
+   * ViewStore.setSort), and the last sort after any column a header click
    * sorts by (columnSort.ts). Each entry's `column` is sent verbatim as
    * gramps-web-api's order_by, which takes a flat column ("surname") or,
    * since gramps-web-api #962, a dotted path ("name.value"). Whichever it
