@@ -17,6 +17,12 @@ starting with a small header:
 
     Keep screenshots around 1500 px wide, saved as JPEG.
 
+    The post's first image is also its thumbnail: shown beside it on the
+    blog's front page, named in the feed (media:thumbnail) and used as the
+    preview picture when someone shares a link to the post (og:image). To
+    pick a different one, add "thumbnail: img/other.jpg" to the header;
+    "thumbnail: none" leaves the post without one.
+
 Running
 
     python scripts/build-blog.py
@@ -44,6 +50,8 @@ BLOG = ROOT / "blog"
 POSTS = BLOG / "posts"
 SITE = "https://dsblank.github.io/gramps-connect/"
 BLOG_URL = SITE + "blog/"
+
+FIRST_IMG_RE = re.compile(r'<img [^>]*?src="([^"]+)"')
 
 NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-([a-z0-9-]+)\.md$")
 
@@ -75,6 +83,12 @@ def read_post(path):
         sys.exit(f"{path.name}: missing 'title:' in the header")
     body = markdown.markdown(text, extensions=["extra", "sane_lists", "smarty"])
     body = FIGURE_RE.sub(figure, body)
+    thumbnail = meta.get("thumbnail", "")
+    if thumbnail.lower() == "none":
+        thumbnail = ""
+    elif not thumbnail:
+        m = FIRST_IMG_RE.search(body)
+        thumbnail = html.unescape(m.group(1)) if m else ""
     return {
         "date": date,
         "slug": slug,
@@ -83,6 +97,9 @@ def read_post(path):
         "author": meta.get("author", ""),
         "draft": meta.get("draft", "").lower() in ("true", "yes", "1"),
         "html": body,
+        # As written in the post (img/x.jpg); see thumbnail_url() for the
+        # full address that feeds and link previews need.
+        "thumbnail": thumbnail,
     }
 
 
@@ -118,7 +135,18 @@ STYLE = """
   h1 { font-size: 2rem; line-height: 1.25; margin: 40px 0 8px; }
   .meta { color: var(--muted); font-size: 0.95rem; margin: 0 0 32px; }
   .post-list { list-style: none; padding: 0; margin: 0 0 48px; }
-  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border); }
+  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border);
+                  display: flex; gap: 20px; align-items: flex-start; }
+  .post-list .text { flex: 1; min-width: 0; }
+  .post-list .thumb { flex: none; width: 168px; aspect-ratio: 4 / 3;
+                      border: 1px solid var(--border); border-radius: 8px;
+                      overflow: hidden; background: var(--bg-alt); }
+  .post-list .thumb img { display: block; width: 100%; height: 100%;
+                          object-fit: cover; object-position: top left; }
+  @media (max-width: 560px) {
+    .post-list li { flex-direction: column-reverse; gap: 12px; }
+    .post-list .thumb { width: 100%; aspect-ratio: 2 / 1; }
+  }
   .post-list h2 { font-size: 1.35rem; margin: 0 0 4px; }
   .post-list h2 a { color: var(--fg); text-decoration: none; }
   .post-list h2 a:hover { color: var(--accent); }
@@ -144,7 +172,26 @@ STYLE = """
 """
 
 
-def page(title, description, body):
+def social_tags(title, description, url, image, kind):
+    """Open Graph tags: the title, text and picture that Discourse, Mastodon,
+    Slack, Facebook and others show when someone pastes a link."""
+    tags = [
+        ("og:site_name", "Gramps Connect"),
+        ("og:type", kind),
+        ("og:title", title),
+        ("og:description", description),
+        ("og:url", url),
+    ]
+    if image:
+        tags.append(("og:image", image))
+    lines = [f'<meta property="{k}" content="{html.escape(v)}">' for k, v in tags]
+    card = "summary_large_image" if image else "summary"
+    lines.append(f'<meta name="twitter:card" content="{card}">')
+    lines.append(f'<link rel="canonical" href="{html.escape(url)}">')
+    return "\n".join(lines)
+
+
+def page(title, description, body, social):
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -152,6 +199,7 @@ def page(title, description, body):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
 <meta name="description" content="{html.escape(description)}">
+{social}
 <link rel="icon" href="../app/public/favicon-32.png">
 <link rel="alternate" type="application/atom+xml" title="Gramps Connect blog" href="feed.xml">
 <style>{STYLE}</style>
@@ -183,20 +231,43 @@ def byline(post):
     return " · ".join(parts)
 
 
+def post_url(post):
+    return f"{BLOG_URL}{post['slug']}.html"
+
+
+def thumbnail_url(post):
+    """The thumbnail's full address, or "" when the post has none."""
+    if not post["thumbnail"]:
+        return ""
+    return urllib.parse.urljoin(post_url(post), post["thumbnail"])
+
+
 def build_index(posts):
     items = []
     for p in posts:
         summary = f"<p>{html.escape(p['summary'])}</p>" if p["summary"] else ""
+        # The title link already names the post, so the picture is a second
+        # way in rather than more to read: empty alt, out of the tab order.
+        thumb = (
+            f'<a class="thumb" href="{p["slug"]}.html" tabindex="-1" aria-hidden="true">'
+            f'<img src="{html.escape(p["thumbnail"])}" alt="" loading="lazy"></a>'
+            if p["thumbnail"] else ""
+        )
         items.append(
-            f'<li><h2><a href="{p["slug"]}.html">{html.escape(p["title"])}</a></h2>'
-            f'<p class="meta">{byline(p)}</p>{summary}</li>'
+            f'<li><div class="text"><h2><a href="{p["slug"]}.html">{html.escape(p["title"])}</a></h2>'
+            f'<p class="meta">{byline(p)}</p>{summary}</div>{thumb}</li>'
         )
     body = (
         "<h1>Blog</h1>\n"
         '<p class="meta">News, new features and behind-the-scenes notes on Gramps Connect.</p>\n'
         f'<ul class="post-list">\n{chr(10).join(items) or "<li>No posts yet.</li>"}\n</ul>'
     )
-    return page("Gramps Connect blog", "News and notes from the Gramps Connect project.", body)
+    description = "News and notes from the Gramps Connect project."
+    image = thumbnail_url(posts[0]) if posts else ""
+    return page(
+        "Gramps Connect blog", description, body,
+        social_tags("Gramps Connect blog", description, BLOG_URL, image, "website"),
+    )
 
 
 def build_post(post):
@@ -205,7 +276,11 @@ def build_post(post):
         f'<p class="meta">{byline(post)}</p>\n{post["html"]}\n</article>\n'
         '<p class="back"><a href="./">&larr; All posts</a></p>'
     )
-    return page(f"{post['title']} · Gramps Connect", post["summary"] or post["title"], body)
+    description = post["summary"] or post["title"]
+    return page(
+        f"{post['title']} · Gramps Connect", description, body,
+        social_tags(post["title"], description, post_url(post), thumbnail_url(post), "article"),
+    )
 
 
 RELATIVE_URL_RE = re.compile(r'(\b(?:src|href)=")([^"#][^"]*)(")')
@@ -227,8 +302,14 @@ def build_feed(posts):
     updated = f"{posts[0]['date']}T00:00:00Z" if posts else now
     entries = []
     for p in posts:
-        url = f"{BLOG_URL}{p['slug']}.html"
+        url = post_url(p)
         author = f"<author><name>{html.escape(p['author'])}</name></author>" if p["author"] else ""
+        # Media RSS's thumbnail, the element feed readers look for when a
+        # feed names an entry's picture outright.
+        thumb = (
+            f'<media:thumbnail url="{html.escape(thumbnail_url(p))}"/>'
+            if p["thumbnail"] else ""
+        )
         entries.append(
             f"""  <entry>
     <title>{html.escape(p['title'])}</title>
@@ -236,13 +317,14 @@ def build_feed(posts):
     <id>{url}</id>
     <updated>{p['date']}T00:00:00Z</updated>
     {author}
+    {thumb}
     <summary>{html.escape(p['summary'])}</summary>
     <content type="html">{html.escape(absolute_urls(p['html'], url))}</content>
   </entry>"""
         )
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <?xml-stylesheet type="text/xsl" href="feed.xsl"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <title>Gramps Connect blog</title>
   <link href="{BLOG_URL}"/>
   <link rel="self" href="{BLOG_URL}feed.xml"/>

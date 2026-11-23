@@ -6,7 +6,8 @@
 -->
 <xsl:stylesheet version="1.0"
     xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-    xmlns:atom="http://www.w3.org/2005/Atom">
+    xmlns:atom="http://www.w3.org/2005/Atom"
+    xmlns:media="http://search.yahoo.com/mrss/">
 <xsl:output method="html" encoding="utf-8" doctype-system="about:legacy-compat"/>
 
 <xsl:template match="/atom:feed">
@@ -51,7 +52,18 @@
          user-select: all; }
   .meta { color: var(--muted); font-size: 0.95rem; margin: 0; }
   .post-list { list-style: none; padding: 0; margin: 0 0 48px; }
-  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border); }
+  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border);
+                  display: flex; gap: 20px; align-items: flex-start; }
+  .post-list .text { flex: 1; min-width: 0; }
+  .post-list .thumb { flex: none; width: 168px; aspect-ratio: 4 / 3;
+                      border: 1px solid var(--border); border-radius: 8px;
+                      overflow: hidden; background: var(--bg-alt); }
+  .post-list .thumb img { display: block; width: 100%; height: 100%;
+                          object-fit: cover; object-position: top left; }
+  @media (max-width: 560px) {
+    .post-list li { flex-direction: column-reverse; gap: 12px; }
+    .post-list .thumb { width: 100%; aspect-ratio: 2 / 1; }
+  }
   .post-list h2 { font-size: 1.35rem; margin: 0 0 4px; }
   .post-list h2 a { color: var(--fg); text-decoration: none; }
   .post-list h2 a:hover { color: var(--accent); }
@@ -79,10 +91,17 @@
 <ul class="post-list">
   <xsl:for-each select="atom:entry">
     <li>
-      <h2><a href="{substring-after(atom:link/@href, '/blog/')}"><xsl:value-of select="atom:title"/></a></h2>
-      <p class="meta"><xsl:value-of select="substring(atom:updated, 1, 10)"/></p>
-      <xsl:if test="atom:summary != ''">
-        <p><xsl:value-of select="atom:summary"/></p>
+      <div class="text">
+        <h2><a href="{substring-after(atom:link/@href, '/blog/')}"><xsl:value-of select="atom:title"/></a></h2>
+        <p class="meta"><xsl:value-of select="substring(atom:updated, 1, 10)"/></p>
+        <xsl:if test="atom:summary != ''">
+          <p><xsl:value-of select="atom:summary"/></p>
+        </xsl:if>
+      </div>
+      <xsl:if test="media:thumbnail">
+        <a class="thumb" href="{substring-after(atom:link/@href, '/blog/')}" tabindex="-1" aria-hidden="true">
+          <img src="{media:thumbnail/@url}" alt="" loading="lazy"/>
+        </a>
       </xsl:if>
     </li>
   </xsl:for-each>

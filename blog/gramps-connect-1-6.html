@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gramps Connect 1.6: color your charts, sort any column · Gramps Connect</title>
 <meta name="description" content="Gramps Connect 1.6 colors the people on your charts by tag, attribute or filter, sorts every list by any column (or two), and adds drag-to-reorder for notes and citations, tag ordering, and a Make Backup command.">
+<meta property="og:site_name" content="Gramps Connect">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Gramps Connect 1.6: color your charts, sort any column">
+<meta property="og:description" content="Gramps Connect 1.6 colors the people on your charts by tag, attribute or filter, sorts every list by any column (or two), and adds drag-to-reorder for notes and citations, tag ordering, and a Make Backup command.">
+<meta property="og:url" content="https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-6.html">
+<meta property="og:image" content="https://dsblank.github.io/gramps-connect/blog/img/v16-fan-colors.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-6.html">
 <link rel="icon" href="../app/public/favicon-32.png">
 <link rel="alternate" type="application/atom+xml" title="Gramps Connect blog" href="feed.xml">
 <style>
@@ -34,7 +42,18 @@
   h1 { font-size: 2rem; line-height: 1.25; margin: 40px 0 8px; }
   .meta { color: var(--muted); font-size: 0.95rem; margin: 0 0 32px; }
   .post-list { list-style: none; padding: 0; margin: 0 0 48px; }
-  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border); }
+  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border);
+                  display: flex; gap: 20px; align-items: flex-start; }
+  .post-list .text { flex: 1; min-width: 0; }
+  .post-list .thumb { flex: none; width: 168px; aspect-ratio: 4 / 3;
+                      border: 1px solid var(--border); border-radius: 8px;
+                      overflow: hidden; background: var(--bg-alt); }
+  .post-list .thumb img { display: block; width: 100%; height: 100%;
+                          object-fit: cover; object-position: top left; }
+  @media (max-width: 560px) {
+    .post-list li { flex-direction: column-reverse; gap: 12px; }
+    .post-list .thumb { width: 100%; aspect-ratio: 2 / 1; }
+  }
   .post-list h2 { font-size: 1.35rem; margin: 0 0 4px; }
   .post-list h2 a { color: var(--fg); text-decoration: none; }
   .post-list h2 a:hover { color: var(--accent); }

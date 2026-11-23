@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <?xml-stylesheet type="text/xsl" href="feed.xsl"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <title>Gramps Connect blog</title>
   <link href="https://dsblank.github.io/gramps-connect/blog/"/>
   <link rel="self" href="https://dsblank.github.io/gramps-connect/blog/feed.xml"/>
@@ -13,6 +13,7 @@
     <id>https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-6.html</id>
     <updated>2026-11-23T00:00:00Z</updated>
     <author><name>Doug Blank</name></author>
+    <media:thumbnail url="https://dsblank.github.io/gramps-connect/blog/img/v16-fan-colors.jpg"/>
     <summary>Gramps Connect 1.6 colors the people on your charts by tag, attribute or filter, sorts every list by any column (or two), and adds drag-to-reorder for notes and citations, tag ordering, and a Make Backup command.</summary>
     <content type="html">&lt;p&gt;Gramps Connect 1.6 is out. The biggest change is in the charts: they can
 now show &lt;em&gt;what you know&lt;/em&gt; about each person, not just who they are. Lists
@@ -100,6 +101,7 @@ settings in this browser.&lt;/p&gt;
     <id>https://dsblank.github.io/gramps-connect/blog/citations.html</id>
     <updated>2026-11-22T00:00:00Z</updated>
     <author><name>Doug Blank</name></author>
+    <media:thumbnail url="https://dsblank.github.io/gramps-connect/blog/img/citations-formatted.jpg"/>
     <summary>Gramps Connect 1.4 turns the sources and citations in your family tree into properly written citations, in the style that suits each kind of record, ready to copy or collect into a bibliography.</summary>
     <content type="html">&lt;p&gt;Every fact in a family tree should say where it came from. A birth date
 is only as good as the record it was copied from, and a year from now
@@ -209,6 +211,7 @@ move between Gramps Connect and Gramps on your computer.&lt;/p&gt;
     <id>https://dsblank.github.io/gramps-connect/blog/welcome.html</id>
     <updated>2026-11-21T00:00:00Z</updated>
     <author><name>Doug Blank</name></author>
+    <media:thumbnail url="https://dsblank.github.io/gramps-connect/blog/img/tour-lincoln.jpg"/>
     <summary>A place for news about Gramps Connect, starting with a new narrated tour of the app.</summary>
     <content type="html">&lt;p&gt;Gramps Connect now has a blog. This is where new releases, new features,
 and notes on how things work behind the scenes will be posted. You can
