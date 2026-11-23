@@ -2,6 +2,7 @@ import { Group, Text, Badge } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import type { ViewSnapshot } from "../store/viewStore";
+import { t } from "../i18n/i18n";
 import { VIEWS, type ViewConfig } from "../store/views";
 import type { LiveSyncStatus } from "../hooks/useLiveSync";
 
@@ -25,16 +26,20 @@ const LIVE_SYNC_COLOR: Record<LiveSyncStatus, string> = {
  * the moment a list filtered from its first load waits on that count). */
 function listCountText(key: ViewConfig["key"], snapshot: ViewSnapshot): string {
   const { loadedCount, totalCount, status } = snapshot;
-  if (status === "loading" && totalCount === 0) return "loading…";
+  if (status === "loading" && totalCount === 0) return t("loading…");
   if (loadedCount < totalCount) {
-    return `loaded ${loadedCount.toLocaleString()} / ${totalCount.toLocaleString()}`;
+    return t("loaded {loaded} / {total}")
+      .replace("{loaded}", loadedCount.toLocaleString())
+      .replace("{total}", totalCount.toLocaleString());
   }
   if (status !== "ready") return "";
   const filtered = snapshot.whereExpr !== null || snapshot.pickerExpr !== null;
   if (!filtered && totalCount === 0) return "";
   const treeTotal = getViewStore(key).wholeTreeTotal();
-  if (treeTotal === null) return `showing ${totalCount.toLocaleString()}`;
-  return `showing ${totalCount.toLocaleString()} / ${treeTotal.toLocaleString()}`;
+  if (treeTotal === null) return t("showing {count}").replace("{count}", totalCount.toLocaleString());
+  return t("showing {count} / {total}")
+    .replace("{count}", totalCount.toLocaleString())
+    .replace("{total}", treeTotal.toLocaleString());
 }
 
 export function StatusBar({ view, liveSyncStatus }: StatusBarProps) {
