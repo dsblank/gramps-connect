@@ -4,7 +4,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useViewStore } from "../hooks/useViewStore";
 import { getColumnWidths, setColumnWidths as saveColumnWidths } from "../store/columnWidths";
 import { getViewStore } from "../store/registry";
-import { headerSortColumn, type ViewConfig } from "../store/views";
+import { SORT_ROW_LIMIT, type ViewConfig } from "../store/views";
+import { columnSort, headerSortColumn } from "../store/columnSort";
 import { layoutColumns, useColumnSettingsVersion } from "../store/columnSettings";
 import { useDisplayFormatVersion } from "../store/placeIndex";
 import { t } from "../i18n/i18n";
@@ -271,14 +272,12 @@ export function DataTable({ view }: DataTableProps) {
     <div className={classes.tableWrapper} ref={scrollRef}>
       <div ref={headerRef} className={`${classes.row} ${classes.header}`} style={{ ...gridStyle, width: rowWidth }}>
         {columns.map(({ column: col }, index) => {
-          // A flat column sorts by itself; a json_path-backed one only when
-          // it names what to sort by (`sortKeys`/`sortBy` -- see
-          // ViewConfig.orderBy for why each such path is opted into
-          // individually rather than by default).
-          // A custom column sorts only while the list is small enough for
-          // the server to sort cheaply (ColumnConfig.sortLimit).
-          const overLimit = col.sortLimit !== undefined && snapshot.totalCount > col.sortLimit;
-          const sortColumn = overLimit ? null : headerSortColumn(col);
+          // Every column sorts but a Gramps type or whole record; one read
+          // from inside each record only while the list is small enough for
+          // the server to sort cheaply (columnSort.ts).
+          const sort = columnSort(view, col);
+          const overLimit = sort !== null && sort.limited && snapshot.totalCount > SORT_ROW_LIMIT;
+          const sortColumn = overLimit || !sort ? null : headerSortColumn(view, col);
           const activeSort = snapshot.orderBy;
           const isSorted = sortColumn !== null && activeSort.column === sortColumn;
           return (
@@ -289,7 +288,7 @@ export function DataTable({ view }: DataTableProps) {
               title={
                 overLimit
                   ? t("Sorts when the list has at most {n} rows. Search or filter it to fewer first.").replace(
-                      "{n}", col.sortLimit!.toLocaleString(),
+                      "{n}", SORT_ROW_LIMIT.toLocaleString(),
                     )
                   : undefined
               }

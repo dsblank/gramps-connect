@@ -14,14 +14,15 @@ import { getToken } from "../auth/auth";
 import { fetchByHandle, fetchPage, testGoqlSelect } from "./api";
 import { notifications } from "@mantine/notifications";
 import {
-  appliedCustomColumns, applyColumnSettings, columnExpression, columnSortKeys, expressionDependencies, markBroken,
+  appliedCustomColumns, applyColumnSettings, columnExpression, expressionDependencies, markBroken,
 } from "./columnSettings";
+import { columnSort, locateSortKey, orderByFor, sortColumnFor } from "./columnSort";
 import { goqlNamespaceForEndpoint } from "./goqlCompletion";
 import { t } from "../i18n/i18n";
 import { loadFromOpfs, saveToOpfs, clearOpfs } from "./opfs";
 import { fetchServerState, isCacheStale, updateCachedCursor, writeCacheMeta } from "./cacheMeta";
 import { createTableSql, insertSql, upsertSql, updateSql, toRowValues, toUpdateRowValues } from "./sql";
-import { defaultOrderBy, type ColumnConfig, type OrderBy, type ViewConfig } from "./views";
+import { defaultOrderBy, SORT_ROW_LIMIT, type ColumnConfig, type OrderBy, type ViewConfig } from "./views";
 import { loadDisplaySettings, subscribeDisplaySettings } from "./displaySettings";
 import type { TreeChangeNotification } from "./historyPoll";
 import { getHomePersonHandle } from "./homePersonPreference";
@@ -193,10 +194,13 @@ export class ViewStore {
    * onDefaultOrderChange()), changed otherwise only via setSort(). Kept
    * separate from the view's own default (the one to fall back to) so
    * each view's sort choice is independent per-instance state, same
-   * treatment as whereExpr. An array (fetchPage's order_by is technically
-   * a list) but this app only ever sorts by one column, so index 0 is the
-   * only element and the only one the snapshot bothers exposing. */
+   * treatment as whereExpr. Every key of the clicked column's sort (its
+   * own, its thenBy, the default order's -- see columnSort.ts); the
+   * snapshot exposes only the first, which is what the header arrow shows. */
   private orderBy: OrderBy[];
+  /** The `key` of the column whose header click set `orderBy`; null while
+   * it's the default order. */
+  private sortColumnKey: string | null = null;
   private status: ViewStatus = "idle";
   private error: string | null = null;
   /** Bumped on every runQuery() call; a stale in-flight background fill
@@ -260,6 +264,12 @@ export class ViewStore {
   /** JSON of the default order as of the last check -- see
    * onDefaultOrderChange(). */
   private lastDefaultOrder: string;
+
+  /** Back to the view's default order. */
+  private resetOrder(): void {
+    this.orderBy = defaultOrderBy(this.view);
+    this.sortColumnKey = null;
+  }
 
   private isDefaultOrder(): boolean {
     return JSON.stringify(this.orderBy) === JSON.stringify(defaultOrderBy(this.view));
@@ -730,14 +740,17 @@ export class ViewStore {
     });
   }
 
-  /** The column with a `sortLimit` the current sort is by, if any. */
+  /** The column the current sort is by, when it only sorts small lists
+   * (columnSort.ts's `limited`). */
   private limitedSortColumn(): ColumnConfig | undefined {
-    return this.view.columns.find((c) => c.sortLimit !== undefined && columnSortKeys(c).some((key) => this.orderBy.some((o) => o.column === key)));
+    if (this.sortColumnKey === null) return undefined;
+    const column = this.view.columns.find((c) => c.key === this.sortColumnKey);
+    return column && columnSort(this.view, column)?.limited ? column : undefined;
   }
 
-  /** If the current sort is by a column with a `sortLimit` (a list's
-   * custom column) and the list under `whereExpr`/`pickerExpr` has more
-   * rows than that, falls back to the default order, with a notice --
+  /** If the current sort is by a column that only sorts small lists (a
+   * date, a custom column) and the list under `whereExpr`/`pickerExpr` has
+   * more than SORT_ROW_LIMIT rows, falls back to the default order, with a notice --
    * before any query sorts that many rows by it. One cheap count query,
    * only while such a sort is active. True when the order changed. */
   private async enforceSortLimit(token: string, whereExpr: string | null, pickerExpr: string | null): Promise<boolean> {
@@ -746,8 +759,8 @@ export class ViewStore {
     const { totalCount } = await fetchPage(
       this.view, token, null, true, this.combinedFilter(whereExpr, pickerExpr), defaultOrderBy(this.view), 1, [],
     );
-    if ((totalCount ?? 0) <= limited.sortLimit!) return false;
-    this.orderBy = defaultOrderBy(this.view);
+    if ((totalCount ?? 0) <= SORT_ROW_LIMIT) return false;
+    this.resetOrder();
     notifications.show({
       color: "blue",
       title: `${t("Back to the usual order")}`,
@@ -780,7 +793,7 @@ export class ViewStore {
     pickerExpr: string | null = this.pickerExpr,
   ): Promise<number> {
     // The full sort key "before" is decided on: every configured order_by
-    // column (Person's surname+given_name secondarySort makes this two,
+    // column (a clicked column, its thenBy and the default order -- several,
     // not just one) plus the server's own trailing tiebreak -- the same
     // effective_order_by that always appends `OrderBy("handle", "asc")",
     // *always* ascending regardless of any other key's own direction.
@@ -789,22 +802,7 @@ export class ViewStore {
     // gramps-object-query-language's query_lang.py) -- JSON's string
     // escaping is a safe subset of Python's, so JSON.stringify doubles as
     // a correct, injection-safe Python string literal here.
-    // An order_by key is a flat column (cached under its own name), a GOQL
-    // path cached by whichever column declares it as `orderPath`, or a path
-    // inside a column that caches a whole structure -- a date's `sortval`
-    // inside the cached date (`birth.date.sortval` in Birth's
-    // `birth.date`), walked as `rest`.
-    const locate = (column: string): { cached: ColumnConfig; rest: string[] } | undefined => {
-      const exact =
-        this.view.columns.find((c) => c.orderPath === column) ?? this.view.columns.find((c) => c.key === column);
-      if (exact) return { cached: exact, rest: [] };
-      // The column that sorts by this key first (a name column, not a
-      // custom column that merely selects the whole father), then any.
-      const inside = (c: ColumnConfig) => typeof c.select === "object" && column.startsWith(`${columnExpression(c)}.`);
-      const within =
-        this.view.columns.find((c) => inside(c) && columnSortKeys(c).includes(column)) ?? this.view.columns.find(inside);
-      return within ? { cached: within, rest: column.slice(columnExpression(within).length + 1).split(".") } : undefined;
-    };
+    const locate = (column: string) => locateSortKey(this.view, column);
     const columnFor = (column: string) => locate(column)?.cached;
     const literalFor = (column: string, value: unknown) => {
       const sqlType = columnFor(column)?.sqlType;
@@ -812,14 +810,13 @@ export class ViewStore {
       if (typeof value === "boolean") return value ? "True" : "False";
       return JSON.stringify(String(value ?? ""));
     };
-    // A list's custom columns (`goql` selects, columnSettings.ts) and the
-    // dates (a person with no birth) can be empty, which GOQL sorts as the
-    // smallest value -- "before" and "tied" have to say so. The other
-    // built-in sort keys are never missing.
+    // A value read from inside a record (a person with no birth, an event
+    // with no place, a list's custom column) can be missing, which GOQL
+    // sorts as the smallest value -- "before" and "tied" have to say so.
+    // Flat columns are never missing.
     const nullable = (column: string) => {
       const cached = columnFor(column);
-      if (!cached) return false;
-      return cached.sortLimit !== undefined || (typeof cached.select === "object" && "goql" in cached.select);
+      return cached !== undefined && typeof cached.select === "object";
     };
     const tie = (column: string) => {
       const value = valueFor(column);
@@ -1169,7 +1166,7 @@ export class ViewStore {
         this.totalCount = this.loadedCount = Number(db.exec(`SELECT COUNT(*) FROM ${this.view.key};`)[0].values[0][0]);
         this.whereExpr = this.wantedWhereExpr = null;
         this.pickerExpr = this.wantedPickerExpr = null;
-        this.orderBy = defaultOrderBy(this.view);
+        this.resetOrder();
         this.status = "ready";
         this.applyDefaultSelection();
         this.emit();
@@ -1680,17 +1677,15 @@ export class ViewStore {
     const current = this.orderBy[0];
     const direction: "asc" | "desc" =
       current?.column === column && current.direction === "asc" ? "desc" : "asc";
-    // A configured secondarySort (Person's surname/given_name pair) rides
-    // along at the same direction as the column just clicked -- so
-    // reversing "Surname" also reverses the given-name tiebreak, rather
-    // than leaving ties in a fixed order while everything else flips.
-    // A column with runtime `sortKeys` (People's Name, by name format)
-    // sorts by all of them, every one at the clicked direction.
-    const keys = this.view.columns.find((c) => c.sortKeys?.()[0] === column)?.sortKeys?.();
-    const secondary = this.view.columns.find((c) => (c.sortBy ?? c.select) === column)?.secondarySort;
-    this.orderBy = keys
-      ? keys.map((key) => ({ column: key, direction }))
-      : secondary ? [{ column, direction }, { column: secondary, direction }] : [{ column, direction }];
+    // Every key of the column's sort -- its own (People's Name: the name
+    // format's parts), its thenBy, then the default order as tiebreak --
+    // at the clicked direction, so reversing "Surname" also reverses the
+    // given-name tiebreak rather than leaving ties in a fixed order while
+    // everything else flips.
+    const target = sortColumnFor(this.view, column);
+    const sort = target && columnSort(this.view, target);
+    this.orderBy = sort ? orderByFor(sort, direction) : [{ column, direction }];
+    this.sortColumnKey = target?.key ?? null;
     return this.runQueryPreservingSelection(undefined);
   }
 
@@ -1776,14 +1771,14 @@ export class ViewStore {
    * the current ones stay, with the new columns blank. Order, visibility
    * and titles alone change nothing here (DataTable redraws). */
   async applyColumnChange(): Promise<void> {
-    const customSortKeys = () => new Set(this.view.columns.filter((c) => c.sortLimit).flatMap((c) => columnSortKeys(c)));
-    const before = customSortKeys();
     const changed = applyColumnSettings(this.view);
-    // Sorted by a custom column that's gone (removed, or no longer
-    // sortable): back to the default order.
-    const after = customSortKeys();
-    const sortGone = this.orderBy.some((o) => before.has(o.column) && !after.has(o.column));
-    if (sortGone) this.orderBy = defaultOrderBy(this.view);
+    // Sorted by a custom column that's gone, or now sorts by other keys
+    // (its expression changed): back to the default order.
+    const sortedBy = this.sortColumnKey === null ? undefined : this.view.columns.find((c) => c.key === this.sortColumnKey);
+    const sort = sortedBy && columnSort(this.view, sortedBy);
+    const sortGone =
+      this.sortColumnKey !== null && (!sort || sort.keys.join("\n") !== this.orderBy.map((o) => o.column).join("\n"));
+    if (sortGone) this.resetOrder();
     if (!changed) {
       if (sortGone && this.db) await this.runQueryPreservingSelection(undefined);
       return;

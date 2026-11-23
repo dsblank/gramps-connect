@@ -8,7 +8,7 @@
 import { createElement, type ReactNode } from "react";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { displayPlaceTitle, formatDisplayDate } from "./placeIndex";
-import { displayNameSortKeys, formatDisplayName, nameSortKeysAt, type RawName } from "./nameDisplay";
+import { displayNameSortKeys, formatDisplayName, type RawName } from "./nameDisplay";
 import type { GqlFilterNamespace } from "../data/gqlFilterPresets";
 import { buildPersonSearchExpr } from "./personSearch";
 import { buildSimpleSearchExpr } from "./simpleSearch";
@@ -43,9 +43,9 @@ export interface ColumnConfig {
    * GOQL's path string with `as <key>` added; or any GOQL select
    * expression (`len(citations)`, `birth.place.title`), likewise sent with
    * `as <key>` (toSelectEntry in sql.ts) -- what a list's custom columns
-   * use (columnSettings.ts). Like a json_path column, a `goql` column isn't
-   * sortable: ordering by anything inside a record reads every row on the
-   * server (seconds per page on a big tree). */
+   * use (columnSettings.ts). A header click on a json_path or `goql`
+   * column sorts by a value read from inside each record, which the server
+   * can only do cheaply on a small list (see columnSort.ts). */
   select: string | { json_path: (string | number)[] } | { goql: string };
   sqlType: "TEXT" | "INTEGER";
   /** API response value -> value to store in local SQLite. Default:
@@ -72,39 +72,20 @@ export interface ColumnConfig {
    * foreign key, but "a5af0eb667015e355db" is noise in a table that
    * already shows the place's title next to it. */
   hidden?: boolean;
-  /** What clicking this column's header sorts by, when that isn't its own
-   * `select` -- a GOQL path (see ViewConfig.orderBy), whose value some
-   * column must cache via `orderPath`. Makes a json_path-backed column
-   * sortable. */
-  sortBy?: string;
-  /** Header sorting is off while the list has more rows than this (a
-   * sort the server can't do cheaply -- dates and a list's custom
-   * columns, SORT_ROW_LIMIT); a sort already in place falls
-   * back to the default order when the list grows past it. */
-  sortLimit?: number;
-  /** This column caches the value of GOQL path `orderPath`, so that path
-   * can be an order_by key (see ViewConfig.orderBy). */
-  orderPath?: string;
-  /** Another plain column's `key` to break ties on when sorting by this
-   * one -- e.g. Person's surname/given_name pair, so clicking "Surname"
-   * doesn't leave same-surname rows in whatever order the server happens
-   * to otherwise return them. Only meaningful on a column whose own
-   * `select` is a plain string (setSort() ignores it for a json_path
-   * column, which can't be sorted server-side at all -- see
-   * ViewConfig.orderBy's doc comment). */
-  secondarySort?: string;
-  /** What clicking this column's header sorts by when that depends on
-   * runtime settings -- every key, most significant first, all at the
-   * clicked direction. Takes precedence over `sortBy`/`secondarySort`.
-   * Person's Name column: the tree's name format decides whether surname
-   * or given name comes first (nameSortKeys()). */
-  sortKeys?: () => string[];
-}
-
-/** The column a header click sorts by first (null: not sortable) -- what
- * DataTable compares against the active sort to draw the arrow. */
-export function headerSortColumn(column: ColumnConfig): string | null {
-  return column.sortKeys?.()[0] ?? column.sortBy ?? (typeof column.select === "string" ? column.select : null);
+  /** What clicking this column's header sorts by, most significant key
+   * first, when that isn't worked out from `select` (columnSort.ts: a flat
+   * column by itself, a date by its sortval, a name by its parts, a single
+   * value by itself; a Gramps type or a whole record not at all). A
+   * function when it depends on runtime settings (People's Name: the
+   * tree's name format). null: not sortable, for a column whose shown
+   * value has nothing on the server to sort by (a category computed here).
+   * Every key must be cached by some column of the view, so the list can
+   * place a row (ViewStore.globalRankOfItem()) -- a unit test checks. */
+  sortBy?: string | (() => string[]) | null;
+  /** A key to break ties on before the view's default order does -- a
+   * flat column or GOQL path, at the clicked direction (Citations' Source
+   * by Page). */
+  thenBy?: string;
 }
 
 /** The columns DataTable actually renders, each paired with its index into
@@ -119,7 +100,7 @@ export function visibleColumns(view: ViewConfig): { column: ColumnConfig; index:
 }
 
 /** The most rows a list may have to sort by a value read from inside each
- * record (a date, a list's custom column -- ColumnConfig.sortLimit).
+ * record (a date, a list's custom column -- see columnSort.ts).
  * Nothing indexes inside a record, so the server sorts every row of the
  * list for each page (seconds per page on a 100k tree); at this size
  * that's at most a few pages over a few thousand rows. */
@@ -180,12 +161,13 @@ export interface ViewConfig {
    * view that isn't another peer object type in the same list (e.g.
    * Output, a fixed-filter window onto other views' own Media rows). */
   sidebarSeparatorBefore?: boolean;
-  /** Default sort, used until the user clicks a sortable column header
-   * (see ViewStore.setSort). Each entry's `column` is sent verbatim as
+  /** Default sort, used until the user clicks a column header (see
+   * ViewStore.setSort), and the tiebreak after any column a header click
+   * sorts by (columnSort.ts). Each entry's `column` is sent verbatim as
    * gramps-web-api's order_by, which takes a flat column ("surname") or,
    * since gramps-web-api #962, a dotted path ("name.value"). Whichever it
-   * is, some ColumnConfig in this view must cache its value -- a plain
-   * column via `select`, a path via `orderPath` -- because
+   * is, some ColumnConfig in this view must cache its value (its own
+   * `select`, or a structure the path walks into) -- because
    * ViewStore.globalRankOfItem() compares against that value to find a
    * row's position. Mind the cost of a path: nothing indexes inside a
    * record, so the server reads every row for each page (measured on the
@@ -376,10 +358,9 @@ export const PERSON_VIEW: ViewConfig = {
   endpoint: "/api/people/query/",
   // Birth/Death dates are read through the person's own events.
   dependsOn: [{ table: "event", via: "event_refs" }],
-  // given_name rides along as a tiebreak from the very first load, matching
-  // the "surname" column's own secondarySort (below) that setSort() applies
-  // on every later click -- without it, the default sort left same-surname
-  // rows in server-insertion order instead of alphabetized by given name.
+  // given_name rides along as a tiebreak -- without it, the default sort
+  // left same-surname rows in server-insertion order instead of
+  // alphabetized by given name.
   orderBy: [{ column: "surname", direction: "asc" }, { column: "given_name", direction: "asc" }],
   // The real default: the name format's own order, e.g. given name first
   // for "Given Surname" -- the static orderBy above is its shape for the
@@ -398,21 +379,19 @@ export const PERSON_VIEW: ViewConfig = {
     // by the formatted name -- "Given" sorts by given name, then surname.
     {
       key: "primary_name", label: "Name", select: { json_path: ["primary_name"] }, sqlType: "TEXT",
-      sortKeys: displayNameSortKeys, toSql: toSqlJson, toDisplay: displayName,
+      sortBy: displayNameSortKeys, toSql: toSqlJson, toDisplay: displayName,
     },
     // Hidden: the sort keys behind Name, and what person searches and
     // pickers match on.
-    { key: "surname", label: "Surname", select: "surname", sqlType: "TEXT", hidden: true, secondarySort: "given_name" },
-    { key: "given_name", label: "Given name", select: "given_name", sqlType: "TEXT", hidden: true, secondarySort: "surname" },
+    { key: "surname", label: "Surname", select: "surname", sqlType: "TEXT", hidden: true },
+    { key: "given_name", label: "Given name", select: "given_name", sqlType: "TEXT", hidden: true },
     {
       key: "birth_date", label: "Birth", select: { json_path: ["birth", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
-      sortBy: "birth.date.sortval", sortLimit: SORT_ROW_LIMIT,
     },
     {
       key: "death_date", label: "Death", select: { json_path: ["death", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
-      sortBy: "death.date.sortval", sortLimit: SORT_ROW_LIMIT,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
     // Hidden, for the Map/Timeline's subject scoping (store/visualScope.ts).
@@ -461,15 +440,12 @@ export const FAMILY_VIEW: ViewConfig = {
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
       key: "father_name", label: "Father", select: { json_path: ["father", "primary_name"] }, sqlType: "TEXT",
+      // Sorts in the tree's name format, like People's Name (columnSort.ts).
       toSql: toSqlJson, toDisplay: displayName,
-      // In the tree's name format, like People's Name -- read through the
-      // linked person, so only on a list small enough to sort that way.
-      sortKeys: () => nameSortKeysAt("father.primary_name"), sortLimit: SORT_ROW_LIMIT,
     },
     {
       key: "mother_name", label: "Mother", select: { json_path: ["mother", "primary_name"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: displayName,
-      sortKeys: () => nameSortKeysAt("mother.primary_name"), sortLimit: SORT_ROW_LIMIT,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
     // Hidden, for subject scoping -- same reasoning as Person's above.
@@ -562,11 +538,13 @@ export const EVENT_VIEW: ViewConfig = {
       // *is* the thing with the date, so this is a direct (still
       // json_path, since date isn't a flat secondary column) select.
       key: "date", label: "Date", select: { json_path: ["date"] }, sqlType: "TEXT",
-      toSql: toSqlJson, toDisplay: formatGrampsDateJson,
-      sortBy: "date.sortval", sortLimit: SORT_ROW_LIMIT,
+      toSql: toSqlJson, toDisplay: formatGrampsDateJson, thenBy: "description",
     },
     {
+      // Sorted as the Places list is: by the place's own name, then its
+      // stored title.
       key: "place_title", label: "Place", select: { json_path: ["place", "title"] }, sqlType: "TEXT",
+      sortBy: () => ["place.name.value", "place.title"],
       toSql: (title, item) => placeTitleOrName(title, item, "place_name"),
       toDisplay: (title, row) => displayPlaceCell(title, row?.("place"), parseDateJson(row?.("date"))),
     },
@@ -611,7 +589,7 @@ export const PLACE_VIEW: ViewConfig = {
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
-      key: "title", label: "Title", select: "title", sqlType: "TEXT", sortBy: "name.value", secondarySort: "title",
+      key: "title", label: "Title", select: "title", sqlType: "TEXT", sortBy: "name.value",
       // The stored title, not the automatic one: it's what this view's
       // search matches (simpleSearch above), so a match always shows why it
       // matched. A place editor's title choice brings it up to date.
@@ -654,7 +632,7 @@ export const PLACE_VIEW: ViewConfig = {
     // Hidden: the sort key for "name.value" (see PLACE_VIEW.orderBy).
     {
       key: "name_value", label: "Name", select: { json_path: ["name", "value"] },
-      sqlType: "TEXT", hidden: true, orderPath: "name.value",
+      sqlType: "TEXT", hidden: true,
     },
     {
       key: "place_type", label: "Place type", select: { json_path: ["place_type", "value"] },
@@ -740,13 +718,12 @@ export const CITATION_VIEW: ViewConfig = {
   columns: [
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
     {
-      key: "source_title", label: "Source", select: { json_path: ["source", "title"] }, sqlType: "TEXT",
+      key: "source_title", label: "Source", select: { json_path: ["source", "title"] }, sqlType: "TEXT", thenBy: "page",
     },
     { key: "page", label: "Page", select: "page", sqlType: "TEXT" },
     {
       key: "date", label: "Date", select: { json_path: ["date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
-      sortBy: "date.sortval", sortLimit: SORT_ROW_LIMIT,
     },
     { key: "confidence", label: "Confidence", select: "confidence", sqlType: "INTEGER", toDisplay: displayConfidence },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
@@ -829,16 +806,15 @@ export const MEDIA_VIEW: ViewConfig = {
     // `mime` under this column's own key via a json_path (a duplicate
     // response key across columns is rejected server-side, so it can't just
     // reuse "mime") -- deliberately *not* a plain string select ("mime as
-    // category"): DataTable.tsx treats any string-select column as
-    // sortable and sends it verbatim as order_by, which a bare column name
-    // like "mime" would tolerate but an aliased expression doesn't parse
-    // as. A json_path select isn't offered as sortable unless the column
-    // opts in with `sortBy` (see ViewConfig.orderBy), which is right here
-    // anyway -- there's no server-side column to sort a *computed*
-    // category by.
+    // category"): a string-select column sorts by sending it verbatim as
+    // order_by, which a bare column name like "mime" would tolerate but an
+    // aliased expression doesn't parse as. Not sortable: there's no
+    // server-side column to sort a *computed* category by, and sorting by
+    // the raw MIME type would scatter one category (Document:
+    // application/pdf, text/plain) across the list.
     {
       key: "category", label: "Type", select: { json_path: ["mime"] }, sqlType: "TEXT",
-      toSql: mediaCategory,
+      toSql: mediaCategory, sortBy: null,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
@@ -956,7 +932,9 @@ export const TOPICS_VIEW: ViewConfig = {
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", hidden: true },
     {
       key: "title", label: "Title", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
-      toSql: styledTextToSql, toDisplay: storyTitle,
+      // Not sortable: the stored text is a JSON spec, and the title is
+      // only one of its fields.
+      toSql: styledTextToSql, toDisplay: storyTitle, sortBy: null,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],
@@ -1014,7 +992,9 @@ export const STORY_VIEW: ViewConfig = {
     { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", hidden: true },
     {
       key: "title", label: "Title", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
-      toSql: styledTextToSql, toDisplay: storyTitle,
+      // Not sortable: the stored text is a JSON spec, and the title is
+      // only one of its fields.
+      toSql: styledTextToSql, toDisplay: storyTitle, sortBy: null,
     },
     { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
   ],

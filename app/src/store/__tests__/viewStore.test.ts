@@ -1517,7 +1517,7 @@ describe("ViewStore sorting by a custom column", () => {
     vi.mocked(fetchByHandle).mockReset();
     vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
     const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
-    setColumnLayout("tag", { custom: [{ id: "goql_t", expr: EXPR, sortable: true }], order: [], hidden: [] });
+    setColumnLayout("tag", { custom: [{ id: "goql_t", expr: EXPR }], order: [], hidden: [] });
     applyColumnSettings(TAG_VIEW);
   });
 
@@ -1546,14 +1546,18 @@ describe("ViewStore sorting by a custom column", () => {
     vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1", { goql_t: 3 }));
     await store.applyLiveChange({ table: "tag", handle: "H1", op: "UPDATE", changedBy: null });
     expect(lastRankExpr()).toContain(`(${EXPR} is None or ${EXPR} < 3)`);
-    expect(lastRankExpr()).toContain(`${EXPR} == 3 and handle < "H1"`);
+    // Ties fall back to the list's default order (name), then handle.
+    expect(lastRankExpr()).toContain(`${EXPR} == 3 and name < "Chores"`);
+    expect(lastRankExpr()).toContain(`${EXPR} == 3 and name == "Chores" and handle < "H1"`);
   });
 
   it("ranks a missing value only among the other missing ones", async () => {
     const store = await sortedStore();
     vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1", { goql_t: null }));
     await store.applyLiveChange({ table: "tag", handle: "H1", op: "UPDATE", changedBy: null });
-    expect(lastRankExpr()).toBe(`(${EXPR} is None and handle < "H1")`);
+    expect(lastRankExpr()).toBe(
+      `(${EXPR} is None and name < "Chores") or (${EXPR} is None and name == "Chores" and handle < "H1")`,
+    );
   });
 
   it("goes back to the default order when the list grows past the limit", async () => {
@@ -1606,8 +1610,12 @@ describe("ViewStore sorting by a built-in date", () => {
     const store = await sortedByDate();
     vi.mocked(fetchByHandle).mockResolvedValueOnce(eventRow("E1", 2415021));
     await store.applyLiveChange({ table: "event", handle: "E1", op: "UPDATE", changedBy: null });
+    // Ties by description (the Date column's thenBy), then the default
+    // order (gramps_id), then handle.
     expect(lastRankExpr()).toBe(
-      '((date.sortval is None or date.sortval < 2415021)) or (date.sortval == 2415021 and handle < "E1")',
+      '((date.sortval is None or date.sortval < 2415021)) or (date.sortval == 2415021 and description < "") or ' +
+        '(date.sortval == 2415021 and description == "" and gramps_id < "E1") or ' +
+        '(date.sortval == 2415021 and description == "" and gramps_id == "E1" and handle < "E1")',
     );
   });
 
@@ -1615,7 +1623,10 @@ describe("ViewStore sorting by a built-in date", () => {
     const store = await sortedByDate();
     vi.mocked(fetchByHandle).mockResolvedValueOnce(eventRow("E1", null));
     await store.applyLiveChange({ table: "event", handle: "E1", op: "UPDATE", changedBy: null });
-    expect(lastRankExpr()).toBe('(date.sortval is None and handle < "E1")');
+    expect(lastRankExpr()).toBe(
+      '(date.sortval is None and description < "") or (date.sortval is None and description == "" and gramps_id < "E1") or ' +
+        '(date.sortval is None and description == "" and gramps_id == "E1" and handle < "E1")',
+    );
   });
 
   it("doesn't sort a list over the limit by date", async () => {
@@ -1637,7 +1648,7 @@ describe("ViewStore sorting by a custom name column", () => {
     vi.mocked(fetchByHandle).mockReset();
     vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
     const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
-    setColumnLayout("family", { custom: [{ id: "goql_f", expr: NAME, sortable: true }], order: [], hidden: [] });
+    setColumnLayout("family", { custom: [{ id: "goql_f", expr: NAME }], order: [], hidden: [] });
     applyColumnSettings(FAMILY_VIEW);
   });
 
@@ -1665,14 +1676,17 @@ describe("ViewStore sorting by a custom name column", () => {
     await store.runQuery(null, false);
     await store.setSort(SURNAME);
     const orderBy = vi.mocked(fetchPage).mock.calls[vi.mocked(fetchPage).mock.calls.length - 1][5];
-    expect(orderBy).toEqual([{ column: SURNAME, direction: "asc" }, { column: GIVEN, direction: "asc" }]);
+    expect(orderBy).toEqual([
+      { column: SURNAME, direction: "asc" }, { column: GIVEN, direction: "asc" }, { column: "gramps_id", direction: "asc" },
+    ]);
 
     vi.mocked(fetchByHandle).mockResolvedValueOnce(familyRow("F1", { surname: "Smith", given: "Ann" }));
     await store.applyLiveChange({ table: "family", handle: "F1", op: "UPDATE", changedBy: null });
     expect(lastRankExpr()).toBe(
       `((${SURNAME} is None or ${SURNAME} < "Smith")) or ` +
         `(${SURNAME} == "Smith" and (${GIVEN} is None or ${GIVEN} < "Ann")) or ` +
-        `(${SURNAME} == "Smith" and ${GIVEN} == "Ann" and handle < "F1")`,
+        `(${SURNAME} == "Smith" and ${GIVEN} == "Ann" and gramps_id < "F1") or ` +
+        `(${SURNAME} == "Smith" and ${GIVEN} == "Ann" and gramps_id == "F1" and handle < "F1")`,
     );
   });
 });

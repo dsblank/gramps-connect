@@ -29,8 +29,8 @@ export interface CustomColumn {
   expr: string;
   /** Header text; the expression itself when absent. */
   title?: string;
-  /** Clicking the header sorts by it -- while the list has at most
-   * SORT_ROW_LIMIT rows (see customSortKeys). */
+  /** No longer read: every custom column sorts now (columnSort.ts). Kept
+   * so layouts saved before stay valid. */
   sortable?: boolean;
 }
 
@@ -418,26 +418,10 @@ export function customSortKeys(namespace: string, expr: string): (() => string[]
   return null;
 }
 
-/** Every key a column sorts by (sortKeys, else sortBy). */
-export function columnSortKeys(column: ColumnConfig): string[] {
-  return column.sortKeys?.() ?? (column.sortBy ? [column.sortBy] : []);
-}
-
-/** A custom column's config. A sortable one sorts by its sort keys
- * (customSortKeys). ViewStore's rank query compares against the row's
- * value for each key: this column's own value when the key is its
- * expression (`orderPath`), else read from inside it (a date's `sortval`,
- * a name's parts). */
-export function customColumnConfig(column: CustomColumn, namespace = ""): ColumnConfig {
+/** A custom column's config. Its header sorts by what its expression
+ * shows (columnSort.ts: customSortKeys()). */
+export function customColumnConfig(column: CustomColumn): ColumnConfig {
   const changeTime = isChangeTime(column.expr);
-  const sortKeys = column.sortable ? customSortKeys(namespace, column.expr) : null;
-  const keys = sortKeys?.() ?? [];
-  const expr = column.expr.trim();
-  const sorting: Partial<ColumnConfig> = !sortKeys
-    ? {}
-    : keys.length === 1
-      ? { sortBy: keys[0], sortLimit: SORT_ROW_LIMIT, ...(keys[0] === expr ? { orderPath: expr } : {}) }
-      : { sortKeys, sortLimit: SORT_ROW_LIMIT };
   return {
     key: column.id,
     label: column.title?.trim() || column.expr,
@@ -447,7 +431,6 @@ export function customColumnConfig(column: CustomColumn, namespace = ""): Column
     toSql: (value) => (value === undefined || value === null ? null : JSON.stringify(value)),
     toDisplay: changeTime ? (stored) => formatChange(parseStored(stored)) : formatGoqlValue,
     toTitle: changeTime ? (stored) => formatChangeTitle(parseStored(stored)) : undefined,
-    ...sorting,
   };
 }
 
@@ -459,7 +442,7 @@ export function layoutChangesCache(view: ViewConfig, before: ColumnLayout, after
     columnSignature(
       (layout?.custom ?? [])
         .filter((c) => c.expr.trim() && !structuredValueError(namespace, c.expr))
-        .map((c) => customColumnConfig(c, namespace)),
+        .map((c) => customColumnConfig(c)),
     );
   return signature(before) !== signature(after);
 }
@@ -481,7 +464,7 @@ export function applyColumnSettings(view: ViewConfig): boolean {
   const deps = custom.map((c) => dependencyColumns(view, c));
   const next = [
     ...base.columns,
-    ...custom.map((c) => customColumnConfig(c, namespace)),
+    ...custom.map((c) => customColumnConfig(c)),
     ...deps.flatMap((d) => d.columns),
   ];
   const changed = columnSignature(next) !== columnSignature(view.columns);
