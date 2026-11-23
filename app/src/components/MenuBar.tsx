@@ -313,7 +313,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const storeNewsCount = storeNews.newCount + storeNews.updateCount;
   useEffect(() => onOpenGrampletStoreRequest(() => setGrampletStoreOpened(true)), []);
   // Daily blog check's findings (blogNews.ts): a dot on Help, a count on
-  // Help > Blog, cleared by opening the blog from there.
+  // Help > Gramps Connect Blog, cleared by opening the blog from there.
   const blogNewsCount = useSyncExternalStore(subscribeBlogNews, getBlogNewsCount);
   const [reindexOpened, setReindexOpened] = useState(false);
   const [placeLanguageRepairOpened, setPlaceLanguageRepairOpened] = useState(false);
@@ -626,7 +626,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               // The project's blog (release news and how-tos), on GitHub
               // Pages -- not a tree's own Blog view. A new tab, like the
               // forum. Opening it marks every post found so far as seen.
-              label: t("Blog"),
+              label: t("Gramps Connect Blog"),
               badge: blogNewsCount,
               badgeLabel: blogNewsCount === 1 ? t("1 new post") : t("{count} new posts").replace("{count}", String(blogNewsCount)),
               onClick: () => {

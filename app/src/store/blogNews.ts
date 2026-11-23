@@ -1,7 +1,7 @@
 // Background check of the Gramps Connect blog (the project's GitHub Pages
 // site, not a tree's own Blog view): once a day, fetch its Atom feed and
 // count posts this browser hasn't seen yet. MenuBar shows that as a dot on
-// the Help menu and a count on Help > Blog; opening the blog from there
+// the Help menu and a count on Help > Gramps Connect Blog; opening the blog from there
 // marks them as seen. No toast -- a blog post is news, not something to act
 // on, so the quiet dot is enough. Same pattern as the Gramplet Store's
 // check (pyodidePoc/grampletStoreNews.ts).
@@ -101,7 +101,7 @@ export function getBlogNewsCount(): number {
   return snapshot;
 }
 
-/** Called when Help > Blog opens the blog: every post found so far
+/** Called when Help > Gramps Connect Blog opens the blog: every post found so far
  * counts as seen. */
 export function markBlogNewsSeen(): void {
   const next = acknowledgeBlogNews(readState());

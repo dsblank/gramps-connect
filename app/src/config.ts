@@ -11,7 +11,7 @@ export const DISCUSSION_FORUM_URL = "https://gramps.discourse.group/c/gramps-con
 /** The project's home page (GitHub Pages), linked from the sign-in page. */
 export const PROJECT_HOME_URL = "https://dsblank.github.io/gramps-connect/";
 
-/** The Gramps Connect blog, opened by Help > Blog; its Atom feed is what
+/** The Gramps Connect blog, opened by Help > Gramps Connect Blog; its Atom feed is what
  * store/blogNews.ts checks daily for new posts. */
 export const BLOG_URL = `${PROJECT_HOME_URL}blog/`;
 export const BLOG_FEED_URL = `${BLOG_URL}feed.xml`;
