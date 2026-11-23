@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gramps Connect 1.6: color your charts, sort any column · Gramps Connect</title>
+<meta name="description" content="Gramps Connect 1.6 colors the people on your charts by tag, attribute or filter, sorts every list by any column (or two), and adds drag-to-reorder for notes and citations, tag ordering, and a Make Backup command.">
+<link rel="icon" href="../app/public/favicon-32.png">
+<link rel="alternate" type="application/atom+xml" title="Gramps Connect blog" href="feed.xml">
+<style>
+  :root {
+    --bg: #ffffff; --bg-alt: #f5f6f8; --fg: #1f2328; --muted: #59636e;
+    --border: #d8dee4; --accent: #2f6f4f; --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16191d; --bg-alt: #1e2228; --fg: #e6e8eb; --muted: #9aa4af;
+      --border: #333a42; --accent: #5fb38a; --accent-fg: #0d1a13;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+  nav { display: flex; align-items: center; gap: 16px; padding: 20px 0;
+        border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  nav .home { display: flex; align-items: center; gap: 8px; font-weight: 700;
+              color: var(--fg); text-decoration: none; margin-right: auto; }
+  nav .home img { width: 28px; height: 28px; }
+  nav a { text-decoration: none; }
+  h1 { font-size: 2rem; line-height: 1.25; margin: 40px 0 8px; }
+  .meta { color: var(--muted); font-size: 0.95rem; margin: 0 0 32px; }
+  .post-list { list-style: none; padding: 0; margin: 0 0 48px; }
+  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border); }
+  .post-list h2 { font-size: 1.35rem; margin: 0 0 4px; }
+  .post-list h2 a { color: var(--fg); text-decoration: none; }
+  .post-list h2 a:hover { color: var(--accent); }
+  .post-list p { margin: 6px 0 0; }
+  .post-list .meta { margin: 0; }
+  article { margin-bottom: 48px; }
+  article h2 { font-size: 1.4rem; margin: 36px 0 8px; }
+  article h3 { font-size: 1.15rem; margin: 28px 0 8px; }
+  article img { max-width: 100%; height: auto; border: 1px solid var(--border);
+                border-radius: 8px; }
+  article figure { margin: 24px 0; }
+  article figure img { display: block; }
+  article figcaption { margin-top: 6px; color: var(--muted); font-size: 0.92rem;
+                       text-align: center; }
+  article pre { background: var(--bg-alt); border: 1px solid var(--border);
+                border-radius: 6px; padding: 12px 16px; overflow-x: auto; }
+  article code { font-size: 0.92em; }
+  article blockquote { margin: 16px 0; padding: 0 16px; color: var(--muted);
+                       border-left: 3px solid var(--border); }
+  .back { margin: 0 0 48px; }
+  footer { padding: 32px 0 48px; border-top: 1px solid var(--border);
+           color: var(--muted); font-size: 0.9rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <a class="home" href="../"><img src="../app/src/assets/icons/gramps-connect-logo.svg" alt="">Gramps Connect</a>
+  <a href="./">Blog</a>
+  <a href="../tour/">Tour</a>
+  <a href="https://github.com/dsblank/gramps-connect/wiki">Documentation</a>
+  <a href="feed.xml">Feed</a>
+</nav>
+<article>
+<h1>Gramps Connect 1.6: color your charts, sort any column</h1>
+<p class="meta"><time datetime="2026-11-23">November 23, 2026</time> · Doug Blank</p>
+<p>Gramps Connect 1.6 is out. The biggest change is in the charts: they can
+now show <em>what you know</em> about each person, not just who they are. Lists
+got more flexible too, along with smaller changes for putting things in
+the order you want and for keeping a safe copy of your tree.</p>
+<h2>Color your charts</h2>
+<p>The fan, tree and Generations charts each have a <strong>Color</strong> menu, and
+1.6 adds three new choices to it.</p>
+<ul>
+<li><strong>Tag</strong> colors each person with their tag&rsquo;s color, so the people you&rsquo;ve
+  tagged &ldquo;ToDo&rdquo;, &ldquo;Brick wall&rdquo; or &ldquo;Verified&rdquo; stand out at a glance. This
+  answers a long-standing Gramps request.</li>
+<li><strong>Attribute</strong> colors people by one of their attributes. Numbers shade
+  from light to dark, which suits a research level such as 1 to 6 for how
+  fully each ancestor has been researched. Other values, such as an
+  occupation, each get their own color.</li>
+<li><strong>Filter</strong> highlights the people a saved filter matches, or the people
+  a GOQL query you type in matches.</li>
+</ul>
+<figure><img alt="A fan chart of Queen Elizabeth II's ancestors, with everyone born in England colored blue" src="img/v16-fan-colors.jpg" /><figcaption>Queen Elizabeth II&rsquo;s ancestors, colored by the query <code>'England' in birth.place.title</code>. The legend at the bottom counts 11 matches and 72 others.</figcaption></figure>
+<p>A legend below the chart shows each color and how many people have it.
+When you export a chart as an image or PDF, the legend comes with it.
+Your color choice is remembered for next time, for each kind of chart.</p>
+<h2>Sort by any column, or by two</h2>
+<p>Every column in every list can now be sorted: click the header, and
+click again to reverse. Dates sort as dates, and names follow your
+tree&rsquo;s name format. When several records share a value, they&rsquo;re listed
+in a sensible order among themselves: people born on the same day by
+name, events at the same place by Gramps ID.</p>
+<p>Columns you add yourself in the <strong>Columns</strong> dialog now have a <strong>Then
+sort by</strong> box. Clicking the column sorts by it first and then by what you
+put there. That&rsquo;s an easy way to group records by one thing and order
+each group by another.</p>
+<figure><img alt="The Columns dialog for the People list, adding a Birthplace column that then sorts by birth date" src="img/v16-columns-then-sort.jpg" /><figcaption>A Birthplace column (<code>birth.place.title</code>) that then sorts by birth date.</figcaption></figure>
+<figure><img alt="The People list, searched for Gascoigne and sorted by Birthplace" src="img/v16-list-sorted.jpg" /><figcaption>The Gascoignes, grouped by where they were born and oldest first within each place.</figcaption></figure>
+<h2>Put things in your own order</h2>
+<p>A record&rsquo;s notes and citations are kept in the order they&rsquo;re listed,
+which is also the order Gramps&rsquo; reports and exports print them in. You
+can now drag them into place by their grip (⋮⋮) in any edit dialog. In the
+panel beside a record, you can drag its Notes, Discussions and Stories
+the same way. Each move there is saved at once and can be undone from the
+record&rsquo;s History.</p>
+<p>When a record has several tags, the one higher in the tag list wins, for
+example for its color in a chart. A tag&rsquo;s <strong>Edit</strong> dialog now shows the
+whole tag list under <strong>Order priority</strong>. Drag the tag to where it
+belongs. Records list their tags in that order everywhere.</p>
+<figure><img alt="The Edit Tag dialog for Coronation, with every tag listed under Order priority" src="img/v16-tag-order.jpg" /><figcaption>The tag being edited is highlighted. Drag it up or down, then Save.</figcaption></figure>
+<h2>Citations, grouped by source</h2>
+<p>The <strong>Citations</strong> section beside a record now groups citations under
+their sources. It includes the citations on the record&rsquo;s events, names,
+media and associations too, and says which one each is attached to. The
+Citations list also has a standard Date column.</p>
+<figure><img alt="The Citations section beside Queen Elizabeth II, grouped under four sources" src="img/v16-citations-grouped.jpg" /><figcaption>Ten citations from four sources. &ldquo;on [E1674] Birth&rdquo; means the citation is attached to her birth event rather than to her.</figcaption></figure>
+<h2>Make Backup</h2>
+<p><strong>Family Trees → Make Backup…</strong> saves your whole tree as a Gramps XML
+file, the counterpart to Restore from Backup. It includes private records
+and living people, and desktop Gramps can import the file too. The dialog
+also says plainly what that file <em>doesn&rsquo;t</em> hold, and offers buttons to
+download those separately: your photos and other media, and your
+settings in this browser.</p>
+<figure><img alt="The Make Backup dialog" src="img/v16-make-backup.jpg" /><figcaption>Make Backup lists what is and isn&rsquo;t in the tree file.</figcaption></figure>
+<h2>And more</h2>
+<ul>
+<li>The status bar shows &ldquo;showing 3 / 4,668&rdquo; once a list has fully loaded,
+  so you can see how much of the tree a search or filter is showing.</li>
+<li>If you open a record that someone just deleted, the panel says so
+  calmly instead of showing an error.</li>
+</ul>
+<h2>Try it</h2>
+<ul>
+<li><a href="https://github.com/dsblank/gramps-connect/releases/tag/v1.6.0">Download Gramps Connect 1.6</a>
+  for Windows, macOS or Linux, or take the <a href="../tour/">narrated tour</a>.</li>
+<li>The documentation has the details:
+  <a href="https://github.com/dsblank/gramps-connect/wiki/Charts">Charts</a>,
+  <a href="https://github.com/dsblank/gramps-connect/wiki/Search-and-Filters#sorting-a-list">Sorting a list</a>,
+  <a href="https://github.com/dsblank/gramps-connect/wiki/Data-Model-and-Editing#dragging-to-reorder">Dragging to reorder</a>
+  and <a href="https://github.com/dsblank/gramps-connect/wiki/Administration-and-Settings#make-backup">Make Backup</a>.</li>
+<li>Questions and ideas are welcome on the
+  <a href="https://gramps.discourse.group/c/gramps-connect/35">Gramps Discourse forum</a>.</li>
+</ul>
+</article>
+<p class="back"><a href="./">&larr; All posts</a></p>
+<footer>
+  <!-- Generated by scripts/build-blog.py from blog/posts/; edit the .md, not this file. -->
+  Gramps Connect is free software under the AGPL-3.0-or-later licence.
+</footer>
+</div>
+</body>
+</html>

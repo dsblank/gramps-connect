@@ -5,8 +5,95 @@
   <link href="https://dsblank.github.io/gramps-connect/blog/"/>
   <link rel="self" href="https://dsblank.github.io/gramps-connect/blog/feed.xml"/>
   <id>https://dsblank.github.io/gramps-connect/blog/</id>
-  <updated>2026-11-22T00:00:00Z</updated>
+  <updated>2026-11-23T00:00:00Z</updated>
   <author><name>Gramps Connect</name></author>
+  <entry>
+    <title>Gramps Connect 1.6: color your charts, sort any column</title>
+    <link href="https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-6.html"/>
+    <id>https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-6.html</id>
+    <updated>2026-11-23T00:00:00Z</updated>
+    <author><name>Doug Blank</name></author>
+    <summary>Gramps Connect 1.6 colors the people on your charts by tag, attribute or filter, sorts every list by any column (or two), and adds drag-to-reorder for notes and citations, tag ordering, and a Make Backup command.</summary>
+    <content type="html">&lt;p&gt;Gramps Connect 1.6 is out. The biggest change is in the charts: they can
+now show &lt;em&gt;what you know&lt;/em&gt; about each person, not just who they are. Lists
+got more flexible too, along with smaller changes for putting things in
+the order you want and for keeping a safe copy of your tree.&lt;/p&gt;
+&lt;h2&gt;Color your charts&lt;/h2&gt;
+&lt;p&gt;The fan, tree and Generations charts each have a &lt;strong&gt;Color&lt;/strong&gt; menu, and
+1.6 adds three new choices to it.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Tag&lt;/strong&gt; colors each person with their tag&amp;rsquo;s color, so the people you&amp;rsquo;ve
+  tagged &amp;ldquo;ToDo&amp;rdquo;, &amp;ldquo;Brick wall&amp;rdquo; or &amp;ldquo;Verified&amp;rdquo; stand out at a glance. This
+  answers a long-standing Gramps request.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Attribute&lt;/strong&gt; colors people by one of their attributes. Numbers shade
+  from light to dark, which suits a research level such as 1 to 6 for how
+  fully each ancestor has been researched. Other values, such as an
+  occupation, each get their own color.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Filter&lt;/strong&gt; highlights the people a saved filter matches, or the people
+  a GOQL query you type in matches.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;figure&gt;&lt;img alt=&quot;A fan chart of Queen Elizabeth II&#x27;s ancestors, with everyone born in England colored blue&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v16-fan-colors.jpg&quot; /&gt;&lt;figcaption&gt;Queen Elizabeth II&amp;rsquo;s ancestors, colored by the query &lt;code&gt;&#x27;England&#x27; in birth.place.title&lt;/code&gt;. The legend at the bottom counts 11 matches and 72 others.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;p&gt;A legend below the chart shows each color and how many people have it.
+When you export a chart as an image or PDF, the legend comes with it.
+Your color choice is remembered for next time, for each kind of chart.&lt;/p&gt;
+&lt;h2&gt;Sort by any column, or by two&lt;/h2&gt;
+&lt;p&gt;Every column in every list can now be sorted: click the header, and
+click again to reverse. Dates sort as dates, and names follow your
+tree&amp;rsquo;s name format. When several records share a value, they&amp;rsquo;re listed
+in a sensible order among themselves: people born on the same day by
+name, events at the same place by Gramps ID.&lt;/p&gt;
+&lt;p&gt;Columns you add yourself in the &lt;strong&gt;Columns&lt;/strong&gt; dialog now have a &lt;strong&gt;Then
+sort by&lt;/strong&gt; box. Clicking the column sorts by it first and then by what you
+put there. That&amp;rsquo;s an easy way to group records by one thing and order
+each group by another.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Columns dialog for the People list, adding a Birthplace column that then sorts by birth date&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v16-columns-then-sort.jpg&quot; /&gt;&lt;figcaption&gt;A Birthplace column (&lt;code&gt;birth.place.title&lt;/code&gt;) that then sorts by birth date.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;figure&gt;&lt;img alt=&quot;The People list, searched for Gascoigne and sorted by Birthplace&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v16-list-sorted.jpg&quot; /&gt;&lt;figcaption&gt;The Gascoignes, grouped by where they were born and oldest first within each place.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;h2&gt;Put things in your own order&lt;/h2&gt;
+&lt;p&gt;A record&amp;rsquo;s notes and citations are kept in the order they&amp;rsquo;re listed,
+which is also the order Gramps&amp;rsquo; reports and exports print them in. You
+can now drag them into place by their grip (⋮⋮) in any edit dialog. In the
+panel beside a record, you can drag its Notes, Discussions and Stories
+the same way. Each move there is saved at once and can be undone from the
+record&amp;rsquo;s History.&lt;/p&gt;
+&lt;p&gt;When a record has several tags, the one higher in the tag list wins, for
+example for its color in a chart. A tag&amp;rsquo;s &lt;strong&gt;Edit&lt;/strong&gt; dialog now shows the
+whole tag list under &lt;strong&gt;Order priority&lt;/strong&gt;. Drag the tag to where it
+belongs. Records list their tags in that order everywhere.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Edit Tag dialog for Coronation, with every tag listed under Order priority&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v16-tag-order.jpg&quot; /&gt;&lt;figcaption&gt;The tag being edited is highlighted. Drag it up or down, then Save.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;h2&gt;Citations, grouped by source&lt;/h2&gt;
+&lt;p&gt;The &lt;strong&gt;Citations&lt;/strong&gt; section beside a record now groups citations under
+their sources. It includes the citations on the record&amp;rsquo;s events, names,
+media and associations too, and says which one each is attached to. The
+Citations list also has a standard Date column.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Citations section beside Queen Elizabeth II, grouped under four sources&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v16-citations-grouped.jpg&quot; /&gt;&lt;figcaption&gt;Ten citations from four sources. &amp;ldquo;on [E1674] Birth&amp;rdquo; means the citation is attached to her birth event rather than to her.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;h2&gt;Make Backup&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;Family Trees → Make Backup…&lt;/strong&gt; saves your whole tree as a Gramps XML
+file, the counterpart to Restore from Backup. It includes private records
+and living people, and desktop Gramps can import the file too. The dialog
+also says plainly what that file &lt;em&gt;doesn&amp;rsquo;t&lt;/em&gt; hold, and offers buttons to
+download those separately: your photos and other media, and your
+settings in this browser.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Make Backup dialog&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v16-make-backup.jpg&quot; /&gt;&lt;figcaption&gt;Make Backup lists what is and isn&amp;rsquo;t in the tree file.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;h2&gt;And more&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;The status bar shows &amp;ldquo;showing 3 / 4,668&amp;rdquo; once a list has fully loaded,
+  so you can see how much of the tree a search or filter is showing.&lt;/li&gt;
+&lt;li&gt;If you open a record that someone just deleted, the panel says so
+  calmly instead of showing an error.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;Try it&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/dsblank/gramps-connect/releases/tag/v1.6.0&quot;&gt;Download Gramps Connect 1.6&lt;/a&gt;
+  for Windows, macOS or Linux, or take the &lt;a href=&quot;https://dsblank.github.io/gramps-connect/tour/&quot;&gt;narrated tour&lt;/a&gt;.&lt;/li&gt;
+&lt;li&gt;The documentation has the details:
+  &lt;a href=&quot;https://github.com/dsblank/gramps-connect/wiki/Charts&quot;&gt;Charts&lt;/a&gt;,
+  &lt;a href=&quot;https://github.com/dsblank/gramps-connect/wiki/Search-and-Filters#sorting-a-list&quot;&gt;Sorting a list&lt;/a&gt;,
+  &lt;a href=&quot;https://github.com/dsblank/gramps-connect/wiki/Data-Model-and-Editing#dragging-to-reorder&quot;&gt;Dragging to reorder&lt;/a&gt;
+  and &lt;a href=&quot;https://github.com/dsblank/gramps-connect/wiki/Administration-and-Settings#make-backup&quot;&gt;Make Backup&lt;/a&gt;.&lt;/li&gt;
+&lt;li&gt;Questions and ideas are welcome on the
+  &lt;a href=&quot;https://gramps.discourse.group/c/gramps-connect/35&quot;&gt;Gramps Discourse forum&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;</content>
+  </entry>
   <entry>
     <title>Citing your sources, auto formatted</title>
     <link href="https://dsblank.github.io/gramps-connect/blog/citations.html"/>
