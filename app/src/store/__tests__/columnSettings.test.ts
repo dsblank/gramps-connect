@@ -210,6 +210,20 @@ describe("expressionDependencies", () => {
     });
   });
 
+  it("watches the records a counted field or distinct count reads", () => {
+    // f.father is the handle stored on each family: watching the families is enough.
+    expect(expressionDependencies("Person", "len(distinct([f.father for f in parent_families]))")).toEqual({
+      links: [{ select: "parent_family_list", table: "family" }], untracked: false,
+    });
+    expect(expressionDependencies("Person", "len([f.father for f in parent_families])")).toEqual({
+      links: [{ select: "parent_family_list", table: "family" }], untracked: false,
+    });
+    // Reading on through the father reaches records that aren't watched.
+    expect(
+      expressionDependencies("Person", "len(distinct([f.father.primary_name.first_name for f in parent_families]))"),
+    ).toEqual({ links: [{ select: "parent_family_list", table: "family" }], untracked: true });
+  });
+
   it("flags what can't be watched", () => {
     expect(expressionDependencies("Person", "len(backlinks)").untracked).toBe(true);
     // The events are watched; their places aren't.

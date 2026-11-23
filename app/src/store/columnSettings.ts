@@ -227,8 +227,9 @@ const COLLECTION_LIST: Record<string, { field: string; table: string }> = {
 };
 
 const COUNT_CALL_RE = /^(?:len|count)\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,([\s\S]*))?\)$/;
+// len([... for x in rel ...]), or len(distinct([...])).
 const COUNT_COMPREHENSION_RE =
-  /^len\(\s*\[([\s\S]*)\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+([A-Za-z_][A-Za-z0-9_]*)\b([\s\S]*)\]\s*\)$/;
+  /^len\(\s*(?:distinct\(\s*)?\[([\s\S]*)\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+([A-Za-z_][A-Za-z0-9_]*)\b([\s\S]*)\]\s*(?:\)\s*)?\)$/;
 
 /** How to keep `expr`'s column fresh in `namespace` ("Person", ...): the
  * links it reads through, and whether it also reads something no cached
@@ -260,7 +261,11 @@ export function expressionDependencies(namespace: string, expr: string): { links
       let segments = match[0].split(".").map((seg) => seg.replace(/\[[0-9]+\]/g, ""));
       if (bound && segments[0] === bound) segments = segments.slice(1);
       if (segments.length === 0 || !targetVocab) continue; // child_refs: ChildRef fields only
-      if (segments[0] in targetVocab.relationships || segments[0] in targetVocab.collections) deeper = true;
+      // A bare link (`[f.father for f in ...]`) is the handle stored on the
+      // record itself; only reading on through it (`f.father.surname`) or
+      // into a collection reaches other records.
+      if (segments[0] in targetVocab.relationships && segments.length > 1) deeper = true;
+      if (segments[0] in targetVocab.collections) deeper = true;
     }
     return { links: [{ select: list.field, table: list.table }], untracked: deeper };
   }

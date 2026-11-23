@@ -515,6 +515,36 @@
       ]
     },
     {
+      "namespace": "Person",
+      "source": "len(di",
+      "expect": [
+        "distinct"
+      ],
+      "kind": {
+        "distinct": "function"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "di",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "len(distinct(",
+      "expect": [
+        "["
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "len(distinct([f for f in parent_families ",
+      "contains": [
+        "for",
+        "if"
+      ]
+    },
+    {
       "namespace": "Family",
       "source": "len(father.",
       "contains": [

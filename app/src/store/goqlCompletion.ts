@@ -153,7 +153,8 @@ const VALUE_FUNCTIONS = ["Date"];
 const NON_OPERAND_WORDS = new Set(["and", "or", "not", "in", "is", "for", "if"]);
 // What each argument of a whitelisted function call is: Date('Jan 1,
 // 1968'), like(path, 'pattern'), exists(collection, condition),
-// len([... for x in collection]) or len(path); any(...) takes conditions.
+// len([... for x in collection]), len(distinct([...])) or len(path);
+// any(...) takes conditions.
 const ARGUMENT_ROLES: Record<string, Expected[]> = {
   Date: ["string"],
   like: ["path", "string"],
@@ -161,6 +162,7 @@ const ARGUMENT_ROLES: Record<string, Expected[]> = {
   exists: ["collection", "operand"],
   count: ["collection", "operand"],
   len: ["iterable"],
+  distinct: ["iterable"],
   any: ["operand", "operand"],
 };
 // Roles whose argument is complete after one operand: only , or ) follows.
@@ -663,7 +665,15 @@ export function completeFromVocabularies(
       candidates = collections;
     } else if (want === "iterable") {
       candidates = [...paths.filter(([, kind, detail]) => kind === "relationship" || kind === "variable" || isArray(detail)), ...collections];
-      if (before.slice(0, start).trimEnd().endsWith("len(")) candidates.push(listOpen);
+      const opened = before.slice(0, start).trimEnd();
+      if (opened.endsWith("distinct(")) {
+        // distinct(...) only takes a list of fields: [f.father for ...].
+        candidates = [listOpen];
+      } else if (opened.endsWith("len(")) {
+        candidates.push(listOpen);
+        // Only counted so far, so offered only inside len(.
+        candidates.push(["distinct", "function", null]);
+      }
     } else if (want === "index") {
       candidates = [];
       const indexed = INDEXED_RE.exec(before.slice(0, start));
