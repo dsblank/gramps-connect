@@ -310,6 +310,13 @@ jobs:
           find dist/gramps-connect-desktop.app -type f -exec xattr -w com.apple.quarantine "0181;00000000;Safari;" {} \;
           xattr -w com.apple.quarantine "0181;00000000;Safari;" dist/gramps-connect-desktop.app
           spctl -a -vvv --type execute dist/gramps-connect-desktop.app
+          # Take the simulated download marks off again before zipping:
+          # ditto keeps extended attributes as a "._<name>" AppleDouble
+          # entry beside every file, and anything but Finder's own unzip
+          # writes those out as real files -- alembic then loaded
+          # alembic_users/versions/._*.py at launch and crashed on its
+          # null bytes ("source code string cannot contain null bytes").
+          xattr -dr com.apple.quarantine dist/gramps-connect-desktop.app
 
       # actions/upload-artifact archives a directory tree with its own
       # tooling, not a byte-for-byte passthrough -- handing it the signed
@@ -332,7 +339,15 @@ jobs:
       - name: Zip the signed, notarized .app for upload
         if: runner.os == 'macOS'
         working-directory: gramps-connect/standalone
-        run: ditto -c -k --keepParent dist/gramps-connect-desktop.app dist/gramps-connect-desktop.app.zip
+        run: |
+          ditto -c -k --keepParent dist/gramps-connect-desktop.app dist/gramps-connect-desktop.app.zip
+          # No "._" AppleDouble entries (see the Gatekeeper step above): an
+          # extended attribute from anywhere would ship as stray binary
+          # files for any unzip tool other than Finder's.
+          if zipinfo -1 dist/gramps-connect-desktop.app.zip | grep -E '(^|/)\._'; then
+            echo "::error::The macOS zip contains ._ AppleDouble entries (extended attributes on the files above)"
+            exit 1
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
