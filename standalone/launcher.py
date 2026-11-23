@@ -122,13 +122,32 @@ def email_config_from_env() -> dict:
     return config
 
 
+def ensure_media_dir(path: str) -> None:
+    """Create a media folder unless something is already there.
+
+    A tree's media folder (or the whole media/ folder) may be a link to
+    somewhere else, e.g. an existing Gramps desktop media folder, which
+    is how a tree gets its own media location. If the link's target is
+    missing (an unplugged drive), os.makedirs(exist_ok=True) would raise
+    FileExistsError and stop the app from starting; and creating the
+    folder must never replace the link. So leave any existing entry
+    alone and only warn: the media just shows as missing until the
+    target is back.
+    """
+    if os.path.islink(path) and not os.path.exists(path):
+        print(f"Media folder {path} links to {os.readlink(path)}, which isn't there.")
+        return
+    if not os.path.lexists(path):
+        os.makedirs(path)
+
+
 def build_config() -> dict:
     os.makedirs(data_path(), exist_ok=True)
     # gramps_webapi.api.file.FileHandler raises ValueError if this doesn't
     # already exist on disk -- unconditional (not just first-run) so a
     # tester who manually deletes just this subdirectory doesn't get a
     # 500 on every media/thumbnail request instead of a self-healing dir.
-    os.makedirs(data_path("media"), exist_ok=True)
+    ensure_media_dir(data_path("media"))
     # gramps-web-api's own defaults for all five of these are Path.cwd() /
     # "<name>_cache" (or "report_cache"/"export_cache") -- fine for a
     # normal server deployment with a fixed working directory, but this app
@@ -616,7 +635,7 @@ def ensure_setup(app) -> None:
                 raise
         migrate_to_multi_tree(tree_id)
         # Uploads create it on demand, but other media requests expect it.
-        os.makedirs(data_path("media", tree_id), exist_ok=True)
+        ensure_media_dir(data_path("media", tree_id))
 
 
 def main() -> None:
