@@ -22,6 +22,7 @@ import { TreeChart, type TreeChartHandle } from "./TreeChart";
 import { ChartLegend } from "./ChartLegend";
 import { ChartGoqlInput } from "./ChartGoqlInput";
 import { fetchMatchingHandles, loadChartFilters, type ChartFilter } from "../../store/chartFilters";
+import { loadChartColorPreference, saveChartColorPreference } from "../../store/chartColorPreference";
 import { attributeTypesIn, buildAttributeColoring, buildFilterColoring, buildTagColoring, type TagInfo } from "../../charts/personColors";
 import { fetchAllTags } from "../../store/tagList";
 import { VisualFrame } from "./VisualFrame";
@@ -54,7 +55,17 @@ const MIN_FAN_DISPLAY_DEPTH = 1;
 // manual is the preferred mode for now. Flip to re-show it.
 const SHOW_MANUAL_EXPAND_TOGGLE = false;
 
-type TreeColorScheme = "gender" | "tag" | "attribute" | "filter";
+const FAN_COLOR_SCHEMES = ["gen", "death", "tag", "attribute", "filter"] as const;
+const TREE_COLOR_SCHEMES = ["gender", "tag", "attribute", "filter"] as const;
+const FAMILY_COLOR_SCHEMES = ["none", "tag", "attribute", "filter"] as const;
+type TreeColorScheme = (typeof TREE_COLOR_SCHEMES)[number];
+type FamilyColorScheme = (typeof FAMILY_COLOR_SCHEMES)[number];
+
+/** `value` if it's one of `allowed`, else `fallback` -- for a remembered
+ * choice from an older version, or edited by hand. */
+function oneOf<T extends string>(value: string, allowed: readonly T[], fallback: T): T {
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
 /** "Color: Filter"'s choice for a typed GOQL query rather than a saved
  * filter. Saved filter ids are generated, so this can't clash. */
 const GOQL_FILTER_ID = "__goql__";
@@ -124,28 +135,41 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const [fanDisplayDepth, setFanDisplayDepth] = useState(FAN_BASE_ANC);
   const fanChartRef = useRef<FanChartHandle>(null);
   const treeChartRef = useRef<TreeChartHandle>(null);
-  // Fan mode's own wedge-color scheme -- "Age at death" is the only other
-  // one wired up so far (fanChart.ts's own doc comment on why: harrywind.nl
-  // has several more, but generation/age-at-death are the two computable
-  // from data this app already fetches with no further plumbing).
-  const [colorScheme, setColorScheme] = useState<FanColorScheme>("gen");
+  // Fan mode's own wedge-color scheme: generation, age at death, or a
+  // person coloring (tag/attribute/filter, charts/personColors.ts).
+  // The Color choices below start from what was picked last time
+  // (store/chartColorPreference.ts) and are saved whenever they change.
+  const [savedColors] = useState(loadChartColorPreference);
+  const [colorScheme, setColorScheme] = useState<FanColorScheme>(() =>
+    oneOf(savedColors.fan, FAN_COLOR_SCHEMES, "gen"));
   // Tree mode's own color setting: the accent bar on each box shows gender
   // by default, or a tag/attribute color (charts/personColors.ts).
-  const [treeColorScheme, setTreeColorScheme] = useState<TreeColorScheme>("gender");
-  // "Color: Filter" (both charts): the tree's saved Person filters, loaded
+  const [treeColorScheme, setTreeColorScheme] = useState<TreeColorScheme>(() =>
+    oneOf(savedColors.tree, TREE_COLOR_SCHEMES, "gender"));
+  // Generations mode's own: "none" (its cards have no colored bar by
+  // default) or a person coloring shown as a bar on each card's left edge.
+  const [familyColorScheme, setFamilyColorScheme] = useState<FamilyColorScheme>(() =>
+    oneOf(savedColors.family, FAMILY_COLOR_SCHEMES, "none"));
+  // "Color: Filter" (every chart): the tree's saved Person filters, loaded
   // the first time it's picked; which one (or GOQL_FILTER_ID for a typed
   // query); the typed query once applied; and the last answer from the
   // server, kept with the expression it answered so a stale one isn't
   // shown for a different filter.
   const [chartFilters, setChartFilters] = useState<ChartFilter[] | null>(null);
-  const [colorFilterId, setColorFilterId] = useState<string | null>(null);
-  const [colorGoql, setColorGoql] = useState("");
+  const [colorFilterId, setColorFilterId] = useState<string | null>(savedColors.filterId);
+  const [colorGoql, setColorGoql] = useState(savedColors.goql);
   const [filterMatches, setFilterMatches] = useState<{ expr: string; label: string; matched: Set<string> } | null>(null);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [filterLoading, setFilterLoading] = useState(false);
-  // "Color by attribute"'s chosen type, shared by Fan and Tree; null (or a
+  // "Color by attribute"'s chosen type, shared by every chart; null (or a
   // type no longer in the chart) means the most common one present.
-  const [colorAttributeType, setColorAttributeType] = useState<string | null>(null);
+  const [colorAttributeType, setColorAttributeType] = useState<string | null>(savedColors.attributeType);
+  useEffect(() => {
+    saveChartColorPreference({
+      fan: colorScheme, tree: treeColorScheme, family: familyColorScheme,
+      attributeType: colorAttributeType, filterId: colorFilterId, goql: colorGoql,
+    });
+  }, [colorScheme, treeColorScheme, familyColorScheme, colorAttributeType, colorFilterId, colorGoql]);
   // The tree's tags, fetched the first time "Color by tag" is picked.
   const [tags, setTags] = useState<Map<string, TagInfo> | null>(null);
   // Generations mode's own "Compact" toggle -- same spot/style as fan
@@ -415,180 +439,6 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     return trimTreeToDepth(fanTree, fanDisplayDepth);
   }, [fanTree, fanDisplayDepth]);
 
-  // The color scheme of whichever chart is showing, as far as person
-  // coloring goes (Generations/Relationship have none yet).
-  const activeColorScheme = chartStyle === "fan" ? colorScheme : chartStyle === "box" ? treeColorScheme : null;
-
-  // Everyone the current chart draws, once each (pedigree collapse can put
-  // one person in several places) -- what "Color by tag/attribute" counts.
-  const chartPeople = useMemo(() => {
-    const seen = new Map<string, TreePersonRaw>();
-    const walk = (n: TreeNode | null) => {
-      if (!n) return;
-      if (n.person) seen.set(n.person.handle, n.person);
-      n.children?.forEach(walk);
-    };
-    if (chartStyle === "fan") walk(fanDisplayTree);
-    else if (chartStyle === "box" && trees) {
-      walk(trees.ancestorTree);
-      walk(trees.descendantTree);
-    }
-    return [...seen.values()];
-  }, [chartStyle, fanDisplayTree, trees]);
-  const chartAttributeTypes = useMemo(() => attributeTypesIn(chartPeople), [chartPeople]);
-  const effectiveAttributeType =
-    colorAttributeType && chartAttributeTypes.some((a) => a.type === colorAttributeType)
-      ? colorAttributeType
-      : (chartAttributeTypes[0]?.type ?? null);
-
-  useEffect(() => {
-    if (activeColorScheme !== "filter" || chartFilters) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const all = await loadChartFilters(await getToken());
-        if (!cancelled) setChartFilters(all);
-      } catch (err) {
-        if (!cancelled) {
-          setChartFilters([]);
-          setFilterError(`${t("Couldn't load saved filters:")} ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeColorScheme, chartFilters]);
-
-  // The saved filter picked, else the first one, else the GOQL box.
-  const effectiveFilterId =
-    colorFilterId === GOQL_FILTER_ID || (colorFilterId && chartFilters?.some((f) => f.id === colorFilterId))
-      ? colorFilterId
-      : (chartFilters?.[0]?.id ?? GOQL_FILTER_ID);
-  const pickedFilter = chartFilters?.find((f) => f.id === effectiveFilterId) ?? null;
-  const filterExpr = effectiveFilterId === GOQL_FILTER_ID ? colorGoql || null : (pickedFilter?.whereExpr ?? null);
-  const filterLabel = effectiveFilterId === GOQL_FILTER_ID ? colorGoql : (pickedFilter?.name ?? "");
-
-  // One query for everyone in the chart (in chunks), only while "Filter"
-  // is showing; again when the chart gains people or the filter changes.
-  // Debounced so a burst of expands costs one round of queries.
-  const chartHandlesKey = useMemo(() => chartPeople.map((p) => p.handle).sort().join(","), [chartPeople]);
-  useEffect(() => {
-    if (activeColorScheme !== "filter") return;
-    if (!filterExpr) {
-      setFilterError(pickedFilter?.error ? `${t("This filter can't be used:")} ${pickedFilter.error}` : null);
-      return;
-    }
-    if (!chartHandlesKey) return;
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      setFilterLoading(true);
-      try {
-        const matched = await fetchMatchingHandles(await getToken(), filterExpr, chartHandlesKey.split(","));
-        if (!cancelled) {
-          setFilterMatches({ expr: filterExpr, label: filterLabel, matched });
-          setFilterError(null);
-        }
-      } catch (err) {
-        // Keep the last good coloring; say what's wrong with this one (the
-        // server's "unknown field ... -- known fields: <long list>" is cut
-        // at the list).
-        if (!cancelled) setFilterError((err instanceof Error ? err.message : String(err)).split(" -- ")[0].slice(0, 200));
-      } finally {
-        if (!cancelled) setFilterLoading(false);
-      }
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- filterLabel follows filterExpr
-  }, [activeColorScheme, filterExpr, chartHandlesKey, pickedFilter?.error]);
-
-  useEffect(() => {
-    if (activeColorScheme !== "tag" || tags) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        const all = await fetchAllTags(token);
-        if (!cancelled) setTags(all);
-      } catch (err) {
-        if (!cancelled) {
-          notifications.show({ color: "red", message: `${t("Couldn't load tags:")} ${err instanceof Error ? err.message : String(err)}` });
-          setColorScheme("gen");
-          setTreeColorScheme("gender");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeColorScheme, tags]);
-
-  const personColoring = useMemo(() => {
-    if (activeColorScheme === "tag") return tags ? buildTagColoring(chartPeople, tags) : null;
-    // With no attribute to pick, everyone shows as "Not recorded" rather
-    // than quietly falling back to generation colors.
-    if (activeColorScheme === "attribute") return buildAttributeColoring(chartPeople, effectiveAttributeType ?? "");
-    if (activeColorScheme === "filter") {
-      // The answer for this filter; after an error, the last good one; and
-      // before any answer (no query yet, or still loading), everyone grey
-      // rather than quietly falling back to the chart's usual colors.
-      if (filterMatches && (filterMatches.expr === filterExpr || filterError)) {
-        return buildFilterColoring(chartPeople, filterMatches.matched, filterMatches.label);
-      }
-      return buildFilterColoring(chartPeople, new Set(), filterLabel);
-    }
-    return null;
-  }, [activeColorScheme, tags, chartPeople, effectiveAttributeType, filterMatches, filterExpr, filterLabel, filterError]);
-
-  // The second menu (and GOQL box) for "Color: Filter", the same in Fan and
-  // Tree.
-  const filterControls = (
-    <>
-      <Select
-        size="xs"
-        w={200}
-        allowDeselect={false}
-        value={chartFilters ? effectiveFilterId : null}
-        onChange={(v) => v && setColorFilterId(v)}
-        data={[
-          ...(chartFilters ?? []).map((f) => ({ value: f.id, label: f.name, disabled: !!f.error })),
-          { value: GOQL_FILTER_ID, label: t("GOQL…") },
-        ]}
-        placeholder={t("Loading filters…")}
-        disabled={!chartFilters}
-        rightSection={filterLoading ? <Loader size={12} /> : undefined}
-        aria-label={t("Filter")}
-      />
-      {chartFilters && effectiveFilterId === GOQL_FILTER_ID && (
-        <ChartGoqlInput applied={colorGoql} onApply={setColorGoql} error={filterError} />
-      )}
-    </>
-  );
-  // Shown beside the legend, for a saved filter that fails (a GOQL box
-  // shows its own error under itself).
-  const filterNote =
-    activeColorScheme === "filter" && filterError && effectiveFilterId !== GOQL_FILTER_ID ? (
-      <Text size="xs" c="red">{filterError}</Text>
-    ) : null;
-
-  // The second menu for "Color: Attribute", the same in Fan and Tree.
-  const attributeTypeSelect = (
-    <Select
-      size="xs"
-      w={180}
-      allowDeselect={false}
-      value={effectiveAttributeType}
-      onChange={(v) => v && setColorAttributeType(v)}
-      data={chartAttributeTypes.map((a) => ({ value: a.type, label: `${t(a.type)} (${a.count})` }))}
-      placeholder={t("No attributes in this chart")}
-      disabled={chartAttributeTypes.length === 0}
-      aria-label={t("Attribute")}
-    />
-  );
-
   // Family mode's own ancestor-ward tree: a chain of sibling clusters, one
   // per generation expanded "up" so far -- see buildFamilyClusterTree's own
   // doc comment. `expandedFamilyUp` is this graph's own state, not shared
@@ -716,6 +566,193 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     }
     return map;
   }, [data, expandedSpouses, expandedFamilyUp]);
+
+  // The color scheme of whichever chart is showing, as far as person
+  // coloring goes (the Relationship chart has none).
+  const activeColorScheme =
+    chartStyle === "fan" ? colorScheme
+    : chartStyle === "box" ? treeColorScheme
+    : chartStyle === "family" ? familyColorScheme
+    : null;
+
+  // Everyone the current chart draws, once each (pedigree collapse can put
+  // one person in several places) -- what "Color by tag/attribute" counts.
+  const chartPeople = useMemo(() => {
+    const seen = new Map<string, TreePersonRaw>();
+    const walk = (n: TreeNode | null) => {
+      if (!n) return;
+      if (n.person) seen.set(n.person.handle, n.person);
+      n.children?.forEach(walk);
+    };
+    const walkCluster = (c: FamilyClusterNode) => {
+      for (const sib of c.siblings) seen.set(sib.person.handle, sib.person);
+      Object.values(c.parentClustersByGroup).flat().forEach(walkCluster);
+    };
+    if (chartStyle === "fan") walk(fanDisplayTree);
+    else if (chartStyle === "box" && trees) {
+      walk(trees.ancestorTree);
+      walk(trees.descendantTree);
+    } else if (chartStyle === "family") {
+      if (familyAncestorCluster) walkCluster(familyAncestorCluster);
+      walk(familyDescendantTree);
+      for (const clusters of spouseClustersByHandle.values()) clusters.forEach(walkCluster);
+    }
+    return [...seen.values()];
+  }, [chartStyle, fanDisplayTree, trees, familyAncestorCluster, familyDescendantTree, spouseClustersByHandle]);
+  const chartAttributeTypes = useMemo(() => attributeTypesIn(chartPeople), [chartPeople]);
+  const effectiveAttributeType =
+    colorAttributeType && chartAttributeTypes.some((a) => a.type === colorAttributeType)
+      ? colorAttributeType
+      : (chartAttributeTypes[0]?.type ?? null);
+
+  useEffect(() => {
+    if (activeColorScheme !== "filter" || chartFilters) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const all = await loadChartFilters(await getToken());
+        if (!cancelled) setChartFilters(all);
+      } catch (err) {
+        if (!cancelled) {
+          setChartFilters([]);
+          setFilterError(`${t("Couldn't load saved filters:")} ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeColorScheme, chartFilters]);
+
+  // The saved filter picked, else the first one, else the GOQL box.
+  const effectiveFilterId =
+    colorFilterId === GOQL_FILTER_ID || (colorFilterId && chartFilters?.some((f) => f.id === colorFilterId))
+      ? colorFilterId
+      : (chartFilters?.[0]?.id ?? GOQL_FILTER_ID);
+  const pickedFilter = chartFilters?.find((f) => f.id === effectiveFilterId) ?? null;
+  const filterExpr = effectiveFilterId === GOQL_FILTER_ID ? colorGoql || null : (pickedFilter?.whereExpr ?? null);
+  const filterLabel = effectiveFilterId === GOQL_FILTER_ID ? colorGoql : (pickedFilter?.name ?? "");
+
+  // One query for everyone in the chart (in chunks), only while "Filter"
+  // is showing; again when the chart gains people or the filter changes.
+  // Debounced so a burst of expands costs one round of queries.
+  const chartHandlesKey = useMemo(() => chartPeople.map((p) => p.handle).sort().join(","), [chartPeople]);
+  useEffect(() => {
+    if (activeColorScheme !== "filter") return;
+    if (!filterExpr) {
+      setFilterError(pickedFilter?.error ? `${t("This filter can't be used:")} ${pickedFilter.error}` : null);
+      return;
+    }
+    if (!chartHandlesKey) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setFilterLoading(true);
+      try {
+        const matched = await fetchMatchingHandles(await getToken(), filterExpr, chartHandlesKey.split(","));
+        if (!cancelled) {
+          setFilterMatches({ expr: filterExpr, label: filterLabel, matched });
+          setFilterError(null);
+        }
+      } catch (err) {
+        // Keep the last good coloring; say what's wrong with this one (the
+        // server's "unknown field ... -- known fields: <long list>" is cut
+        // at the list).
+        if (!cancelled) setFilterError((err instanceof Error ? err.message : String(err)).split(" -- ")[0].slice(0, 200));
+      } finally {
+        if (!cancelled) setFilterLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filterLabel follows filterExpr
+  }, [activeColorScheme, filterExpr, chartHandlesKey, pickedFilter?.error]);
+
+  useEffect(() => {
+    if (activeColorScheme !== "tag" || tags) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const all = await fetchAllTags(token);
+        if (!cancelled) setTags(all);
+      } catch (err) {
+        if (!cancelled) {
+          notifications.show({ color: "red", message: `${t("Couldn't load tags:")} ${err instanceof Error ? err.message : String(err)}` });
+          setColorScheme("gen");
+          setTreeColorScheme("gender");
+          setFamilyColorScheme("none");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeColorScheme, tags]);
+
+  const personColoring = useMemo(() => {
+    if (activeColorScheme === "tag") return tags ? buildTagColoring(chartPeople, tags) : null;
+    // With no attribute to pick, everyone shows as "Not recorded" rather
+    // than quietly falling back to generation colors.
+    if (activeColorScheme === "attribute") return buildAttributeColoring(chartPeople, effectiveAttributeType ?? "");
+    if (activeColorScheme === "filter") {
+      // The answer for this filter; after an error, the last good one; and
+      // before any answer (no query yet, or still loading), everyone grey
+      // rather than quietly falling back to the chart's usual colors.
+      if (filterMatches && (filterMatches.expr === filterExpr || filterError)) {
+        return buildFilterColoring(chartPeople, filterMatches.matched, filterMatches.label);
+      }
+      return buildFilterColoring(chartPeople, new Set(), filterLabel);
+    }
+    return null;
+  }, [activeColorScheme, tags, chartPeople, effectiveAttributeType, filterMatches, filterExpr, filterLabel, filterError]);
+
+  // The second menu (and GOQL box) for "Color: Filter", the same in every
+  // chart.
+  const filterControls = (
+    <>
+      <Select
+        size="xs"
+        w={200}
+        allowDeselect={false}
+        value={chartFilters ? effectiveFilterId : null}
+        onChange={(v) => v && setColorFilterId(v)}
+        data={[
+          ...(chartFilters ?? []).map((f) => ({ value: f.id, label: f.name, disabled: !!f.error })),
+          { value: GOQL_FILTER_ID, label: t("GOQL…") },
+        ]}
+        placeholder={t("Loading filters…")}
+        disabled={!chartFilters}
+        rightSection={filterLoading ? <Loader size={12} /> : undefined}
+        aria-label={t("Filter")}
+      />
+      {chartFilters && effectiveFilterId === GOQL_FILTER_ID && (
+        <ChartGoqlInput applied={colorGoql} onApply={setColorGoql} error={filterError} />
+      )}
+    </>
+  );
+  // Shown beside the legend, for a saved filter that fails (a GOQL box
+  // shows its own error under itself).
+  const filterNote =
+    activeColorScheme === "filter" && filterError && effectiveFilterId !== GOQL_FILTER_ID ? (
+      <Text size="xs" c="red">{filterError}</Text>
+    ) : null;
+
+  // The second menu for "Color: Attribute", the same in every chart.
+  const attributeTypeSelect = (
+    <Select
+      size="xs"
+      w={180}
+      allowDeselect={false}
+      value={effectiveAttributeType}
+      onChange={(v) => v && setColorAttributeType(v)}
+      data={chartAttributeTypes.map((a) => ({ value: a.type, label: `${t(a.type)} (${a.count})` }))}
+      placeholder={t("No attributes in this chart")}
+      disabled={chartAttributeTypes.length === 0}
+      aria-label={t("Attribute")}
+    />
+  );
 
   // The single funnel every expand trigger calls through: a marker click
   // (TreeChart.tsx's box), "Increase depth" below firing one call per
@@ -1051,18 +1088,41 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           ) : undefined
         ) : chartStyle === "family" ? (
           familyAncestorCluster ? (
+            <Stack gap={6}>
+            {personColoring && <ChartLegend entries={personColoring.legend} />}
+            {filterNote}
             <Group justify="space-between" wrap="wrap" gap="xs">
               <Text size="xs" c="dimmed">
                 drag to pan · click a person for details · "+" reveals parents/siblings (up) or children (down) ·
                 "−" collapses a revealed branch back down (no data is lost -- "+" brings it right back)
               </Text>
-              <Checkbox
-                size="xs"
-                label={t("Compact")}
-                checked={familyCompact}
-                onChange={(e) => setFamilyCompact(e.currentTarget.checked)}
-              />
+              <Group gap="sm" wrap="nowrap">
+                <Text size="xs" c="dimmed">{t("Color:")}</Text>
+                <Select
+                  size="xs"
+                  w={120}
+                  allowDeselect={false}
+                  value={familyColorScheme}
+                  onChange={(v) => v && setFamilyColorScheme(v as FamilyColorScheme)}
+                  data={[
+                    { value: "none", label: t("None") },
+                    { value: "tag", label: t("Tag") },
+                    { value: "attribute", label: t("Attribute") },
+                    { value: "filter", label: t("Filter") },
+                  ]}
+                  aria-label={t("Color by")}
+                />
+                {familyColorScheme === "attribute" && attributeTypeSelect}
+                {familyColorScheme === "filter" && filterControls}
+                <Checkbox
+                  size="xs"
+                  label={t("Compact")}
+                  checked={familyCompact}
+                  onChange={(e) => setFamilyCompact(e.currentTarget.checked)}
+                />
+              </Group>
             </Group>
+            </Stack>
           ) : undefined
         ) : trees ? (
           <Stack gap={6}>
@@ -1134,6 +1194,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           onCollapseDown={collapseFamilyDown}
           spouseClustersByHandle={spouseClustersByHandle}
           compact={familyCompact}
+          personColoring={personColoring}
         />
       )}
       {chartStyle === "box" && trees && (

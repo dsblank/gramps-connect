@@ -26,6 +26,7 @@ const DEFS = {
   colorScheme: { key: `${P}colorScheme`, tag: "setting" },
   language: { key: `${P}language`, tag: "setting" },
   treeManualExpand: { key: `${P}treeManualExpand`, tag: "setting" },
+  chartColors: { key: `${P}chartColors`, tag: "setting" },
   browserNotifications: { key: `${P}browserNotifications`, tag: "setting" },
   largeImageChoice: { key: `${P}largeImageChoice`, tag: "setting" },
   asideWidths: { key: `${P}asideWidths`, tag: "setting" },

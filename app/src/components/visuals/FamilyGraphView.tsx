@@ -20,6 +20,7 @@ import {
   type MouseEvent as ReactMouseEvent, type ReactNode,
 } from "react";
 import { ActionIcon, Avatar, Badge, Divider, Group, Paper, Stack, Text } from "@mantine/core";
+import { NO_DATA_COLOR, type PersonColoring } from "../../charts/personColors";
 import {
   groupChildrenByFamily, groupSiblingsByParents, personThumbnailUrl,
   type ClusterSibling, type FamilyClusterNode, type SiblingGroup, type TreeNode, type TreePersonRaw,
@@ -409,11 +410,13 @@ interface FamilySquareCardProps {
    * puts birth/death right beside the name instead of in their own row
    * below it, so each card is shorter and reads as one line. */
   compact?: boolean;
+  /** See SharedProps' own doc comment. */
+  personColoring?: PersonColoring | null;
 }
 
 function FamilySquareCard({
   person, token, selected, highlighted, relationText, onSelect, onExpand, canExpand, expanding,
-  onCollapse, canCollapse, expandDirection, cardRef, pulse, compact,
+  onCollapse, canCollapse, expandDirection, cardRef, pulse, compact, personColoring,
 }: FamilySquareCardProps) {
   // Date badges follow the display settings (lifeEventDates.ts).
   useDisplayFormatVersion();
@@ -439,7 +442,22 @@ function FamilySquareCard({
         animation: "familyReveal 320ms ease both",
       }}
       onClick={onSelect}
+      title={personColoring?.detailFor(person) ?? undefined}
     >
+      {personColoring && (
+        <div
+          style={{
+            position: "absolute",
+            left: 3,
+            top: 8,
+            bottom: 8,
+            width: 4,
+            borderRadius: 2,
+            background: personColoring.colorFor(person) ?? NO_DATA_COLOR,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       {pulse && (
         <div
           style={{
@@ -533,6 +551,9 @@ interface SharedProps {
    * more local container a box's own incoming line could be scoped to. */
   getBoxRef: (key: string) => (el: HTMLDivElement | null) => void;
   getBoxNode: (key: string) => HTMLDivElement | undefined;
+  /** "Color by tag/attribute/filter" (charts/personColors.ts): every card
+   * gets a colored bar on its left edge; null leaves cards plain. */
+  personColoring: PersonColoring | null;
 }
 
 /** One SiblingGroup's own bordered box -- everyone inside shares the exact
@@ -577,6 +598,7 @@ function SiblingGroupBox({
                 onSelect={() => shared.onSelectPerson(sib.person.handle)}
                 cardRef={shared.getCardRef(sib.person.handle)}
                 pulse={shared.pulsingHandle === sib.person.handle}
+                personColoring={shared.personColoring}
                 compact
               />
             ))}
@@ -594,6 +616,7 @@ function SiblingGroupBox({
                 onSelect={() => shared.onSelectPerson(sib.person.handle)}
                 cardRef={shared.getCardRef(sib.person.handle)}
                 pulse={shared.pulsingHandle === sib.person.handle}
+                personColoring={shared.personColoring}
               />
             ))}
           </Group>
@@ -642,6 +665,7 @@ function ChildrenGroupBox({
               expandDirection="down"
               cardRef={shared.getCardRef(child.person.handle)}
               pulse={shared.pulsingHandle === child.person.handle}
+              personColoring={shared.personColoring}
               compact
             />
           ) : null))}
@@ -664,6 +688,7 @@ function ChildrenGroupBox({
               expandDirection="down"
               cardRef={shared.getCardRef(child.person.handle)}
               pulse={shared.pulsingHandle === child.person.handle}
+              personColoring={shared.personColoring}
             />
           ) : null))}
         </Group>
@@ -1056,7 +1081,7 @@ export function FamilyGraphView({
   const sharedProps: SharedProps = {
     token: shared.token, selectedHandle: shared.selectedHandle, onSelectPerson: shared.onSelectPerson,
     getCardRef, getCardNode, pulsingHandle, spouseClustersByHandle: shared.spouseClustersByHandle,
-    compact: shared.compact, getBoxRef, getBoxNode,
+    compact: shared.compact, getBoxRef, getBoxNode, personColoring: shared.personColoring,
   };
   const rows = new Map<number, ReactNode[]>();
   const connectors: ConnectorSpec[] = [];
