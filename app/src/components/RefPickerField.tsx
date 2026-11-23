@@ -389,6 +389,11 @@ interface RefListFieldProps {
    * priority order, see useTagOrder). Display only -- adds and removes
    * still work on `refs` as stored. */
   displayOrder?: (refs: string[]) => string[];
+  /** Moves the entry at `from` to `to` (indexes into `refs`): gives each
+   * row a drag grip (SortableList), for lists whose order matters in
+   * Gramps (Notes, Citations). Ignored with `displayOrder`, whose rows
+   * aren't in stored order. */
+  onMove?: (from: number, to: number) => void;
   labels: Record<string, string>;
   newDraftsByHandle: Map<string, DraftEntry>;
   findEditDraft: (refHandle: string) => DraftEntry | undefined;
@@ -417,39 +422,48 @@ interface RefListFieldProps {
 export function RefListField({
   label, refs, labels, newDraftsByHandle: newDrafts, findEditDraft: findEdit, onAddExisting, onAddNew,
   onRemoveExisting, onOpenEditDraft, onReopenDraft, onCancelDraft, view, searchField, buildExpr, renderLabel,
-  placeholder, createLabel, displayOrder,
+  placeholder, createLabel, displayOrder, onMove,
 }: RefListFieldProps) {
   const pickedHandles = new Set(refs);
   const shown = displayOrder ? displayOrder(refs) : refs;
+
+  function row(refHandle: string, grip?: ReactNode) {
+    const nestedDraft = newDrafts.get(refHandle) ?? findEdit(refHandle);
+    if (nestedDraft) {
+      return (
+        <OccupiedRefRow
+          key={refHandle}
+          label={nestedDraftLabel(nestedDraft)}
+          isNew={nestedDraft.mode === "new"}
+          onEdit={() => onReopenDraft(nestedDraft.handle)}
+          onRemove={() => onCancelDraft(nestedDraft.handle)}
+          removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
+          grip={grip}
+        />
+      );
+    }
+    return (
+      <OccupiedRefRow
+        key={refHandle}
+        label={labels[refHandle] ?? refHandle}
+        isNew={false}
+        onEdit={() => onOpenEditDraft(refHandle)}
+        onRemove={() => onRemoveExisting(refHandle)}
+        removeLabel="Remove"
+        grip={grip}
+      />
+    );
+  }
+
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
       {refs.length === 0 && <Text size="xs" c="dimmed">No {label.toLowerCase()}</Text>}
-      {shown.map((refHandle) => {
-        const nestedDraft = newDrafts.get(refHandle) ?? findEdit(refHandle);
-        if (nestedDraft) {
-          return (
-            <OccupiedRefRow
-              key={refHandle}
-              label={nestedDraftLabel(nestedDraft)}
-              isNew={nestedDraft.mode === "new"}
-              onEdit={() => onReopenDraft(nestedDraft.handle)}
-              onRemove={() => onCancelDraft(nestedDraft.handle)}
-              removeLabel={nestedDraft.mode === "new" ? "Remove" : "Cancel edit"}
-            />
-          );
-        }
-        return (
-          <OccupiedRefRow
-            key={refHandle}
-            label={labels[refHandle] ?? refHandle}
-            isNew={false}
-            onEdit={() => onOpenEditDraft(refHandle)}
-            onRemove={() => onRemoveExisting(refHandle)}
-            removeLabel="Remove"
-          />
-        );
-      })}
+      {onMove && !displayOrder ? (
+        <SortableList keys={refs} onMove={onMove} gap={4} renderItem={(i, grip) => row(refs[i], grip)} />
+      ) : (
+        shown.map((refHandle) => row(refHandle))
+      )}
       <SearchOrCreate
         view={view}
         searchField={searchField}

@@ -594,6 +594,7 @@ export function FamilyEditDialog({
             <RefListField
               label={t("Citations")}
               refs={citationRefs}
+              onMove={(from, to) => onChange({ citation_list: moveItem(citationRefs, from, to) })}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "citation", CITATION_FIELD_PREFIX)}
               findEditDraft={(h) => findEditDraft(stack, draft.handle, CITATION_EDIT_FIELD_PREFIX, h)}
@@ -616,6 +617,7 @@ export function FamilyEditDialog({
             <RefListField
               label={t("Notes")}
               refs={noteRefs}
+              onMove={(from, to) => onChange({ note_list: moveItem(noteRefs, from, to) })}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "note", NOTE_FIELD_PREFIX)}
               findEditDraft={(h) => findEditDraft(stack, draft.handle, NOTE_EDIT_FIELD_PREFIX, h)}

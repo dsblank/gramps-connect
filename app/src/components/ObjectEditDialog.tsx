@@ -748,6 +748,7 @@ export function ObjectEditDialog({
             label={t(f.label)}
             refs={refs}
             displayOrder={f.refType === "tag" ? orderTags : undefined}
+            onMove={f.refType === "tag" ? undefined : (from, to) => onChange({ [f.key]: moveItem(refs, from, to) })}
             labels={pickedLabels}
             newDraftsByHandle={newDraftsByHandle(stack, draft.handle, f.refType, fieldPrefix)}
             findEditDraft={(h) => findEditDraft(stack, draft.handle, editFieldPrefix, h)}
