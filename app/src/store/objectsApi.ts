@@ -72,7 +72,11 @@ export async function fetchPlainObject(
   const res = await apiFetch(`${API_BASE}${endpointBaseFor(view)}${encodeURIComponent(handle)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(await parseErrorMessage(res));
+  if (!res.ok) {
+    // `status` lets a caller tell "this record no longer exists" (404, e.g.
+    // RelatedPanel after a delete) apart from any other failure.
+    throw Object.assign(new Error(await parseErrorMessage(res)), { status: res.status });
+  }
   return await res.json();
 }
 

@@ -100,6 +100,11 @@ type LoadState =
   // trips over that dangling reference server-side, but the plain GET and
   // a PUT that fixes or removes it don't need to resolve it at all).
   | { status: "error"; message: string; plain: ObjectDetail | null }
+  // The record itself 404s: deleted (here, or by someone else) while it was
+  // still selected. Not an error -- the list's own reload clears the
+  // selection soon after (issue #46: a red "Failed to load Media" flashed
+  // after every Media delete).
+  | { status: "gone" }
   | { status: "ready"; detail: ObjectDetail };
 
 // Discussion #4, F7: `handle` changes on every row DataTable's arrow-key
@@ -492,8 +497,12 @@ export function RelatedPanel({
             let plain: ObjectDetail | null = null;
             try {
               plain = (await fetchPlainObject(token, view, handle)) as ObjectDetail;
-            } catch {
-              // leave plain as null
+            } catch (plainErr: any) {
+              if (plainErr?.status === 404) {
+                if (!cancelled) setState({ status: "gone" });
+                return;
+              }
+              // otherwise leave plain as null
             }
             if (!cancelled) setState({ status: "error", message: err.message ?? String(err), plain });
           }
@@ -514,6 +523,13 @@ export function RelatedPanel({
       <Group p="md">
         <Loader size="sm" />
       </Group>
+    );
+  }
+  if (state.status === "gone") {
+    return (
+      <Text size="sm" c="dimmed" p="md">
+        {t("This item has been deleted.")}
+      </Text>
     );
   }
   if (state.status === "error") {
