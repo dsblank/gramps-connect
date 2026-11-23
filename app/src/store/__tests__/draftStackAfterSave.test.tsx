@@ -17,6 +17,11 @@ vi.mock("../objectsApi", () => ({
   fetchPlainObject: vi.fn(async () => ({})),
 }));
 
+// A tag draft goes through saveTagDraft (store/tagOrder.ts) first; by
+// default it hands the data back for the ordinary create.
+const saveTagDraft = vi.fn(async (_token: string, draft: { data: Record<string, unknown> }) => draft.data as Record<string, unknown> | null);
+vi.mock("../tagOrder", () => ({ saveTagDraft, withoutMoveMarker: (d: Record<string, unknown>) => d }));
+
 const { useDraftStack } = await import("../draftStack");
 
 describe("afterSave on a new draft", () => {
@@ -37,6 +42,24 @@ describe("afterSave on a new draft", () => {
       saved = await result.current.saveAll();
     });
     expect(calls).toEqual(["create", "link new1"]);
+    expect(saved).toHaveLength(1);
+  });
+
+  it("skips the ordinary create for a tag saved as a reorder transaction, and still links it", async () => {
+    saveTagDraft.mockImplementationOnce(async () => {
+      calls.push("reorder");
+      return null;
+    });
+    const { result } = renderHook(() => useDraftStack());
+    const run = vi.fn(async (handle: string) => { calls.push(`link ${handle}`); });
+    act(() => {
+      result.current.openDraft("tag", undefined, { data: { name: "Brick" }, afterSave: { run, failureText: "add it here" } });
+    });
+    let saved: unknown[] = [];
+    await act(async () => {
+      saved = await result.current.saveAll();
+    });
+    expect(calls).toEqual(["reorder", "link new1"]);
     expect(saved).toHaveLength(1);
   });
 

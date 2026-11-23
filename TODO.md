@@ -73,6 +73,12 @@ the wiki are the record of what shipped.
 - **Map overlays and alternate place names** — an image overlay's date
   gating reads only its Place's *primary* name date (`visualData.ts`,
   `storyHydration.ts`), not dated alternate names (`alt_names`).
+- **Reorder all tags at once** — a tag's Edit dialog can drag only that
+  one tag in the Order priority list (`TagOrderField.tsx`). Putting many
+  tags in order means one dialog per tag. A reorder mode on the Tags list
+  (drag any row, save once as one "Reorder tags" transaction via
+  `store/tagOrder.ts`), like Gramps' Organize Tags, would cover that.
+  Wait until someone asks for it.
 
 ## gramps-web-api 3.26 follow-ups
 

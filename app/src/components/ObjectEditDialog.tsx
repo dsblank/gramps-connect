@@ -8,6 +8,7 @@ import { fetchPage, type QueryItem } from "../store/api";
 import { CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, PLACE_VIEW, SOURCE_VIEW, TAG_VIEW } from "../store/views";
 import { DRAFT_TYPE_LABELS, type DraftEntry, type DraftType } from "../store/draftStack";
 import { DateInput } from "./DateInput";
+import { TagOrderField } from "./TagOrderField";
 import {
   MediaListField, moveItem, RefListField, RefSlot, cancelledNewDraftHandles, findEditDraft, newDraftsByHandle,
   openNewListItemPatch, pickerResultLabel,
@@ -36,6 +37,8 @@ type FieldSpec =
   | { kind: "number"; key: string; label: string; min?: number; max?: number }
   | { kind: "switch"; key: string; label: string }
   | { kind: "color"; key: string; label: string }
+  // Tag.priority as a position in the list of all tags (TagOrderField).
+  | { kind: "tagOrder"; label: string }
   | { kind: "date"; key: string; label: string }
   | { kind: "placeName"; label: string }
   // Place.name (a PlaceName struct) carries its own `date`/`lang` alongside
@@ -232,7 +235,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     quick: [{ kind: "text", key: "name", label: "Name" }],
     details: [
       { kind: "color", key: "color", label: "Color" },
-      { kind: "number", key: "priority", label: "Order priority", min: 0 },
+      { kind: "tagOrder", label: "Order priority" },
     ],
   },
   // A story note's text.string is a JSON-stringified StorySpec
@@ -545,6 +548,8 @@ export function ObjectEditDialog({
             onChange={(v) => onChange({ [f.key]: v })}
           />
         );
+      case "tagOrder":
+        return <TagOrderField key="tagOrder" draft={draft} label={t(f.label)} onChange={onChange} />;
       case "date":
         return (
           <DateInput

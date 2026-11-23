@@ -17,6 +17,7 @@ import { getToken } from "../auth/auth";
 import { notifications } from "@mantine/notifications";
 import { getViewStore } from "./registry";
 import { setNameGroup } from "./nameGroups";
+import { saveTagDraft, withoutMoveMarker } from "./tagOrder";
 import { createHandle, createObjects, fetchPlainObject, updateObject } from "./objectsApi";
 import {
   CITATION_VIEW, EVENT_VIEW, FAMILY_VIEW, NOTE_VIEW, PERSON_VIEW, PLACE_VIEW, REPOSITORY_VIEW, SOURCE_VIEW,
@@ -492,19 +493,37 @@ export function useDraftStack(): UseDraftStack {
         }
       }
 
-      const createBatch = newDrafts.flatMap((d) => [...d.extraCreate, d.data]);
+      // A tag moved in its "Order priority" list (TagOrderField) may
+      // renumber other tags too; saveTagDraft then saves it and them as one
+      // transaction and returns null, and it's left out of the writes below.
+      // Otherwise it hands back the data to save as usual, with the number
+      // filled in (a new tag goes last, as in Gramps).
+      const savedAsTransaction = new Set<string>();
+      const tagData = new Map<string, Record<string, unknown>>();
+      for (const draft of [...newDrafts, ...editDrafts]) {
+        if (draft.type !== "tag") continue;
+        const data = await saveTagDraft(token, draft);
+        if (data === null) savedAsTransaction.add(draft.handle);
+        tagData.set(draft.handle, data ?? withoutMoveMarker(draft.data));
+      }
+      const dataOf = (d: DraftEntry) => tagData.get(d.handle) ?? d.data;
+
+      const createBatch = newDrafts
+        .filter((d) => !savedAsTransaction.has(d.handle))
+        .flatMap((d) => [...d.extraCreate, dataOf(d)]);
       if (createBatch.length > 0) {
         await createObjects(token, createBatch);
       }
 
       for (const draft of editDrafts) {
+        if (savedAsTransaction.has(draft.handle)) continue;
         if (draft.extraCreate.length > 0) {
           await createObjects(token, draft.extraCreate);
         }
         for (const upd of draft.extraUpdate) {
           await updateObject(token, VIEW_BY_TYPE[upd.type], upd.handle, upd.data);
         }
-        await updateObject(token, VIEW_BY_TYPE[draft.type], draft.handle, draft.data);
+        await updateObject(token, VIEW_BY_TYPE[draft.type], draft.handle, dataOf(draft));
       }
 
       // Every object is saved by now; link the ones created from a Related
@@ -559,7 +578,7 @@ export function useDraftStack(): UseDraftStack {
         }
       }
       const saved = [...newDrafts, ...editDrafts].map((d) => ({
-        type: d.type, mode: d.mode, handle: d.handle, data: d.data,
+        type: d.type, mode: d.mode, handle: d.handle, data: dataOf(d),
       }));
       setStack([]);
       setOpenHandles([]);
