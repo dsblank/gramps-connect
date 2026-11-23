@@ -178,9 +178,78 @@ export const SOURCE_MEDIA_TYPE_VALUES: Readonly<Record<string, number>> = {
   "Video": 13,
 };
 
+export const NAME_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Unknown": -1,
+  "Custom": 0,
+  "Also Known As": 1,
+  "Birth Name": 2,
+  "Married Name": 3,
+};
+
+/** Value 1 is Gramps' blank origin ("" in its own list). */
+export const NAME_ORIGIN_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Unknown": -1,
+  "Custom": 0,
+  "": 1,
+  "Inherited": 2,
+  "Given": 3,
+  "Taken": 4,
+  "Patronymic": 5,
+  "Matronymic": 6,
+  "Feudal": 7,
+  "Pseudonym": 8,
+  "Patrilineal": 9,
+  "Matrilineal": 10,
+  "Occupation": 11,
+  "Location": 12,
+};
+
+export const EVENT_ROLE_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Unknown": -1,
+  "Custom": 0,
+  "Primary": 1,
+  "Clergy": 2,
+  "Celebrant": 3,
+  "Aide": 4,
+  "Bride": 5,
+  "Groom": 6,
+  "Witness": 7,
+  "Family": 8,
+  "Informant": 9,
+  "Godparent": 10,
+  "Father": 11,
+  "Mother": 12,
+  "Parent": 13,
+  "Child": 14,
+  "Multiple birth": 15,
+  "Friend": 16,
+  "Neighbor": 17,
+  "Officiator": 18,
+};
+
+export const CHILD_REF_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "None": 0,
+  "Birth": 1,
+  "Adopted": 2,
+  "Stepchild": 3,
+  "Sponsored": 4,
+  "Foster": 5,
+  "Unknown": 6,
+  "Custom": 7,
+};
+
+export const URL_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Unknown": -1,
+  "Custom": 0,
+  "E-mail": 1,
+  "Web Home": 2,
+  "Web Search": 3,
+  "FTP": 4,
+};
+
 export type GrampsTypeTable =
   | "EventType" | "PlaceType" | "NoteType" | "AttributeType" | "SrcAttributeType" | "RepositoryType" | "FamilyRelType"
-  | "SourceMediaType";
+  | "SourceMediaType" | "NameType" | "NameOriginType" | "EventRoleType" | "ChildRefType" | "UrlType";
 
 export const GRAMPS_TYPE_TABLES: Readonly<Record<GrampsTypeTable, Readonly<Record<string, number>>>> = {
   EventType: EVENT_TYPE_VALUES,
@@ -191,4 +260,18 @@ export const GRAMPS_TYPE_TABLES: Readonly<Record<GrampsTypeTable, Readonly<Recor
   RepositoryType: REPOSITORY_TYPE_VALUES,
   FamilyRelType: FAMILY_REL_TYPE_VALUES,
   SourceMediaType: SOURCE_MEDIA_TYPE_VALUES,
+  NameType: NAME_TYPE_VALUES,
+  NameOriginType: NAME_ORIGIN_TYPE_VALUES,
+  EventRoleType: EVENT_ROLE_TYPE_VALUES,
+  ChildRefType: CHILD_REF_TYPE_VALUES,
+  UrlType: URL_TYPE_VALUES,
 };
+
+/** The built-in (English) name of a stored Gramps type value, e.g.
+ * ("UrlType", 2) -> "Web Home"; undefined for a class or value with no
+ * table entry. */
+export function grampsTypeName(cls: string, value: number): string | undefined {
+  const table = GRAMPS_TYPE_TABLES[cls as GrampsTypeTable];
+  if (!table) return undefined;
+  return Object.entries(table).find(([, v]) => v === value)?.[0];
+}

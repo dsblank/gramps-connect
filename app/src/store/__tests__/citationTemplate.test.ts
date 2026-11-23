@@ -104,6 +104,8 @@ describe("formatTemplateValue", () => {
     expect(formatTemplateValue("x", { _class: "SrcAttributeType", string: "Film", value: 0 })).toBe("Film");
     expect(formatTemplateValue("x", { _class: "AttributeType", string: "", value: 7 })).toBe("Nickname");
     expect(formatTemplateValue("reporef_list[0].media_type", { _class: "SourceMediaType", string: "", value: 6 })).toBe("Film");
+    expect(formatTemplateValue("x", { _class: "UrlType", string: "", value: 2 })).toBe("Web Home");
+    expect(formatTemplateValue("x", { _class: "ChildRefType", string: "", value: 3 })).toBe("Stepchild");
     expect(formatTemplateValue("x", ["a", null, "b"])).toBe("a, b");
     expect(formatTemplateValue("x", 12)).toBe("12");
     expect(formatTemplateValue("x", null)).toBe("");

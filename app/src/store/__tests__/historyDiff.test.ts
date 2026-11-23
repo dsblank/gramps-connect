@@ -119,6 +119,12 @@ describe("formatDiffValue", () => {
     const attribute = { type: { _class: "AttributeType", value: 0, string: "RIN" }, value: "MH:I3042", _class: "Attribute" };
     expect(formatDiffValue(attribute, opts)).toBe("type: RIN, value: MH:I3042");
     expect(formatDiffValue({ _class: "FooType", value: 7, string: "" }, opts)).toBe("7");
+    // Roles Gramps 6.0 added after Informant (9) have names too.
+    expect(formatDiffValue({ _class: "EventRoleType", value: 10, string: "" }, opts)).toBe("[Godparent]");
+    expect(formatDiffValue({ _class: "EventRoleType", value: 18, string: "" }, opts)).toBe("[Officiator]");
+    // The blank surname origin and Unknown have no name, so read as empty.
+    expect(formatDiffValue({ _class: "NameOriginType", value: 1, string: "" }, opts)).toBe("[(none)]");
+    expect(formatDiffValue({ _class: "NameType", value: -1, string: "" }, opts)).toBe("[(none)]");
   });
 
   it("shows dates and styled text as text, nested lists joined", () => {

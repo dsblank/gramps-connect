@@ -5,6 +5,8 @@
 // user wants to see only what actually changed, not a re-render of the
 // whole record.
 
+import { grampsTypeName } from "../data/grampsTypeTables";
+
 export interface DiffRow {
   /** Path into the object, e.g. "primary_name.first_name" or
    * "event_ref_list[0].ref" -- bracketed array indices, matching Gramps
@@ -99,31 +101,6 @@ export function summarizeDiffPaths(rows: DiffRow[], maxPaths = 2): string {
   return extra > 0 ? `${shown.join(", ")} +${extra} more` : shown.join(", ");
 }
 
-// Built-in names for the Gramps types that turn up inside list items (an
-// added web link, event reference, attribute, ...): stored values carry
-// only the number, and `string` only for a custom type. Unlisted classes
-// and values fall back to the number, never a guess.
-const TYPE_NAMES: Record<string, Record<number, string>> = {
-  UrlType: { 0: "Custom", 1: "E-mail", 2: "Web Home", 3: "Web Search", 4: "FTP" },
-  EventRoleType: {
-    0: "Custom", 1: "Primary", 2: "Clergy", 3: "Celebrant", 4: "Aide", 5: "Bride", 6: "Groom", 7: "Witness",
-    8: "Family", 9: "Informant",
-  },
-  NameType: { 0: "Custom", 1: "Also Known As", 2: "Birth Name", 3: "Married Name" },
-  NameOriginType: {
-    0: "Custom", 1: "", 2: "Inherited", 3: "Given", 4: "Taken", 5: "Patronymic", 6: "Matronymic", 7: "Feudal",
-    8: "Pseudonym", 9: "Patrilineal", 10: "Matrilineal", 11: "Occupation", 12: "Location",
-  },
-  ChildRefType: {
-    0: "None", 1: "Birth", 2: "Adopted", 3: "Stepchild", 4: "Sponsored", 5: "Foster", 6: "Unknown", 7: "Custom",
-  },
-  AttributeType: {
-    0: "Custom", 1: "Caste", 2: "Description", 3: "Identification Number", 4: "National Origin",
-    5: "Number of Children", 6: "Social Security Number", 7: "Nickname", 8: "Cause", 9: "Agency", 10: "Age",
-    11: "Father's Age", 12: "Mother's Age", 13: "Witness", 14: "Time",
-  },
-};
-
 export interface DiffValueOptions {
   /** Shows a stored Gramps Date as text; "" for an empty one. */
   formatDate: (date: Record<string, unknown>) => string;
@@ -138,7 +115,7 @@ function typeName(value: Record<string, unknown>, opts: DiffValueOptions): strin
   if (typeof value.string === "string" && value.string) return value.string;
   const num = value.value;
   if (typeof num !== "number" || num === -1) return "";
-  const name = TYPE_NAMES[value._class as string]?.[num];
+  const name = grampsTypeName(value._class as string, num);
   return name === undefined ? String(num) : name && opts.translate(name);
 }
 
