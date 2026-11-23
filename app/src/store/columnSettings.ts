@@ -29,6 +29,9 @@ export interface CustomColumn {
   expr: string;
   /** Header text; the expression itself when absent. */
   title?: string;
+  /** A GOQL expression to break ties on when the column is sorted, before
+   * the list's default order does (ColumnConfig.thenBy). */
+  thenBy?: string;
   /** No longer read: every custom column sorts now (columnSort.ts). Kept
    * so layouts saved before stay valid. */
   sortable?: boolean;
@@ -422,7 +425,9 @@ export function customSortKeys(namespace: string, expr: string): (() => string[]
  * shows (columnSort.ts: customSortKeys()). */
 export function customColumnConfig(column: CustomColumn): ColumnConfig {
   const changeTime = isChangeTime(column.expr);
+  const thenBy = column.thenBy?.trim();
   return {
+    ...(thenBy ? { thenBy } : {}),
     key: column.id,
     label: column.title?.trim() || column.expr,
     literalLabel: true,
@@ -440,11 +445,48 @@ export function layoutChangesCache(view: ViewConfig, before: ColumnLayout, after
   const namespace = goqlNamespaceForEndpoint(view.endpoint) ?? "";
   const signature = (layout: ColumnLayout | null) =>
     columnSignature(
-      (layout?.custom ?? [])
-        .filter((c) => c.expr.trim() && !structuredValueError(namespace, c.expr))
-        .map((c) => customColumnConfig(c)),
+      customColumnsFor(view, (layout?.custom ?? []).filter((c) => c.expr.trim() && !structuredValueError(namespace, c.expr)))
+        .columns,
     );
   return signature(before) !== signature(after);
+}
+
+/** The cache columns `custom` adds to `view`: each custom column, the
+ * hidden handle columns that keep it fresh (dependencyColumns()), and for a
+ * "then by" expression no column caches yet, a hidden column caching it
+ * (key `<id>_t`) plus its own handle columns -- the list compares against
+ * the cached value of every sort key to place a row
+ * (ViewStore.globalRankOfItem()). A "then by" that's a flat column, or that
+ * some column already selects (`birth.date`, the Birth column), needs
+ * none: its keys are read from that column. */
+function customColumnsFor(view: ViewConfig, custom: CustomColumn[]): { columns: ColumnConfig[]; dependsOn: { table: string; via: string }[] } {
+  const base = builtinColumns(view);
+  const configs = custom.map((c) => customColumnConfig(c));
+  const deps = custom.map((c) => dependencyColumns(view, c));
+  const cachedExprs = new Set([...base, ...configs].map(columnExpression));
+  const thenByColumns = custom.flatMap((c) => {
+    const thenBy = c.thenBy?.trim();
+    if (!thenBy || cachedExprs.has(thenBy)) return [];
+    const id = `${c.id}_t`;
+    cachedExprs.add(thenBy);
+    const column: ColumnConfig = {
+      key: id,
+      label: thenBy,
+      select: { goql: thenBy },
+      sqlType: "TEXT",
+      hidden: true,
+      toSql: (value) => (value === undefined || value === null ? null : JSON.stringify(value)),
+    };
+    return [{ column, deps: dependencyColumns(view, { id, expr: thenBy }) }];
+  });
+  return {
+    columns: [
+      ...configs,
+      ...deps.flatMap((d) => d.columns),
+      ...thenByColumns.flatMap((t) => [t.column, ...t.deps.columns]),
+    ],
+    dependsOn: [...deps.flatMap((d) => d.dependsOn), ...thenByColumns.flatMap((t) => t.deps.dependsOn)],
+  };
 }
 
 function columnSignature(columns: ColumnConfig[]): string {
@@ -461,15 +503,11 @@ export function applyColumnSettings(view: ViewConfig): boolean {
   const custom = currentLayout(view.key).custom.filter(
     (c) => c.expr.trim() && !brokenMessage(view.key, c.id) && !structuredValueError(namespace, c.expr),
   );
-  const deps = custom.map((c) => dependencyColumns(view, c));
-  const next = [
-    ...base.columns,
-    ...custom.map((c) => customColumnConfig(c)),
-    ...deps.flatMap((d) => d.columns),
-  ];
+  const added = customColumnsFor(view, custom);
+  const next = [...base.columns, ...added.columns];
   const changed = columnSignature(next) !== columnSignature(view.columns);
   view.columns = next;
-  const dependsOn = [...(base.dependsOn ?? []), ...deps.flatMap((d) => d.dependsOn)];
+  const dependsOn = [...(base.dependsOn ?? []), ...added.dependsOn];
   view.dependsOn = dependsOn.length > 0 ? dependsOn : undefined;
   bump();
   return changed;

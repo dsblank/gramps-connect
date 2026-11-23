@@ -26,8 +26,12 @@ interface Row {
   builtinLabel: string | null;
   expr: string;
   title: string;
+  /** A custom column's tiebreak (CustomColumn.thenBy). */
+  thenBy: string;
   visible: boolean;
   error: string | null;
+  /** Why `thenBy` can't be used, from Save's check. */
+  thenByError: string | null;
 }
 
 /** Built-in columns the dialog lists: those the table can show at all
@@ -38,7 +42,7 @@ function shownBuiltins(view: ViewConfig) {
 
 function defaultRows(view: ViewConfig): Row[] {
   return shownBuiltins(view).map((c) => ({
-    key: c.key, builtinLabel: c.label, expr: columnExpression(c), title: "", visible: true, error: null,
+    key: c.key, builtinLabel: c.label, expr: columnExpression(c), title: "", thenBy: "", visible: true, error: null, thenByError: null,
   }));
 }
 
@@ -48,8 +52,8 @@ function rowsFromLayout(view: ViewConfig, layout: ColumnLayout): Row[] {
   const rows: Row[] = [
     ...defaultRows(view),
     ...layout.custom.map((c) => ({
-      key: c.id, builtinLabel: null, expr: c.expr, title: c.title ?? "", visible: true,
-      error: structuredValueError(namespace, c.expr) ?? brokenMessage(view.key, c.id) ?? null,
+      key: c.id, builtinLabel: null, expr: c.expr, title: c.title ?? "", thenBy: c.thenBy ?? "", visible: true,
+      error: structuredValueError(namespace, c.expr) ?? brokenMessage(view.key, c.id) ?? null, thenByError: null,
     })),
   ].map((row) => ({ ...row, visible: !hidden.has(row.key) }));
   const position = new Map(layout.order.map((key, i) => [key, i]));
@@ -66,6 +70,7 @@ function layoutFromRows(view: ViewConfig, rows: Row[]): ColumnLayout | null {
       id: r.key,
       expr: r.expr.trim(),
       ...(r.title.trim() ? { title: r.title.trim() } : {}),
+      ...(r.thenBy.trim() ? { thenBy: r.thenBy.trim() } : {}),
     }));
   const order = rows.map((r) => r.key);
   const hidden = rows.filter((r) => !r.visible).map((r) => r.key);
@@ -91,6 +96,7 @@ function ColumnSettingsBody({ view, onClose }: { view: ViewConfig; onClose: () =
   const namespace = goqlNamespaceForEndpoint(view.endpoint) ?? "";
 
   const savedExprs = new Map(saved.custom.map((c) => [c.id, c.expr.trim()]));
+  const savedThenBy = new Map(saved.custom.map((c) => [c.id, c.thenBy?.trim() ?? ""]));
   // Anything that changes what's fetched (not order/visibility/titles).
   const refetches = layoutChangesCache(view, saved, layoutFromRows(view, rows));
 
@@ -111,7 +117,7 @@ function ColumnSettingsBody({ view, onClose }: { view: ViewConfig; onClose: () =
   function addColumn() {
     setRows((prev) => [
       ...prev,
-      { key: newCustomColumnId(), builtinLabel: null, expr: "", title: "", visible: true, error: null },
+      { key: newCustomColumnId(), builtinLabel: null, expr: "", title: "", thenBy: "", visible: true, error: null, thenByError: null },
     ]);
   }
 
@@ -126,18 +132,30 @@ function ColumnSettingsBody({ view, onClose }: { view: ViewConfig; onClose: () =
     try {
       // Only expressions that are new, edited, or failed before are checked.
       const token = await getToken();
+      // A "then by" has to be one sortable value: not a record, a list or
+      // a type. Checked against the server only when new or changed.
+      const checkThenBy = async (thenBy: string, before: string, broken: boolean): Promise<string | null> => {
+        if (!thenBy) return null;
+        const structured = structuredValueError(namespace, thenBy);
+        if (structured) return structured;
+        if (customSortKeys(namespace, thenBy) === null) return t("Types such as an event's type can't be sorted.");
+        if (thenBy === before && !broken) return null;
+        return testGoqlSelect(view, token, thenBy);
+      };
       const checked = await Promise.all(
         kept.map(async (r) => {
           if (r.builtinLabel !== null) return r;
           const expr = r.expr.trim();
+          const broken = !!brokenMessage(view.key, r.key);
+          const thenByError = await checkThenBy(r.thenBy.trim(), savedThenBy.get(r.key) ?? "", broken);
           const structured = structuredValueError(namespace, expr);
-          if (structured) return { ...r, error: structured };
-          if (savedExprs.get(r.key) === expr && !brokenMessage(view.key, r.key)) return { ...r, error: null };
-          return { ...r, error: await testGoqlSelect(view, token, expr) };
+          if (structured) return { ...r, error: structured, thenByError };
+          if (savedExprs.get(r.key) === expr && !broken) return { ...r, error: null, thenByError };
+          return { ...r, error: await testGoqlSelect(view, token, expr), thenByError };
         }),
       );
       setRows(checked);
-      if (checked.some((r) => r.error)) return;
+      if (checked.some((r) => r.error || r.thenByError)) return;
       clearBroken(view.key);
       setColumnLayout(view.key, layoutFromRows(view, checked));
       onClose();
@@ -279,6 +297,7 @@ function CustomColumnFields({
           value={row.title}
           onChange={(e) => onChange({ title: e.currentTarget.value })}
         />
+        <ThenByField row={row} namespace={namespace} onChange={onChange} />
         <Tooltip label={t("Remove this column")} openDelay={400}>
           <ActionIcon variant="subtle" color="gray" mt={2} onClick={onRemove} aria-label={t("Remove this column")}>
             ✕
@@ -296,5 +315,55 @@ function CustomColumnFields({
         </Text>
       )}
     </Stack>
+  );
+}
+
+/** A custom column's "then by" box: the GOQL expression that orders rows
+ * tied on the column when it's sorted, with Tab completion like the
+ * expression box. */
+function ThenByField({
+  row,
+  namespace,
+  onChange,
+}: {
+  row: Row;
+  namespace: string;
+  onChange: (patch: Partial<Row>) => void;
+}) {
+  const fieldRef = useRef<HTMLInputElement>(null);
+  const completion = useGoqlCompletion({
+    value: row.thenBy,
+    setValue: (thenBy) => onChange({ thenBy, thenByError: null }),
+    fieldRef,
+    locate: (value) => ({ namespace, source: value, offset: 0 }),
+  });
+  return (
+    <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="bottom-start" width={320} withinPortal>
+      <Combobox.Target withKeyboardNavigation={false}>
+        <TextInput
+          ref={fieldRef}
+          size="xs"
+          ff="monospace"
+          style={{ flex: 1, minWidth: 0 }}
+          placeholder={t("Then sort by (optional)")}
+          aria-label={t("Then sort by")}
+          title={t("When rows tie on this column, order them by this GOQL expression, then by the list's usual order.")}
+          spellCheck={false}
+          value={row.thenBy}
+          error={row.thenByError ?? undefined}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            onChange({ thenBy: value, thenByError: null });
+            completion.handleChange(value, e.currentTarget.selectionStart ?? value.length);
+          }}
+          onKeyDown={(e) => {
+            completion.handleKeyDown(e);
+          }}
+          onBlur={completion.close}
+          data-mantine-stop-propagation
+        />
+      </Combobox.Target>
+      <GoqlCompletionDropdown completions={completion.completions} />
+    </Combobox>
   );
 }

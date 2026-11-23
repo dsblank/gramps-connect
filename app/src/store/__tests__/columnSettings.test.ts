@@ -391,3 +391,51 @@ describe("sorting custom columns", () => {
     resetViews();
   });
 });
+
+describe("a custom column's \"then by\"", () => {
+  it("breaks ties by it before the list's default order", async () => {
+    const { columnSort } = await import("../columnSort");
+    const { customColumnConfig } = await import("../columnSettings");
+    const column = customColumnConfig({ id: "goql_c", expr: "len(citations)", thenBy: "birth.date" });
+    expect(columnSort(PERSON_VIEW, column)?.keys).toEqual(["len(citations)", "birth.date.sortval", "surname", "given_name"]);
+  });
+
+  it("reads it from a column that already selects it, with nothing new cached", async () => {
+    const { layoutChangesCache } = await import("../columnSettings");
+    const { locateSortKey } = await import("../columnSort");
+    resetViews();
+    const layout = (thenBy?: string) => ({ custom: [{ id: "goql_c", expr: "len(citations)", ...(thenBy ? { thenBy } : {}) }], order: [], hidden: [] });
+    setColumnLayout("person", layout("birth.date"));
+    applyColumnSettings(PERSON_VIEW);
+    expect(PERSON_VIEW.columns.some((c) => c.key === "goql_c_t")).toBe(false);
+    expect(locateSortKey(PERSON_VIEW, "birth.date.sortval")?.cached.key).toBe("birth_date");
+    expect(layoutChangesCache(PERSON_VIEW, layout(), layout("birth.date"))).toBe(false);
+    expect(layoutChangesCache(PERSON_VIEW, layout(), layout("gramps_id"))).toBe(false);
+    resetViews();
+  });
+
+  it("caches one no column has, watching the records it reads", async () => {
+    const { layoutChangesCache } = await import("../columnSettings");
+    const { columnSort, locateSortKey } = await import("../columnSort");
+    resetViews();
+    const layout = (thenBy?: string) => ({ custom: [{ id: "goql_c", expr: "len(citations)", ...(thenBy ? { thenBy } : {}) }], order: [], hidden: [] });
+    setColumnLayout("person", layout("birth.place.title"));
+    applyColumnSettings(PERSON_VIEW);
+    const hidden = PERSON_VIEW.columns.find((c) => c.key === "goql_c_t");
+    expect(hidden).toMatchObject({ hidden: true, select: { goql: "birth.place.title" } });
+    expect(locateSortKey(PERSON_VIEW, "birth.place.title")?.cached.key).toBe("goql_c_t");
+    // Its link to the birth event, and the event's to the place, are watched.
+    expect(PERSON_VIEW.dependsOn?.some((d) => d.via.startsWith("goql_c_t_d"))).toBe(true);
+    const custom = PERSON_VIEW.columns.find((c) => c.key === "goql_c")!;
+    expect(columnSort(PERSON_VIEW, custom)?.keys.slice(0, 2)).toEqual(["len(citations)", "birth.place.title"]);
+    expect(layoutChangesCache(PERSON_VIEW, layout(), layout("birth.place.title"))).toBe(true);
+    resetViews();
+  });
+
+  it("ignores a type, which can't be sorted", async () => {
+    const { columnSort } = await import("../columnSort");
+    const { customColumnConfig } = await import("../columnSettings");
+    const column = customColumnConfig({ id: "goql_c", expr: "len(citations)", thenBy: "birth.type" });
+    expect(columnSort(PERSON_VIEW, column)?.keys).toEqual(["len(citations)", "surname", "given_name"]);
+  });
+});

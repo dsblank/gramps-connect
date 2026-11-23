@@ -1745,3 +1745,40 @@ describe("ViewStore.ensureLoaded", () => {
     expect(store.getSnapshot().loadedCount).toBe(2);
   });
 });
+
+describe("ViewStore sorting by a custom column with a \"then by\"", () => {
+  const EXPR = "len(backlinks)";
+
+  beforeEach(async () => {
+    vi.mocked(fetchPage).mockReset();
+    vi.mocked(fetchByHandle).mockReset();
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+    const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
+    setColumnLayout("tag", { custom: [{ id: "goql_t", expr: EXPR, thenBy: "priority" }], order: [], hidden: [] });
+    applyColumnSettings(TAG_VIEW);
+  });
+
+  afterEach(async () => {
+    const { setColumnLayout, applyColumnSettings } = await import("../columnSettings");
+    setColumnLayout("tag", null);
+    applyColumnSettings(TAG_VIEW);
+  });
+
+  it("sorts by the column, then the \"then by\", then the default order, and ranks the same way", async () => {
+    vi.mocked(fetchPage).mockResolvedValue({ page: { items: [tagRow("H1", { goql_t: 2 })], next_after: null }, totalCount: 1 });
+    const store = new ViewStore(TAG_VIEW, getSql);
+    await store.runQuery(null, false);
+    await store.setSort(EXPR);
+    await store.setSort(EXPR); // reversed: the tiebreaks follow
+    const orderBy = vi.mocked(fetchPage).mock.calls[vi.mocked(fetchPage).mock.calls.length - 1][5];
+    expect(orderBy).toEqual([
+      { column: EXPR, direction: "desc" }, { column: "priority", direction: "desc" }, { column: "name", direction: "desc" },
+    ]);
+
+    vi.mocked(fetchByHandle).mockResolvedValueOnce(tagRow("H1", { goql_t: 3, priority: 4 }));
+    await store.applyLiveChange({ table: "tag", handle: "H1", op: "UPDATE", changedBy: null });
+    const rank = vi.mocked(fetchPage).mock.calls.map((call) => call[4] as string).filter((e) => e?.includes("handle <")).pop();
+    expect(rank).toContain(`${EXPR} == 3 and priority > 4`);
+    expect(rank).toContain(`${EXPR} == 3 and priority == 4 and name > "Chores"`);
+  });
+});

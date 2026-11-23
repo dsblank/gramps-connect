@@ -1814,14 +1814,22 @@ export class ViewStore {
   private async setAsideBrokenColumns(token: string): Promise<boolean> {
     const custom = appliedCustomColumns(this.view);
     let any = false;
-    for (const column of custom) {
+    // Each custom column's own expression, then any "then by" expression
+    // cached on its own (columnSettings.ts's `<id>_t`), which sets aside
+    // the column it belongs to.
+    const thenBy = this.view.columns.filter((c) => c.hidden && /^goql_.*_t$/.test(c.key));
+    const owner = (column: ColumnConfig) =>
+      column.hidden ? custom.find((c) => `${c.key}_t` === column.key) : column;
+    for (const column of [...custom, ...thenBy]) {
       if (typeof column.select !== "object" || !("goql" in column.select)) continue;
+      const own = owner(column);
+      if (!own) continue;
       const message = await testGoqlSelect(this.view, token, column.select.goql).catch(() => null);
       if (message) {
-        markBroken(this.view.key, column.key, message);
+        markBroken(this.view.key, own.key, message);
         notifications.show({
           color: "orange",
-          title: `${t("Column left out")}: ${column.label}`,
+          title: `${t("Column left out")}: ${own.label}`,
           message: `${message} ${t("Fix it with the list's Columns button.")}`,
         });
         any = true;

@@ -38,12 +38,20 @@ export function primarySortKeys(view: ViewConfig, column: ColumnConfig): string[
   return keys && keys.length > 0 ? keys : null;
 }
 
+/** The keys `column`'s thenBy sorts by: a date by its sortval, a name by
+ * its parts, a value by itself; none for a type or a whole record. */
+export function thenByKeys(view: ViewConfig, column: ColumnConfig): string[] {
+  const thenBy = column.thenBy?.trim();
+  if (!thenBy) return [];
+  return customSortKeys(goqlNamespaceForEndpoint(view.endpoint) ?? "", thenBy)?.() ?? [];
+}
+
 /** The column's full sort (null: not sortable). */
 export function columnSort(view: ViewConfig, column: ColumnConfig): ColumnSort | null {
   const primary = primarySortKeys(view, column);
   if (!primary) return null;
   const defaults = defaultOrderBy(view).map((o) => o.column);
-  const keys = [...new Set([...primary, ...(column.thenBy ? [column.thenBy] : []), ...defaults])];
+  const keys = [...new Set([...primary, ...thenByKeys(view, column), ...defaults])];
   const flat = new Set(
     view.columns.flatMap((c) => (typeof c.select === "string" && FLAT_COLUMN_RE.test(c.select) ? [c.select] : [])),
   );
