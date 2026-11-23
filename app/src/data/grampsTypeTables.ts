@@ -160,8 +160,27 @@ export const FAMILY_REL_TYPE_VALUES: Readonly<Record<string, number>> = {
   "Custom": 4,
 };
 
+export const SOURCE_MEDIA_TYPE_VALUES: Readonly<Record<string, number>> = {
+  "Unknown": -1,
+  "Custom": 0,
+  "Audio": 1,
+  "Book": 2,
+  "Card": 3,
+  "Electronic": 4,
+  "Fiche": 5,
+  "Film": 6,
+  "Magazine": 7,
+  "Manuscript": 8,
+  "Map": 9,
+  "Newspaper": 10,
+  "Photo": 11,
+  "Tombstone": 12,
+  "Video": 13,
+};
+
 export type GrampsTypeTable =
-  | "EventType" | "PlaceType" | "NoteType" | "AttributeType" | "SrcAttributeType" | "RepositoryType" | "FamilyRelType";
+  | "EventType" | "PlaceType" | "NoteType" | "AttributeType" | "SrcAttributeType" | "RepositoryType" | "FamilyRelType"
+  | "SourceMediaType";
 
 export const GRAMPS_TYPE_TABLES: Readonly<Record<GrampsTypeTable, Readonly<Record<string, number>>>> = {
   EventType: EVENT_TYPE_VALUES,
@@ -171,4 +190,5 @@ export const GRAMPS_TYPE_TABLES: Readonly<Record<GrampsTypeTable, Readonly<Recor
   SrcAttributeType: SRC_ATTRIBUTE_TYPE_VALUES,
   RepositoryType: REPOSITORY_TYPE_VALUES,
   FamilyRelType: FAMILY_REL_TYPE_VALUES,
+  SourceMediaType: SOURCE_MEDIA_TYPE_VALUES,
 };
