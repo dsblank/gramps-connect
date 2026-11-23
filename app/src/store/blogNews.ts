@@ -7,10 +7,12 @@
 // check (pyodidePoc/grampletStoreNews.ts).
 //
 // State is per browser (the blog is the same for every tree and user) in
-// localStorage under STORAGE_KEYS.blogNews. The very first check only
+// localStorage under STORAGE_KEYS.blogNews; the on/off switch is the
+// shared one in newsCheck.ts. The very first check only
 // records the feed's current posts as the baseline, so nobody is told
 // "5 new posts" the first time they sign in.
 import { BLOG_FEED_URL } from "../config";
+import { isNewsCheckEnabled, isNewsCheckStorageKey, onNewsCheckChange } from "./newsCheck";
 import { STORAGE_KEYS } from "./storageKeys";
 
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -84,7 +86,7 @@ let snapshot = 0;
 const listeners = new Set<() => void>();
 
 function refreshSnapshot(): void {
-  const next = readState()?.pending.length ?? 0;
+  const next = isNewsCheckEnabled() ? (readState()?.pending.length ?? 0) : 0;
   if (next !== snapshot) {
     snapshot = next;
     listeners.forEach((l) => l());
@@ -116,6 +118,7 @@ let inFlight = false;
 async function tick(): Promise<void> {
   if (inFlight) return;
   refreshSnapshot();
+  if (!isNewsCheckEnabled()) return;
   if (typeof document !== "undefined" && document.hidden) return;
   // Read fresh: another tab may have checked (or opened the blog) since
   // this one last looked.
@@ -151,11 +154,16 @@ export function startBlogNewsCheck(): () => void {
     if (!document.hidden) void tick();
   };
   const onStorage = (e: StorageEvent) => {
-    if (e.key === null || e.key === STORAGE_KEYS.blogNews) refreshSnapshot();
+    if (e.key === null || e.key === STORAGE_KEYS.blogNews || isNewsCheckStorageKey(e.key)) refreshSnapshot();
   };
+  const offSwitch = onNewsCheckChange((enabled) => {
+    refreshSnapshot();
+    if (enabled) void tick();
+  });
   document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("storage", onStorage);
   return () => {
+    offSwitch();
     clearTimeout(first);
     clearInterval(interval);
     document.removeEventListener("visibilitychange", onVisible);

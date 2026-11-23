@@ -44,7 +44,9 @@ const DEFS = {
   anniversariesOnlyLiving: { key: `${P}anniversariesOnlyLiving`, tag: "setting" },
   homePerson: { key: `${P}homePerson`, tag: "setting" },
   blogDraft: { key: `${P}blogDraft:`, prefix: true, tag: "setting" },
+  // Superseded by newsCheck; still read so an old "off" carries over.
   grampletStoreCheck: { key: `${P}grampletStoreCheck`, tag: "setting" },
+  newsCheck: { key: `${P}newsCheck`, tag: "setting" },
   citationsSectionOpen: { key: `${P}citationsSectionOpen`, tag: "setting" },
   // localStorage, excluded
   visited: { key: `${P}visited`, tag: "excluded" },

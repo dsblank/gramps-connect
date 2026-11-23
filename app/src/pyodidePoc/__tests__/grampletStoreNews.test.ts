@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setNewsCheckEnabled } from "../../store/newsCheck";
 
 vi.mock("../../auth/auth", () => ({
   getTreeId: vi.fn(() => "tree1"),
@@ -23,7 +24,6 @@ import {
   computeNews,
   countNews,
   getGrampletStoreNews,
-  setGrampletStoreCheckEnabled,
   startGrampletStoreCheck,
 } from "../grampletStoreNews";
 import type { CatalogEntry, Gramplet } from "../types";
@@ -118,7 +118,7 @@ describe("startGrampletStoreCheck", () => {
     expect(fetchCatalog).not.toHaveBeenCalled();
 
     vi.mocked(canAuthorGramplets).mockReturnValue(true);
-    setGrampletStoreCheckEnabled(false);
+    setNewsCheckEnabled(false);
     await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS);
     expect(fetchCatalog).not.toHaveBeenCalled();
     stop();

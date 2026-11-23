@@ -8,10 +8,11 @@
 // State is per tree and user (installed Gramplets are per tree) in
 // localStorage under grampletStoreNewsKey(); the very first check only
 // records the catalog's current ids as the baseline, so nobody is told
-// "15 new Gramplets" the first time they sign in. The on/off switch
-// (Preferences > General) is a per-browser setting, default on.
+// "15 new Gramplets" the first time they sign in. The on/off switch is the
+// shared one in store/newsCheck.ts.
 import { getCurrentUsername, getTreeId } from "../auth/auth";
-import { grampletStoreNewsKey, STORAGE_KEYS } from "../store/storageKeys";
+import { grampletStoreNewsKey } from "../store/storageKeys";
+import { isNewsCheckEnabled, isNewsCheckStorageKey, onNewsCheckChange } from "../store/newsCheck";
 import { canAuthorGramplets, fetchGramplets } from "./grampletMedia";
 import { fetchCatalog, hasCatalogUpdate } from "./grampletStore";
 import type { CatalogEntry, Gramplet } from "./types";
@@ -111,24 +112,6 @@ function writeState(state: NewsState): void {
   }
 }
 
-export function isGrampletStoreCheckEnabled(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEYS.grampletStoreCheck) !== "false";
-  } catch {
-    return true;
-  }
-}
-
-export function setGrampletStoreCheckEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.grampletStoreCheck, String(enabled));
-  } catch {
-    // ignore -- falls back to the default (on)
-  }
-  refreshSnapshot();
-  if (enabled) void tick();
-}
-
 // ---- live counts (useSyncExternalStore) ------------------------------------
 
 const ZERO: NewsCounts = { newCount: 0, updateCount: 0 };
@@ -136,7 +119,7 @@ let snapshot: NewsCounts = ZERO;
 const listeners = new Set<() => void>();
 
 function refreshSnapshot(): void {
-  const active = isGrampletStoreCheckEnabled() && canAuthorGramplets();
+  const active = isNewsCheckEnabled() && canAuthorGramplets();
   const next = active ? countNews(readState()?.pending ?? []) : ZERO;
   if (next.newCount !== snapshot.newCount || next.updateCount !== snapshot.updateCount) {
     snapshot = next.newCount === 0 && next.updateCount === 0 ? ZERO : next;
@@ -184,7 +167,7 @@ let inFlight = false;
 async function tick(): Promise<void> {
   if (inFlight || !notifier) return;
   refreshSnapshot();
-  if (!isGrampletStoreCheckEnabled() || !canAuthorGramplets()) return;
+  if (!isNewsCheckEnabled() || !canAuthorGramplets()) return;
   if (typeof document !== "undefined" && document.hidden) return;
   // Read fresh: another tab may have checked (or the user opened the
   // Store there) since this one last looked.
@@ -198,7 +181,7 @@ async function tick(): Promise<void> {
     refreshSnapshot();
     const before = new Set(prev?.pending ?? []);
     const fresh = next.pending.filter((k) => !before.has(k));
-    if (fresh.length > 0 && isGrampletStoreCheckEnabled()) notifier?.(countNews(fresh));
+    if (fresh.length > 0 && isNewsCheckEnabled()) notifier?.(countNews(fresh));
   } catch (err) {
     // Offline or the Store host is down: routine. checkedAt is left alone,
     // so the next hourly tick tries again.
@@ -219,11 +202,16 @@ export function startGrampletStoreCheck(notify: NewsNotifier): () => void {
     if (!document.hidden) void tick();
   };
   const onStorage = (e: StorageEvent) => {
-    if (e.key === null || e.key === newsKey() || e.key === STORAGE_KEYS.grampletStoreCheck) refreshSnapshot();
+    if (e.key === null || e.key === newsKey() || isNewsCheckStorageKey(e.key)) refreshSnapshot();
   };
+  const offSwitch = onNewsCheckChange((enabled) => {
+    refreshSnapshot();
+    if (enabled) void tick();
+  });
   document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("storage", onStorage);
   return () => {
+    offSwitch();
     clearTimeout(first);
     clearInterval(interval);
     document.removeEventListener("visibilitychange", onVisible);

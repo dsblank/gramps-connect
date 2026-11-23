@@ -21,7 +21,7 @@ import {
   type NotificationBlocker,
 } from "../store/browserNotifications";
 import { canAuthorGramplets } from "../pyodidePoc/grampletMedia";
-import { isGrampletStoreCheckEnabled, setGrampletStoreCheckEnabled } from "../pyodidePoc/grampletStoreNews";
+import { isNewsCheckEnabled, setNewsCheckEnabled } from "../store/newsCheck";
 
 const BLOCKER_MESSAGES: Record<NotificationBlocker, string> = {
   insecure: "Not available here: browsers only allow notifications on a secure (https://) connection.",
@@ -150,19 +150,23 @@ function BrowserNotificationsToggle() {
   );
 }
 
-/** Daily check of the Gramplet Store (grampletStoreNews.ts) -- shown only
- * to users who can install Gramplets, the only ones it ever tells. */
-function GrampletStoreCheckToggle() {
-  const [enabled, setEnabled] = useState(isGrampletStoreCheckEnabled);
-  if (!canAuthorGramplets()) return null;
+/** The one switch for the daily look at the project's own sites
+ * (store/newsCheck.ts): blog posts for everyone, plus Gramplet Store news
+ * for users who can install Gramplets. */
+function NewsCheckToggle() {
+  const [enabled, setEnabled] = useState(isNewsCheckEnabled);
   return (
     <Switch
-      label={t("Check the Gramplet Store for news")}
-      description={t("Once a day, look for new Gramplets in the Gramplet Store and for updates to the ones installed in this tree, and let you know.")}
+      label={t("Check for Gramps Connect news")}
+      description={
+        canAuthorGramplets()
+          ? t("Once a day, look for new posts on the Gramps Connect blog, new Gramplets in the Gramplet Store and updates to the ones installed in this tree, and let you know.")
+          : t("Once a day, look for new posts on the Gramps Connect blog, and show a dot on the Help menu when there are some.")
+      }
       checked={enabled}
       onChange={(e) => {
         const next = e.currentTarget.checked;
-        setGrampletStoreCheckEnabled(next);
+        setNewsCheckEnabled(next);
         setEnabled(next);
       }}
     />
@@ -207,7 +211,7 @@ export function PreferencesDialog({ opened, onClose, initialTab, section }: Pref
             <ColorSchemeToggle />
             <LanguagePicker />
             <BrowserNotificationsToggle />
-            <GrampletStoreCheckToggle />
+            <NewsCheckToggle />
             <LocalSettingsSection />
           </Stack>
         </Tabs.Panel>
