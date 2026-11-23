@@ -21,7 +21,8 @@ import { DocumentationDialog } from "./DocumentationDialog";
 import { formatHash } from "../hash";
 import { getHomePersonHandle } from "../store/homePersonPreference";
 import { BLOG_VIEW, GENERATED_VIEW, STORY_VIEW, TOPICS_VIEW } from "../store/views";
-import { DISCUSSION_FORUM_URL } from "../config";
+import { BLOG_URL, DISCUSSION_FORUM_URL } from "../config";
+import { getBlogNewsCount, markBlogNewsSeen, subscribeBlogNews } from "../store/blogNews";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
 import { startMediaExport } from "../store/startExport";
@@ -311,6 +312,9 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const storeNews = useSyncExternalStore(subscribeGrampletStoreNews, getGrampletStoreNews);
   const storeNewsCount = storeNews.newCount + storeNews.updateCount;
   useEffect(() => onOpenGrampletStoreRequest(() => setGrampletStoreOpened(true)), []);
+  // Daily blog check's findings (blogNews.ts): a dot on Help, a count on
+  // Help > Blog, cleared by opening the blog from there.
+  const blogNewsCount = useSyncExternalStore(subscribeBlogNews, getBlogNewsCount);
   const [reindexOpened, setReindexOpened] = useState(false);
   const [placeLanguageRepairOpened, setPlaceLanguageRepairOpened] = useState(false);
   const [checkRepairOpened, setCheckRepairOpened] = useState(false);
@@ -592,6 +596,8 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             Gramplet Store moved to the Gramplets menu.) */}
         <AppMenu
           label={t("Help")}
+          indicator={blogNewsCount > 0}
+          indicatorLabel={t("New on the Gramps Connect blog")}
           items={[
             {
               // The prose that used to live in an in-app Overview dialog
@@ -615,6 +621,18 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               label: "Discussion Forum",
               onClick: () =>
                 window.open(DISCUSSION_FORUM_URL, "_blank", "noopener"),
+            },
+            {
+              // The project's blog (release news and how-tos), on GitHub
+              // Pages -- not a tree's own Blog view. A new tab, like the
+              // forum. Opening it marks every post found so far as seen.
+              label: t("Blog"),
+              badge: blogNewsCount,
+              badgeLabel: blogNewsCount === 1 ? t("1 new post") : t("{count} new posts").replace("{count}", String(blogNewsCount)),
+              onClick: () => {
+                markBlogNewsSeen();
+                window.open(BLOG_URL, "_blank", "noopener");
+              },
             },
             { label: "About", onClick: () => setAboutOpened(true), separatorBefore: true },
           ]}

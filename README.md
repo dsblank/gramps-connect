@@ -7,6 +7,7 @@ A faster, real-time-collaborative web frontend for
   <a href="https://dsblank.github.io/gramps-connect/tour/"><img alt="Watch the tour" src="https://img.shields.io/badge/%E2%96%B6%20Watch%20the%20tour-1c6fd1?style=for-the-badge"></a>
   <a href="https://github.com/dsblank/gramps-connect/wiki/Installing"><img alt="Download" src="https://img.shields.io/badge/Download-2b8a3e?style=for-the-badge"></a>
   <a href="https://dsblank.github.io/gramps-connect/"><img alt="Home page" src="https://img.shields.io/badge/Home%20page-495057?style=for-the-badge"></a>
+  <a href="https://dsblank.github.io/gramps-connect/blog/"><img alt="Blog" src="https://img.shields.io/badge/Blog-495057?style=for-the-badge"></a>
 </p>
 
 ## Overview
@@ -43,6 +44,12 @@ available for hosting it for a family to share (see
 
 To see it in action, watch the narrated
 [ten-minute tour](https://dsblank.github.io/gramps-connect/tour/).
+
+News about releases and new features is posted on the
+[blog](https://dsblank.github.io/gramps-connect/blog/), which also has a
+[feed](https://dsblank.github.io/gramps-connect/blog/feed.xml) you can
+subscribe to.
+
 For a full tour of the app itself, see [docs/Overview.md](docs/Overview.md);
 for the search-box query language behind it, see [docs/GOQL.md](docs/GOQL.md).
 

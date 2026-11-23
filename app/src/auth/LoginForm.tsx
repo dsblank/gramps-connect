@@ -3,17 +3,13 @@ import { Center, Paper, Stack, Group, Image, Title, TextInput, PasswordInput, Bu
 import { login } from "./auth";
 import logo from "../assets/icons/gramps-connect-logo.svg";
 import { t } from "../i18n/i18n";
-import { DISCUSSION_FORUM_URL } from "../config";
-import { AboutDialog } from "../components/AboutDialog";
-import { DocumentationDialog } from "../components/DocumentationDialog";
+import { PROJECT_HOME_URL } from "../config";
 
 export function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [documentationOpened, setDocumentationOpened] = useState(false);
-  const [aboutOpened, setAboutOpened] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -54,29 +50,15 @@ export function LoginForm() {
             </Button>
           </Stack>
         </Paper>
-        {/* The same three Help-menu entries that need no sign-in -- the
-            documentation and forum are both fetched/opened straight from
-            public sites, and About's prose is the same for every reader --
-            so someone stuck at this page can still find out what it is and
-            ask for help. Deliberately plain: this page is every deployment's
-            front door, self-hosted family servers included, not a project
-            homepage. */}
-        <Group gap="xs" justify="center">
-          <Anchor component="button" type="button" size="sm" c="dimmed" onClick={() => setDocumentationOpened(true)}>
-            {t("Documentation")}
-          </Anchor>
-          <Text size="sm" c="dimmed">·</Text>
-          <Anchor href={DISCUSSION_FORUM_URL} target="_blank" rel="noopener" size="sm" c="dimmed">
-            {t("Discussion Forum")}
-          </Anchor>
-          <Text size="sm" c="dimmed">·</Text>
-          <Anchor component="button" type="button" size="sm" c="dimmed" onClick={() => setAboutOpened(true)}>
-            {t("About")}
-          </Anchor>
-        </Group>
+        {/* One link to the project's home page, which leads on to the
+            documentation, forum, blog and downloads, so someone stuck at
+            this page can still find out what Gramps Connect is and where
+            to ask for help. Kept to one small line: this page is every
+            deployment's front door, self-hosted family servers included. */}
+        <Anchor href={PROJECT_HOME_URL} target="_blank" rel="noopener" size="sm" c="dimmed">
+          {t("About Gramps Connect")}
+        </Anchor>
       </Stack>
-      <DocumentationDialog opened={documentationOpened} onClose={() => setDocumentationOpened(false)} />
-      <AboutDialog opened={aboutOpened} onClose={() => setAboutOpened(false)} />
     </Center>
   );
 }

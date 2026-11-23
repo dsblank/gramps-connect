@@ -50,6 +50,7 @@ const DEFS = {
   visited: { key: `${P}visited`, tag: "excluded" },
   activity: { key: `${P}activity`, tag: "excluded" },
   grampletStoreNews: { key: `${P}grampletStoreNews:`, prefix: true, tag: "excluded" },
+  blogNews: { key: `${P}blogNews`, tag: "excluded" },
   // sessionStorage
   token: { key: `${P}token`, tag: "excluded" },
   refreshToken: { key: `${P}refreshToken`, tag: "excluded" },
