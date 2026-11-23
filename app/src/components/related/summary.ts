@@ -37,7 +37,9 @@ function truncate(text: string, max = 60): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-function summaryText(type: string, obj: any): string {
+/** summaryLine() without the leading Gramps ID -- what a sortable table
+ * orders a record's link by (ObjectCellButton.tsx). */
+export function summaryText(type: string, obj: any): string {
   switch (type) {
     case "person":
       return personName(obj);

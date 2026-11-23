@@ -16,7 +16,53 @@ import { Menu, Text } from "@mantine/core";
 import type { ReactElement } from "react";
 import { formatHash, isSubjectKey, type VisualKey } from "../hash";
 import { t } from "../i18n/i18n";
+import { summaryLine, summaryText } from "../components/related/summary";
 import type { ObjectCell } from "./types";
+
+// The field(s) summaryLine() needs for each type to say more than
+// "(unnamed)"/"(event)" -- a filter() result has only its what= fields, so
+// a cell without them keeps the Gramplet's own text (pyodideWorker.ts's
+// _describe_object), which names the type instead. Place labels come from
+// the tree's place index by handle, so need nothing.
+const SUMMARY_NEEDS: Record<string, string[]> = {
+  person: ["primary_name"],
+  family: ["father", "mother"],
+  event: ["type", "date"],
+  repository: ["name"],
+  source: ["title"],
+  citation: ["source", "page"],
+  media: ["desc", "path"],
+  note: ["text"],
+  tag: ["name"],
+};
+
+function summaryFields(cell: ObjectCell): Record<string, unknown> | null {
+  const fields = cell.fields;
+  if (!fields) return null;
+  const needs = SUMMARY_NEEDS[cell.objectType];
+  if (needs && !needs.some((key) => fields[key] != null)) return null;
+  return { ...fields, handle: cell.handle };
+}
+
+/** A table link's label: the same text "Referenced by" shows for that
+ * record (summary.ts's summaryLine(), in the tree's name/date formats),
+ * when the Gramplet fetched the fields for it, else row()'s own text. */
+export function objectCellLabel(cell: ObjectCell): string {
+  const fields = summaryFields(cell);
+  return (fields && summaryLine(cell.objectType, fields)) || cell.text;
+}
+
+/** What a sortable table orders a link by: its label without the leading
+ * Gramps ID (so people sort by name, not ID), then the ID. */
+export function objectCellSortKeys(cell: ObjectCell): [string, string] {
+  const fields = summaryFields(cell);
+  if (fields) {
+    const id = typeof fields.gramps_id === "string" ? fields.gramps_id : "";
+    return [summaryText(cell.objectType, fields), id];
+  }
+  const match = /^\[([^\]]*)\] (.*)$/su.exec(cell.text);
+  return match ? [match[2], match[1]] : [cell.text, ""];
+}
 
 // Which visuals apply to which subject type -- same applicability
 // VisualButtons.tsx's HINTS table encodes (Tree only for person/family).
@@ -41,8 +87,9 @@ export interface PersonMenuOptions {
 }
 
 export function ObjectCellButton({ cell }: { cell: ObjectCell }) {
+  const label = objectCellLabel(cell);
   return (
-    <ObjectMenu objectType={cell.objectType} handle={cell.handle} label={cell.text}>
+    <ObjectMenu objectType={cell.objectType} handle={cell.handle} label={label}>
       <Text
         component="button"
         size="sm"
@@ -55,7 +102,7 @@ export function ObjectCellButton({ cell }: { cell: ObjectCell }) {
           color: "var(--mantine-color-blue-6)",
         }}
       >
-        {cell.text}
+        {label}
       </Text>
     </ObjectMenu>
   );

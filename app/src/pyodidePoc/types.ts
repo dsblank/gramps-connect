@@ -375,12 +375,16 @@ export interface TransactionItem {
  * this instead of a plain string -- `text` is a default description (ported
  * from Gramps desktop's own SimpleAccess.describe(), see pyodideWorker.ts's
  * `_describe_object`), `objectType`/`handle` are what ObjectCellButton.tsx
- * needs to build a navigation link via hash.ts's formatHash(). */
+ * needs to build a navigation link via hash.ts's formatHash(). `fields`
+ * are the record's own fields summary.ts's summaryLine() reads (whichever
+ * the Gramplet fetched), so the link can be labeled the way "Referenced
+ * by" labels it -- see objectCellLabel() in ObjectCellButton.tsx. */
 export interface ObjectCell {
   kind: "object";
   objectType: string;
   handle: string;
   text: string;
+  fields?: Record<string, unknown>;
 }
 
 export type TableCell = string | ObjectCell;

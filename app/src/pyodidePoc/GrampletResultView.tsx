@@ -7,11 +7,11 @@
 // block, in call order, as a real GUI table or raw markup instead of a
 // single Code block -- the whole point of that quartet existing, mirroring
 // Gramps desktop's own GrampyScript addon.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Code, Table, Text } from "@mantine/core";
 import { t } from "../i18n/i18n";
 import { ChangeSummary } from "./ChangeSummary";
-import { ObjectCellButton } from "./ObjectCellButton";
+import { ObjectCellButton, objectCellLabel, objectCellSortKeys } from "./ObjectCellButton";
 import { RelationshipChart } from "./RelationshipChart";
 import { CitationBibliography } from "../components/related/CitationBibliography";
 import "./stWidgets.css";
@@ -276,6 +276,50 @@ function HtmlOutput({
   );
 }
 
+// Numeric-aware ("9" before "10"), case- and accent-insensitive.
+const cellCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+function cellSortKeys(cell: TableCell | undefined): string[] {
+  if (cell == null) return [""];
+  return typeof cell === "string" ? [cell] : objectCellSortKeys(cell);
+}
+
+function compareCells(a: TableCell | undefined, b: TableCell | undefined): number {
+  const ka = cellSortKeys(a);
+  const kb = cellSortKeys(b);
+  for (let i = 0; i < Math.max(ka.length, kb.length); i++) {
+    const x = ka[i] ?? "";
+    const y = kb[i] ?? "";
+    const c = cellCollator.compare(x, y);
+    if (c !== 0) return c;
+  }
+  return 0;
+}
+
+/** Rows ordered by column `col`, ties broken by the other columns left to
+ * right (ascending), then by the order the Gramplet added them. Empty
+ * cells in `col` always sort last. */
+export function sortTableRows(rows: TableCell[][], col: number, desc: boolean): TableCell[][] {
+  const isEmpty = (cell: TableCell | undefined) => cellSortKeys(cell).every((k) => !k);
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const ea = isEmpty(a.row[col]);
+      const eb = isEmpty(b.row[col]);
+      if (ea !== eb) return ea ? 1 : -1;
+      const primary = compareCells(a.row[col], b.row[col]);
+      if (primary !== 0) return desc ? -primary : primary;
+      const width = Math.max(a.row.length, b.row.length);
+      for (let j = 0; j < width; j++) {
+        if (j === col) continue;
+        const c = compareCells(a.row[j], b.row[j]);
+        if (c !== 0) return c;
+      }
+      return a.index - b.index;
+    })
+    .map(({ row }) => row);
+}
+
 function TableOutput({
   columns,
   rows,
@@ -285,6 +329,13 @@ function TableOutput({
   rows: TableCell[][];
   interactive: boolean;
 }) {
+  // Click a header: sort by it ascending, again descending, a third time
+  // back to the Gramplet's own row order (which may itself mean something,
+  // e.g. a ranking).
+  const [sort, setSort] = useState<{ col: number; desc: boolean } | null>(null);
+  const shown = useMemo(() => (sort ? sortTableRows(rows, sort.col, sort.desc) : rows), [rows, sort]);
+  const clickHeader = (col: number) =>
+    setSort((cur) => (cur?.col !== col ? { col, desc: false } : !cur.desc ? { col, desc: true } : null));
   return (
     <Table
       striped
@@ -305,16 +356,25 @@ function TableOutput({
       <Table.Thead>
         <Table.Tr>
           {columns.map((col, i) => (
-            <Table.Th key={i}>{col}</Table.Th>
+            <Table.Th
+              key={i}
+              onClick={rows.length > 1 ? () => clickHeader(i) : undefined}
+              style={rows.length > 1 ? { cursor: "pointer", userSelect: "none" } : undefined}
+              aria-sort={sort?.col === i ? (sort.desc ? "descending" : "ascending") : undefined}
+              title={rows.length > 1 ? t("Click to sort") : undefined}
+            >
+              {col}
+              {sort?.col === i ? (sort.desc ? " ▼" : " ▲") : ""}
+            </Table.Th>
           ))}
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
-        {rows.map((row, i) => (
+        {shown.map((row, i) => (
           <Table.Tr key={i}>
             {row.map((cell, j) => (
               <Table.Td key={j}>
-                {typeof cell === "string" ? cell : interactive ? <ObjectCellButton cell={cell} /> : cell.text}
+                {typeof cell === "string" ? cell : interactive ? <ObjectCellButton cell={cell} /> : objectCellLabel(cell)}
               </Table.Td>
             ))}
           </Table.Tr>

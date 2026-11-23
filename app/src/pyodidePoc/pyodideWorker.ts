@@ -1775,52 +1775,105 @@ def name_of(person_or_name):
     primary = _field(person_or_name, "primary_name")
     return _name_label(primary if primary is not None else person_or_name)
 
+# One-hop relations _describe_object()/_summary_fields() read a label
+# from -- a family's father/mother names, a citation's source title --
+# when a filter() call asked for them with a dotted what= entry
+# ("father.primary_name", "source.title"), which arrives as that flat
+# dotted key, or already nested (a dict under "father"/"source").
+_SUMMARY_RELATIONS = ("father", "mother", "source")
+
+def _related(value, rel):
+    nested = _field(value, rel)
+    if isinstance(nested, dict):
+        return nested
+    if not isinstance(value, dict):
+        return None
+    prefix = rel + "."
+    found = {k[len(prefix):]: v for k, v in value.items() if isinstance(k, str) and k.startswith(prefix) and v is not None}
+    return found or None
+
 def _describe_object(value):
-    # Lightweight, dbase-free counterpart to Gramps desktop's
-    # gramps.gen.simple.SimpleAccess.describe() (gramps/gen/simple/
-    # _simpleaccess.py) -- that one needs a live local DbReadBase for
-    # cross-object lookups this sandboxed worker doesn't have, so Family
-    # here falls back to just its gramps_id rather than resolving parent
-    # names (that'd be two more network round trips).
+    # Dbase-free counterpart to the app's own summaryLine() (components/
+    # related/summary.ts, what "Referenced by" and every other reference
+    # row shows): the Gramps ID first, then the same per-type text, built
+    # from whatever fields this record carries. GrampletResultView.tsx
+    # relabels a table's links with summaryLine() itself from
+    # _summary_fields() below (so names and dates follow the tree's
+    # Preferences); this text is the fallback, and what change summaries
+    # (changesBootstrap.ts) show.
     cls = value.get("_class") if isinstance(value, dict) else type(value).__name__
     gid = _field(value, "gramps_id")
-    suffix = f" [{gid}]" if gid else ""
+    text = ""
     if cls == "Person":
-        return f"{_name_label(_field(value, 'primary_name')) or 'Person'}{suffix}"
-    if cls == "Event":
-        return f"{_type_label(_field(value, 'type')) or 'Event'}{suffix}"
-    if cls == "Place":
-        label = _field(_field(value, "name"), "value")
-        return f"{label or 'Place'}{suffix}"
-    if cls == "Media":
-        return f"{_field(value, 'desc') or 'Media'}{suffix}"
-    if cls == "Source":
-        return f"{_field(value, 'title') or 'Source'}{suffix}"
-    if cls == "Repository":
-        return f"{_field(value, 'name') or 'Repository'}{suffix}"
-    if cls == "Citation":
-        page = _field(value, "page")
-        return f"{page}{suffix}" if page else f"Citation{suffix}"
-    if cls == "Note":
+        text = _name_label(_field(value, "primary_name")) or "Person"
+    elif cls == "Family":
+        names = [_name_label(_field(p, "primary_name")) for p in (_related(value, "father"), _related(value, "mother")) if p]
+        text = " & ".join(n for n in names if n) or "Family"
+    elif cls == "Event":
+        date = _field(value, "date")
+        date_text = _pp(date) if date is not None else ""
+        text = ": ".join(x for x in (_type_label(_field(value, "type")), date_text) if x) or _field(value, "description") or "Event"
+    elif cls == "Place":
+        text = _field(value, "title") or _field(_field(value, "name"), "value") or "Place"
+    elif cls == "Media":
+        text = _field(value, "desc") or _field(value, "path") or "Media"
+    elif cls == "Source":
+        text = _field(value, "title") or "Source"
+    elif cls == "Repository":
+        text = _field(value, "name") or "Repository"
+    elif cls == "Citation":
+        source = _related(value, "source")
+        text = ", ".join(x for x in (_field(source, "title") if source else "", _field(value, "page")) if x) or "Citation"
+    elif cls == "Note":
         raw = _field(_field(value, "text"), "string") or ""
-        snippet = raw.strip().replace("\\n", " ")[:40]
-        return f"{snippet or 'Note'}{suffix}"
-    if cls == "Tag":
-        return _field(value, "name") or f"Tag{suffix}"
-    if cls == "Family":
-        return f"Family{suffix}"
-    handle = _field(value, "handle")
-    return f"{cls}{suffix or (f' [{str(handle)[:8]}]' if handle else '')}"
+        text = raw.strip().replace("\\n", " ")[:40] or "Note"
+    elif cls == "Tag":
+        return _field(value, "name") or "Tag"
+    else:
+        text = cls
+        if not gid:
+            handle = _field(value, "handle")
+            return f"{cls} [{str(handle)[:8]}]" if handle else cls
+    return f"[{gid}] {text}" if gid else text
+
+# The fields of a record summaryLine() (components/related/summary.ts)
+# reads, copied into an ObjectCell's "fields" so the app can label the
+# link exactly as "Referenced by" would. Only what's there: a filter()
+# result has just its what= fields.
+_SUMMARY_KEYS = ("gramps_id", "primary_name", "date", "description", "title", "name", "desc", "path", "page")
+
+def _summary_fields(value):
+    if not isinstance(value, dict):
+        try:
+            from gramps.gen.lib.json_utils import object_to_dict
+            value = object_to_dict(value)
+        except Exception:
+            return None
+    fields = {k: value[k] for k in _SUMMARY_KEYS if value.get(k) is not None}
+    if value.get("type") is not None:
+        fields["type"] = _type_label(value.get("type"))
+    text = _field(value.get("text"), "string") if isinstance(value.get("text"), dict) else None
+    if text:
+        fields["text"] = {"string": text[:200]}
+    for rel in _SUMMARY_RELATIONS:
+        nested = _related(value, rel)
+        if nested:
+            fields[rel] = {k: v for k, v in nested.items() if k in ("primary_name", "title", "gramps_id")}
+    return fields
 
 def _cell(value):
     if _is_primary_dict(value) or _is_primary_object(value):
         cls = value.get("_class") if isinstance(value, dict) else type(value).__name__
-        return {
+        cell = {
             "kind": "object",
             "objectType": cls.lower(),
             "handle": _field(value, "handle"),
             "text": _describe_object(value),
         }
+        fields = _summary_fields(value)
+        if fields:
+            cell["fields"] = fields
+        return cell
     return _pp(value)
 
 def _cell_kind(value):

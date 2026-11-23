@@ -23,7 +23,11 @@
 #   - limit= plus one extra row, to tell whether there were more matches
 #     without counting them all
 #   - a row() cell that links to its record: any dict with a "_class" and
-#     a "handle" (filter() always returns "handle")
+#     a "handle" (filter() always returns "handle"). Asking for the fields
+#     a record is named by (LABEL_FIELDS) makes the link read the way
+#     "Referenced by" does: "[I0001] Smith, John", a family by its
+#     parents ("father.primary_name" reaches into the father's record)
+#   - click a column title to sort the table; ties go by the other column
 # =============================================================================
 
 import html as _html
@@ -31,6 +35,16 @@ import html as _html
 KINDS = ["person", "family", "event", "media", "source", "citation"]
 SCAN_LIMIT = 5000   # records with attributes read per kind, to find type names
 SHOW_LIMIT = 200    # rows shown per kind for the chosen type
+
+# The fields each kind's link is labeled from, as in "Referenced by".
+LABEL_FIELDS = {
+    "person": ["primary_name"],
+    "family": ["father.primary_name", "mother.primary_name"],
+    "event": ["type", "date", "description"],
+    "media": ["desc", "path"],
+    "source": ["title"],
+    "citation": ["page", "source.title"],
+}
 
 # The attribute types in use, with how many records have each. Each kind
 # is one whole-table scan on the server, so the result is kept for the
@@ -105,7 +119,7 @@ else:
             for i, kind in enumerate(kinds):
                 bar.progress(i / len(kinds), text=f"Finding {t} in {kind} records...")
                 rs = filter(kind, where=f"{key} != None",
-                            what=["gramps_id", col], limit=SHOW_LIMIT + 1)
+                            what=["gramps_id", *LABEL_FIELDS[kind], col], limit=SHOW_LIMIT + 1)
                 if len(rs) > SHOW_LIMIT:
                     more.append(kind)
                 for r in rs[:SHOW_LIMIT]:
