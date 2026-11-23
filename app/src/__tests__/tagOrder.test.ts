@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planTagOrder, sortTags, TAG_MOVED_KEY, withoutMoveMarker } from "../store/tagOrder";
+import { orderTagHandles, planTagOrder, sortTags, TAG_MOVED_KEY, withoutMoveMarker } from "../store/tagOrder";
 
 const tags = [
   { handle: "a", name: "ToDo", priority: 0 },
@@ -67,5 +67,12 @@ describe("planTagOrder", () => {
 describe("withoutMoveMarker", () => {
   it("strips only the dialog's marker", () => {
     expect(withoutMoveMarker({ name: "X", priority: 1, [TAG_MOVED_KEY]: true })).toEqual({ name: "X", priority: 1 });
+  });
+});
+
+describe("orderTagHandles", () => {
+  it("lists a record's tags by priority then name, unknown (unsaved) ones last", () => {
+    const byHandle = new Map(tags.map((t) => [t.handle, t]));
+    expect(orderTagHandles(["c", "new1", "a", "d", "b"], byHandle)).toEqual(["b", "a", "d", "c", "new1"]);
   });
 });

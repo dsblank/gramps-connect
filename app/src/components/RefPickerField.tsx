@@ -385,6 +385,10 @@ interface RefListFieldProps {
    * below handle their own wrapped-ref shapes separately rather than
    * going through this component at all). */
   refs: string[];
+  /** The order to show `refs` in, when it isn't the stored order (Tags:
+   * priority order, see useTagOrder). Display only -- adds and removes
+   * still work on `refs` as stored. */
+  displayOrder?: (refs: string[]) => string[];
   labels: Record<string, string>;
   newDraftsByHandle: Map<string, DraftEntry>;
   findEditDraft: (refHandle: string) => DraftEntry | undefined;
@@ -413,14 +417,15 @@ interface RefListFieldProps {
 export function RefListField({
   label, refs, labels, newDraftsByHandle: newDrafts, findEditDraft: findEdit, onAddExisting, onAddNew,
   onRemoveExisting, onOpenEditDraft, onReopenDraft, onCancelDraft, view, searchField, buildExpr, renderLabel,
-  placeholder, createLabel,
+  placeholder, createLabel, displayOrder,
 }: RefListFieldProps) {
   const pickedHandles = new Set(refs);
+  const shown = displayOrder ? displayOrder(refs) : refs;
   return (
     <Stack gap={4}>
       <Text size="sm" fw={500}>{label}</Text>
       {refs.length === 0 && <Text size="xs" c="dimmed">No {label.toLowerCase()}</Text>}
-      {refs.map((refHandle) => {
+      {shown.map((refHandle) => {
         const nestedDraft = newDrafts.get(refHandle) ?? findEdit(refHandle);
         if (nestedDraft) {
           return (

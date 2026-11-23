@@ -172,3 +172,16 @@ export async function saveTagDraft(
   }
   return null;
 }
+
+/** `handles` (a record's tag_list) in the order its tags win: priority,
+ * then name, as sortTags. Handles not in `tags` (a tag created in this
+ * dialog and not saved yet) go last, in their own order -- that's where a
+ * new tag lands when saved. The stored list itself is never reordered:
+ * neither Gramps nor this app gives its order any meaning. */
+export function orderTagHandles(handles: readonly string[], tags: ReadonlyMap<string, TagRecord>): string[] {
+  const known = sortTags(handles.flatMap((h) => {
+    const tag = tags.get(h);
+    return tag ? [{ ...tag, handle: h }] : [];
+  })).map((t) => t.handle);
+  return [...known, ...handles.filter((h) => !tags.has(h))];
+}

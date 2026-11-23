@@ -7,6 +7,7 @@ import { AttachControl } from "../AttachControl";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { SectionShell, zipHandles } from "./shared";
 import { gtkColorToCss } from "../color";
+import { orderTagHandles } from "../../../store/tagOrder";
 import type { SectionProps } from "../types";
 import { t } from "../../../i18n/i18n";
 
@@ -20,7 +21,14 @@ import { t } from "../../../i18n/i18n";
  * CircleGlyphButton inside the badge's rightSection rather than RefRow's
  * "−", since there's no RefRow here to hang it off. */
 export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProps) {
-  const rows = zipHandles<{ handle: string; name: string; color?: string }>(detail.tag_list, detail.extended?.tags);
+  const stored = zipHandles<{ handle: string; name: string; color?: string; priority?: number }>(
+    detail.tag_list, detail.extended?.tags
+  );
+  // In priority order -- the order they win in (e.g. chart colors) -- not
+  // the order they were added, which means nothing (as in Gramps).
+  const tagByHandle = new Map(stored.flatMap(({ handle, target }) => (target ? [[handle, target] as const] : [])));
+  const rowByHandle = new Map(stored.map((r) => [r.handle, r]));
+  const rows = orderTagHandles(stored.map((r) => r.handle), tagByHandle).map((h) => rowByHandle.get(h)!);
   // See NotesSection.tsx's identical comment -- this live attach/detach is a
   // quicker path to tag_list than the edit dialog, not the only one.
   const canAttach = hasPermissions("EditObject");

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useTagOrder } from "../hooks/useTagOrder";
 import {
   Alert, Anchor, Button, Collapse, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
@@ -247,6 +248,8 @@ export function PersonEditDialog({
   // only ever grows, since a NameEditDialog Modal already registered with
   // Mantine's ModalStack can never be safely unmounted (see this file's own
   // doc comment above).
+  // Tags listed in priority order, the order they win in.
+  const orderTags = useTagOrder(true, draft.session);
   const sessionRef = useRef(draft.session);
   useEffect(() => {
     if (draft.session === sessionRef.current) return;
@@ -848,6 +851,7 @@ export function PersonEditDialog({
             <RefListField
               label={t("Tags")}
               refs={tagRefs}
+              displayOrder={orderTags}
               labels={pickedLabels}
               newDraftsByHandle={newDraftsByHandle(stack, draft.handle, "tag", TAG_FIELD_PREFIX)}
               findEditDraft={(h) => findEditDraft(stack, draft.handle, TAG_EDIT_FIELD_PREFIX, h)}

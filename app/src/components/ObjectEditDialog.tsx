@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTagOrder } from "../hooks/useTagOrder";
 import {
   Alert, Anchor, Button, Collapse, ColorInput, Group, Loader, Modal, NumberInput, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
@@ -312,6 +313,8 @@ export function ObjectEditDialog({
   // fresh component -- so a "Details" disclosure left open from a cancelled
   // session would otherwise still show expanded next time. See
   // PersonEditDialog's identical session-reset effect for the fuller story.
+  // Tags listed in priority order, the order they win in.
+  const orderTags = useTagOrder(allFields(draft.type).some((f) => f.kind === "refList" && f.refType === "tag"), draft.session);
   const sessionRef = useRef(draft.session);
   useEffect(() => {
     if (draft.session === sessionRef.current) return;
@@ -744,6 +747,7 @@ export function ObjectEditDialog({
             key={f.key}
             label={t(f.label)}
             refs={refs}
+            displayOrder={f.refType === "tag" ? orderTags : undefined}
             labels={pickedLabels}
             newDraftsByHandle={newDraftsByHandle(stack, draft.handle, f.refType, fieldPrefix)}
             findEditDraft={(h) => findEditDraft(stack, draft.handle, editFieldPrefix, h)}
