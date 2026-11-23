@@ -122,8 +122,11 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // has several more, but generation/age-at-death are the two computable
   // from data this app already fetches with no further plumbing).
   const [colorScheme, setColorScheme] = useState<FanColorScheme>("gen");
-  // "Color by attribute"'s chosen type; null (or a type no longer in the
-  // chart) means the most common one present.
+  // Tree mode's own color setting: the accent bar on each box shows gender
+  // by default, or a tag/attribute color (charts/personColors.ts).
+  const [treeColorScheme, setTreeColorScheme] = useState<"gender" | "tag" | "attribute">("gender");
+  // "Color by attribute"'s chosen type, shared by Fan and Tree; null (or a
+  // type no longer in the chart) means the most common one present.
   const [colorAttributeType, setColorAttributeType] = useState<string | null>(null);
   // The tree's tags, fetched the first time "Color by tag" is picked.
   const [tags, setTags] = useState<Map<string, TagInfo> | null>(null);
@@ -394,25 +397,34 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
     return trimTreeToDepth(fanTree, fanDisplayDepth);
   }, [fanTree, fanDisplayDepth]);
 
-  // Everyone the fan currently draws, once each (pedigree collapse can put
-  // one person in several wedges) -- what "Color by tag/attribute" counts.
-  const fanPeople = useMemo(() => {
+  // The color scheme of whichever chart is showing, as far as person
+  // coloring goes (Generations/Relationship have none yet).
+  const activeColorScheme = chartStyle === "fan" ? colorScheme : chartStyle === "box" ? treeColorScheme : null;
+
+  // Everyone the current chart draws, once each (pedigree collapse can put
+  // one person in several places) -- what "Color by tag/attribute" counts.
+  const chartPeople = useMemo(() => {
     const seen = new Map<string, TreePersonRaw>();
-    const walk = (n: TreeNode) => {
+    const walk = (n: TreeNode | null) => {
+      if (!n) return;
       if (n.person) seen.set(n.person.handle, n.person);
       n.children?.forEach(walk);
     };
-    if (fanDisplayTree) walk(fanDisplayTree);
+    if (chartStyle === "fan") walk(fanDisplayTree);
+    else if (chartStyle === "box" && trees) {
+      walk(trees.ancestorTree);
+      walk(trees.descendantTree);
+    }
     return [...seen.values()];
-  }, [fanDisplayTree]);
-  const fanAttributeTypes = useMemo(() => attributeTypesIn(fanPeople), [fanPeople]);
+  }, [chartStyle, fanDisplayTree, trees]);
+  const chartAttributeTypes = useMemo(() => attributeTypesIn(chartPeople), [chartPeople]);
   const effectiveAttributeType =
-    colorAttributeType && fanAttributeTypes.some((a) => a.type === colorAttributeType)
+    colorAttributeType && chartAttributeTypes.some((a) => a.type === colorAttributeType)
       ? colorAttributeType
-      : (fanAttributeTypes[0]?.type ?? null);
+      : (chartAttributeTypes[0]?.type ?? null);
 
   useEffect(() => {
-    if (colorScheme !== "tag" || tags) return;
+    if (activeColorScheme !== "tag" || tags) return;
     let cancelled = false;
     (async () => {
       try {
@@ -423,21 +435,37 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         if (!cancelled) {
           notifications.show({ color: "red", message: `${t("Couldn't load tags:")} ${err instanceof Error ? err.message : String(err)}` });
           setColorScheme("gen");
+          setTreeColorScheme("gender");
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [colorScheme, tags]);
+  }, [activeColorScheme, tags]);
 
   const personColoring = useMemo(() => {
-    if (colorScheme === "tag") return tags ? buildTagColoring(fanPeople, tags) : null;
+    if (activeColorScheme === "tag") return tags ? buildTagColoring(chartPeople, tags) : null;
     // With no attribute to pick, everyone shows as "Not recorded" rather
     // than quietly falling back to generation colors.
-    if (colorScheme === "attribute") return buildAttributeColoring(fanPeople, effectiveAttributeType ?? "");
+    if (activeColorScheme === "attribute") return buildAttributeColoring(chartPeople, effectiveAttributeType ?? "");
     return null;
-  }, [colorScheme, tags, fanPeople, effectiveAttributeType]);
+  }, [activeColorScheme, tags, chartPeople, effectiveAttributeType]);
+
+  // The second menu for "Color: Attribute", the same in Fan and Tree.
+  const attributeTypeSelect = (
+    <Select
+      size="xs"
+      w={180}
+      allowDeselect={false}
+      value={effectiveAttributeType}
+      onChange={(v) => v && setColorAttributeType(v)}
+      data={chartAttributeTypes.map((a) => ({ value: a.type, label: `${t(a.type)} (${a.count})` }))}
+      placeholder={t("No attributes in this chart")}
+      disabled={chartAttributeTypes.length === 0}
+      aria-label={t("Attribute")}
+    />
+  );
 
   // Family mode's own ancestor-ward tree: a chain of sibling clusters, one
   // per generation expanded "up" so far -- see buildFamilyClusterTree's own
@@ -858,19 +886,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
                   ]}
                   aria-label={t("Color by")}
                 />
-                {colorScheme === "attribute" && (
-                  <Select
-                    size="xs"
-                    w={180}
-                    allowDeselect={false}
-                    value={effectiveAttributeType}
-                    onChange={(v) => v && setColorAttributeType(v)}
-                    data={fanAttributeTypes.map((a) => ({ value: a.type, label: `${t(a.type)} (${a.count})` }))}
-                    placeholder={t("No attributes in this chart")}
-                    disabled={fanAttributeTypes.length === 0}
-                    aria-label={t("Attribute")}
-                  />
-                )}
+                {colorScheme === "attribute" && attributeTypeSelect}
                 <Checkbox
                   size="xs"
                   label={t("Show lifespan")}
@@ -924,16 +940,36 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
             </Group>
           ) : undefined
         ) : trees ? (
-          <Group justify="space-between" wrap="nowrap" gap="xs">
-            <Text size="xs" c="dimmed">
-              drag to pan · scroll to zoom · click a person for details ·{" "}
-              {manualExpandOnly ? "click + to reveal more, − to fold back" : "pan toward the edges to reveal more, or click + (− folds back)"}
-            </Text>
-            <DownloadImageButton
-              getSvg={() => treeChartRef.current?.getSvg() ?? null}
-              filename={`tree-chart-${(root?.label ?? "tree").replace(/[^\p{L}\p{N}]+/gu, "-")}`}
-            />
-          </Group>
+          <Stack gap={6}>
+            {personColoring && <ChartLegend entries={personColoring.legend} />}
+            <Group justify="space-between" wrap="nowrap" gap="xs">
+              <Text size="xs" c="dimmed">
+                drag to pan · scroll to zoom · click a person for details ·{" "}
+                {manualExpandOnly ? "click + to reveal more, − to fold back" : "pan toward the edges to reveal more, or click + (− folds back)"}
+              </Text>
+              <Group gap="sm" wrap="nowrap">
+                <Text size="xs" c="dimmed">{t("Color:")}</Text>
+                <Select
+                  size="xs"
+                  w={120}
+                  allowDeselect={false}
+                  value={treeColorScheme}
+                  onChange={(v) => v && setTreeColorScheme(v as "gender" | "tag" | "attribute")}
+                  data={[
+                    { value: "gender", label: t("Gender") },
+                    { value: "tag", label: t("Tag") },
+                    { value: "attribute", label: t("Attribute") },
+                  ]}
+                  aria-label={t("Color by")}
+                />
+                {treeColorScheme === "attribute" && attributeTypeSelect}
+                <DownloadImageButton
+                  getSvg={() => treeChartRef.current?.getSvg() ?? null}
+                  filename={`tree-chart-${(root?.label ?? "tree").replace(/[^\p{L}\p{N}]+/gu, "-")}`}
+                />
+              </Group>
+            </Group>
+          </Stack>
         ) : undefined
       }
     >
@@ -985,6 +1021,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           expandingKeys={expandingKeys}
           autoExpandEnabled={!manualExpandOnly}
           expandCenterHandle={expandCenterHandle}
+          personColoring={personColoring}
         />
       )}
       {selectedPerson && chartStyle !== "relationship" && (

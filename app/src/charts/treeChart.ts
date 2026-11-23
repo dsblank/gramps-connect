@@ -35,6 +35,7 @@ import { personThumbnailUrl, type TreeNode } from "../store/treeData";
 import { retryApiImageOnError } from "../store/apiImage";
 import { lifeEventDate } from "../store/lifeEventDates";
 import { GENDER_LABEL, genderAccent } from "./genderColors";
+import { NO_DATA_COLOR, type PersonColoring } from "./personColors";
 import { t } from "../i18n/i18n";
 
 const BOX_WIDTH = 190;
@@ -114,6 +115,9 @@ interface CoreOptions {
    * from `selectedHandle` so expanding a node re-centers on it without also
    * ringing it or opening its detail card. */
   centerHandle?: string | null;
+  /** "Color by tag/attribute" (charts/personColors.ts): colors the accent
+   * bar instead of gender, every person getting one. */
+  personColoring?: PersonColoring | null;
 }
 
 /** Lays out and draws one generation-tree (ancestors or descendants) into
@@ -131,7 +135,7 @@ function treeChartCore(
   svgParent: Selection<SVGGElement, undefined, null, undefined>,
   data: TreeNode,
   orientation: "LTR" | "RTL",
-  { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, onCollapse, centerHandle }: CoreOptions,
+  { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, onCollapse, centerHandle, personColoring }: CoreOptions,
 ): [number, number, number, number, number, { x: number; y: number } | null] {
   const root: HierarchyPointNode<TreeNode> = d3tree<TreeNode>()
     .nodeSize([BOX_HEIGHT + GAP_Y, BOX_WIDTH + GAP_X])
@@ -214,15 +218,22 @@ function treeChartCore(
   // edge once the box rect is drawn on top of it -- ported verbatim rather
   // than reinvented, since it's already the exact look this feature is
   // matching.
+  // With a person coloring active, the bar shows that instead, and every
+  // person gets one (grey when the scheme has nothing for them); the box
+  // body stays as it is, so photo and text keep their contrast.
+  const accentFor = (d: HierarchyPointNode<TreeNode>): string | null =>
+    personColoring
+      ? (personColoring.colorFor(d.data.person!) ?? NO_DATA_COLOR)
+      : genderAccent(d.data.person?.gender, dark);
   withPerson
-    .filter((d) => genderAccent(d.data.person?.gender, dark) !== null)
+    .filter((d) => accentFor(d) !== null)
     .append("rect")
     .attr("width", 24)
     .attr("height", BOX_HEIGHT - 1)
     .attr("rx", 12)
     .attr("ry", 12)
     .attr("transform", `translate(${-BOX_WIDTH / 2 - 4},${-BOX_HEIGHT / 2 + 0.5})`)
-    .attr("fill", (d) => genderAccent(d.data.person!.gender, dark)!);
+    .attr("fill", (d) => accentFor(d)!);
 
   withPerson
     .append("rect")
@@ -244,7 +255,9 @@ function treeChartCore(
     .text((d) => {
       const name = [d.data.nameGiven, d.data.nameSurname].filter(Boolean).join(" ") || "(unknown)";
       const gender = GENDER_LABEL[d.data.person!.gender];
-      return gender ? `${name} (${gender})` : name;
+      const base = gender ? `${name} (${gender})` : name;
+      const detail = personColoring?.detailFor(d.data.person!);
+      return detail ? `${base}\n${detail}` : base;
     });
 
   // Thumbnail: a plain <image> (preserveAspectRatio "slice", the SVG
@@ -487,6 +500,8 @@ export interface TreeChartOptions {
    * only on the render where the center target just changed, not on every
    * rebuild while it stays the same. */
   centerOnSelect?: boolean;
+  /** See CoreOptions' own doc comment -- threaded straight through. */
+  personColoring?: PersonColoring | null;
 }
 
 /** Draws both halves (descendants on the left, RTL, ancestors on the right,
@@ -498,7 +513,7 @@ export function renderTreeChart(
   descendantTree: TreeNode | null,
   {
     bboxWidth, bboxHeight, initialZoom, onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand,
-    onCollapse, centerHandle, centerOnSelect,
+    onCollapse, centerHandle, centerOnSelect, personColoring,
   }: TreeChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 13);
@@ -540,7 +555,9 @@ export function renderTreeChart(
   // unlike treeChartCore's own return value) -- null if there's no
   // `centerHandle`, or it isn't in either currently-loaded half.
   let centerAbsPos: { x: number; y: number } | null = null;
-  const coreOptions: CoreOptions = { onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, onCollapse, centerHandle };
+  const coreOptions: CoreOptions = {
+    onSelectPerson, selectedHandle, dark, token, expandingKeys, onExpand, onCollapse, centerHandle, personColoring,
+  };
 
   if (descendantTree) {
     const chartD = chartContent.append("g");

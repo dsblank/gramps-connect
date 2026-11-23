@@ -3,6 +3,7 @@ import { zoomTransform, type ZoomTransform } from "d3-zoom";
 import { ActionIcon, Tooltip } from "@mantine/core";
 import { renderFanChart, resetFanRotation, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
 import type { PersonColoring } from "../../charts/personColors";
+import { setExportLegend } from "../../store/chartExport/legend";
 import { t } from "../../i18n/i18n";
 import type { TreeNode } from "../../store/treeData";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
@@ -131,6 +132,7 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
       centerHandle: selectedHandle,
       centerOnSelect: justSelected && !shouldFit,
     });
+    setExportLegend(svg, personColoring?.legend);
     container.replaceChildren(svg);
   }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, personColoring, flipLabels, displayVersion]);
 

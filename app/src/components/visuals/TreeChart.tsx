@@ -3,6 +3,8 @@ import { useComputedColorScheme } from "@mantine/core";
 import { zoomTransform, type ZoomTransform } from "d3-zoom";
 import { renderTreeChart } from "../../charts/treeChart";
 import type { TreeNode } from "../../store/treeData";
+import type { PersonColoring } from "../../charts/personColors";
+import { setExportLegend } from "../../store/chartExport/legend";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
 
 /** Auto-expand-on-reveal won't fire until a boundary marker has been
@@ -57,6 +59,8 @@ interface TreeChartProps {
    * node the user just expanded stays where they were looking instead of
    * drifting as new boxes appear around it. `null` once nothing's pending. */
   expandCenterHandle: string | null;
+  /** "Color by tag/attribute" (charts/personColors.ts); null for gender. */
+  personColoring?: PersonColoring | null;
 }
 
 /** Same escape hatch as FanChart.tsx's own FanChartHandle -- the live
@@ -75,7 +79,7 @@ export interface TreeChartHandle {
  * `dark` (see its own `seriesColor(dark)`). */
 export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function TreeChart({
   ancestorTree, descendantTree, selectedHandle, onSelectPerson, token, onExpand, onCollapse, expandingKeys,
-  autoExpandEnabled, expandCenterHandle,
+  autoExpandEnabled, expandCenterHandle, personColoring,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(ref, () => ({
@@ -142,7 +146,9 @@ export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function Tr
       onCollapse,
       centerHandle,
       centerOnSelect: centerHandle !== null,
+      personColoring,
     });
+    setExportLegend(svg, personColoring?.legend);
     container.replaceChildren(svg);
 
     // Auto-expand-on-reveal: watches every boundary marker
@@ -191,7 +197,7 @@ export const TreeChart = forwardRef<TreeChartHandle, TreeChartProps>(function Tr
     return () => io.disconnect();
   }, [
     ancestorTree, descendantTree, size.width, size.height, selectedHandle, onSelectPerson, dark, token, onExpand,
-    onCollapse, expandingKeys, autoExpandEnabled, expandCenterHandle, displayVersion,
+    onCollapse, expandingKeys, autoExpandEnabled, expandCenterHandle, displayVersion, personColoring,
   ]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;

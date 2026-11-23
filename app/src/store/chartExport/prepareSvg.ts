@@ -19,6 +19,7 @@
 // An SVG without `data-export-content` can still be exported, just only
 // as "current view".
 import { apiFetch } from "../apiFetch";
+import { drawLegend, exportLegendOf, layoutLegend, type LegendLayout } from "./legend";
 
 export type ExportArea = "whole" | "view";
 /** "light" renders with the light theme's colors whatever the app is
@@ -138,9 +139,25 @@ export function measureWholeChart(svg: SVGSVGElement, keepRotation: boolean): DO
   }
 }
 
+/** The chart's color legend (legend.ts) laid out for a frame `width`
+ * wide, inset by the whole-chart margin on each side; null if the chart
+ * has none. */
+function legendLayoutFor(svg: SVGSVGElement, width: number): LegendLayout | null {
+  const entries = exportLegendOf(svg);
+  return entries ? layoutLegend(entries, Math.max(1, width - 2 * WHOLE_CHART_MARGIN)) : null;
+}
+
 /** The export frame for `area`, without building anything -- what the
- * dialog's size readout uses. */
+ * dialog's size readout uses. Includes the legend band below the chart,
+ * when the chart has a legend. */
 export function measureExportFrame(svg: SVGSVGElement, area: ExportArea, keepRotation: boolean): DOMRect | null {
+  const frame = measureChartFrame(svg, area, keepRotation);
+  if (!frame) return null;
+  const legend = legendLayoutFor(svg, frame.width);
+  return legend ? new DOMRect(frame.x, frame.y, frame.width, frame.height + legend.height) : frame;
+}
+
+function measureChartFrame(svg: SVGSVGElement, area: ExportArea, keepRotation: boolean): DOMRect | null {
   if (area === "whole") return measureWholeChart(svg, keepRotation);
   // The live chart's own viewBox *is* the current view (both charts offset
   // it so content (0,0) lands mid-panel) -- reuse it as is.
@@ -271,6 +288,9 @@ export async function prepareExportSvg(live: SVGSVGElement, options: PrepareOpti
   svg.setAttribute("width", String(frame.width));
   svg.setAttribute("height", String(frame.height));
   svg.removeAttribute("style");
+
+  const legend = legendLayoutFor(live, frame.width);
+  if (legend) drawLegend(svg, legend, frame.x + WHOLE_CHART_MARGIN, frame.y + frame.height - legend.height);
 
   const backgroundColor = bakeCustomProperties(svg, options.colors);
   if (options.background) {

@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { addXlinkHrefs, rasterSize } from "../store/chartExport/exportChart";
 import { layoutOnPage } from "../store/chartExport/paperSizes";
 import { pdfFontsCover } from "../store/chartExport/pdfFonts";
-import { exportTransformOf, prepareExportSvg } from "../store/chartExport/prepareSvg";
+import { exportTransformOf, measureExportFrame, prepareExportSvg } from "../store/chartExport/prepareSvg";
+import { layoutLegend, setExportLegend } from "../store/chartExport/legend";
 import { renderFanChart } from "../charts/fanChart";
 
 describe("layoutOnPage", () => {
@@ -158,6 +159,53 @@ describe("prepareExportSvg", () => {
     expect(opaque.svg.querySelector(":scope > rect")).not.toBeNull();
     const clear = await prepareExportSvg(liveChart(), { area: "whole", colors: "current", keepRotation: true, background: false });
     expect(clear.svg.querySelector(":scope > rect")).toBeNull();
+  });
+});
+
+describe("export legend", () => {
+  const entries = [
+    { color: "#ff0000", label: "ToDo", count: 3 },
+    { color: "#00ff00", label: "Brick wall", count: 1 },
+    { color: "#c9c2b3", label: "No tag", count: 40 },
+  ];
+
+  it("wraps entries onto new rows when the frame is narrow", () => {
+    const wide = layoutLegend(entries, 1000);
+    expect(new Set(wide.items.map((i) => i.y)).size).toBe(1);
+    const narrow = layoutLegend(entries, 90);
+    expect(new Set(narrow.items.map((i) => i.y)).size).toBe(3);
+    expect(narrow.height).toBeGreaterThan(wide.height);
+    expect(layoutLegend([], 500).height).toBe(0);
+  });
+
+  it("adds a band under the chart, counted in the frame and the dialog's size", async () => {
+    const live = liveChart();
+    setExportLegend(live, entries);
+    const band = layoutLegend(entries, 232 - 32).height;
+    expect(measureExportFrame(live, "whole", true)!.height).toBe(192 + band);
+    const { svg, height } = await prepareExportSvg(live, {
+      area: "whole", colors: "current", keepRotation: true, background: true,
+    });
+    expect(height).toBe(192 + band);
+    expect(svg.getAttribute("viewBox")).toBe(`-116 -96 232 ${192 + band}`);
+    const legend = svg.querySelector(".export-legend")!;
+    expect([...legend.querySelectorAll("text")].map((t) => t.textContent)).toEqual(["ToDo  3", "Brick wall  1", "No tag  40"]);
+    expect(legend.querySelector("rect")!.getAttribute("fill")).toBe("#ff0000");
+    // Text color is baked like the rest of the chart.
+    expect(legend.innerHTML).not.toContain("var(");
+    // Starts below the chart's own frame (frame bottom = -96 + 192).
+    expect(Number(legend.querySelector("rect")!.getAttribute("y"))).toBeGreaterThan(96);
+  });
+
+  it("adds nothing once the legend is cleared", async () => {
+    const live = liveChart();
+    setExportLegend(live, entries);
+    setExportLegend(live, null);
+    const { svg, height } = await prepareExportSvg(live, {
+      area: "whole", colors: "current", keepRotation: true, background: true,
+    });
+    expect(height).toBe(192);
+    expect(svg.querySelector(".export-legend")).toBeNull();
   });
 });
 
