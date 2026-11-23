@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { getToken, hasPermissions } from "../../../auth/auth";
 import { confirmDialog } from "../../../store/confirmDialog";
-import { detachRefListEntry } from "../../../store/refListApi";
+import { notifications } from "@mantine/notifications";
+import { detachRefListEntry, moveRefListEntry } from "../../../store/refListApi";
+import { SortableList, useOptimisticOrder } from "../../SortableList";
 import { generateStory, STORY_SOURCE_VIEWS, STORY_TYPE } from "../../../store/storyApi";
 import type { StoryOptions, StorySpec } from "../../../store/storyBuilder";
 import { TOPIC_TYPE } from "../../../store/topicsApi";
@@ -113,9 +115,15 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
   const rows = zipHandles<RawNote>(detail.note_list, detail.extended?.notes);
   const isTopic = (target: RawNote) => target?.type === TOPIC_TYPE;
   const isStory = (target: RawNote) => target?.type === STORY_TYPE;
-  const noteRows = rows.filter(({ target }) => !isTopic(target) && !isStory(target));
-  const topicRows = rows.filter(({ target }) => isTopic(target));
-  const storyRows = rows.filter(({ target }) => isStory(target));
+  // Each sub-list is reordered on its own, shown in its new order straight
+  // after a drop until the refetch catches up (as in ChildrenSection).
+  const noteOrder = useOptimisticOrder(rows.filter(({ target }) => !isTopic(target) && !isStory(target)), detail);
+  const topicOrder = useOptimisticOrder(rows.filter(({ target }) => isTopic(target)), detail);
+  const storyOrder = useOptimisticOrder(rows.filter(({ target }) => isStory(target)), detail);
+  const noteRows = noteOrder.rows;
+  const topicRows = topicOrder.rows;
+  const storyRows = storyOrder.rows;
+  const [moving, setMoving] = useState(false);
   // "+ Add a story" only offered where there's a seeding rule -- same
   // reasoning AddStoryControl's own internal gate has, kept here too so the
   // Stories SectionShell itself doesn't render empty for every other type.
@@ -141,6 +149,34 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
     onRefetch?.();
   }
 
+  // A drop within one sub-list moves that note to where the note it was
+  // dropped on sits in the record's whole note_list (notes, discussions and
+  // stories share it), so the other sub-lists keep their places. One PUT,
+  // so one undoable change in the record's History.
+  async function handleMove(order: typeof noteOrder, from: number, to: number) {
+    if (moving) return;
+    const noteList = (detail.note_list as string[] | undefined) ?? [];
+    const handle = order.rows[from].handle;
+    const fullFrom = noteList.indexOf(handle);
+    const fullTo = noteList.indexOf(order.rows[to].handle);
+    order.move(from, to);
+    setMoving(true);
+    try {
+      const token = await getToken();
+      await moveRefListEntry(token, view, detail.handle, "note_list", fullFrom, fullTo, handle);
+      onRefetch?.();
+    } catch (err) {
+      order.revert();
+      notifications.show({
+        color: "red",
+        title: t("Couldn't change the order of the notes"),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setMoving(false);
+    }
+  }
+
   return (
     <>
       {(noteRows.length > 0 || canAttach) && (
@@ -158,36 +194,54 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
             />
           )}
         >
-          {noteRows.map(({ handle, target }) => (
-            <RefRow
-              key={handle}
-              type="note"
-              handle={handle}
-              obj={target}
-              onNavigate={onNavigate}
-              onRemove={canAttach ? () => handleRemove(handle, target, "note") : undefined}
-            />
-          ))}
+          <SortableList
+            keys={noteRows.map((r) => r.handle)}
+            onMove={(from, to) => handleMove(noteOrder, from, to)}
+            disabled={!canAttach}
+            gap="var(--mantine-spacing-sm)"
+            renderItem={(i, grip) => {
+              const { handle, target } = noteRows[i];
+              return (
+                <RefRow
+                  type="note"
+                  handle={handle}
+                  obj={target}
+                  grip={grip}
+                  onNavigate={onNavigate}
+                  onRemove={canAttach ? () => handleRemove(handle, target, "note") : undefined}
+                />
+              );
+            }}
+          />
         </SectionShell>
       )}
       {topicRows.length > 0 && (
         <SectionShell label={t("Discussions")}>
-          {topicRows.map(({ handle, target }) => (
-            <RefRow
-              key={handle}
-              type="topics"
-              handle={handle}
-              obj={target}
-              label={summaryLine("topics", target)}
-              onNavigate={onNavigate}
-              // Opens a FloatingTopicWindow instead of navigating/sub-
-              // selecting -- a topic is a live conversation you want to
-              // keep chatting in without losing this record off screen,
-              // not a page to drill into.
-              onClick={() => openTopicWindow(handle)}
-              onRemove={canAttach ? () => handleRemove(handle, target, "topics") : undefined}
-            />
-          ))}
+          <SortableList
+            keys={topicRows.map((r) => r.handle)}
+            onMove={(from, to) => handleMove(topicOrder, from, to)}
+            disabled={!canAttach}
+            gap="var(--mantine-spacing-sm)"
+            renderItem={(i, grip) => {
+              const { handle, target } = topicRows[i];
+              return (
+                <RefRow
+                  type="topics"
+                  handle={handle}
+                  obj={target}
+                  label={summaryLine("topics", target)}
+                  grip={grip}
+                  onNavigate={onNavigate}
+                  // Opens a FloatingTopicWindow instead of navigating/sub-
+                  // selecting -- a topic is a live conversation you want to
+                  // keep chatting in without losing this record off screen,
+                  // not a page to drill into.
+                  onClick={() => openTopicWindow(handle)}
+                  onRemove={canAttach ? () => handleRemove(handle, target, "topics") : undefined}
+                />
+              );
+            }}
+          />
         </SectionShell>
       )}
       {(storyRows.length > 0 || canAddStory) && (
@@ -197,17 +251,26 @@ export function NotesSection({ view, detail, onNavigate, onRefetch }: SectionPro
             <AddStoryControl view={view} detail={detail} onAttached={() => onRefetch?.()} />
           )}
         >
-          {storyRows.map(({ handle, target }) => (
-            <RefRow
-              key={handle}
-              type="story"
-              handle={handle}
-              obj={target}
-              label={summaryLine("story", target)}
-              onNavigate={onNavigate}
-              onRemove={canAttach ? () => handleRemove(handle, target, "story") : undefined}
-            />
-          ))}
+          <SortableList
+            keys={storyRows.map((r) => r.handle)}
+            onMove={(from, to) => handleMove(storyOrder, from, to)}
+            disabled={!canAttach}
+            gap="var(--mantine-spacing-sm)"
+            renderItem={(i, grip) => {
+              const { handle, target } = storyRows[i];
+              return (
+                <RefRow
+                  type="story"
+                  handle={handle}
+                  obj={target}
+                  label={summaryLine("story", target)}
+                  grip={grip}
+                  onNavigate={onNavigate}
+                  onRemove={canAttach ? () => handleRemove(handle, target, "story") : undefined}
+                />
+              );
+            }}
+          />
         </SectionShell>
       )}
     </>
