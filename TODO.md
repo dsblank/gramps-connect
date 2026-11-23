@@ -300,6 +300,12 @@ runs in multi-tree mode like every deployment. Still open:
 
 Roughly by value, most first:
 
+- **One-file complete backup** — Make Backup… today makes a `.gramps`
+  file plus optional media `.zip` and browser-settings `.json`; the
+  tree's Preferences (`/api/trees/-/config`: display formats, citation
+  templates) are in no download at all. A single archive holding the
+  tree, its media and its config, which Restore from Backup also reads,
+  would make a backup one step and one file.
 - **DNA support** — `/people/<handle>/dna/matches` (which since 3.26
   returns each match's relationship `distance`, #1182), `/ydna`,
   `/parsers/dna-match` on the API side; `gramps-web` has a match list,

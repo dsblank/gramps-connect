@@ -6,14 +6,12 @@ import { useState } from "react";
 import { Alert, Button, FileButton, Group, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { t } from "../i18n/i18n";
-import { clickDownloadLink } from "../store/downloadFile";
+import { downloadLocalSettings } from "../store/downloadLocalSettings";
 import {
-  exportLocalSettings,
   importLocalSettings,
   parseSettingsFile,
   resetLocalSettings,
   SettingsFileInvalid,
-  settingsFileName,
   type SettingsFileError,
 } from "../store/localSettings";
 
@@ -26,18 +24,6 @@ const FILE_ERRORS: Record<SettingsFileError, string> = {
 type Pending =
   | { kind: "load"; settings: Record<string, string>; skipped: number }
   | { kind: "reset" };
-
-function download() {
-  try {
-    const json = JSON.stringify(exportLocalSettings(), null, 2);
-    const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
-    clickDownloadLink(url, settingsFileName());
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  } catch (err) {
-    console.error("settings download failed", err);
-    notifications.show({ color: "red", message: t("Couldn't read the settings stored in this browser.") });
-  }
-}
 
 export function LocalSettingsSection() {
   const [pending, setPending] = useState<Pending | null>(null);
@@ -74,7 +60,7 @@ export function LocalSettingsSection() {
         {t("Save these settings to a file, load them in another browser, or go back to the defaults. Your layout, window positions, search sites, home person and drafts are included; your sign-in, Visited history and the family tree's own preferences are not.")}
       </Text>
       <Group gap="xs" mt={4}>
-        <Button variant="default" size="xs" onClick={download}>
+        <Button variant="default" size="xs" onClick={downloadLocalSettings}>
           {t("Download settings")}
         </Button>
         <FileButton onChange={chooseFile} accept=".json,application/json">

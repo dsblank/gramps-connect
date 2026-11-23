@@ -21,13 +21,11 @@ import {
   initialToggleValues,
   listExporters,
   LIVING_MODES,
-  runExport,
   togglesFor,
   type ExporterSummary,
 } from "../store/exportersApi";
-import { exportLabel, stripMnemonic } from "../store/jobsPromote";
-import { deliverJob, trackJob } from "../store/jobsPoll";
-import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
+import { stripMnemonic } from "../store/jobsPromote";
+import { startTreeExport } from "../store/startExport";
 import { t } from "../i18n/i18n";
 
 type Stage = "loading" | "ready" | "error";
@@ -118,36 +116,12 @@ export function ExportDialog({ opened, onClose }: ExportDialogProps) {
     setToggles((prev) => ({ ...prev, [key]: value }));
   }
 
-  /** Dispatches the export and closes immediately, for exactly the reasons
-   * ReportDialog.handleGenerate does (see its comment): with a Celery
-   * broker the POST returns a task id at once and trackJob() does the
-   * waiting; without one, run_task() runs the export inline and the POST
-   * doesn't return until the file exists -- so awaiting it here would pin
-   * a spinner to the dialog for the whole export of the tree. Either way
-   * the request outlives the dialog and the toasts report how it went. */
+  /** Starts the export and closes at once -- see startTreeExport() on why
+   * the request isn't awaited here. */
   function handleExport() {
     if (!exporter) return;
-    const { name } = exporter;
-    const params = exportQueryParams(extension, { toggles, living, yearsAfterDeath });
-    const desc = exportLabel(name);
     onClose();
-    notifyJobStarted("export", stripMnemonic(name));
-
-    (async () => {
-      const token = await getToken();
-      const result = await runExport(token, extension, params);
-      if (result.kind === "task") {
-        // trackJob() polls, promotes and toasts on its own, and is
-        // deliberately not awaited (see its doc comment).
-        trackJob(result.taskId, "export", jobsPollCallbacks, desc);
-        return;
-      }
-      // Ran inline, so the finished file is already there -- same
-      // delivery, just with no task to watch first.
-      await deliverJob(token, "export", result.url, desc, result.messages, jobsPollCallbacks);
-    })().catch((err: any) => {
-      jobsPollCallbacks.onFailed("export", err.message ?? String(err));
-    });
+    startTreeExport(extension, exporter.name, exportQueryParams(extension, { toggles, living, yearsAfterDeath }));
   }
 
   return (

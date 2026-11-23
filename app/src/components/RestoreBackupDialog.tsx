@@ -127,6 +127,9 @@ export function RestoreBackupDialog({ opened, onClose }: RestoreBackupDialogProp
               <Alert color="red" title={t("This replaces the entire tree")}>
                 {t("Restoring resets this family tree to exactly match the uploaded backup: anything not in the backup is deleted. There is no undo.")}
               </Alert>
+              <Text size="sm" c="dimmed">
+                {t("Backup files come from Family Trees → Make Backup…. The .gramps file holds the tree's records only; media files are restored separately with Family Trees → Import → Media….")}
+              </Text>
               <FileButton onChange={setFile} accept=".gramps">
                 {(props) => (
                   <Button {...props} variant="light">{t("Choose backup file (.gramps)")}</Button>

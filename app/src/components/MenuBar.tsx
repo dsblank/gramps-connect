@@ -12,6 +12,7 @@ import { ReindexDialog } from "./ReindexDialog";
 import { PlaceLanguageRepairDialog } from "./PlaceLanguageRepairDialog";
 import { ConfirmTaskDialog } from "./ConfirmTaskDialog";
 import { RestoreBackupDialog } from "./RestoreBackupDialog";
+import { MakeBackupDialog } from "./MakeBackupDialog";
 import { checkRepairDatabase, upgradeSchema } from "../store/toolsApi";
 import { SystemInfoDialog } from "./SystemInfoDialog";
 import { ResearcherDialog } from "./ResearcherDialog";
@@ -23,11 +24,8 @@ import { BLOG_VIEW, GENERATED_VIEW, STORY_VIEW, TOPICS_VIEW } from "../store/vie
 import { DISCUSSION_FORUM_URL } from "../config";
 import { listReports, REPORT_CATEGORIES, type ReportSummary } from "../store/reportsApi";
 import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type UseDraftStack } from "../store/draftStack";
-import { runMediaExport } from "../store/mediaExportApi";
+import { startMediaExport } from "../store/startExport";
 import { pickAndAddMedia } from "../store/addMedia";
-import { exportLabel, downloadArchiveLocally } from "../store/jobsPromote";
-import { trackJob } from "../store/jobsPoll";
-import { jobsPollCallbacks, notifyJobStarted } from "../store/jobsCallbacks";
 import { fetchGramplets, GRAMPLET_AUTHOR_PERMISSION } from "../pyodidePoc/grampletMedia";
 import { grampletMenuGroups } from "../pyodidePoc/grampletMenu";
 import {
@@ -272,33 +270,6 @@ function goToHomePersonGraphs() {
     : formatHash({ viewKey: "tree", handle: null });
 }
 
-/** Export -> Media…: unlike the Family Tree export, there's no format or
- * option to pick -- one archive, every Media file the caller may see -- so
- * this dispatches straight from the menu instead of opening a dialog first.
- * Otherwise the same fire-and-forget pipeline as ExportDialog's
- * handleExport: the POST returns fast either way (a task id to poll, or --
- * no Celery broker -- the finished archive already sitting there). The
- * result is never promoted into the tree as Media, unlike every other job
- * kind -- see jobsPromote.ts's downloadArchiveLocally doc comment on why a
- * copy of the tree's whole media collection has no business being stored
- * *in* the tree a second time -- it goes straight to the user's disk. */
-function handleExportMedia() {
-  const desc = exportLabel("Media");
-  notifyJobStarted("export", "Media");
-
-  (async () => {
-    const token = await getToken();
-    const result = await runMediaExport(token);
-    if (result.kind === "task") {
-      trackJob(result.taskId, "export", jobsPollCallbacks, desc);
-      return;
-    }
-    if (await downloadArchiveLocally(token, result.url, desc)) jobsPollCallbacks.onDownloaded(desc, "export", []);
-  })().catch((err: any) => {
-    jobsPollCallbacks.onFailed("export", err.message ?? String(err));
-  });
-}
-
 /** The desktop-Gramps-style menu bar, following ~/gramps/gramps'
  * viewmanager.py menu layout and order. Only the menus with something in
  * them are shown: desktop Gramps' Edit and Tools are left out until they
@@ -345,6 +316,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
   const [checkRepairOpened, setCheckRepairOpened] = useState(false);
   const [upgradeSchemaOpened, setUpgradeSchemaOpened] = useState(false);
   const [restoreOpened, setRestoreOpened] = useState(false);
+  const [backupOpened, setBackupOpened] = useState(false);
 
   // App.tsx mounts a second MenuBar when the header switches layouts, so
   // the fetch is deduplicated in loadReports() and only its result is
@@ -442,14 +414,19 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
               perm: PERM_EDIT_OBJ,
               children: [
                 { label: "Family Tree…", onClick: () => setExportOpened(true) },
-                { label: "Media…", onClick: handleExportMedia },
+                { label: "Media…", onClick: startMediaExport },
               ],
+            },
+            {
+              label: "Make Backup…",
+              perm: PERM_EDIT_OBJ,
+              onClick: () => setBackupOpened(true),
+              separatorBefore: true,
             },
             {
               label: "Restore from Backup…",
               perm: [PERM_IMPORT_FILE, PERM_DEL_OBJ_BATCH],
               onClick: () => setRestoreOpened(true),
-              separatorBefore: true,
               danger: true,
             },
           ]}
@@ -672,6 +649,7 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
         successMessage={t("Schema upgrade completed.")}
         run={upgradeSchema}
       />
+      <MakeBackupDialog opened={backupOpened} onClose={() => setBackupOpened(false)} />
       <RestoreBackupDialog opened={restoreOpened} onClose={() => setRestoreOpened(false)} />
       <ReportDialog reportId={reportId} onClose={() => setReportId(null)} />
       <SystemInfoDialog opened={systemInfoOpened} onClose={() => setSystemInfoOpened(false)} />
