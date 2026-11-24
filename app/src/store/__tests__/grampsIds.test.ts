@@ -75,3 +75,17 @@ describe("assignGrampsIds", () => {
     expect(assigned).toBe(0);
   });
 });
+
+describe("built-in fallback", () => {
+  it("numbers types with no template from Gramps' own templates when asked, and the tree's own still win", async () => {
+    templates = { person: "", note: "Note-%03d" };
+    cachedIds.person = ["I0007"];
+    onServer.add("I0008");
+    const objects = [{ _class: "Person" }, { _class: "Note" }, { _class: "Event", gramps_id: "E5" }];
+    const without = await assignGrampsIds("tok", objects);
+    expect(without.objects.map((o) => o.gramps_id)).toEqual([undefined, "Note-000", "E5"]);
+    const withFallback = await assignGrampsIds("tok", objects, { builtInFallback: true });
+    expect(withFallback.objects.map((o) => o.gramps_id)).toEqual(["I0009", "Note-000", "E5"]);
+    expect(withFallback.assigned).toBe(2);
+  });
+});

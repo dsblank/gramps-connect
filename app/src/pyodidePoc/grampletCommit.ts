@@ -6,11 +6,9 @@
 // since the Gramplet read it -- instead of overwriting their edit. The
 // endpoint doesn't validate objects, which is why the worker checks each one
 // against its Gramps schema before it gets here.
-import { getToken, hasPermissions } from "../auth/auth";
-import { API_BASE } from "../config";
-import { parseErrorMessage } from "../store/api";
+import { hasPermissions } from "../auth/auth";
+import { postTransaction } from "../store/transactionsApi";
 import type { TransactionItem } from "./types";
-import { apiFetch } from "../store/apiFetch";
 
 /** /api/transactions/ needs all three, i.e. Editor and above. */
 export const CHANGE_DATA_PERMISSIONS = ["AddObject", "EditObject", "DeleteObject"];
@@ -26,27 +24,9 @@ export interface CommittedGroup {
   transaction: TransactionItem[];
 }
 
-async function postTransaction(query: string, items: TransactionItem[]): Promise<TransactionItem[]> {
-  const token = await getToken();
-  const res = await apiFetch(`${API_BASE}/api/transactions/?${query}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(items),
-  });
-  if (!res.ok) {
-    const message = await parseErrorMessage(res);
-    // apply_transactions()'s own wording for a failed `old` check.
-    if (message === "Object has changed") {
-      throw new Error("One of these records was changed by someone else since it was read.");
-    }
-    throw new Error(message);
-  }
-  return (await res.json()) as TransactionItem[];
-}
-
 export async function commitChangeGroup(message: string, items: TransactionItem[]): Promise<CommittedGroup> {
   if (!canChangeData()) throw new Error("Saving changes needs Editor rights or above.");
-  const transaction = await postTransaction(`message=${encodeURIComponent(message)}`, items);
+  const transaction = await postTransaction(items, { message });
   return { message, transaction };
 }
 
@@ -57,7 +37,7 @@ export async function undoCommittedGroups(groups: CommittedGroup[]): Promise<voi
   const reversed = [...groups].reverse();
   for (const [i, group] of reversed.entries()) {
     try {
-      await postTransaction(`undo=true&message=${encodeURIComponent(`Undo: ${group.message}`)}`, group.transaction);
+      await postTransaction(group.transaction, { undo: true, message: `Undo: ${group.message}` });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       throw new Error(i === 0 ? reason : `Undid ${i} of ${reversed.length} groups, then: ${reason}`);

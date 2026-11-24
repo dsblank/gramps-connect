@@ -79,16 +79,37 @@ async function existsOnServer(token: string, type: IdType, id: string): Promise<
 
 const MAX_SERVER_CHECKS = 50;
 
+/** Gramps' own default ID templates (gramps.ini preferences.*prefix), for
+ * writes that must carry an ID themselves: POST /api/transactions/ stores
+ * records as sent and refuses a new one without a gramps_id. */
+export const BUILT_IN_ID_TEMPLATES: Record<IdType, string> = {
+  person: "I%04d",
+  family: "F%04d",
+  event: "E%04d",
+  place: "P%04d",
+  source: "S%04d",
+  citation: "C%04d",
+  repository: "R%04d",
+  media: "O%04d",
+  note: "N%04d",
+};
+
 /** Copies of `objects` with a gramps_id filled in wherever the object has
  * none and its type has a template. Objects that already carry a
  * gramps_id, or whose type has no template, pass through unchanged (the
  * server numbers the latter with Gramps' built-in I%04d-style templates).
+ * With `builtInFallback`, a type with no template gets an ID from those
+ * built-in templates here instead (for writes the server won't number).
  * `assigned` reports what was filled in. */
 export async function assignGrampsIds(
   token: string,
   objects: Record<string, unknown>[],
+  options: { builtInFallback?: boolean } = {},
 ): Promise<{ objects: Record<string, unknown>[]; assigned: number }> {
-  const templates = getDisplaySettings().ids;
+  const own = getDisplaySettings().ids;
+  const templates = options.builtInFallback
+    ? (Object.fromEntries(Object.entries(BUILT_IN_ID_TEMPLATES).map(([t, built]) => [t, own[t as IdType] || built])) as typeof own)
+    : own;
   const next = new Map<IdType, number>();
   let assigned = 0;
   const result: Record<string, unknown>[] = [];
