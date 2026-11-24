@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Alert, Box, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
+import { Alert, Box, Button, Group, Loader, ScrollArea, Stack, Text, Title, Tooltip, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
+import { BOARD_KEY, formatHash } from "../hash";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { fetchObjectExtended, getCachedObjectDetail, setCachedObjectDetail, zipRefs } from "../store/objectDetail";
 import type { ObjectDetail } from "../store/objectDetail";
@@ -611,6 +612,11 @@ export function RelatedPanel({
             <EditTopicButton detail={detail} onSaved={() => setRefetchNonce((n) => n + 1)} />
           )}
           {view.key === "story" && <StoryActions detail={detail} />}
+          {view.key === "casefile" && (
+            <Button size="xs" component="a" href={formatHash({ viewKey: BOARD_KEY, handle: detail.handle })}>
+              {t("Open the board")}
+            </Button>
+          )}
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}
           {view.key === "media" && (
             <>

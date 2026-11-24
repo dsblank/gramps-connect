@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatHash, HOME_KEY, isForeignRoute, isStorelessKey, isVisualKey, parseHash, type VisualSubject } from "../hash";
+import { BOARD_KEY, formatHash, HOME_KEY, isBoardKey, isForeignRoute, isStorelessKey, isVisualKey, parseHash, type VisualSubject } from "../hash";
 import { getViewStore } from "../store/registry";
 import { VIEWS } from "../store/views";
 import { useViewStore } from "./useViewStore";
@@ -61,6 +61,12 @@ export function useHistorySync(): {
    * ForeignTreeDialog) rather than applied; cleared by dismissForeignTree. */
   foreignTree: ForeignTreeLink | null;
   dismissForeignTree: () => void;
+  /** The case the Evidence Board shows (a case-file Note handle, or
+   * "new-<id>"), or null when the board isn't the active route. */
+  boardCase: string | null;
+  /** Points the board's route at another case without a history step --
+   * for a new case's first Save, which gives it a real handle. */
+  replaceBoardCase: (handle: string) => void;
 } {
   const [activeKey, setActiveKey] = useState(() => readLocalRoute().viewKey);
   const [foreignTree, setForeignTree] = useState<ForeignTreeLink | null>(readForeign);
@@ -72,6 +78,11 @@ export function useHistorySync(): {
   // *from*: without it, that effect would reformat a scoped visual route as
   // its bare "#/map" self and immediately throw the scope away again.
   const [visualSubject, setVisualSubject] = useState<VisualSubject | null>(() => readLocalRoute().subject);
+  // Mirrors the board route's case, for the same reason as visualSubject.
+  const [boardCase, setBoardCase] = useState<string | null>(() => {
+    const route = readLocalRoute();
+    return isBoardKey(route.viewKey) ? route.handle : null;
+  });
   // A visual page (#/map, #/timeline) or Home (#/home) is a route but not a
   // view: it has no store, so there's no snapshot to sync and
   // getViewStore() would throw on its key. Subscribe to the first view
@@ -106,6 +117,7 @@ export function useHistorySync(): {
         const { viewKey, handle, subject } = route;
         setActiveKey(viewKey);
         setVisualSubject(subject);
+        setBoardCase(isBoardKey(viewKey) ? handle : null);
         if (isStorelessKey(viewKey)) return; // nothing to select -- see `noStore` above
         const store = getViewStore(viewKey);
         if (handle) {
@@ -150,7 +162,7 @@ export function useHistorySync(): {
       // A visual or Home page carries no handle, and the snapshot read here
       // is some other view's (see `noStore` above) -- appending its
       // selection would make up a route that doesn't exist.
-      handle: noStore || activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle,
+      handle: isBoardKey(activeKey) ? boardCase : noStore || activeSnapshot.selectionIsDefault ? null : activeSnapshot.selectedHandle,
       // ...a visual carries a subject instead, and only while it's the
       // active route: a stale subject left over from a visual would
       // otherwise be formatted onto an ordinary view's hash, where
@@ -180,7 +192,7 @@ export function useHistorySync(): {
     // derived read: clicking the very row that was already auto-selected
     // leaves selectedHandle unchanged and only flips this flag -- which is
     // exactly the moment that handle has to start appearing in the hash.
-  }, [visual, noStore, visualSubject, activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
+  }, [visual, noStore, visualSubject, boardCase, activeKey, activeSnapshot.selectedHandle, activeSnapshot.selectionIsDefault]);
 
   // A record the user picked (a row click, Back/Forward onto it, a link
   // to it), never a view's automatic first-row selection -- the same rule
@@ -213,6 +225,12 @@ export function useHistorySync(): {
   useEffect(() => installActivityAwayTracking(), []);
 
   const dismissForeignTree = useCallback(() => setForeignTree(null), []);
+  const replaceBoardCase = useCallback((handle: string) => {
+    const next = formatHash({ viewKey: BOARD_KEY, handle });
+    lastLocalHash.current = next;
+    window.history.replaceState(window.history.state, "", next);
+    setBoardCase(handle);
+  }, []);
 
-  return { activeKey, setActiveKey, visualSubject, foreignTree, dismissForeignTree };
+  return { activeKey, setActiveKey, visualSubject, foreignTree, dismissForeignTree, boardCase, replaceBoardCase };
 }

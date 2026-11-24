@@ -130,11 +130,27 @@ export function isHomeKey(key: string): boolean {
   return key === HOME_KEY;
 }
 
+/** The Evidence Board (components/board/BoardView.tsx): a page of its own
+ * like a visual, with no ViewConfig/store, but carrying the case it shows
+ * instead of a subject: "#/board/<case-file Note handle>", or
+ * "#/board/new-<id>" for a case not saved yet (its id keys the unsaved
+ * draft kept in this browser, so a reload reopens the same board). */
+export const BOARD_KEY = "board";
+
+export function isBoardKey(key: string): boolean {
+  return key === BOARD_KEY;
+}
+
+/** A not-yet-saved case's route handle, "new-<id>". */
+export function isNewBoardHandle(handle: string): boolean {
+  return handle.startsWith("new-");
+}
+
 /** Every route key that names a page rather than a VIEWS entry -- the ones
  * with no ViewStore to select a row in or wait on (useHistorySync.ts) and
  * no per-view load to kick off (App.tsx's ensureLoaded effect). */
 export function isStorelessKey(key: string): boolean {
-  return isVisualKey(key) || isHomeKey(key);
+  return isVisualKey(key) || isHomeKey(key) || isBoardKey(key);
 }
 
 /** Parses "#/<viewKey>", "#/<viewKey>/<handle>", "#/home", or a visual's
@@ -165,6 +181,10 @@ export function parseHash(hash: string = window.location.hash): HashRoute {
   if (!viewKey || isHomeKey(viewKey)) {
     return { viewKey: HOME_KEY, handle: null, subject: null, treeId };
   }
+  if (isBoardKey(viewKey)) {
+    // A board always names its case; a bare "#/board" starts a new one.
+    return { viewKey, handle: handle || `new-${Date.now().toString(36)}`, subject: null, treeId };
+  }
   if (!VIEWS.some((v) => v.key === viewKey)) {
     return { viewKey: HOME_KEY, handle: null, subject: null, treeId };
   }
@@ -182,4 +202,9 @@ export function formatHash(route: Partial<HashRoute> & { viewKey: string }): str
     return route.subject ? `${prefix}${route.viewKey}/${formatSubject(route.subject)}` : `${prefix}${route.viewKey}`;
   }
   return route.handle ? `${prefix}${route.viewKey}/${route.handle}` : `${prefix}${route.viewKey}`;
+}
+
+/** The route of a new, unsaved case's board. */
+export function newBoardHash(): string {
+  return formatHash({ viewKey: BOARD_KEY, handle: `new-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` });
 }

@@ -9,6 +9,8 @@ import { DRAFT_TYPE_LABELS, EDITABLE_TYPES, type DraftType, type UseDraftStack }
 import type { ViewConfig } from "../../store/views";
 import { ParticipantsInput } from "./ParticipantsInput";
 import { NewBlogPostButton } from "./NewBlogPostDialog";
+import { canChangeData } from "../../pyodidePoc/grampletCommit";
+import { newBoardHash } from "../../hash";
 import { t } from "../../i18n/i18n";
 
 const PERM_ADD_OBJ = "AddObject";
@@ -105,6 +107,13 @@ function NewTopicButton() {
 export function AddButton({ view, draftStack }: { view: ViewConfig; draftStack?: UseDraftStack }) {
   if (view.key === "topics") return <NewTopicButton />;
   if (view.key === "blog") return <NewBlogPostButton />;
+  if (view.key === "casefile") {
+    // A new Evidence Board case starts as an empty, unsaved board; its first
+    // Save makes the case file. Saving needs Editor rights, so only editors
+    // are offered it.
+    if (!canChangeData()) return null;
+    return <Button size="xs" onClick={() => (window.location.hash = newBoardHash())}>{t("New case")}</Button>;
+  }
   if (view.key === "media") {
     if (!hasPermissions(PERM_ADD_OBJ)) return null;
     return <Button size="xs" onClick={pickAndAddMedia}>{t("Add media")}</Button>;

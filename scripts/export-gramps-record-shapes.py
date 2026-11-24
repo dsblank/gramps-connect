@@ -14,6 +14,7 @@ stored record field by field, so the client needs Gramps' own internal form
 - `types`: the integer codes of the Gramps types the board writes (event
   types, roles, child relationships...), so the TypeScript never hard-codes
   a number.
+- `type_names`: code -> English name for every value of those types.
 
 Also writes app/src/data/grampsSchemas.json, for checking records before
 they're sent (app/src/store/board/validate.ts), as the Gramplet worker does
@@ -69,6 +70,10 @@ def main() -> int:
         "blanks": {c: object_to_dict(getattr(lib, c)()) for c in TOP + NESTED},
         "types": {t: {n: getattr(getattr(lib, t), n) for n in names if hasattr(getattr(lib, t), n)} for t, names in TYPES.items()},
         "person_gender": {"FEMALE": lib.Person.FEMALE, "MALE": lib.Person.MALE, "UNKNOWN": lib.Person.UNKNOWN},
+        # Code -> English name of every value of the types the board shows
+        # (yarn labels, card headings), from Gramps' own table. The app
+        # translates them with t() like other Gramps vocabulary.
+        "type_names": {t: {str(v): english for (v, _tr, english) in getattr(lib, t)._DATAMAP} for t in TYPES},
     }
     OUT.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n")
     print(f"wrote {OUT.relative_to(ROOT)} (Gramps {VERSION})")
