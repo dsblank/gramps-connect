@@ -48,7 +48,11 @@ export interface YarnDrawing {
   selected: boolean;
   /** Added on this board and not saved yet. */
   isNew: boolean;
+  /** Snipped on this board and not saved yet: drawn cut, ends dangling. */
+  cut: boolean;
   showTag: boolean;
+  /** For a cut piece: its two ends, which dangle from each pin. */
+  ends?: { x1: number; y1: number; x2: number; y2: number };
 }
 
 export interface BoardSkin {

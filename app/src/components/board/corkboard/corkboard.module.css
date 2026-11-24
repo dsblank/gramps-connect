@@ -123,3 +123,5 @@
 .tag text { font: 700 15px var(--font-hand); fill: var(--type-ink); }
 .yarn.isNew .tag text { fill: var(--hand-ink); }
 .pull { fill: none; stroke: var(--y-kin); stroke-width: 2.6; stroke-linecap: round; opacity: 0.9; pointer-events: none; }
+.yarn .fray { fill: none; stroke: var(--yc); stroke-width: 1.4; stroke-linecap: round; }
+.yarn.cut .tag text { fill: var(--stamp); text-decoration: line-through; }

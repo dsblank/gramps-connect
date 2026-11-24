@@ -282,3 +282,45 @@ export function detailsOf(handle: string, records: Records): string[] {
   }
   return out;
 }
+
+/** A record's direct links to other records, read from its own fields: the
+ * card panel's "Leads" (with Pin up for the ones not on the board yet). */
+export interface Lead {
+  handle: string;
+  cls: GrampsRecord["_class"];
+  /** How it's linked, in English, e.g. "parents' family", "event", "evidence". */
+  how: string;
+}
+
+export function leadsOf(record: GrampsRecord): Lead[] {
+  const out: Lead[] = [];
+  const add = (handle: unknown, cls: GrampsRecord["_class"], how: string) => {
+    if (typeof handle === "string" && handle && !out.some((l) => l.handle === handle)) out.push({ handle, cls, how });
+  };
+  switch (record._class) {
+    case "Person":
+      for (const f of handles(record.parent_family_list)) add(f, "Family", "parents' family");
+      for (const f of handles(record.family_list)) add(f, "Family", "own family");
+      for (const e of refs(record.event_ref_list)) add(e.ref, "Event", "event");
+      break;
+    case "Family":
+      add(record.father_handle, "Person", "father");
+      add(record.mother_handle, "Person", "mother");
+      for (const c of refs(record.child_ref_list)) add(c.ref, "Person", "child");
+      for (const e of refs(record.event_ref_list)) add(e.ref, "Event", "event");
+      break;
+    case "Event":
+      add(record.place, "Place", "place");
+      break;
+    case "Citation":
+      add(record.source_handle, "Source", "source");
+      break;
+    case "Source":
+      for (const r of refs(record.reporef_list)) add(r.ref, "Repository", "kept at");
+      break;
+  }
+  for (const c of handles(record.citation_list)) add(c, "Citation", "evidence");
+  for (const m of refs(record.media_list)) add(m.ref, "Media", "photo");
+  for (const n of handles(record.note_list)) add(n, "Note", "note");
+  return out;
+}

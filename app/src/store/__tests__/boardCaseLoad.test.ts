@@ -33,7 +33,7 @@ vi.stubGlobal("localStorage", {
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { emptyCaseFile, newCaseFileNote, serializeCaseFile, type CaseFile } from "../board/caseFile";
 import { readDraft, writeDraft } from "../board/caseDraft";
-import { CaseNotAvailableError, draftOf, openCase, openUnsavedCase } from "../board/caseLoad";
+import { AFTER_OWN_SAVE, CaseNotAvailableError, draftOf, openCase, openUnsavedCase } from "../board/caseLoad";
 import { linkParentChild, newPerson } from "../board/links";
 import { blank, GENDER, type GrampsRecord } from "../board/records";
 
@@ -140,6 +140,33 @@ describe("unsaved work from this browser", () => {
     const opened = await openCase("case1");
     expect(opened.file.cards[0].x).toBe(111);
     expect(opened.layoutReplaced).toBe(true);
+  });
+
+  it("a card for a record made by an unsaved loose end isn't reported gone", async () => {
+    put(person("john", 1000));
+    const base = { john: tree.get("john") as GrampsRecord };
+    const b = new ChangeBuilder(base);
+    const martha = newPerson(b, { first: "Martha" });
+    linkParentChild(b, "john", martha);
+    const file = { ...emptyCaseFile("Scratch", "doug"), cards: [card("john", 1000), card(martha, null)] };
+    writeDraft("new:abc", draftOf({ note: null, base }, file, [b.change("Martha")]));
+    const opened = await openUnsavedCase("new:abc", "Scratch", "doug");
+    expect(opened.gone).toEqual([]);
+    expect(applyChanges(opened.base, opened.changes)[martha]).toBeTruthy();
+  });
+
+  it("loose ends left unticked at this browser's own Save are kept with their cards", async () => {
+    const { file, note } = setup();
+    const base = { john: tree.get("john") as GrampsRecord };
+    const b = new ChangeBuilder(base);
+    const martha = newPerson(b, { first: "Martha" });
+    writeDraft("case1", { ...draftOf({ note, base }, { ...file, cards: [...file.cards, card(martha, null, 300)] }, [b.change("Martha")]), noteChange: AFTER_OWN_SAVE });
+    putNote(file, NOTE_CHANGE + 100); // the save's own new time, unknown when the draft was written
+    const opened = await openCase("case1");
+    expect(opened.layoutReplaced).toBe(false);
+    expect(opened.file.cards.map((c) => c.handle)).toEqual(["john", martha]);
+    expect(opened.gone).toEqual([]);
+    expect(opened.changes).toHaveLength(1);
   });
 
   it("a case never saved opens from its draft, or empty", async () => {

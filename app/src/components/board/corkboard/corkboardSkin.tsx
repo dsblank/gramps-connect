@@ -370,8 +370,41 @@ export const corkboardSkin: BoardSkin = {
     );
   },
 
-  renderYarn({ yarn, d, mx, my, selected, isNew, showTag }: YarnDrawing): ReactNode {
+  renderYarn({ yarn, d, mx, my, selected, isNew, cut, showTag, ends }: YarnDrawing): ReactNode {
     const tw = yarn.label.length * 6.6 + 26;
+    if (cut && ends) {
+      // Two halves hanging from their pins, frayed at the cut.
+      const dx = ends.x2 - ends.x1;
+      const dy = ends.y2 - ends.y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      const reach = Math.min(80, len * 0.3);
+      const half = (x: number, y: number, s: number) => {
+        const ex = x + ux * s * reach;
+        const ey = y + uy * s * reach + 54;
+        return { d: `M${x} ${y}Q${x + ux * s * reach * 0.6} ${y + uy * s * reach * 0.6 + 4} ${ex} ${ey}`, ex, ey };
+      };
+      const halves = [half(ends.x1, ends.y1, 1), half(ends.x2, ends.y2, -1)];
+      const tag = `✂ ${yarn.label}`;
+      const cw = tag.length * 6.6 + 26;
+      return (
+        <g className={[css.yarn, css[yarn.kind], css.cut, selected ? css.selected : ""].join(" ")}>
+          <path className={css.yHit} d={d} />
+          {halves.map((h, i) => (
+            <g key={i}>
+              <path className={css.yShadow} d={h.d} transform="translate(1 2.5)" />
+              <path className={css.yMain} d={h.d} />
+              <path className={css.fray} d={`M${h.ex} ${h.ey}l-3.5 5M${h.ex} ${h.ey}l.5 6.5M${h.ex} ${h.ey}l4 4.5`} />
+            </g>
+          ))}
+          <g className={css.tag} transform={`translate(${mx.toFixed(1)} ${my.toFixed(1)})`}>
+            <rect className={css.tagPaper} x={-cw / 2} y={-10} width={cw} height={20} rx={3} />
+            <text x={0} y={5} textAnchor="middle">{tag}</text>
+          </g>
+        </g>
+      );
+    }
     return (
       <g className={[css.yarn, css[yarn.kind], isNew ? css.isNew : "", selected ? css.selected : ""].join(" ")}>
         <path className={`yp ${css.yHit}`} d={d} />

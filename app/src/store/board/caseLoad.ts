@@ -85,13 +85,16 @@ function reapply(draft: CaseDraft | null, base: Records): { changes: Change[]; n
   };
 }
 
-function classify(file: CaseFile, note: GrampsRecord | null, base: Records, canSeePrivate: boolean) {
+function classify(file: CaseFile, note: GrampsRecord | null, base: Records, canSeePrivate: boolean, draft: CaseDraft | null) {
+  // Records made by this browser's unsaved loose ends aren't in the tree yet.
+  const unsaved = new Set((draft?.changes ?? []).flatMap((c) => c.creates));
   const updated: CaseCard[] = [];
   const gone: CaseCard[] = [];
   let hidden = 0;
   const noteChange = note ? changeOf(note) : 0;
   for (const card of file.cards) {
     const record = base[card.handle];
+    if (!record && unsaved.has(card.handle)) continue;
     if (!record) {
       if (canSeePrivate) gone.push(card);
       else hidden++;
@@ -103,6 +106,10 @@ function classify(file: CaseFile, note: GrampsRecord | null, base: Records, canS
   return { updated, gone, hidden };
 }
 
+/** A draft's noteChange when it was written right after this browser saved
+ * the case, before the save's own change time was known. */
+export const AFTER_OWN_SAVE = -1;
+
 /** Opens the saved case file `noteHandle`. */
 export async function openCase(noteHandle: string): Promise<OpenedCase> {
   const notes = await loadRecords("Note", [noteHandle]);
@@ -111,7 +118,9 @@ export async function openCase(noteHandle: string): Promise<OpenedCase> {
   const saved = readCaseFileNote(note);
   const draft = readDraft(noteHandle);
   // The draft's layout counts only if it was made against this very save.
-  const draftCurrent = !!draft && draft.noteChange === changeOf(note);
+  // AFTER_OWN_SAVE marks one written right after this browser's own Save
+  // (the loose ends unticked there), before the new save's time was known.
+  const draftCurrent = !!draft && (draft.noteChange === changeOf(note) || draft.noteChange === AFTER_OWN_SAVE);
   const file = draftCurrent ? draft!.file : saved;
   const layoutReplaced = !!draft && !draftCurrent && JSON.stringify(draft.file) !== JSON.stringify(saved);
 
@@ -121,7 +130,7 @@ export async function openCase(noteHandle: string): Promise<OpenedCase> {
   const { changes, needsReview } = reapply(draft, base);
   // Guests can't see private records; everyone from Member up can.
   const canSeePrivate = hasPermissions("ViewPrivate");
-  return { caseKey: noteHandle, note, file, base, changes, needsReview, ...classify(file, note, base, canSeePrivate), layoutReplaced };
+  return { caseKey: noteHandle, note, file, base, changes, needsReview, ...classify(file, note, base, canSeePrivate, draftCurrent ? draft : null), layoutReplaced };
 }
 
 /** Opens a case that hasn't been saved yet: from its draft in this browser
@@ -134,7 +143,7 @@ export async function openUnsavedCase(caseKey: string, name: string, startedBy: 
   const base = await loadByClass(wanted);
   const { changes, needsReview } = reapply(draft, base);
   const canSeePrivate = hasPermissions("ViewPrivate");
-  return { caseKey, note: null, file, base, changes, needsReview, ...classify(file, null, base, canSeePrivate), layoutReplaced: false };
+  return { caseKey, note: null, file, base, changes, needsReview, ...classify(file, null, base, canSeePrivate, draft), layoutReplaced: false };
 }
 
 /** The draft to keep for a board's current state: its layout and loose

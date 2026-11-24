@@ -25,6 +25,11 @@ export type BoardSelection = { kind: "card"; id: string } | { kind: "yarn"; id: 
 
 export interface BoardCanvasHandle {
   fit: () => void;
+  /** The board point at the middle of what's on screen. */
+  center: () => Point;
+  /** Pans and zooms out just enough to show `handles` (no-op if they're
+   * already in view). */
+  reveal: (handles: string[]) => void;
 }
 
 interface Props {
@@ -34,6 +39,8 @@ interface Props {
   yarn: Yarn[];
   /** Yarn added on this board and not saved yet (drawn dashed). */
   newYarn: Set<string>;
+  /** Yarn snipped on this board and not saved yet (drawn cut). */
+  cutYarn?: Yarn[];
   photoUrls: Record<string, string | null>;
   selection: BoardSelection;
   onSelect: (selection: BoardSelection) => void;
@@ -49,7 +56,7 @@ interface Props {
 const reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 export function BoardCanvas(props: Props) {
-  const { skin, cards, positions, yarn, newYarn, photoUrls, selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
+  const { skin, cards, positions, yarn, newYarn, cutYarn = [], photoUrls, selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [view, setView] = useState<ZoomTransform>(zoomIdentity.translate(80, 90));
@@ -113,10 +120,39 @@ export function BoardCanvas(props: Props) {
     select(svg).transition().duration(450).call(z.transform, zoomIdentity.translate(r.width / 2 - cx * k, r.height / 2 - cy * k).scale(k));
   }, []);
 
+  const center = useCallback((): Point => {
+    const r = svgRef.current?.getBoundingClientRect();
+    const v = viewRef.current;
+    if (!r) return { x: 0, y: 0 };
+    return { x: (r.width / 2 - v.x) / v.k, y: (r.height / 2 - 60 - v.y) / v.k };
+  }, []);
+
+  const reveal = useCallback((handles: string[]) => {
+    const svg = svgRef.current;
+    const z = zoomRef.current;
+    if (!svg || !z) return;
+    const r = svg.getBoundingClientRect();
+    const v = viewRef.current;
+    const boxes = handles
+      .filter((h) => positionsRef.current[h] && boxesRef.current[h])
+      .map((h) => {
+        const p = positionsRef.current[h];
+        const b = boxesRef.current[h];
+        return [p.x + b.x0, p.y + b.y0 - 8, p.x + b.x0 + b.w, p.y + b.y0 + b.h];
+      });
+    if (!boxes.length || r.width < 50) return;
+    const m = 30 / v.k;
+    const view = [-v.x / v.k, -v.y / v.k, (r.width - v.x) / v.k, (r.height - v.y) / v.k];
+    if (boxes.every((b) => b[0] >= view[0] + m && b[1] >= view[1] + m && b[2] <= view[2] - m && b[3] <= view[3] - m)) return;
+    const u = boxes.reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])], view);
+    const k = Math.min(v.k, r.width / (u[2] - u[0] + 120 / v.k), r.height / (u[3] - u[1] + 120 / v.k));
+    select(svg).transition().duration(450).call(z.transform, zoomIdentity.translate(r.width / 2 - ((u[0] + u[2]) / 2) * k, r.height / 2 - ((u[1] + u[3]) / 2) * k).scale(k));
+  }, []);
+
   useEffect(() => {
-    canvasRef?.({ fit });
+    canvasRef?.({ fit, center, reveal });
     return () => canvasRef?.(null);
-  }, [canvasRef, fit]);
+  }, [canvasRef, fit, center, reveal]);
 
   // Fit once the board has a real size (it can start at 0x0 in a layout
   // that's still settling), and once cards have arrived.
@@ -261,7 +297,20 @@ export function BoardCanvas(props: Props) {
           physics.kickYarn(y.id, 80);
         }}
       >
-        {skin.renderYarn({ yarn: { ...y, label: t(y.label) }, d, mx, my, selected, isNew: newYarn.has(y.id), showTag: showTags || selected || touchesSelected })}
+        {skin.renderYarn({ yarn: { ...y, label: t(y.label) }, d, mx, my, selected, isNew: newYarn.has(y.id), cut: false, showTag: showTags || selected || touchesSelected })}
+      </g>
+    );
+  });
+  const cutEls = cutYarn.map((y) => {
+    const A = positions[y.a];
+    const B = positions[y.b];
+    if (!A || !B) return null;
+    const len = Math.hypot(B.x - A.x, B.y - A.y);
+    const { d, mx, my } = yarnPath({ x1: A.x, y1: A.y, x2: B.x, y2: B.y, ox: 0, oy: 0, sag: Math.min(70, 8 + len * 0.09) });
+    const selected = selection?.kind === "yarn" && selection.id === y.id;
+    return (
+      <g key={`cut-${y.id}`} data-nozoom style={{ cursor: "pointer" }} onPointerDown={(e) => e.stopPropagation()} onClick={() => onSelect({ kind: "yarn", id: y.id })}>
+        {skin.renderYarn({ yarn: { ...y, label: t(y.label) }, d, mx, my, selected, isNew: false, cut: true, showTag: true, ends: { x1: A.x, y1: A.y, x2: B.x, y2: B.y } })}
       </g>
     );
   });
@@ -331,7 +380,7 @@ export function BoardCanvas(props: Props) {
         {skin.renderBackground()}
         {still.map(cardEl)}
         {lifted && cardEl(lifted)}
-        <g>{yarnEls}</g>
+        <g>{yarnEls}{cutEls}</g>
         {still.map(pinEl)}
         {lifted && pinEl(lifted)}
         {pullEl}
