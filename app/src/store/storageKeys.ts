@@ -52,6 +52,9 @@ const DEFS = {
   visited: { key: `${P}visited`, tag: "excluded" },
   activity: { key: `${P}activity`, tag: "excluded" },
   grampletStoreNews: { key: `${P}grampletStoreNews:`, prefix: true, tag: "excluded" },
+  // Unsaved Evidence Board work (loose ends and layout) per case: never part of
+  // Download / Load / Reset, so resetting settings can't lose it.
+  boardDraft: { key: `${P}boardDraft:`, prefix: true, tag: "excluded" },
   blogNews: { key: `${P}blogNews`, tag: "excluded" },
   // sessionStorage
   token: { key: `${P}token`, tag: "excluded" },
@@ -79,6 +82,8 @@ export const grampletAddedViewsKey = (grampletId: string) => `${DEFS.grampletAdd
 export const grampletStoreNewsKey = (treeId: string, username: string) =>
   `${DEFS.grampletStoreNews.key}${treeId}:${username}`;
 export const blogDraftKey = (treeId: string, username: string) => `${DEFS.blogDraft.key}${treeId}:${username}`;
+export const boardDraftKey = (treeId: string, username: string, caseKey: string) =>
+  `${DEFS.boardDraft.key}${treeId}:${username}:${caseKey}`;
 
 /** True if `key` is a localStorage setting that Download / Load / Reset
  * cover. */

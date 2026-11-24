@@ -17,7 +17,9 @@ const TEST_TREE = "a673c3dc-3346-4d09-b40a-9f92be7d87cf"; // Royal Family (test)
 const ACCOUNT = new URL("../../../../dev-fixtures/layer3-sync/api-fixture/claude-account.json", import.meta.url);
 
 const session = vi.hoisted(() => ({ token: "" }));
-vi.mock("../../auth/auth", () => ({ getToken: async () => session.token, hasPermissions: () => true }));
+vi.mock("../../auth/auth", () => ({ getToken: async () => session.token, hasPermissions: () => true, getTreeId: () => "live", getCurrentUsername: () => "claude" }));
+const drafts = new Map<string, string>();
+vi.stubGlobal("localStorage", { getItem: (k: string) => drafts.get(k) ?? null, setItem: (k: string, v: string) => void drafts.set(k, v), removeItem: (k: string) => void drafts.delete(k) });
 // The real assignGrampsIds reads the app's view caches (sql.js); here the
 // next IDs come straight from the server, which is what that code checks against too.
 vi.mock("../grampsIds", () => ({
@@ -43,9 +45,11 @@ vi.mock("../grampsIds", () => ({
 
 import { ChangeBuilder, type Change, applyChanges } from "../board/changes";
 import { addEventRef, attachNote, cite, linkParentChild, newCitation, newEvent, newNote, newPerson, newSource } from "../board/links";
-import { GRAMPS_CLASSES, loadRecords, NAMESPACE, type GrampsRecord, type Records } from "../board/records";
+import { blank, GRAMPS_CLASSES, grampsType, loadRecords, NAMESPACE, type GrampsRecord, type Records } from "../board/records";
 import { validateRecord } from "../board/validate";
 import { emptyCaseFile, readCaseFileNote } from "../board/caseFile";
+import { clearDraft, writeDraft } from "../board/caseDraft";
+import { draftOf, openCase } from "../board/caseLoad";
 import { changedSince, saveBoard, undoSave, type SavedBoard } from "../board/save";
 import { TransactionConflictError } from "../transactionsApi";
 
@@ -57,10 +61,13 @@ const newestHistory = async () => ((await api("/api/transactions/history/?page=1
 
 let saved: SavedBoard | null = null;
 let undone = false;
+/** Saves made by the loading test, newest last; undone newest first in afterAll if a step fails. */
+const loadSaves: SavedBoard[] = [];
 let originals: GrampsRecord[] = [];
 
 afterAll(async () => {
   if (LIVE && saved && !undone) await undoSave(saved); // a failed step must not strand the Save
+  while (LIVE && loadSaves.length) await undoSave(loadSaves.pop()!);
 });
 
 /** Logs in as the test account; fails unless the token is for the test tree. */
@@ -183,5 +190,63 @@ describe.skipIf(!LIVE)("Evidence Board Save, live on the Royal Family test tree"
     expect(Object.keys(await loadRecords("Person", [martha]))).toEqual([]);
     expect(Object.keys(await loadRecords("Note", [caseNote]))).toEqual([]);
     expect(Object.keys(await loadRecords("Note", [saved!.caseNote!.handle]))).toEqual([]);
+  }, 60_000);
+
+  it("reopens a saved case: its own Save isn't 'updated', someone else's later edit is, and a stale loose end waits for review", async () => {
+    await login(); // refuses anything but the test tree
+    const q = await api("/api/families/query/", { method: "POST", body: JSON.stringify({ select: ["handle", "father_handle"], where_expr: "gramps_id == 'F0070'", limit: 1 }) });
+    const famRow = (q.body as { items: { handle: string; father_handle: string }[] }).items[0];
+    const dad = famRow.father_handle;
+    const base: Records = { ...(await loadRecords("Family", [famRow.handle])), ...(await loadRecords("Person", [dad])) };
+    const originals = Object.values(base).map((r) => structuredClone(r));
+
+    // 1. Save a new case: Martha, a child of the father, pinned with him.
+    const b = new ChangeBuilder(base);
+    const martha = newPerson(b, { first: "Martha", surname: "Loadtest", gender: "F" });
+    linkParentChild(b, dad, martha);
+    const file = {
+      ...emptyCaseFile("Live loading case", "claude"),
+      cards: [
+        { handle: dad, class: "Person" as const, gramps_id: base[dad].gramps_id, label: "father", seenChange: base[dad].change as number, x: 0, y: 0, size: "compact" as const },
+        { handle: martha, class: "Person" as const, gramps_id: "", label: "Martha", seenChange: 0, x: 260, y: 0, size: "compact" as const },
+      ],
+    };
+    const first = await saveBoard(base, [b.change("Martha")], "Evidence Board live test: loading case", { caseFile: { note: null, content: file } });
+    loadSaves.push(first!);
+    const caseHandle = first!.caseNote!.handle;
+
+    // 2. Reopen: nothing is "updated", because only this case's own Save changed things.
+    const opened = await openCase(caseHandle);
+    expect(opened.updated).toEqual([]);
+    expect(opened.gone).toEqual([]);
+    expect(Object.keys(opened.base).sort()).toEqual([dad, martha].sort());
+
+    // 3. An unsaved loose end touching the father, kept in this browser.
+    const lb = new ChangeBuilder(opened.base);
+    lb.push(dad, "attribute_list", blank("Attribute", { type: grampsType("AttributeType", "CUSTOM", "Loadtest"), value: "draft" }));
+    const loose = lb.change("Unsaved attribute on the father");
+    writeDraft(caseHandle, draftOf(opened, opened.file, [loose]));
+
+    // 4. Someone else edits the father, a few seconds later.
+    await new Promise((r) => setTimeout(r, 3000));
+    const fresh = await loadRecords("Person", [dad]);
+    const other = new ChangeBuilder(fresh);
+    other.set(dad, "private", !fresh[dad].private);
+    loadSaves.push((await saveBoard(fresh, [other.change("someone else")], "Evidence Board live test: someone else"))!);
+
+    // 5. Reopen: the father is "updated"; the stale loose end is unticked for review.
+    const again = await openCase(caseHandle);
+    expect(again.updated.map((c) => c.handle)).toEqual([dad]);
+    expect(again.needsReview).toEqual([loose.id]);
+    expect(again.changes[0].off).toBe(true);
+    expect(again.layoutReplaced).toBe(false);
+
+    // 6. Undo both Saves, newest first; everything is back.
+    while (loadSaves.length) await undoSave(loadSaves.pop()!);
+    clearDraft(caseHandle);
+    const after = await changedSince(originals);
+    expect(after.changed.map((r) => r.gramps_id)).toEqual([]);
+    expect(after.gone).toEqual([]);
+    expect(Object.keys(await loadRecords("Note", [caseHandle]))).toEqual([]);
   }, 60_000);
 });
