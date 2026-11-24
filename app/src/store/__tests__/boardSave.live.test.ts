@@ -45,6 +45,7 @@ import { ChangeBuilder, type Change, applyChanges } from "../board/changes";
 import { addEventRef, attachNote, cite, linkParentChild, newCitation, newEvent, newNote, newPerson, newSource } from "../board/links";
 import { GRAMPS_CLASSES, loadRecords, NAMESPACE, type GrampsRecord, type Records } from "../board/records";
 import { validateRecord } from "../board/validate";
+import { emptyCaseFile, readCaseFileNote } from "../board/caseFile";
 import { changedSince, saveBoard, undoSave, type SavedBoard } from "../board/save";
 import { TransactionConflictError } from "../transactionsApi";
 
@@ -126,7 +127,15 @@ describe.skipIf(!LIVE)("Evidence Board Save, live on the Royal Family test tree"
     });
 
     const before = await newestHistory();
-    saved = await saveBoard(base, changes, "Evidence Board live test: board save");
+    const file = {
+      ...emptyCaseFile("Live test case", "claude"),
+      question: "Who was Martha?",
+      cards: [
+        { handle: dad, class: "Person" as const, gramps_id: base[dad].gramps_id, label: "father", seenChange: base[dad].change as number, x: 0, y: 0, size: "compact" as const },
+        { handle: martha, class: "Person" as const, gramps_id: "", label: "Martha", seenChange: 0, x: 260, y: 0, size: "compact" as const },
+      ],
+    };
+    saved = await saveBoard(base, changes, "Evidence Board live test: board save", { caseFile: { note: null, content: file } });
     expect(saved).not.toBeNull();
 
     // --- one History entry, ours ---
@@ -145,6 +154,20 @@ describe.skipIf(!LIVE)("Evidence Board Save, live on the Royal Family test tree"
     expect(note.type).toMatchObject({ string: "Case File" });
     expect(saved!.newIds[martha]).toMatch(/^I\d{4}$/);
 
+    // --- the case file was saved in the same transaction ---
+    const caseHandle = saved!.caseNote!.handle;
+    const caseNoteNow = (await loadRecords("Note", [caseHandle]))[caseHandle];
+    const content = readCaseFileNote(caseNoteNow);
+    expect(content.question).toBe("Who was Martha?");
+    expect(content.cards.find((c) => c.handle === martha)).toMatchObject({ gramps_id: saved!.newIds[martha], seenChange: null });
+    expect(content.cards.find((c) => c.handle === dad)!.seenChange).toBeNull(); // the Save changed the father (note attached)
+    // Which GOQL filter finds case files (for the list view's baseFilter)?
+    for (const where of ['type.string == "Case File"', 'type == "Case File"']) {
+      const r = await api("/api/notes/query/", { method: "POST", body: JSON.stringify({ select: ["handle"], where_expr: where, limit: 50 }) });
+      const found = r.status === 200 && (r.body as { items: { handle: string }[] }).items.some((i) => i.handle === caseHandle);
+      console.log(`GOQL ${where} -> HTTP ${r.status}, finds the case file: ${found}`);
+    }
+
     // --- a stale Save is refused and writes nothing ---
     const stale = new ChangeBuilder(base);
     stale.set(dad, "private", !base[dad].private);
@@ -159,5 +182,6 @@ describe.skipIf(!LIVE)("Evidence Board Save, live on the Royal Family test tree"
     expect(after.gone).toEqual([]);
     expect(Object.keys(await loadRecords("Person", [martha]))).toEqual([]);
     expect(Object.keys(await loadRecords("Note", [caseNote]))).toEqual([]);
+    expect(Object.keys(await loadRecords("Note", [saved!.caseNote!.handle]))).toEqual([]);
   }, 60_000);
 });

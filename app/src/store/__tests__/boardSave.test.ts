@@ -101,7 +101,7 @@ describe("saveBoard", () => {
 
   it("Undo sends the recorded transaction back with undo=true", async () => {
     apiFetch.mockResolvedValue(json([]));
-    await undoSave({ message: "Evidence Board: Miller case", transaction: [], newIds: {} });
+    await undoSave({ message: "Evidence Board: Miller case", transaction: [], newIds: {}, caseNote: null });
     expect(apiFetch.mock.calls[0][0]).toMatch(/\?undo=true&message=Undo%3A%20Evidence%20Board%3A%20Miller%20case$/);
   });
 });

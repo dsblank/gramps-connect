@@ -22,6 +22,7 @@ import { getToken } from "../../auth/auth";
 import { assignGrampsIds } from "../grampsIds";
 import { postTransaction, type TransactionItem } from "../transactionsApi";
 import { applyChanges, sameValue, type Change } from "./changes";
+import { caseFileChanged, newCaseFileNote, writeCaseFileNote, type CaseFile } from "./caseFile";
 import { loadRecords, type GrampsClass, type GrampsRecord, type Records } from "./records";
 import { validateRecords } from "./validate";
 
@@ -60,32 +61,65 @@ export function planSave(base: Records, changes: Change[]): SavePlan {
 export interface SavedBoard {
   message: string;
   transaction: TransactionItem[];
-  /** handle -> Gramps ID given to each new record. */
+  /** handle -> Gramps ID given to each new record (the case-file Note's too). */
   newIds: Record<string, string>;
+  /** The case-file Note as saved, when the Save wrote one. */
+  caseNote: GrampsRecord | null;
 }
 
-/** Saves the ticked loose ends as one transaction labelled `message` (the
- * History description). Resolves to null when there's nothing to save.
- * Rejects with TransactionConflictError if someone changed one of the
- * records since the board loaded it; nothing is written then. */
-export async function saveBoard(base: Records, changes: Change[], message: string): Promise<SavedBoard | null> {
+/** The board's case file, saved with the tree changes in the same
+ * transaction. `note` is the case-file Note as the board loaded it (its
+ * `old`, so a case edited elsewhere meanwhile refuses the Save like any
+ * other record), or null for a case that hasn't been saved yet. */
+export interface CaseFileToSave {
+  note: GrampsRecord | null;
+  content: CaseFile;
+  private?: boolean;
+}
+
+/** Saves the ticked loose ends -- and the case file, if given -- as one
+ * transaction labelled `message` (the History description). Resolves to
+ * null when there's nothing to save. Rejects with TransactionConflictError
+ * if someone changed one of the records since the board loaded it;
+ * nothing is written then. */
+export async function saveBoard(
+  base: Records,
+  changes: Change[],
+  message: string,
+  options: { caseFile?: CaseFileToSave } = {},
+): Promise<SavedBoard | null> {
   if (!canChangeData()) throw new Error("Saving needs Editor rights or above.");
   const plan = planSave(base, changes);
-  if (!plan.adds.length && !plan.updates.length) return null;
-  const needIds = plan.adds.filter((r) => !r.gramps_id);
-  const { objects } = await assignGrampsIds(await getToken(), needIds, { builtInFallback: true });
+  const cf = options.caseFile;
+  // A new case file's Note needs a Gramps ID like any other new record.
+  const newNote = cf && !cf.note ? newCaseFileNote(cf.private) : null;
+  const needIds = [...plan.adds.filter((r) => !r.gramps_id), ...(newNote ? [newNote] : [])];
+  const { objects } = needIds.length ? await assignGrampsIds(await getToken(), needIds, { builtInFallback: true }) : { objects: [] };
   const ids = new Map(objects.map((o) => [String(o.handle), String(o.gramps_id)]));
   const adds = plan.adds.map((r) => (ids.has(r.handle) ? { ...r, gramps_id: ids.get(r.handle)! } : r));
-  const missing = adds.filter((r) => !r.gramps_id);
+
+  let caseItem: TransactionItem | null = null;
+  let caseNote: GrampsRecord | null = null;
+  if (cf) {
+    const savedHandles = new Set([...adds.map((r) => r.handle), ...plan.updates.map((u) => u.old.handle)]);
+    const start = cf.note ?? { ...newNote!, gramps_id: ids.get(newNote!.handle) ?? "" };
+    caseNote = writeCaseFileNote(start, cf.content, { newIds: Object.fromEntries(ids), savedHandles }, cf.private);
+    if (!cf.note) caseItem = { type: "add", _class: "Note", handle: caseNote.handle, old: null, new: caseNote };
+    else if (caseFileChanged(cf.note, caseNote)) caseItem = { type: "update", _class: "Note", handle: caseNote.handle, old: cf.note, new: caseNote };
+  }
+  if (!adds.length && !plan.updates.length && !caseItem) return null;
+
+  const missing = [...adds, ...(caseItem?.type === "add" ? [caseNote!] : [])].filter((r) => !r.gramps_id);
   if (missing.length) throw new Error(`No Gramps ID could be picked for ${missing.length} new record(s)`);
   // The endpoint doesn't validate, so nothing malformed may leave here.
-  validateRecords([...adds, ...plan.updates.map((u) => u.new)]);
+  validateRecords([...adds, ...plan.updates.map((u) => u.new), ...(caseItem ? [caseNote!] : [])]);
   const items: TransactionItem[] = [
     ...adds.map((r): TransactionItem => ({ type: "add", _class: r._class, handle: r.handle, old: null, new: r })),
     ...plan.updates.map((u): TransactionItem => ({ type: "update", _class: u.old._class, handle: u.old.handle, old: u.old, new: u.new })),
+    ...(caseItem ? [caseItem] : []),
   ];
   const transaction = await postTransaction(items, { message });
-  return { message, transaction, newIds: Object.fromEntries(ids) };
+  return { message, transaction, newIds: Object.fromEntries(ids), caseNote: caseItem ? caseNote : null };
 }
 
 /** Takes back a whole Save as one transaction ("Undo: <message>"). Rejects
