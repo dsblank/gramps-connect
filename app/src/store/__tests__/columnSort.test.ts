@@ -8,7 +8,11 @@ import {
 // Shown columns that deliberately don't sort: a Gramps type (stored as a
 // number whose order isn't its name's), and columns whose shown value is
 // computed here or is one field of a stored JSON spec.
-const UNSORTABLE = new Set(["event.event_type", "media.category", "topics.title", "story.title"]);
+const UNSORTABLE = new Set([
+  "event.event_type", "media.category", "topics.title", "story.title",
+  // Each one field of a case file's stored JSON, like story.title.
+  "casefile.name", "casefile.question", "casefile.cards", "casefile.started_by",
+]);
 
 const allViews: ViewConfig[] = [...VIEWS, TOPIC_MESSAGES_VIEW];
 const shown = (view: ViewConfig) => view.columns.filter((c) => !c.hidden);

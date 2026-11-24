@@ -69,7 +69,8 @@ export function DeleteButton({ view, detail }: { view: ViewConfig; detail: Objec
   // the URL segment and sidebar label's basis), so it's the one exception
   // worth spelling out here rather than baking a whole singularization
   // table into this generic button for just one caller.
-  const singularKind = view.key === "topics" ? "discussion" : view.key === "generated" ? "output" : view.key;
+  const singularKind =
+    view.key === "topics" ? "discussion" : view.key === "generated" ? "output" : view.key === "casefile" ? "case file" : view.key;
   const label = `Delete this ${singularKind}`;
   const summary = summaryLine(view.key, detail) || view.label;
 

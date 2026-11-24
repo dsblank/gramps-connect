@@ -291,6 +291,35 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
     );
   }
 
+  if (view.key === "casefile") {
+    // An Evidence Board case file: its text.string is the board's JSON
+    // (store/board/caseFile.ts), shown as the case's name, question and
+    // summary instead of raw JSON.
+    let file: { name?: string; question?: string; description?: string; startedBy?: string; cards?: unknown[] } = {};
+    try {
+      file = JSON.parse((detail.text as { string?: string } | undefined)?.string ?? "") ?? {};
+    } catch {
+      file = {};
+    }
+    const cards = Array.isArray(file.cards) ? file.cards.length : 0;
+    return (
+      <div>
+        <Text size="sm" c="dimmed" fw={600}>
+          {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t("Case File")} <PrivateIndicator detail={detail} />
+        </Text>
+        <ClickableTitle onClick={navigateToSelf}>{file.name || t("(case file)")}</ClickableTitle>
+        {file.question && <Text>{file.question}</Text>}
+        {file.description && <Text c="dimmed">{file.description}</Text>}
+        <Text size="sm" c="dimmed">
+          {[
+            file.startedBy ? t("Started by {name}").replace("{name}", file.startedBy) : "",
+            cards === 1 ? t("1 card") : t("{count} cards").replace("{count}", String(cards)),
+          ].filter(Boolean).join(" · ")}
+        </Text>
+      </div>
+    );
+  }
+
   if (view.key === "note") {
     const text = (detail.text as { string: string; tags?: { name: string; ranges: [number, number][]; value: string }[] } | undefined) ?? { string: "" };
     return (

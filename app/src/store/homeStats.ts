@@ -74,7 +74,7 @@ const RECENT_LABEL: Record<string, (obj: RawObject) => string> = {
  * baseFilter excludes (topics, stories and topic messages each have their
  * own Home panel or view), applied client-side here since /api/search/ has
  * no where_expr to push it into. */
-const RECENT_EXCLUDED_NOTE_TYPES = new Set(["topic", "story", "topic-message"]);
+const RECENT_EXCLUDED_NOTE_TYPES = new Set(["topic", "story", "topic-message", "Case File"]);
 
 /** True for a hit Recently Changed lists leave out -- see
  * RECENT_EXCLUDED_NOTE_TYPES. Shared with View > Change Log (ChangedView.tsx). */

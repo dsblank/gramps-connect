@@ -28,6 +28,7 @@ import iconReports from "../assets/icons/gramps-reports.svg";
 import iconChat from "../assets/icons/chat-message.svg";
 import iconStory from "../assets/icons/story-book.svg";
 import iconBlog from "../assets/icons/blog-post.svg";
+import iconCaseBoard from "../assets/icons/case-board.svg";
 
 export interface ColumnConfig {
   /** Both the local SQLite column name and the API response key (the
@@ -1036,6 +1037,62 @@ export const BLOG_VIEW: ViewConfig = {
   ],
 };
 
+// Evidence Board case files (EVIDENCE_BOARD_PLAN.md, Phase 2): standalone
+// Notes of the custom type "Case File" whose text is the board's JSON
+// (store/board/caseFile.ts). Same fixed-type-filter trick as STORY_VIEW. The
+// filter must compare `type.string`: plain `type == "Case File"` doesn't
+// match a custom type (checked live, 2026-11-24). Columns read single
+// fields out of the JSON as each row is cached -- deliberately lenient, as
+// the board's own parseCaseFile() is, and kept here rather than importing
+// the board modules into this widely imported file.
+export const CASE_FILE_NOTE_TYPE = "Case File";
+
+function caseFileJson(raw: unknown): Record<string, unknown> {
+  const text = styledTextToSql(raw) ?? "";
+  try {
+    const data = JSON.parse(text) as unknown;
+    return data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+const caseFileText = (field: string) => (raw: unknown): string => {
+  const value = caseFileJson(raw)[field];
+  return typeof value === "string" ? value : "";
+};
+
+export const CASE_FILE_VIEW: ViewConfig = {
+  key: "casefile",
+  label: "Case Files",
+  icon: iconCaseBoard,
+  table: "note",
+  endpoint: "/api/notes/query/",
+  baseFilter: `type.string == '${CASE_FILE_NOTE_TYPE}'`,
+  orderBy: [{ column: "change", direction: "desc" }],
+  opfsFilename: "app-cache-casefile.sqlite",
+  wherePlaceholder: 'e.g. "Carter" in text.string',
+  simpleSearch: {
+    placeholder: "Enter a Gramps ID, or words from a case…",
+    buildExpr: buildSimpleSearchExpr(["gramps_id", "text.string"]),
+  },
+  columns: [
+    // Hidden like the Stories view's: a case is known by its name.
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", hidden: true },
+    // Not sortable: each value is one field of the stored JSON.
+    { key: "name", label: "Name", select: { json_path: ["text", "string"] }, sqlType: "TEXT", toSql: (raw) => caseFileText("name")(raw) || "(case file)", sortBy: null },
+    { key: "question", label: "Question", select: { json_path: ["text", "string"] }, sqlType: "TEXT", toSql: caseFileText("question"), sortBy: null },
+    {
+      key: "cards", label: "Cards", select: { json_path: ["text", "string"] }, sqlType: "INTEGER", sortBy: null,
+      toSql: (raw) => {
+        const cards = caseFileJson(raw).cards;
+        return Array.isArray(cards) ? cards.length : 0;
+      },
+    },
+    { key: "started_by", label: "Started by", select: { json_path: ["text", "string"] }, sqlType: "TEXT", toSql: caseFileText("startedBy"), sortBy: null },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+  ],
+};
+
 // One topic's chat posts: standalone Notes (never attached to any object's
 // note_list, and -- unlike TOPICS_VIEW/STORY_VIEW -- never added to the
 // VIEWS array below) whose Note.type is set to "topic-message" at creation
@@ -1091,7 +1148,7 @@ export const NOTE_VIEW: ViewConfig = {
   // Topic-message notes (TOPIC_MESSAGES_VIEW above) are excluded the same
   // way, even though that ViewConfig itself is never in VIEWS -- this
   // NOTE_VIEW is.
-  baseFilter: "type.string != 'topic' and type.string != 'story' and type.string != 'topic-message'",
+  baseFilter: "type.string != 'topic' and type.string != 'story' and type.string != 'topic-message' and type.string != 'Case File'",
   // Notes have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-note.sqlite",
@@ -1194,5 +1251,5 @@ export const TAG_VIEW: ViewConfig = {
 export const VIEWS: ViewConfig[] = [
   PERSON_VIEW, FAMILY_VIEW, EVENT_VIEW, PLACE_VIEW, REPOSITORY_VIEW,
   SOURCE_VIEW, CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, TAG_VIEW, GENERATED_VIEW,
-  TOPICS_VIEW, STORY_VIEW, BLOG_VIEW,
+  TOPICS_VIEW, STORY_VIEW, BLOG_VIEW, CASE_FILE_VIEW,
 ];

@@ -95,6 +95,17 @@ export function summaryText(type: string, obj: any): string {
       }
       return type === "story" ? "(story)" : "(discussion)";
     }
+    case "casefile": {
+      // An Evidence Board case file: its text.string is the board's JSON
+      // (store/board/caseFile.ts); show the case's name, not the JSON.
+      try {
+        const file = JSON.parse(obj.text?.string ?? "");
+        if (file?.name) return file.name;
+      } catch {
+        // fall through
+      }
+      return "(case file)";
+    }
     case "tag":
       return obj.name || "(tag)";
     default:

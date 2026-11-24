@@ -374,6 +374,24 @@ const STORY_HELP: SearchHelp = {
   collections: [TAGS],
 };
 
+// Note under a fixed type filter (see CASE_FILE_VIEW's baseFilter), like
+// STORY_HELP: same fields, its own scope note and examples.
+const CASE_FILE_HELP: SearchHelp = {
+  typeName: "Note",
+  scopeNote:
+    "This list already shows only the Evidence Board's case files -- each is stored as a note " +
+    "(the text describes the board: its name, question and pinned records), so a search here " +
+    "searches those notes, and is narrowed down further within the list rather than reaching " +
+    "the rest of your notes.",
+  examples: [
+    { expr: "'Carter' in text.string", description: "Cases whose name, question or cards mention Carter" },
+    { expr: "like(text.string, '%\"question\":\"\"%')", description: "Cases with no question written yet" },
+    { expr: "private == True", description: "Cases marked private" },
+  ],
+  fields: NOTE_FIELDS,
+  collections: [TAGS],
+};
+
 // Source under a fixed tag filter (see BLOG_VIEW's baseFilter) -- same
 // fields as SOURCE_HELP above (reused verbatim, same reasoning
 // GENERATED_HELP already gives for reusing MEDIA_FIELDS); only the scope
@@ -412,6 +430,7 @@ const SEARCH_HELP: Record<string, SearchHelp> = {
   topics: TOPICS_HELP,
   story: STORY_HELP,
   blog: BLOG_HELP,
+  casefile: CASE_FILE_HELP,
 };
 
 export function getSearchHelp(view: ViewConfig): SearchHelp | undefined {
