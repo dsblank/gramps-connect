@@ -22,7 +22,9 @@ import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf 
 import { mediaThumbnailUrl } from "../../store/mediaCrop";
 import { TransactionConflictError } from "../../store/transactionsApi";
 import { CASE_FILE_VIEW, VIEWS } from "../../store/views";
+import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { RecordPicker } from "../RecordPicker";
+import { pickerResultLabel } from "../RefPickerField";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
 import { corkboardSkin } from "./corkboard/corkboardSkin";
 import type { CardView } from "./skin";
@@ -56,6 +58,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const canvas = useRef<BoardCanvasHandle | null>(null);
   const token = useToken();
   const canSave = canChangeData();
+  useDocumentTitle(`${file?.name ?? t("Evidence Board")} — Gramps Connect`);
 
   // --- open the case ------------------------------------------------------------
   const load = useCallback(async (key: string) => {
@@ -278,7 +281,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         />
         {!cards.length && (
           <Stack align="center" justify="center" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-            <Text c="dimmed" style={{ pointerEvents: "auto" }}>
+            <Text
+              style={{ pointerEvents: "auto", background: "var(--mantine-color-body)", padding: "8px 14px", borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,.3)" }}
+            >
               {t("An empty board. Pin up the people and records you're investigating with “Pin up…”.")}
             </Text>
           </Stack>
@@ -302,6 +307,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
                 searchField="gramps_id"
                 placeholder={t(view.simpleSearch?.placeholder ?? "Search…")}
                 buildExpr={view.simpleSearch?.buildExpr}
+                renderLabel={(item) => pickerResultLabel(view.key, item)}
                 onPick={(item) => {
                   const handle = String(item.handle);
                   setPinType(null);

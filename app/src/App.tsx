@@ -506,7 +506,7 @@ function AuthenticatedApp() {
         // the width. Clicking a marker or a dot navigates to that record in
         // Places or Events, where they take over again. Same for Home: no
         // selected record, nothing for a detail pane to show.
-        aside={stacked || visualKey || isHome ? undefined : { width: asideWidth ?? "50%", breakpoint: 0 }}
+        aside={stacked || visualKey || isHome || isBoard ? undefined : { width: asideWidth ?? "50%", breakpoint: 0 }}
         // Stacked: no docked footer either. A permanently pinned 36px strip
         // is a poor trade for vertical space that's already scarce, and it's
         // what pane 3 was ending up jammed against -- the same StatusBar
