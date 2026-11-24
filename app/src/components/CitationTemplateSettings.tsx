@@ -21,7 +21,7 @@ import {
   type CitationTemplate,
 } from "../store/citationTemplateSyntax";
 import { CitationFormatPreview } from "./CitationFormatPreview";
-import { GoqlCompletionDropdown, useGoqlCompletion } from "./goqlCompletion/useGoqlCompletion";
+import { GoqlCompletionDropdown, useGoqlCompletion, COMPLETION_Z_INDEX } from "./goqlCompletion/useGoqlCompletion";
 import { t } from "../i18n/i18n";
 
 type CitationSettings = DisplaySettings["citation"];
@@ -288,7 +288,7 @@ function TemplateLineInput({
     },
   });
   return (
-    <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="bottom-start" width={320} withinPortal>
+    <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="bottom-start" width={320} withinPortal zIndex={COMPLETION_Z_INDEX}>
       <Combobox.Target withKeyboardNavigation={false}>
         <Textarea
           ref={ref}

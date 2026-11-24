@@ -38,7 +38,7 @@ import { getViewStore } from "../store/registry";
 import { t } from "../i18n/i18n";
 import { InfoButton } from "./InfoButton";
 import { SearchHelpDialog } from "./SearchHelpDialog";
-import { GoqlCompletionDropdown, useGoqlCompletion } from "./goqlCompletion/useGoqlCompletion";
+import { GoqlCompletionDropdown, useGoqlCompletion, COMPLETION_Z_INDEX } from "./goqlCompletion/useGoqlCompletion";
 import { maskTemplateFields } from "../store/goqlLocate";
 
 const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy", "Saved filters", "Custom"];
@@ -893,6 +893,7 @@ export function CustomRuleForm({
           position="bottom-start"
           width={320}
           withinPortal
+          zIndex={COMPLETION_Z_INDEX}
         >
           <Combobox.Target withKeyboardNavigation={false}>
             <Textarea

@@ -35,6 +35,12 @@ export interface GoqlSpot {
  * the cursor isn't in one (Tab then keeps its usual meaning). */
 export type GoqlLocator = (value: string, cursor: number) => GoqlSpot | null;
 
+/** zIndex for every completion dropdown. Mantine's default (300) is below
+ * the app's nested dialogs (zIndex 1000, with their own pickers at 1001),
+ * so the list opened behind the field being typed in. Completions are
+ * short-lived and belong to the focused field, so they sit above all of it. */
+export const COMPLETION_Z_INDEX = 2000;
+
 type TextField = HTMLInputElement | HTMLTextAreaElement;
 
 export interface GoqlCompletion {

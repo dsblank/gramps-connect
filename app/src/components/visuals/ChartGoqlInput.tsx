@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Combobox, TextInput } from "@mantine/core";
-import { GoqlCompletionDropdown, useGoqlCompletion } from "../goqlCompletion/useGoqlCompletion";
+import { GoqlCompletionDropdown, useGoqlCompletion, COMPLETION_Z_INDEX } from "../goqlCompletion/useGoqlCompletion";
 import { t } from "../../i18n/i18n";
 
 /** A one-line Person GOQL box for "Color: Filter → GOQL…" in the charts,
@@ -24,7 +24,7 @@ export function ChartGoqlInput({ applied, onApply, error }: {
     if (expr !== applied) onApply(expr);
   };
   return (
-    <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="top-start" width={320} withinPortal>
+    <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="top-start" width={320} withinPortal zIndex={COMPLETION_Z_INDEX}>
       <Combobox.Target withKeyboardNavigation={false}>
         <TextInput
           ref={inputRef}

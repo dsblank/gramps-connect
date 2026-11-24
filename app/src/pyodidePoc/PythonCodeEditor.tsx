@@ -12,7 +12,7 @@ import Editor from "react-simple-code-editor";
 import Prism from "prismjs";
 import "prismjs/components/prism-python";
 import classes from "./PythonCodeEditor.module.css";
-import { GoqlCompletionDropdown, useGoqlCompletion, type GoqlLocator } from "../components/goqlCompletion/useGoqlCompletion";
+import { GoqlCompletionDropdown, useGoqlCompletion, type GoqlLocator, COMPLETION_Z_INDEX } from "../components/goqlCompletion/useGoqlCompletion";
 import getCaretCoordinates from "textarea-caret";
 import { goqlStringInPython, maskTemplateFields } from "../store/goqlLocate";
 
@@ -103,6 +103,7 @@ export function PythonCodeEditor({
           position="bottom-start"
           width={320}
           withinPortal
+          zIndex={COMPLETION_Z_INDEX}
         >
           <Combobox.Target withKeyboardNavigation={false} withAriaAttributes={false}>
             <span

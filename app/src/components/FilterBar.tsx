@@ -11,7 +11,7 @@ import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
 import { logActivity } from "../store/activityLog";
 import { goqlNamespaceForEndpoint } from "../store/goqlCompletion";
-import { GoqlCompletionDropdown, useGoqlCompletion } from "./goqlCompletion/useGoqlCompletion";
+import { GoqlCompletionDropdown, useGoqlCompletion, COMPLETION_Z_INDEX } from "./goqlCompletion/useGoqlCompletion";
 
 interface FilterBarProps {
   view: ViewConfig;
@@ -201,6 +201,7 @@ export function FilterBar({ view }: FilterBarProps) {
           position="bottom-start"
           width={320}
           withinPortal
+          zIndex={COMPLETION_Z_INDEX}
         >
         <Combobox.Target withKeyboardNavigation={false}>
         <TextInput

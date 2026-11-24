@@ -18,7 +18,7 @@ import { getViewStore } from "../store/registry";
 import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
 import { SortableList } from "./SortableList";
-import { GoqlCompletionDropdown, useGoqlCompletion } from "./goqlCompletion/useGoqlCompletion";
+import { GoqlCompletionDropdown, useGoqlCompletion, COMPLETION_Z_INDEX } from "./goqlCompletion/useGoqlCompletion";
 
 interface Row {
   key: string;
@@ -263,7 +263,7 @@ function CustomColumnFields({
   return (
     <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
       <Group gap="xs" wrap="nowrap" align="flex-start">
-        <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="bottom-start" width={320} withinPortal>
+        <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="bottom-start" width={320} withinPortal zIndex={COMPLETION_Z_INDEX}>
           <Combobox.Target withKeyboardNavigation={false}>
             <TextInput
               ref={exprRef}
@@ -338,7 +338,7 @@ function ThenByField({
     locate: (value) => ({ namespace, source: value, offset: 0 }),
   });
   return (
-    <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="bottom-start" width={320} withinPortal>
+    <Combobox store={completion.combobox} onOptionSubmit={completion.accept} position="bottom-start" width={320} withinPortal zIndex={COMPLETION_Z_INDEX}>
       <Combobox.Target withKeyboardNavigation={false}>
         <TextInput
           ref={fieldRef}
