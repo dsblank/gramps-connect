@@ -1,5 +1,5 @@
 {
-  "_comment": "Completion cases shared by every implementation of completion.complete_from_vocabularies() (this package's own, and ports to other languages that load `python -m gramps_object_query_language.vocabulary` output). `cursor` defaults to the end of `source`; Suggestions depend on the grammar position before the word (start of a condition, after an operand, after a comparison). `expect` is the exact list of names, in order; `contains`/`excludes` check membership only; `kind` maps a name to its expected kind. A name typed in full that can go on is returned with its continuation (`date.`, `dateval[`).",
+  "_comment": "Completion cases shared by every implementation of completion.complete_from_vocabularies() (this package's own, and ports to other languages that load `python -m gramps_object_query_language.vocabulary` output). `cursor` defaults to the end of `source`; Suggestions depend on the grammar position before the word (start of a condition, after an operand, after a comparison). `expect` is the exact list of names, in order; `contains`/`excludes` check membership only; `kind` maps a name to its expected kind. A name typed in full that can go on is returned with its continuation (`date.`, `dateval[`). A Gramps type compared with a value gets `\"`, then its names inside the string (`type == \"Cen` -> `Census\"`), closing quote included unless it's already there.",
   "cases": [
     {
       "namespace": "Person",
@@ -1335,6 +1335,173 @@
         "private",
         "type",
         "value"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type == ",
+      "expect": [
+        "\""
+      ],
+      "kind": {
+        "\"": "punctuation"
+      }
+    },
+    {
+      "namespace": "Event",
+      "source": "type in [",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type in [\"Birth\", ",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type == \"Cen",
+      "expect": [
+        "Census\""
+      ],
+      "kind": {
+        "Census\"": "type_name"
+      },
+      "start": 9
+    },
+    {
+      "namespace": "Event",
+      "source": "type == \"cen",
+      "expect": [
+        "Census\""
+      ],
+      "start": 9
+    },
+    {
+      "namespace": "Event",
+      "source": "type == 'Bur",
+      "expect": [
+        "Burial'"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type != \"",
+      "contains": [
+        "Birth\"",
+        "Census\"",
+        "Death\""
+      ],
+      "excludes": [
+        "Custom\"",
+        "\""
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type == \"Cen\" and gender",
+      "cursor": 12,
+      "expect": [
+        "Census"
+      ],
+      "start": 9
+    },
+    {
+      "namespace": "Event",
+      "source": "type in [\"Birth\", \"Bap",
+      "expect": [
+        "Baptism\""
+      ],
+      "start": 19
+    },
+    {
+      "namespace": "Event",
+      "source": "type not in [\"Bap",
+      "expect": [
+        "Baptism\""
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type == \"Census\" or type == \"Dea",
+      "expect": [
+        "Death\""
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type == Ev",
+      "excludes": [
+        "\""
+      ],
+      "contains": [
+        "EventType"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "type.value == ",
+      "expect": [
+        "EventType."
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "description == \"Bir",
+      "expect": []
+    },
+    {
+      "namespace": "Event",
+      "source": "like(type, \"Bir",
+      "expect": []
+    },
+    {
+      "namespace": "Family",
+      "source": "type == \"Civ",
+      "expect": [
+        "Civil Union\""
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(c.frel == \"Ad\" for c in child_ref_list)",
+      "cursor": 17,
+      "expect": [
+        "Adopted"
+      ],
+      "start": 15
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.type == \"Bur\" for e in events)",
+      "cursor": 18,
+      "expect": [
+        "Burial"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "birth.type == \"Bap",
+      "expect": [
+        "Baptism\""
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "primary_name.type == \"Ma",
+      "expect": [
+        "Married Name\""
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(r.role == \"Pri\" for r in event_ref_list)",
+      "cursor": 18,
+      "expect": [
+        "Primary"
       ]
     }
   ]

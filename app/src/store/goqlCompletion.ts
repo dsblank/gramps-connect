@@ -30,7 +30,11 @@
 // - any other path: walked through relationships (`birth.`), JSON fields
 //   (`primary_name.surname_list[0].`) and comprehension variables (`e.` in
 //   `any(... for e in events)`)
-// - inside a string literal, or after anything it can't follow: nothing.
+// - a Gramps type compared with a value (`type ==`, `type in [`): `"`, and
+//   inside that string the type's names, matched ignoring case
+//   (`type == "cen` -> `Census"`)
+// - inside any other string literal, or after anything it can't follow:
+//   nothing.
 import vocabularyData from "../data/goqlVocabulary.json";
 
 export interface ValueConstants {
@@ -47,6 +51,9 @@ export interface FieldNode {
   items?: FieldNode;
   /** An integer that holds one of a class's ClassName.CONST values. */
   constants?: ValueConstants;
+  /** A Gramps type object (EventType, ...), compared with its name:
+   * the class whose names are in Vocabulary.type_names. */
+  type_names?: string;
 }
 
 export interface Vocabulary {
@@ -61,6 +68,8 @@ export interface Vocabulary {
   functions: string[];
   operators: string[];
   constants: Record<string, string[]>;
+  /** Each Gramps type class's built-in type names (English). */
+  type_names: Record<string, string[]>;
   env: string;
 }
 
@@ -79,7 +88,10 @@ export type CompletionKind =
   /** `"` to start a string, `[` to start a list. */
   | "punctuation"
   /** `0` inside a list field's `[`. */
-  | "index";
+  | "index"
+  /** A Gramps type's name inside the string it's compared with
+   * (`type == "Cen` -> `Census"`); detail is the type class. */
+  | "type_name";
 
 export interface Completion {
   name: string;
@@ -334,22 +346,50 @@ function continuation(
   return "";
 }
 
-/** Whether `text` ends inside an unterminated '...'/"..." literal. */
-function inString(text: string): boolean {
-  let quote: string | null = null;
+/** Where the unterminated '...'/"..." literal `text` ends inside begins
+ * (the offset of its opening quote), or null. */
+function stringStart(text: string): number | null {
+  let start: number | null = null;
   let escaped = false;
-  for (const char of text) {
-    if (quote === null) {
-      if (char === "'" || char === '"') quote = char;
+  for (let position = 0; position < text.length; position++) {
+    const char = text[position];
+    if (start === null) {
+      if (char === "'" || char === '"') start = position;
     } else if (escaped) {
       escaped = false;
     } else if (char === "\\") {
       escaped = true;
-    } else if (char === quote) {
-      quote = null;
+    } else if (char === text[start]) {
+      start = null;
     }
   }
-  return quote !== null;
+  return start;
+}
+
+/** Inside the string opened at `opened`: the names of the Gramps type it's
+ * compared with (`type == "Cen` -> `Census"`), matched ignoring case the
+ * way GOQL matches them, each closing the string unless the quote is
+ * already there. Nothing when the string isn't a type's value. */
+function typeNameCompletions(
+  vocabs: Vocabs,
+  namespace: string,
+  source: string,
+  cursor: number,
+  opened: number,
+): Completion[] {
+  const before = source.slice(0, cursor);
+  const want = expected(before.slice(0, opened))[0];
+  if (want !== "value" && want !== "literal") return [];
+  const bindings = bindingsIn(vocabs, namespace, source);
+  const className = comparedField(vocabs, namespace, before.slice(0, opened), bindings)?.type_names;
+  if (!className) return [];
+  const quote = source[opened];
+  const closing = source.slice(cursor, cursor + 1) === quote ? "" : quote;
+  const typed = before.slice(opened + 1).toLowerCase();
+  return (vocabs[namespace].type_names?.[className] ?? [])
+    .filter((name) => name.toLowerCase().startsWith(typed))
+    .map((name): Completion => ({ name: name + closing, kind: "type_name", detail: className, start: opened + 1 }))
+    .sort((a, b) => compareNames(a.name, b.name));
 }
 
 type Segment = [name: string, indexes: number];
@@ -573,9 +613,11 @@ export function completeFromVocabularies(
   env: Iterable<string> = [],
 ): Completion[] {
   const before = source.slice(0, cursor);
-  if (inString(before)) return [];
   const vocab = vocabs[namespace];
   if (!vocab) return [];
+  const opened = stringStart(before);
+  // Inside a string: only a type's name (`type == "Cen`), else nothing.
+  if (opened !== null) return typeNameCompletions(vocabs, namespace, source, cursor, opened);
   const envList = [...env];
   // Env is offered only where the caller will supply values for it.
   const envNames: Candidate[] = envList.length ? [[vocab.env, "env", null]] : [];
@@ -626,7 +668,11 @@ export function completeFromVocabularies(
     const compared =
       want === "value" || want === "literal" ? comparedField(vocabs, namespace, before.slice(0, start), bindings) : null;
     const comparedType = compared?.type ?? null;
-    if (compared?.constants) {
+    if (compared?.type_names && !prefix) {
+      // A Gramps type (`type ==`, `type in [`) is compared with its name: a
+      // string, whose names come once it's opened.
+      candidates = [quote, ...envNames];
+    } else if (compared?.constants) {
       // The field compared with holds one class's constants (`type.value
       // ==` -> `EventType.`): offer just that class.
       candidates = [[`${compared.constants.class}.`, "constant_class", null], ...envNames];
