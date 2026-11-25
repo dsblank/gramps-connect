@@ -304,7 +304,7 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction,
         autoClose: 12000,
         message: (
           <Group gap="xs">
-            <Text size="sm">{t("Marked")}: {faceWhoLabel(who)}</Text>
+            <Text size="sm">{t("Identified")}: {faceWhoLabel(who)}</Text>
             <Anchor
               component="button"
               size="sm"
@@ -482,7 +482,7 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction,
           </Tooltip>
         ))}
         {canMark && (
-          <Tooltip label={marking ? t("Stop marking") : t("Mark someone in this photo")} withArrow position="bottom">
+          <Tooltip label={marking ? t("Stop identifying") : t("Identify someone in this photo")} withArrow position="bottom">
             <ActionIcon
               variant="filled" color={marking ? "yellow" : "dark"} size={36} radius="xl"
               onClick={() => {
@@ -491,7 +491,7 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction,
                 setAskAt(null);
               }}
               disabled={!src}
-              aria-label={t("Mark someone in this photo")}
+              aria-label={t("Identify someone in this photo")}
               aria-pressed={marking}
               style={{ position: "absolute", top: 16, right: 192, zIndex: 3 }}
             >

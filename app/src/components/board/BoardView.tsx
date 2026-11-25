@@ -342,7 +342,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   function saveFace(person: string, media: string, rect: number[] | null) {
     const who = titleOf(person, working);
     stage(
-      rect ? `${t("Face")}: ${who}, ${photoTitle(media)}` : `${t("Face cleared")}: ${who}, ${photoTitle(media)}`,
+      rect ? `${t("Identified")}: ${who}, ${photoTitle(media)}` : `${t("Box removed")}: ${who}, ${photoTitle(media)}`,
       (b) => setMediaRegion(b, person, media, rect as Region | null),
     );
   }
@@ -360,7 +360,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     if ("handle" in who && !loaded[who.handle]) return;
     let person = "";
     const label = "handle" in who ? titleOf(who.handle, loaded) : faceWhoLabel(who);
-    const change = stage(`${t("Face")}: ${label}, ${photoTitle(media)}`, (b) => {
+    const change = stage(`${t("Identified")}: ${label}, ${photoTitle(media)}`, (b) => {
       person = buildFace(b, media, rect, who);
     }, false, loaded);
     if (change && opened && change.creates.includes(person)) {
@@ -1095,11 +1095,11 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           handle={faceEdit.media}
           initialRect={faceEdit.rect}
           onClose={() => setFaceEdit(null)}
-          title={`${t("Mark the face of")} ${titleOf(faceEdit.person, working)}`}
-          hint={t("Drag a box around the face. Drag the box to move it, or its corners to resize it.")}
-          saveLabel={t("Use this face")}
+          title={t("Identify {name} in this photo").replace("{name}", titleOf(faceEdit.person, working))}
+          hint={t("Drag a box around their face. Drag the box to move it, or its corners to resize it.")}
+          saveLabel={t("Use this box")}
           saveIcon={<TreeMark />}
-          clearLabel={t("Clear the face")}
+          clearLabel={t("Remove the box")}
           onSave={(rect) => saveFace(faceEdit.person, faceEdit.media, rect)}
         />
       )}

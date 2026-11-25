@@ -188,7 +188,7 @@ function FaceThumb({ url, size = 32 }: { url: string | null; size?: number }) {
   return src ? (
     <img src={src} onError={onError} alt="" width={size} height={size} style={{ objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
   ) : (
-    <Box w={size} h={size} title={t("No face marked")} style={{ flexShrink: 0, border: "1px dashed var(--mantine-color-dimmed)", borderRadius: 4, display: "grid", placeItems: "center" }}>
+    <Box w={size} h={size} title={t("Not identified in the photo yet")} style={{ flexShrink: 0, border: "1px dashed var(--mantine-color-dimmed)", borderRadius: 4, display: "grid", placeItems: "center" }}>
       <Text size="xs" c="dimmed">?</Text>
     </Box>
   );
@@ -446,7 +446,7 @@ export function CardPanel(props: {
         <Box>
           <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("In this photo")}{inPhoto ? ` (${inPhoto.length})` : ""}</Text>
           {inPhoto === null && <Loader size="xs" />}
-          {inPhoto?.length === 0 && <Text size="xs" c="dimmed">{t("No one is marked in this photo yet.")}</Text>}
+          {inPhoto?.length === 0 && <Text size="xs" c="dimmed">{t("No one is identified in this photo yet.")}</Text>}
           <Stack gap={4} mt={4}>
             {inPhoto?.map((p) => (
               <Group key={p.handle} gap="xs" wrap="nowrap">
@@ -523,7 +523,7 @@ function FaceMenu({ marked, who, onFace, onNotInPhoto }: { marked: boolean; who:
         <ActionIcon size="sm" variant="subtle" color="gray" aria-label={`${t("Face and photo")}: ${who}`}>⋯</ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item onClick={onFace}>{marked ? t("Change face…") : t("Mark face…")}</Menu.Item>
+        <Menu.Item onClick={onFace}>{marked ? t("Change where they are…") : t("Identify in the photo…")}</Menu.Item>
         <Menu.Item onClick={onNotInPhoto} rightSection={<TreeMark />}>{t("Not in this photo")}</Menu.Item>
       </Menu.Dropdown>
     </Menu>
@@ -556,7 +556,7 @@ function PersonPhoto({ person, all, readOnly, faceUrl, onFace, onNotInPhoto, onM
             <Text size="sm" truncate>{titleOf(main.media, all) || t("Photo")}</Text>
             {!readOnly && (
               <Group gap={4}>
-                <Button size="compact-xs" variant="light" onClick={() => onFace(person, main.media)}>{main.rect ? t("Change face…") : t("Mark face…")}</Button>
+                <Button size="compact-xs" variant="light" onClick={() => onFace(person, main.media)}>{main.rect ? t("Change where they are…") : t("Identify in the photo…")}</Button>
                 <Button size="compact-xs" variant="subtle" color="gray" onClick={() => onNotInPhoto(person, main.media)} rightSection={<TreeMark />}>{t("Not in this photo")}</Button>
               </Group>
             )}

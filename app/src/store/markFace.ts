@@ -33,7 +33,7 @@ export async function markFaceNow(media: string, rect: number[], who: FaceWho): 
   const person = buildFace(b, media, rect, who);
   const change = b.change("face");
   const name = titleOf(person, applyChanges(base, [change]));
-  return saveBoard(base, [change], `Mark face: ${name}`);
+  return saveBoard(base, [change], `Identify in a photo: ${name}`);
 }
 
 export { undoSave as undoMarkFace };
