@@ -730,7 +730,9 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
             <Text size="sm" c="dimmed">{i + 1}.</Text>
             <Text size="sm" style={{ flex: 1 }} td={c.off ? "line-through" : undefined}>{c.label}</Text>
             <Button size="compact-xs" variant="subtle" onClick={() => onShowChange(c)}>{t("Show")}</Button>
-            <Button size="compact-xs" variant="light" onClick={() => onTakeBack(c.id)}>{t("Undo")}</Button>
+            <Tooltip label={t("Take this change out of your loose ends, with anything that depends on it. Nothing in the tree changes.")} multiline w={240} openDelay={400} withArrow>
+              <Button size="compact-xs" variant="light" onClick={() => onTakeBack(c.id)}>{t("Remove")}</Button>
+            </Tooltip>
           </Group>
         ))}
       </Stack>
