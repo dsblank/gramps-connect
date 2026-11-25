@@ -20,7 +20,7 @@ import {
  *      │ (⚭ HW)        │
  *      K ───── ⚭ ───── X
  *
- *   HWF ⚭ HWM: HW, HWB;  HWB ⚭ HWBW
+ *   HWF ⚭ HWM: HW, HWB;  HWB ⚭ HWBW: HWBK;  HWBK ⚭ HWBKW: HWBGK
  *
  * H is the "home" person; S is H's half-brother (same mother A). */
 const FAMILIES: [string, string, string, string[]][] = [
@@ -32,7 +32,8 @@ const FAMILIES: [string, string, string, string[]][] = [
   ["f-c", "C", "CW", ["X"]],
   ["f-k", "K", "X", []],
   ["f-hw", "HWF", "HWM", ["HW", "HWB"]],
-  ["f-hwb", "HWB", "HWBW", []],
+  ["f-hwb", "HWB", "HWBW", ["HWBK"]],
+  ["f-hwbk", "HWBK", "HWBKW", ["HWBGK"]],
 ];
 
 /** What the server would say about each person relative to H (anyone
@@ -50,6 +51,9 @@ const LABELS: Record<string, string> = {
   "H>HWB": "brother-in-law",
   "K>X": "wife",
   "HWB>HWBW": "wife",
+  "HWB>HWBK": "son",
+  "HWB>HWBGK": "grandson",
+  "HWBK>HWBGK": "son",
 };
 
 function buildPeople(): Map<string, PathPerson> {
@@ -253,6 +257,24 @@ describe("getRelationshipPaths", () => {
 
     const [translated] = await getRelationshipPaths("H", "HWBW", deps, { maxPaths: 1, inLawPattern: "{1} van {0}" });
     expect(translated.steps[3].label).toBe("wife van brother-in-law");
+  });
+
+  it("names blood relatives past an in-law from that in-law, in one request", async () => {
+    const { deps, calls } = fakeServer();
+    const [path] = await getRelationshipPaths("H", "HWBGK", deps, { maxPaths: 1 });
+    expect(handles(path.steps)).toEqual(["H", "HW", "HWB", "HWBK", "HWBGK"]);
+    expect(labels(path.steps)).toEqual(["", "wife", "brother-in-law", "brother-in-law's son", "brother-in-law's grandson"]);
+    expect(calls.filter((c) => c.options.max === 1)).toEqual([
+      { from: "HWB", to: "HWBGK", options: { depth: 2, max: 1, bloodOnly: true } },
+    ]);
+  });
+
+  it("labels a link at a time when the blood search takes another route", async () => {
+    const { deps } = fakeServer();
+    const fetchPaths = async (from: string, to: string, options: PathSearchOptions) =>
+      options.bloodOnly && options.max === 1 ? [] : deps.fetchPaths(from, to, options);
+    const [path] = await getRelationshipPaths("H", "HWBGK", { ...deps, fetchPaths }, { maxPaths: 1 });
+    expect(labels(path.steps).slice(3)).toEqual(["brother-in-law's son", "brother-in-law's son's son"]);
   });
 
   it("keeps a marriage in the middle as just its steps", async () => {

@@ -12,9 +12,12 @@
 //   above a sibling link, and the other parent beside a peak (an ancestor
 //   both sides come down from through the same family).
 // - Every person gets a `label`: Gramps' wording, or for someone it has no
-//   word for (e.g. past a second marriage) one built from the person
-//   before them, "brother-in-law's wife", with the caller's translated
-//   pattern.
+//   word for (e.g. past a second marriage) one built from the last person
+//   it did name, "brother-in-law's wife", with the caller's translated
+//   pattern. A stretch of blood relatives after that person is asked for
+//   in one request and named as Gramps would from there ("granduncle-in-
+//   law's third cousin twice removed"), not one link at a time
+//   ("...'s father's mother's ... son's son").
 //
 // Pure module with the network calls injected (RelationshipPathDeps), so
 // it runs in the Gramplet worker (pyodideWorker.ts) and in tests alike.
@@ -163,6 +166,22 @@ function extrasFor(steps: ServerPathStep[], i: number, people: Map<string, PathP
 
 const fill = (pattern: string, anchor: string, word: string) => pattern.replace("{0}", anchor).replace("{1}", word);
 
+/** The last step of the stretch after `from` that Gramps has no name for
+ * and that a blood-only search follows: up, at most one sibling link, then
+ * down. `from` itself when the next step isn't such a link. */
+function bloodStretchEnd(steps: ServerPathStep[], from: number): number {
+  let up = true;
+  let j = from;
+  while (j + 1 < steps.length && !steps[j + 1].relationship_string) {
+    const link = steps[j + 1].link;
+    if (link === "child") up = false;
+    else if (!(up && (link === "parent" || link === "sibling"))) break;
+    if (link === "sibling") up = false;
+    j++;
+  }
+  return j;
+}
+
 /** Every path between two people, shortest first, each person labelled
  * with their relationship to `handle1`. `maxPaths` undefined means as
  * many as the server gives. `inLawPattern` builds a label from the person
@@ -201,6 +220,7 @@ export async function getRelationshipPaths(
 
   // Requests shared by every path: each is made at most once.
   const cache = new Map<string, Promise<string>>();
+  const stretchCache = new Map<string, Promise<string[] | null>>();
   const once = (key: string, request: () => Promise<ServerPath[]>, pick: (paths: ServerPath[]) => string | null | undefined) => {
     let value = cache.get(key);
     if (!value) {
@@ -229,6 +249,27 @@ export async function getRelationshipPaths(
           },
         );
 
+  // A stretch of blood relatives, from its first person: Gramps' word for
+  // each of the others relative to that first person, in one request --
+  // or null when the search took another route (then they're labelled a
+  // link at a time).
+  const stretchWords = (stretch: string[]) => {
+    const key = `stretch\n${stretch.join("\n")}`;
+    let value = stretchCache.get(key);
+    if (!value) {
+      value = deps
+        .fetchPaths(stretch[0], stretch[stretch.length - 1], { depth: stretch.length - 1, max: 1, bloodOnly: true })
+        .then((r) => {
+          const got = r[0]?.steps ?? [];
+          if (got.length !== stretch.length || got.some((s, i) => s.handle !== stretch[i])) return null;
+          return got.map((s) => s.relationship_string ?? "");
+        })
+        .catch(() => null);
+      stretchCache.set(key, value);
+    }
+    return value;
+  };
+
   /** A node for `handle`, with `name` (Gramps' wording) if any, else a
    * label built from `from`'s label and the one-link word. */
   const makeNode = async (handle: string, name: string, from: { handle: string; label: string } | null): Promise<PathNode> => {
@@ -243,13 +284,33 @@ export async function getRelationshipPaths(
   return Promise.all(
     paths.map(async (path, p): Promise<RelationshipPath> => {
       const steps: PathStep[] = [];
+      const server = path.steps;
       // In order: each label can build on the one before.
-      for (const [i, s] of path.steps.entries()) {
-        const node =
-          i === 0
-            ? { handle: s.handle, gender: people.get(s.handle)?.gender ?? 2, relationship_string: "", label: "" }
-            : await makeNode(s.handle, s.relationship_string ?? "", steps[i - 1]);
-        steps.push({ ...node, link: i === 0 ? null : s.link });
+      for (let i = 0; i < server.length; ) {
+        const s = server[i];
+        if (i === 0) {
+          steps.push({ handle: s.handle, gender: people.get(s.handle)?.gender ?? 2, relationship_string: "", label: "", link: null });
+          i++;
+          continue;
+        }
+        // Past where Gramps has a name: the blood relatives of the last
+        // person it named, all named from that person in one request.
+        const base = steps[i - 1];
+        const end = s.relationship_string ? i - 1 : bloodStretchEnd(server, i - 1);
+        const words = end > i && base.label ? await stretchWords(server.slice(i - 1, end + 1).map((x) => x.handle)) : null;
+        if (words) {
+          for (let k = i; k <= end; k++) {
+            const word = words[k - i + 1];
+            const node: PathNode = word
+              ? { handle: server[k].handle, gender: people.get(server[k].handle)?.gender ?? 2, relationship_string: "", label: fill(inLawPattern, base.label, word) }
+              : await makeNode(server[k].handle, "", steps[k - 1]);
+            steps.push({ ...node, link: server[k].link });
+          }
+          i = end + 1;
+          continue;
+        }
+        steps.push({ ...(await makeNode(s.handle, s.relationship_string ?? "", base)), link: s.link });
+        i++;
       }
       await Promise.all(
         steps.map(async (step, i) => {
