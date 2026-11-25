@@ -1,6 +1,16 @@
 // The corkboard skin: each kind of record is a different piece of paper,
 // held by a pin in its record type's colour (a paperclip while it's a draft
 // not saved yet), with yarn sagging between pins. Ported from the prototype.
+
+// The board's fonts, bundled with the app (no font service, so they work
+// offline in the desktop build): typewriter for record cards, handwriting
+// for yarn tags, pencil marks and sticky notes, a bold serif for headlines.
+// Only the weights the skin uses; the browser fetches each file only when
+// the board first draws text in it.
+import "@fontsource/special-elite/400.css";
+import "@fontsource/caveat/500.css";
+import "@fontsource/caveat/700.css";
+import "@fontsource/playfair-display/900.css";
 import { SNAPSHOT_H, SNAPSHOT_W } from "../placeMapSnapshot";
 import { retryApiImageOnError } from "../../../store/apiImage";
 import type { ReactNode } from "react";

@@ -57,6 +57,9 @@ import { corkboardSkin } from "./corkboard/corkboardSkin";
 import type { CardView } from "./skin";
 
 /** A view key (as region and search results name types) to its class. */
+/** The board's typewriter face (bundled by the corkboard skin), for its own headings. */
+const BOARD_TYPEWRITER = '"Special Elite", "Courier Prime", "Courier New", monospace';
+
 const SIDEBAR_DEFAULT = 340;
 const SIDEBAR_MIN = 260;
 /** Never wider than this share of the window, so the cork stays usable. */
@@ -1053,7 +1056,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       <Group gap="xs" px="sm" py={6} wrap="wrap" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
         <Group gap={6} wrap="nowrap">
           <img src={caseBoardIcon} width={20} height={20} alt="" />
-          <Text fw={700} style={{ whiteSpace: "nowrap" }}>{t("Evidence board")}</Text>
+          <Text fz="lg" style={{ whiteSpace: "nowrap", fontFamily: BOARD_TYPEWRITER }}>{t("Evidence board")}</Text>
         </Group>
         <Divider orientation="vertical" />
         <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>{t("Case file")}:</Text>
@@ -1123,7 +1126,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         {!cards.length && !file.stickies.length && !lead && (
           <Stack align="center" justify="center" p="md" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <Paper shadow="lg" p="lg" maw={470} style={{ pointerEvents: "auto", transform: "rotate(-0.8deg)" }}>
-              <Title order={3} mb={6}>{t("New case file")}</Title>
+              <Title order={3} mb={6} fw={400} style={{ fontFamily: BOARD_TYPEWRITER }}>{t("New case file")}</Title>
               <Text size="sm" c="dimmed" mb="md">
                 {canSave
                   ? t("Pin the people and records you're investigating, tie them together with yarn, and save when the case holds up. Nothing goes into the tree until then.")
