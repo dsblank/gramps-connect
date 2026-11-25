@@ -12,7 +12,7 @@ import {
 import { GRAMPS_TYPE_TABLES } from "../data/grampsTypeTables";
 import { FilterCombineError } from "../store/goqlFilterCombiner";
 import {
-  addRuleGroup, addRuleRow, combineFilterTree, countRules, createEmptyTree,
+  addRuleGroup, addRuleRow, combineFilterTree, countRules, createEmptyTree, createRuleRow,
   removeNode, setConnector, toggleNegate, updateRowValues,
   type FilterConnector, type FilterRuleGroup, type FilterRuleRow, type FilterTree, type FilterTreeNode,
 } from "../store/goqlFilterTree";
@@ -44,11 +44,27 @@ import { maskTemplateFields } from "../store/goqlLocate";
 
 const CATEGORIES: GqlFilterCategory[] = ["Dates", "Properties", "Associations", "Tags", "Privacy", "Saved filters", "Custom"];
 
-/** "Load a saved filter…"'s own explicit "nothing loaded" entry -- lets
+/** "Choose a filter…"'s own explicit "nothing loaded" entry -- lets
  * that choice be made right there, rather than only reachable via the
  * bottom "Clear" button. Not a real Media handle, so it can't collide
  * with one. */
 const EMPTY_SAVED_FILTER_VALUE = "__empty__";
+
+/** "Choose a filter…" lists single rules too (issue #60): picking one is
+ * using that rule on its own, no filter to build first. Their values are
+ * this prefix plus the preset id -- never a Media handle, which is hex. */
+const RULE_VALUE_PREFIX = "rule:";
+
+/** The rule `tree` consists of, when it's exactly one plain rule (not
+ * negated, alone in a non-negated root) -- what picking a rule from
+ * "Choose a filter…" makes, so the dropdown can keep showing that rule
+ * and switching to another doesn't ask to discard anything. */
+function singleRuleOf(tree: FilterTree): FilterRuleRow | undefined {
+  const { root } = tree;
+  if (root.negate || root.children.length !== 1) return undefined;
+  const only = root.children[0];
+  return only.kind === "rule" && !only.negate ? only : undefined;
+}
 
 type Preview = { ok: true; whereExpr: string } | { ok: false; message: string } | null;
 
@@ -123,7 +139,7 @@ interface FilterPickerDialogProps {
  *
  * The tree editor, its GOQL preview, and "Custom rules…" all live inside
  * a collapsed-by-default "Edit options" section (`editOptionsOpen`) --
- * picking a Saved Filter from the dropdown and hitting Apply is the
+ * picking a Saved Filter or a single rule from the dropdown is the
  * common path and needs none of that visible; it's a click away for
  * anyone building or tweaking a rule. "Delete" (the loaded Saved
  * Filter, not a rule) lives with Clear/Save/Apply in the always-visible
@@ -158,7 +174,7 @@ export function FilterPickerDialog({
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [manageRulesOpen, setManageRulesOpen] = useState(false);
   // Keeps the rule-builder/GOQL/Custom-rules editing surface tucked away
-  // by default -- the goal is a quick pick from "Load a saved filter…"
+  // by default -- the goal is a quick pick from "Choose a filter…"
   // for the common case, with the full editor a click away for anyone
   // who needs it. Not reset on open/close (the dialog stays mounted the
   // whole time a view has a namespace, see ListHeader.tsx) -- once
@@ -220,6 +236,40 @@ export function FilterPickerDialog({
     [savedFilters, namespace],
   );
 
+  // The rules "Choose a filter…" offers on their own: this list's rules by
+  // category, Custom Rules last. "Matches saved filter" rules are left
+  // out -- the saved filters themselves are listed right above.
+  const pickableRules = useMemo(
+    () => presets.filter((p) =>
+      p.namespace === namespace && p.supported && !p.unavailableReason && p.category !== "Saved filters"),
+    [presets, namespace],
+  );
+  const filterChoices = useMemo(() => {
+    const groups: { group: string; items: { value: string; label: string }[] }[] = [];
+    if (savedFiltersForNamespace.length > 0) {
+      groups.push({
+        group: t("Saved filters"),
+        items: savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
+      });
+    }
+    for (const category of CATEGORIES) {
+      const items = pickableRules
+        .filter((p) => p.category === category)
+        // A Custom Rule's name is whatever its author typed, not a
+        // built-in string to translate.
+        .map((p) => ({ value: RULE_VALUE_PREFIX + p.id, label: category === "Custom" ? p.label : t(p.label) }));
+      if (items.length > 0) {
+        groups.push({ group: category === "Custom" ? t("Custom Rules") : t(category), items });
+      }
+    }
+    return [{ value: EMPTY_SAVED_FILTER_VALUE, label: t("New Filter") }, ...groups];
+  }, [savedFiltersForNamespace, pickableRules]);
+
+  // The rule the tree is, when it's a single rule picked (or built) on its
+  // own and no saved filter is loaded.
+  const singleRule = savedFilterHandle ? undefined : singleRuleOf(tree);
+  const singleRulePreset = singleRule ? pickableRules.find((p) => p.id === singleRule.presetId) : undefined;
+
   // Reported out for ListHeader.tsx's own badge/clear-button/summary --
   // see filterPickerState.ts's own doc comment for why this is the only
   // thing shared across components.
@@ -264,9 +314,11 @@ export function FilterPickerDialog({
   const loadedFilterTree = savedFilterHandle
     ? savedFiltersForNamespace.find((f) => f.handle === savedFilterHandle)?.tree
     : undefined;
+  // A single rule picked from the dropdown isn't work worth confirming
+  // before switching away from it -- picking it again is one click.
   const isDirty = savedFilterHandle
     ? (loadedFilterTree ? JSON.stringify(tree) !== JSON.stringify(loadedFilterTree) : false)
-    : countRules(tree) > 0;
+    : countRules(tree) > 0 && !singleRulePreset;
 
   // Recomputed on every edit -- cheap (a handful of string-only presets) --
   // so the preview (and the Apply button's disabled state) reflect a bad/
@@ -319,7 +371,17 @@ export function FilterPickerDialog({
     setSavedFilterName(filter.name);
   }
 
-  // The "Load a saved filter…" Select's own onChange -- confirms first
+  // Picking a single rule from "Choose a filter…": the tree becomes just
+  // that rule, the same as loading a saved filter -- Apply runs it. One
+  // that needs values shows their inputs under the dropdown first.
+  function handlePickRule(preset: GqlFilterPreset) {
+    const empty = createEmptyTree(namespace);
+    setTree({ ...empty, root: { ...empty.root, children: [createRuleRow(preset.id)] } });
+    setSavedFilterHandle(undefined);
+    setSavedFilterName(undefined);
+  }
+
+  // The "Choose a filter…" Select's own onChange -- confirms first
   // when the current tree is dirty, since switching (to a different
   // filter, or back to "New Filter") would otherwise discard those edits
   // with no warning at all, unlike the bottom "Clear" button (whose
@@ -332,7 +394,10 @@ export function FilterPickerDialog({
   // message falls back to a nameless phrasing rather than showing
   // "undefined" when there's no loaded filter to name.
   async function handleSelectSavedFilter(value: string | null) {
-    const found = value && value !== EMPTY_SAVED_FILTER_VALUE
+    const rule = value?.startsWith(RULE_VALUE_PREFIX)
+      ? pickableRules.find((p) => RULE_VALUE_PREFIX + p.id === value)
+      : undefined;
+    const found = !rule && value && value !== EMPTY_SAVED_FILTER_VALUE
       ? savedFiltersForNamespace.find((f) => f.handle === value)
       : undefined;
     if (isDirty) {
@@ -346,7 +411,9 @@ export function FilterPickerDialog({
       setConfirmPending(false);
       if (!ok) return;
     }
-    if (found) {
+    if (rule) {
+      handlePickRule(rule);
+    } else if (found) {
       handleLoadSavedFilter(found);
     } else {
       handleClear();
@@ -464,25 +531,14 @@ export function FilterPickerDialog({
         <Group gap="xs" wrap="wrap">
           <Select
             size="xs"
-            w={260}
-            placeholder={t("Load a saved filter…")}
-            data={[
-              // A real, visible label -- an empty one (the earlier
-              // approach, relying on `placeholder` showing through a
-              // blank selected box) rendered as a blank, unclickable
-              // row in the dropdown itself. This is purely this
-              // Select's own display text for "nothing loaded"; its
-              // `value` stays EMPTY_SAVED_FILTER_VALUE, a sentinel
-              // that can't collide with a real Media handle, so
-              // handleSelectSavedFilter() below still treats it as
-              // "load nothing" -- it's never written anywhere as an
-              // actual Saved Filter name (SaveFilterDialog's own
-              // `initialName` is always "" for a fresh "Save…", not
-              // derived from this label).
-              { value: EMPTY_SAVED_FILTER_VALUE, label: t("New Filter") },
-              ...savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
-            ]}
-            value={savedFilterHandle ?? EMPTY_SAVED_FILTER_VALUE}
+            w={300}
+            searchable
+            nothingFoundMessage={t("Nothing matches your search.")}
+            maxDropdownHeight={360}
+            aria-label={t("Choose a filter…")}
+            placeholder={t("Choose a filter…")}
+            data={filterChoices}
+            value={savedFilterHandle ?? (singleRulePreset ? RULE_VALUE_PREFIX + singleRulePreset.id : EMPTY_SAVED_FILTER_VALUE)}
             onChange={handleSelectSavedFilter}
           />
           {/* Only signal this app-worthy while it's actually true:
@@ -493,6 +549,24 @@ export function FilterPickerDialog({
            * not a warning about real data loss). */}
           {isDirty && <Text size="xs" c="dimmed">{t("Unsaved changes")}</Text>}
         </Group>
+
+        {/* A single rule picked from the dropdown that needs values: its
+         * inputs, right here, so using it doesn't mean opening the Filter
+         * Builder. Hidden while the builder is open -- it shows the same
+         * inputs on the rule's own row. */}
+        {singleRule && singleRulePreset?.params && singleRulePreset.params.length > 0 && !editOptionsOpen && (
+          <Group gap="xs" wrap="wrap" align="center">
+            {singleRulePreset.params.map((param, i) => (
+              <ParamInput
+                key={param.name}
+                param={param}
+                autoFocus={i === 0}
+                value={singleRule.values?.[param.name] ?? ""}
+                onChange={(v) => mutate((tr) => updateRowValues(tr, singleRule.id, { ...singleRule.values, [param.name]: v }))}
+              />
+            ))}
+          </Group>
+        )}
 
         <Divider />
 
@@ -1338,10 +1412,11 @@ function paramPlaceholder(param: GqlPresetParam): string {
  * GqlPresetParam). A "gramps-type" shows Gramps' standard type names
  * translated, stores the English name (what goqlFilterCombiner.ts looks
  * up), and keeps anything else typed as a custom type name. */
-function ParamInput({ param, value, onChange }: {
+function ParamInput({ param, value, onChange, autoFocus = false }: {
   param: GqlPresetParam;
   value: string;
   onChange: (value: string) => void;
+  autoFocus?: boolean;
 }) {
   switch (param.type) {
     case "integer":
@@ -1351,6 +1426,7 @@ function ParamInput({ param, value, onChange }: {
           w={100}
           placeholder={t(param.label)}
           hideControls
+          autoFocus={autoFocus}
           value={value}
           onChange={(v) => onChange(v === "" ? "" : String(v))}
         />
@@ -1362,6 +1438,7 @@ function ParamInput({ param, value, onChange }: {
           w={130}
           placeholder={t(param.label)}
           data={param.options.map((o) => ({ value: o.value, label: t(o.label) }))}
+          autoFocus={autoFocus}
           value={value || null}
           onChange={(v) => onChange(v ?? "")}
           comboboxProps={{ zIndex: 1001 }}
@@ -1377,6 +1454,7 @@ function ParamInput({ param, value, onChange }: {
           w={170}
           placeholder={t(param.label)}
           data={names.map((name) => t(name))}
+          autoFocus={autoFocus}
           value={isStandard ? t(value) : value}
           onChange={(v) => onChange(names.find((name) => t(name) === v) ?? v)}
           comboboxProps={{ zIndex: 1001 }}
@@ -1390,6 +1468,7 @@ function ParamInput({ param, value, onChange }: {
           size="xs"
           w={param.type === "regex" ? 170 : 140}
           placeholder={paramPlaceholder(param)}
+          autoFocus={autoFocus}
           value={value}
           onChange={(e) => onChange(e.currentTarget.value)}
         />
