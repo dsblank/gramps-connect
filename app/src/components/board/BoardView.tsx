@@ -1106,7 +1106,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         {!cards.length && !lead && (
           <Stack align="center" justify="center" p="md" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <Paper shadow="lg" p="lg" maw={470} style={{ pointerEvents: "auto", transform: "rotate(-0.8deg)" }}>
-              <Title order={3} mb={6}>{t("An empty board")}</Title>
+              <Title order={3} mb={6}>{t("New case file")}</Title>
               <Text size="sm" c="dimmed" mb="md">
                 {canSave
                   ? t("Pin the people and records you're investigating, tie them together with yarn, and save when the case holds up. Nothing goes into the tree until then.")
