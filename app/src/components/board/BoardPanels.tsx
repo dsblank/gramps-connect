@@ -508,11 +508,11 @@ export function CardPanel(props: {
       </Box>
       <Divider />
       <Group gap="xs">
-        <Button size="xs" variant="default" onClick={onTakeOff}>{t("Take off the board")}</Button>
+        <Button size="xs" variant="default" onClick={onTakeOff}>{t("Unpin")}</Button>
         {isDraft && !readOnly && <Button size="xs" color="red" variant="light" onClick={onDiscard}>{t("Discard this draft")}</Button>}
       </Group>
       <Text size="xs" c="dimmed">
-        {isDraft ? t("Discarding removes it, and anything that depends on it, from your loose ends.") : t("Taking a card off the board never changes the tree.")}
+        {isDraft ? t("Discarding removes it, and anything that depends on it, from your loose ends.") : t("Unpinning a card never changes the tree.")}
       </Text>
     </PanelFrame>
   );

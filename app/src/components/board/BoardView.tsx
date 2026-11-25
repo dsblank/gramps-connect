@@ -578,7 +578,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   function takeOff(handle: string) {
     setFile((f) => f && { ...f, cards: f.cards.filter((c) => c.handle !== handle) });
     setSelection(null);
-    notifications.show({ message: t("Taken off the board. Nothing in the tree changed.") });
+    notifications.show({ message: t("Unpinned. Nothing in the tree changed.") });
   }
 
   function discardDraft(handle: string) {
@@ -912,7 +912,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           {notices.map((n) => <Text size="sm" key={n}>{n}</Text>)}
           {goneNow.length > 0 && (
             <Anchor component="button" size="sm" onClick={() => setFile((f) => f && { ...f, cards: f.cards.filter((c) => !goneNow.some((g) => g.handle === c.handle)) })}>
-              {goneNow.length === 1 ? t("Take it off the board") : t("Take them off the board")}
+              {goneNow.length === 1 ? t("Unpin it") : t("Unpin them")}
             </Anchor>
           )}
         </Alert>
