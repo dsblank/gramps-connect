@@ -330,6 +330,20 @@ Roughly by value, most first:
 - **Research Tasks** — `gramps-web` has a to-do-list feature built as a
   specialized Source subtype with task notes (`GrampsjsViewTask(s)`/
   `NewTask`). No equivalent here.
+- **Evidence Board: two people on one case** — today it's taking turns:
+  each browser keeps its unsaved board, and Save sends the case-file Note
+  with its loaded `old`, so a second Save is refused rather than
+  overwriting. But on reopen the saved layout replaces the second
+  person's whole unsaved layout (`layoutReplaced`, caseLoad.ts); only
+  their loose ends carry over. In order of effort:
+  - Merge layouts on reopen instead of replacing: keep the saved cards
+    and add this browser's own pins, unpins, moves and sticky notes on
+    top (a three-way merge against the save the draft was made from).
+  - Notice someone else's save while the board is open: poll the
+    case-file Note's change time and show "Saved by someone else —
+    reload?" before Save fails, not after.
+  - Live co-editing (see each other's cards move). gramps-web-api has no
+    push channel, so it would be built on polling; a large change.
 - **Service worker for app-shell caching**: `app/` registers none, so
   every tab load/reload depends on the network being up at that instant —
   a laptop resuming from sleep mid-load can hit `ERR_NETWORK_CHANGED` on
