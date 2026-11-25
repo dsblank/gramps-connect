@@ -36,6 +36,8 @@ import { ViewButton } from "./related/ViewButton";
 import { TopicLinksSection } from "./related/TopicLinksSection";
 import { LinkObjectControl } from "./related/LinkObjectControl";
 import { parseTopicSpec } from "../store/topicsApi";
+import { parseCaseFile, type CaseFile } from "../store/board/caseFile";
+import { CaseFileSection } from "./related/CaseFileSection";
 import { getTopicActivityVersion, openTopicWindow, subscribeTopicActivity } from "../store/topicWindows";
 import { StoryActions } from "./related/StoryActions";
 import { BlogActions } from "./related/BlogActions";
@@ -295,25 +297,28 @@ function PanelHeader({ view, detail, onNavigate }: { view: ViewConfig; detail: O
   if (view.key === "casefile") {
     // An Evidence Board case file: its text.string is the board's JSON
     // (store/board/caseFile.ts), shown as the case's name, question and
-    // summary instead of raw JSON.
-    let file: { name?: string; question?: string; description?: string; startedBy?: string; cards?: unknown[] } = {};
+    // summary instead of raw JSON. Read through the same tolerant parser
+    // the board opens it with, so a text that isn't a case file shows as an
+    // unnamed case. Its pinned records and sticky notes are listed further
+    // down (CaseFileSection).
+    let file: CaseFile | null = null;
     try {
-      file = JSON.parse((detail.text as { string?: string } | undefined)?.string ?? "") ?? {};
+      file = parseCaseFile((detail.text as { string?: string } | undefined)?.string ?? "");
     } catch {
-      file = {};
+      file = null;
     }
-    const cards = Array.isArray(file.cards) ? file.cards.length : 0;
+    const cards = file?.cards.length ?? 0;
     return (
       <div>
         <Text size="sm" c="dimmed" fw={600}>
           {typeof detail.gramps_id === "string" ? `[${detail.gramps_id}] ` : ""}{t("Case File")} <PrivateIndicator detail={detail} />
         </Text>
-        <ClickableTitle onClick={navigateToSelf}>{file.name || t("(case file)")}</ClickableTitle>
-        {file.question && <Text>{file.question}</Text>}
-        {file.description && <Text c="dimmed">{file.description}</Text>}
+        <ClickableTitle onClick={navigateToSelf}>{file?.name || t("(case file)")}</ClickableTitle>
+        {file?.question && <Text>{file.question}</Text>}
+        {file?.description && <Text c="dimmed">{file.description}</Text>}
         <Text size="sm" c="dimmed">
           {[
-            file.startedBy ? t("Started by {name}").replace("{name}", file.startedBy) : "",
+            file?.startedBy ? t("Started by {name}").replace("{name}", file.startedBy) : "",
             cards === 1 ? t("1 card") : t("{count} cards").replace("{count}", String(cards)),
           ].filter(Boolean).join(" · ")}
         </Text>
@@ -674,6 +679,7 @@ export function RelatedPanel({
           <TopicLinksSection detail={detail} onNavigate={onNavigate} onRefetch={() => setRefetchNonce((n) => n + 1)} />
         </>
       )}
+      {view.key === "casefile" && <CaseFileSection detail={detail} onNavigate={onNavigate} />}
       {sections.map((section) => {
         const Section = SECTION_COMPONENTS[section];
         return (

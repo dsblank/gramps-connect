@@ -31,9 +31,9 @@ vi.stubGlobal("localStorage", {
 });
 
 import { applyChanges, ChangeBuilder } from "../board/changes";
-import { emptyCaseFile, newCaseFileNote, serializeCaseFile, type CaseFile } from "../board/caseFile";
+import { CaseFileFormatError, emptyCaseFile, newCaseFileNote, serializeCaseFile, type CaseFile } from "../board/caseFile";
 import { readDraft, writeDraft } from "../board/caseDraft";
-import { AFTER_OWN_SAVE, CaseNotAvailableError, draftOf, openCase, openUnsavedCase } from "../board/caseLoad";
+import { AFTER_OWN_SAVE, CaseNotAvailableError, draftOf, openCase, openUnsavedCase, readSavedCase } from "../board/caseLoad";
 import { linkParentChild, newPerson } from "../board/links";
 import { blank, GENDER, type GrampsRecord } from "../board/records";
 
@@ -177,5 +177,28 @@ describe("unsaved work from this browser", () => {
     const again = await openUnsavedCase("new:abc", "Scratch", "doug");
     expect(again.note).toBeNull();
     expect(Object.keys(again.base)).toEqual(["john"]);
+  });
+});
+
+describe("reading a saved case for the details pane", () => {
+  it("makes the same changed/gone/hidden checks as opening it, and ignores this browser's draft", async () => {
+    put(person("same", 1000), person("edited", 1500), person("ours", NOTE_CHANGE + 1));
+    const saved = { ...emptyCaseFile("Case", "doug"), cards: [card("same", 1000), card("edited", 1000), card("ours", null), card("deleted", 1000)] };
+    writeDraft("case1", { version: 1, noteChange: NOTE_CHANGE, file: { ...saved, cards: [card("drafted", 1000)] }, changes: [], seen: {} });
+    const read = await readSavedCase(serializeCaseFile(saved), NOTE_CHANGE);
+    expect(read.file.cards.map((c) => c.handle)).toEqual(["same", "edited", "ours", "deleted"]);
+    expect(read.updated.map((c) => c.handle)).toEqual(["edited"]);
+    expect(read.gone.map((c) => c.label)).toEqual(["deleted label"]);
+    auth.hasPermissions.mockImplementation((...perms: string[]) => !perms.includes("ViewPrivate"));
+    const asGuest = await readSavedCase(serializeCaseFile(saved), NOTE_CHANGE);
+    expect(asGuest.gone).toEqual([]);
+    expect(asGuest.hidden).toBe(1);
+  });
+
+  it("drops cards that make no sense and refuses text that isn't a case file", async () => {
+    put(person("same", 1000));
+    const text = JSON.stringify({ version: 1, name: "Case", cards: [card("same", 1000), { handle: "x", class: "Spaceship" }, null] });
+    expect((await readSavedCase(text, NOTE_CHANGE)).file.cards.map((c) => c.handle)).toEqual(["same"]);
+    await expect(readSavedCase("not json", NOTE_CHANGE)).rejects.toBeInstanceOf(CaseFileFormatError);
   });
 });

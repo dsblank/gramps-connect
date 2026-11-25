@@ -20,7 +20,7 @@
 //   blindly over someone else's edit.
 import { hasPermissions } from "../../auth/auth";
 import { withDependents, type Change } from "./changes";
-import { emptyCaseFile, readCaseFileNote, type CaseCard, type CaseFile } from "./caseFile";
+import { emptyCaseFile, parseCaseFile, readCaseFileNote, type CaseCard, type CaseFile } from "./caseFile";
 import { readDraft, type CaseDraft } from "./caseDraft";
 import { loadRecords, type GrampsClass, type GrampsRecord, type Records } from "./records";
 
@@ -85,13 +85,12 @@ function reapply(draft: CaseDraft | null, base: Records): { changes: Change[]; n
   };
 }
 
-function classify(file: CaseFile, note: GrampsRecord | null, base: Records, canSeePrivate: boolean, draft: CaseDraft | null) {
+function classify(file: CaseFile, noteChange: number, base: Records, canSeePrivate: boolean, draft: CaseDraft | null) {
   // Records made by this browser's unsaved loose ends aren't in the tree yet.
   const unsaved = new Set((draft?.changes ?? []).flatMap((c) => c.creates));
   const updated: CaseCard[] = [];
   const gone: CaseCard[] = [];
   let hidden = 0;
-  const noteChange = note ? changeOf(note) : 0;
   for (const card of file.cards) {
     const record = base[card.handle];
     if (!record && unsaved.has(card.handle)) continue;
@@ -130,7 +129,27 @@ export async function openCase(noteHandle: string): Promise<OpenedCase> {
   const { changes, needsReview } = reapply(draft, base);
   // Guests can't see private records; everyone from Member up can.
   const canSeePrivate = hasPermissions("ViewPrivate");
-  return { caseKey: noteHandle, note, file, base, changes, needsReview, ...classify(file, note, base, canSeePrivate, draftCurrent ? draft : null), layoutReplaced };
+  return { caseKey: noteHandle, note, file, base, changes, needsReview, ...classify(file, changeOf(note), base, canSeePrivate, draftCurrent ? draft : null), layoutReplaced };
+}
+
+/** A saved case file as seen from outside the board (the Case Files
+ * details pane): the saved cards only, never this browser's unsaved draft,
+ * with the pinned records loaded as they are now and the same changed /
+ * gone / can't-see checks opening the board makes. `text` is the Note's
+ * text and `noteChange` its change time; a text that isn't a case file
+ * throws CaseFileFormatError. */
+export interface SavedCase {
+  file: CaseFile;
+  base: Records;
+  updated: CaseCard[];
+  gone: CaseCard[];
+  hidden: number;
+}
+
+export async function readSavedCase(text: string, noteChange: number): Promise<SavedCase> {
+  const file = parseCaseFile(text);
+  const base = await loadByClass(new Map(file.cards.map((c) => [c.handle, c.class])));
+  return { file, base, ...classify(file, noteChange, base, hasPermissions("ViewPrivate"), null) };
 }
 
 /** Opens a case that hasn't been saved yet: from its draft in this browser
@@ -143,7 +162,7 @@ export async function openUnsavedCase(caseKey: string, name: string, startedBy: 
   const base = await loadByClass(wanted);
   const { changes, needsReview } = reapply(draft, base);
   const canSeePrivate = hasPermissions("ViewPrivate");
-  return { caseKey, note: null, file, base, changes, needsReview, ...classify(file, null, base, canSeePrivate, draft), layoutReplaced: false };
+  return { caseKey, note: null, file, base, changes, needsReview, ...classify(file, 0, base, canSeePrivate, draft), layoutReplaced: false };
 }
 
 /** The draft to keep for a board's current state: its layout and loose
