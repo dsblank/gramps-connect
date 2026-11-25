@@ -5,8 +5,114 @@
   <link href="https://dsblank.github.io/gramps-connect/blog/"/>
   <link rel="self" href="https://dsblank.github.io/gramps-connect/blog/feed.xml"/>
   <id>https://dsblank.github.io/gramps-connect/blog/</id>
-  <updated>2026-11-23T00:00:00Z</updated>
+  <updated>2026-11-25T00:00:00Z</updated>
   <author><name>Gramps Connect</name></author>
+  <entry>
+    <title>Gramps Connect 1.7: the Evidence Board</title>
+    <link href="https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-7.html"/>
+    <id>https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-7.html</id>
+    <updated>2026-11-25T00:00:00Z</updated>
+    <author><name>Doug Blank</name></author>
+    <media:thumbnail url="https://dsblank.github.io/gramps-connect/blog/img/v17-board.jpg"/>
+    <summary>Gramps Connect 1.7 adds the Evidence Board, a detective&#x27;s corkboard for working on one research question, with case files to keep each investigation together.</summary>
+    <content type="html">&lt;p&gt;Gramps Connect 1.7 is out, and it&amp;rsquo;s mostly about one new thing: the
+&lt;strong&gt;Evidence Board&lt;/strong&gt;. It&amp;rsquo;s a place to work on a single research question
+the way you might on a real corkboard. You pin up the people and records
+involved, tie them together with yarn, keep your hunches on sticky notes,
+and save when the case holds up.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;An Evidence Board for the case &amp;quot;Where was the Queen Mother born?&amp;quot;, with cards for her, her parents, her birth and christening, a place, a citation, a source, a photo and two sticky notes&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v17-board.jpg&quot; /&gt;&lt;figcaption&gt;A case from the Royal Family test tree. The tree says the Queen Mother was born in London, but nothing in it backs that up yet.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;h2&gt;A case file for each question&lt;/h2&gt;
+&lt;p&gt;Every board belongs to a &lt;strong&gt;case file&lt;/strong&gt;. Open &lt;strong&gt;Case Files&lt;/strong&gt; from the
+navigation rail, click &lt;strong&gt;New case file&lt;/strong&gt;, and give it a name and the
+question it&amp;rsquo;s trying to answer: &amp;ldquo;Who were Ruth Carter&amp;rsquo;s parents?&amp;rdquo;, or
+here, &amp;ldquo;Was Elizabeth Bowes-Lyon born in London, or in Hertfordshire?&amp;rdquo;&lt;/p&gt;
+&lt;p&gt;A new board offers two ways to begin. &lt;strong&gt;Find someone in the tree&lt;/strong&gt; pins
+records you already have. &lt;strong&gt;Got a lead?&lt;/strong&gt; starts from a photo or a
+document instead (more on that below).&lt;/p&gt;
+&lt;p&gt;The case file keeps the board: which records are pinned, where they sit,
+and the sticky notes. The records themselves stay in your tree, so a case
+never goes stale. When you open it again, the board loads every record as
+it is &lt;em&gt;now&lt;/em&gt;, and a yellow bar says what changed or was deleted since the
+case was last saved.&lt;/p&gt;
+&lt;h2&gt;Cards, yarn and sticky notes&lt;/h2&gt;
+&lt;p&gt;Each kind of record is its own kind of paper: an index card for a person,
+a map for a place, a photo print for a photo, a typed sheet for a source.
+Every card comes in three sizes, from a small icon to a dossier with more
+details.&lt;/p&gt;
+&lt;p&gt;The yarn isn&amp;rsquo;t decoration. It shows how the records are connected in your
+tree, and its colour says how: red for family, blue for when and where,
+green for evidence, grey for photos and notes.&lt;/p&gt;
+&lt;p&gt;The board also points out what&amp;rsquo;s missing. An event that nothing in the
+tree supports gets a red &lt;strong&gt;UNPROVEN&lt;/strong&gt; stamp, and a photo with no date gets
+a pencilled &lt;strong&gt;date?&lt;/strong&gt;. Both are listed under &lt;strong&gt;Open questions&lt;/strong&gt; in the
+sidebar, so they&amp;rsquo;re easy to find.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Evidence Board with the Birth card selected. The sidebar shows its type, date and place, and an UNPROVEN box saying nothing in the tree says how we know this yet&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v17-card-sidebar.jpg&quot; /&gt;&lt;figcaption&gt;Selecting a card shows its main facts in the sidebar, where you can also change them.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;p&gt;Sticky notes hold hunches you want to keep in sight, such as &amp;ldquo;Her birth
+was registered in Hitchin, Hertfordshire, not London. Which is right?&amp;rdquo;
+They&amp;rsquo;re saved with the case file for anyone who opens it, but they never
+go into the tree.&lt;/p&gt;
+&lt;h2&gt;Tie things together&lt;/h2&gt;
+&lt;p&gt;To connect two records, drag from one card&amp;rsquo;s pin to another card and say
+what the connection is. Here, dragging from the citation to the Birth card
+offers &amp;ldquo;It&amp;rsquo;s evidence for Birth of Elizabeth Angela Marguerite&amp;rdquo;.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;Yarn dragged from the citation card to the Birth card, and a small menu asking &amp;quot;What&#x27;s the connection?&amp;quot; with the answer &amp;quot;It&#x27;s evidence for Birth of Elizabeth Angela Marguerite&amp;quot;&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v17-tie-yarn.jpg&quot; /&gt;&lt;figcaption&gt;Drop the yarn on an empty part of the board instead to make a new record already tied to the first.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;p&gt;You can do more on the board than tie yarn. You can edit a person&amp;rsquo;s name
+or an event&amp;rsquo;s date and place on its card, identify people in a photo, and
+add new people, events and places. &lt;strong&gt;How is … related to…&lt;/strong&gt; finds the
+path between two people, and &lt;strong&gt;Pin the people in between&lt;/strong&gt; lays out the
+whole chain.&lt;/p&gt;
+&lt;h2&gt;Nothing changes until you save&lt;/h2&gt;
+&lt;p&gt;Everything you do on the board waits as a &lt;em&gt;loose end&lt;/em&gt; until you save. The
+&lt;strong&gt;Case notes&lt;/strong&gt; sidebar lists them in order. &lt;strong&gt;Show&lt;/strong&gt; finds one on the
+board, &lt;strong&gt;Remove&lt;/strong&gt; takes it out, and Ctrl+Z takes out the last one. A small
+tree mark on a button tells you that it will change the tree when you
+save. Buttons without it, like &lt;strong&gt;Pin&lt;/strong&gt; or moving a card, only change the
+board.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The board after tying the yarn: the new connection is dashed, and Case notes lists one loose end, &amp;quot;Tie: It&#x27;s evidence for Birth of Elizabeth Angela Marguerite&amp;quot;&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v17-loose-ends.jpg&quot; /&gt;&lt;figcaption&gt;The new yarn is dashed until it&amp;rsquo;s saved. The Birth card has lost its UNPROVEN stamp.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;p&gt;&lt;strong&gt;Save&lt;/strong&gt; shows every loose end with a tick box, so you can leave out the
+ones you&amp;rsquo;re not sure of yet. The ticked ones go into the tree together, as
+one change in its History, so one &lt;strong&gt;Undo&lt;/strong&gt; takes all of it back. If
+someone else changed one of those records since you opened the board,
+nothing is saved and the board tells you, instead of writing over their
+work.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Save dialog listing one ticked change, with Keep working and Save 1 change buttons&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v17-save.jpg&quot; /&gt;&lt;figcaption&gt;The case file itself is saved with the changes.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;p&gt;You don&amp;rsquo;t need Editor rights to work on a board. Anyone who can view the
+tree can open a case, pin records and arrange them; only saving to the
+tree needs Editor rights.&lt;/p&gt;
+&lt;h2&gt;Got a lead?&lt;/h2&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Got a lead? guide&#x27;s first step: Start with the evidence itself, with Choose a scan or photo and I don&#x27;t have a copy buttons&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v17-got-a-lead.jpg&quot; /&gt;&lt;/figure&gt;
+&lt;p&gt;&lt;strong&gt;Got a lead?&lt;/strong&gt; turns one document or photo into records that cite it, by
+asking a few plain questions: what is it, where did you get it, who&amp;rsquo;s in
+it, what was the occasion, and what part did each person play. Every
+answer goes onto the board as you go, so you can stop at any point and
+finish by hand. You don&amp;rsquo;t need to know how Gramps stores sources and
+citations to use it.&lt;/p&gt;
+&lt;h2&gt;See a case without opening it&lt;/h2&gt;
+&lt;p&gt;Select a case in the &lt;strong&gt;Case Files&lt;/strong&gt; list, and its details show its name,
+question and notes, the records pinned on it grouped by type, and its
+sticky notes. Click any record to see its details in the pane below.
+Names are shown as they are now. Records changed since the case was saved
+are marked, and deleted ones are crossed out.&lt;/p&gt;
+&lt;figure&gt;&lt;img alt=&quot;The Case Files list with one case selected. Its details list the people, family and events on the board, and the lower pane shows the Birth event that was clicked&quot; src=&quot;https://dsblank.github.io/gramps-connect/blog/img/v17-case-files.jpg&quot; /&gt;&lt;figcaption&gt;Clicking the birth event in the case&amp;rsquo;s details opens it in the lower pane.&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;h2&gt;And more&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;GOQL searches can compare a type with its name, as in &lt;code&gt;type ==
+  &#x27;Census&#x27;&lt;/code&gt;, and Tab completes the names as you type.&lt;/li&gt;
+&lt;li&gt;Relationship labels are shorter for distant in-laws.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Help → Gramps Connect Blog&lt;/strong&gt;, with a dot when there&amp;rsquo;s a new post.&lt;/li&gt;
+&lt;li&gt;The bar between the two detail panes can be dragged to give either one
+  more room.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;Try it&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/dsblank/gramps-connect/releases/tag/v1.7.0&quot;&gt;Download Gramps Connect 1.7&lt;/a&gt;
+  for Windows, macOS or Linux, or take the &lt;a href=&quot;https://dsblank.github.io/gramps-connect/tour/&quot;&gt;narrated tour&lt;/a&gt;.&lt;/li&gt;
+&lt;li&gt;The &lt;a href=&quot;https://github.com/dsblank/gramps-connect/wiki/Evidence-Board&quot;&gt;Evidence Board&lt;/a&gt;
+  page in the documentation covers everything here in more detail.&lt;/li&gt;
+&lt;li&gt;Questions and ideas are welcome on the
+  &lt;a href=&quot;https://gramps.discourse.group/c/gramps-connect/35&quot;&gt;Gramps Discourse forum&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;</content>
+  </entry>
   <entry>
     <title>Gramps Connect 1.6: color your charts, sort any column</title>
     <link href="https://dsblank.github.io/gramps-connect/blog/gramps-connect-1-6.html"/>
