@@ -422,7 +422,7 @@ export function CardPanel(props: {
         onChange={(v) => onSize(v as CardSize)}
         data={[{ value: "icon", label: t("Icon") }, { value: "compact", label: t("Card") }, { value: "expanded", label: t("Dossier") }]}
       />
-      {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{t("View full size")}</Button>}
+      {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{readOnly ? t("View full size") : t("View full size and mark faces")}</Button>}
       {fields}
       {fields && !readOnly && (
         <Group gap={6} wrap="nowrap">
