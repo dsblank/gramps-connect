@@ -182,6 +182,17 @@ function PanelFrame({ eyebrow, title, sub, onClose, children }: { eyebrow: strin
   );
 }
 
+/** The card's photo, the width of the sidebar; clicking opens it full size. */
+function SidebarPhoto({ url, onClick }: { url: string; onClick: () => void }) {
+  const { src, onError } = useApiImageSrc(url);
+  if (!src) return null;
+  return (
+    <UnstyledButton onClick={onClick} aria-label={t("View full size")} style={{ display: "block", lineHeight: 0 }}>
+      <img src={src} onError={onError} alt="" style={{ width: "100%", maxHeight: 320, objectFit: "contain", borderRadius: 4, background: "var(--mantine-color-default-hover)" }} />
+    </UnstyledButton>
+  );
+}
+
 /** A crop of a photo to someone's face; a dashed "?" when no face is marked. */
 function FaceThumb({ url, size = 32 }: { url: string | null; size?: number }) {
   const { src, onError } = useApiImageSrc(url);
@@ -293,6 +304,8 @@ export function CardPanel(props: {
   readOnly?: boolean;
   /** Shows the card's photo full screen, when it has one. */
   onViewPhoto?: () => void;
+  /** That photo, sized for the sidebar. */
+  photoUrl?: string | null;
   /** For a photo: who's in it (null while loading). */
   inPhoto?: PhotoSubject[] | null;
   /** A crop of photo `media` to `rect`, or null without a region. */
@@ -314,7 +327,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, relatives, onRelate, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, photoUrl, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, relatives, onRelate, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -421,6 +434,7 @@ export function CardPanel(props: {
         onChange={(v) => onSize(v as CardSize)}
         data={[{ value: "icon", label: t("Icon") }, { value: "compact", label: t("Card") }, { value: "expanded", label: t("Dossier") }]}
       />
+      {onViewPhoto && photoUrl && <SidebarPhoto url={photoUrl} onClick={onViewPhoto} />}
       {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{readOnly ? t("View full size") : t("View full size and identify people")}</Button>}
       {fields}
       {fields && !readOnly && (
