@@ -995,7 +995,8 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             isDraft={!opened.base[selectedCard.handle]}
             readOnly={!canSave}
             onViewPhoto={selectedPhoto ? () => setLightbox({ media: selectedPhoto.media }) : undefined}
-            photoUrl={selectedPhoto && token ? mediaThumbnailUrl(selectedPhoto.media, 640, token) : null}
+            // A person's card shows just the area identified as them, when there is one.
+            photoUrl={selectedPhoto && token ? mediaThumbnailUrl(selectedPhoto.media, 640, token, { rect: selectedPhoto.rect }) : null}
             inPhoto={inPhoto && inPhoto.media === selectedCard.handle
               ? inPhoto.subjects && subjectsOnBoard(inPhoto.subjects, working, inPhoto.media)
               : undefined}
