@@ -11,7 +11,7 @@ import { t } from "../../i18n/i18n";
 import type { Change } from "../../store/board/changes";
 import type { CardSize, CaseFile } from "../../store/board/caseFile";
 import { GENDER, type GrampsClass, type GrampsRecord, type Records } from "../../store/board/records";
-import { leadsOf, shortDate, titleOf, typeName, unprovenEventsOf, type Yarn } from "../../store/board/view";
+import { leadsOf, shortDate, titleOf, typeName, unprovenEventsOf, whatsMissing, type Yarn } from "../../store/board/view";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { DateInput } from "../DateInput";
 import shapes from "../../data/grampsRecordShapes.json";
@@ -341,6 +341,7 @@ export function CardPanel(props: {
   const all = { ...peek, ...records };
   const leads = leadsOf(r);
   const unproven = unprovenEventsOf(r, all);
+  const missing = whatsMissing(r, all);
   const name = r.primary_name as { first_name?: string; surname_list?: { surname?: string }[] } | undefined;
   let fields: ReactNode = null;
   switch (r._class) {
@@ -534,6 +535,13 @@ export function CardPanel(props: {
           ))}
         </Stack>
       </Box>
+      {missing.length > 0 && (
+        <Box>
+          <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("What's next?")}</Text>
+          <Text size="sm">{missing.map((w) => t(w)).join(", ")}</Text>
+          <Text size="xs" c="dimmed">{t("What the tree doesn't say yet, counting this board's unsaved changes.")}</Text>
+        </Box>
+      )}
       {unproven.length > 0 && (
         <Box>
           <Group gap={6} align="center">
@@ -754,9 +762,13 @@ export function YarnPanel({ yarn, records, state, readOnly, onSnip, onRetie, onP
 export interface OpenQuestion {
   group: string;
   handle: string;
+  /** "What's next?": what's missing (English, translated here). */
+  what?: string[];
+  /** Not on the board: offer to pin it up (as this kind of card) instead of Show. */
+  pin?: GrampsClass;
 }
 
-export function CaseNotesPanel({ file, changes, questions, records, onCaseField, onTakeBack, onShowChange, onShow, onSave, onDownload, canSave, discussion, onDiscuss }: {
+export function CaseNotesPanel({ file, changes, questions, records, onCaseField, onTakeBack, onShowChange, onShow, onPinUp, onSave, onDownload, canSave, discussion, onDiscuss }: {
   file: CaseFile;
   onDownload: () => void;
   /** The case's discussion: "unsaved" (case not saved yet), "loading",
@@ -770,6 +782,7 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
   onTakeBack: (id: string) => void;
   onShowChange: (change: Change) => void;
   onShow: (handle: string) => void;
+  onPinUp: (cls: GrampsClass, handle: string) => void;
   onSave: () => void;
   canSave: boolean;
 }) {
@@ -797,13 +810,21 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
       {changes.length > 0 && canSave && <Button size="xs" onClick={onSave}>{t("Save…")}</Button>}
       <Divider />
       <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Open questions")} ({questions.length})</Text>
-      {questions.length === 0 && <Text size="xs" c="dimmed">{t("Every card is tied to something, every event has evidence, and every photo has a date.")}</Text>}
+      {questions.length === 0 && <Text size="xs" c="dimmed">{t("Every card is tied to something, every event has evidence, every photo has a date, and nothing is missing.")}</Text>}
       {groups.map((g) => (
         <Box key={g}>
           <Text size="sm" fw={600}>{t(g)}</Text>
           {questions.filter((q) => q.group === g).map((q) => (
-            <Group key={q.handle} gap="xs">
-              <Button size="compact-xs" variant="subtle" onClick={() => onShow(q.handle)}>{titleOf(q.handle, records)}</Button>
+            <Group key={q.handle} gap="xs" wrap="nowrap">
+              {q.pin ? (
+                <>
+                  <Text size="sm" px={10} style={{ minWidth: 0 }} truncate>{titleOf(q.handle, records)}</Text>
+                  <Button size="compact-xs" variant="light" onClick={() => onPinUp(q.pin!, q.handle)}>{t("Pin")}</Button>
+                </>
+              ) : (
+                <Button size="compact-xs" variant="subtle" onClick={() => onShow(q.handle)}>{titleOf(q.handle, records)}</Button>
+              )}
+              {q.what && <Text size="xs" c="dimmed">{q.what.map((w) => t(w)).join(", ")}</Text>}
             </Group>
           ))}
         </Box>

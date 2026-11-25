@@ -218,6 +218,58 @@ export function unprovenEventsOf(record: GrampsRecord | undefined, records: Reco
   return out;
 }
 
+const BIRTHS = ["Birth", "Baptism", "Christening"];
+const DEATHS = ["Death", "Burial", "Cremation"];
+const MARRIAGES = ["Marriage", "Alternate Marriage", "Marriage Banns", "Marriage License", "Marriage Contract", "Marriage Settlement"];
+/** Born this many years ago, someone has surely died. */
+const SURELY_DEAD = 110;
+
+/** What's still to find for a record on the board, in the spirit of Gramps'
+ * What's Next gramplet but only for this record: a person's names, birth,
+ * death and parents; a family's partners and marriage; an event's date and
+ * place. Short English phrases, translated by the caller. Checks that need
+ * the record's events are skipped until all of them are in `records`, so a
+ * private or not-yet-loaded event is never reported missing. */
+export function whatsMissing(record: GrampsRecord | undefined, records: Records, thisYear = new Date().getFullYear()): string[] {
+  if (!record) return [];
+  const out: string[] = [];
+  const own = refs(record.event_ref_list);
+  const allLoaded = own.every((e) => records[e.ref]);
+  /** Types of the events this record is the main subject of. */
+  const types = own
+    .filter((e) => ["", "Primary", "Family"].includes(typeName(e.role, "EventRoleType")))
+    .map((e) => typeName(records[e.ref]?.type, "EventType"));
+  switch (record._class) {
+    case "Person": {
+      const name = record.primary_name as { first_name?: string; surname_list?: { surname?: string }[] } | undefined;
+      if (!name?.first_name?.trim()) out.push("first name");
+      if (!(name?.surname_list ?? []).some((s) => s.surname?.trim())) out.push("surname");
+      if (allLoaded) {
+        if (!types.some((x) => BIRTHS.includes(x))) out.push("birth");
+        const born = own
+          .filter((e) => BIRTHS.includes(typeName(records[e.ref]?.type, "EventType")))
+          .map((e) => Number(yearOf(records[e.ref].date)))
+          .filter(Boolean);
+        if (born.length && thisYear - Math.min(...born) >= SURELY_DEAD && !types.some((x) => DEATHS.includes(x))) out.push("death");
+      }
+      if (!handles(record.parent_family_list).length) out.push("parents");
+      break;
+    }
+    case "Family": {
+      if (!record.father_handle !== !record.mother_handle) out.push("other partner");
+      if (allLoaded && typeName(record.type, "FamilyRelType") !== "Unmarried" && !types.some((x) => MARRIAGES.includes(x))) out.push("marriage");
+      break;
+    }
+    case "Event": {
+      const date = record.date as { text?: string } | undefined;
+      if (!yearOf(record.date) && !date?.text?.trim()) out.push("date");
+      if (!record.place) out.push("place");
+      break;
+    }
+  }
+  return out;
+}
+
 /** A photo with no date: the board pencils "date?" on it. */
 export function isUndatedPhoto(record: GrampsRecord | undefined): boolean {
   return !!record && record._class === "Media" && !yearOf(record.date) && !(record.date as { text?: string } | undefined)?.text;

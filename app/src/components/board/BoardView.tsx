@@ -24,7 +24,7 @@ import { makeMainPhoto, newEvent, newNote, newPerson, newPlace, newRepository, n
 import { makeDate } from "@gramps-connect/gramps-date";
 import { GRAMPS_CLASSES, loadRecords, type GrampsClass, type Records } from "../../store/board/records";
 import { saveBoard, undoSave } from "../../store/board/save";
-import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, unprovenEventsOf, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
+import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, unprovenEventsOf, whatsMissing, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
 import { mediaThumbnailUrl } from "../../store/mediaCrop";
 import { TransactionConflictError } from "../../store/transactionsApi";
 import { CASE_FILE_VIEW, MEDIA_VIEW } from "../../store/views";
@@ -225,6 +225,14 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   // A family card names its whole family (parents and every child), pinned
   // or not: their records are loaded into `peek` below.
   const withKin = useMemo(() => ({ ...peek, ...working }), [peek, working]);
+  const dossierOf = useCallback(
+    (h: string) => {
+      const missing = whatsMissing(working[h], withKin);
+      const details = detailsOf(h, working[h]._class === "Family" ? withKin : working);
+      return missing.length ? [...details, `What's next? ${missing.join(", ")}`] : details;
+    },
+    [working, withKin],
+  );
   const cards: CardView[] = useMemo(
     () =>
       (file?.cards ?? [])
@@ -234,7 +242,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           cls: working[c.handle]._class,
           title: titleOf(c.handle, working[c.handle]._class === "Family" ? withKin : working),
           subtitle: subtitleOf(c.handle, working),
-          details: c.size === "expanded" ? detailsOf(c.handle, working[c.handle]._class === "Family" ? withKin : working) : [],
+          details: c.size === "expanded" ? dossierOf(c.handle) : [],
           size: c.size,
           unproven: isUnproven(working[c.handle]),
           unprovenEvents: unprovenEventsOf(working[c.handle], withKin).length,
@@ -244,7 +252,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           photo: photoOf(c.handle),
           coords: working[c.handle]._class === "Place" ? parseCoords(String(working[c.handle].lat ?? ""), String(working[c.handle].long ?? "")) : null,
         })),
-    [file, working, withKin, opened, updated, photoOf],
+    [file, working, withKin, opened, updated, photoOf, dossierOf],
   );
   const photoUrls = useMemo(() => {
     const out: Record<string, string | null> = {};
@@ -287,8 +295,18 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     const tied = new Set(yarn.flatMap((y) => [y.a, y.b]));
     const out: OpenQuestion[] = [];
     if (onBoard.size > 1) for (const h of onBoard) if (!tied.has(h)) out.push({ group: "Not tied to anything on the board", handle: h });
-    for (const h of onBoard) if (isUnproven(working[h])) out.push({ group: "Unproven: where does it come from?", handle: h });
-    for (const h of onBoard) if (unprovenEventsOf(working[h], withKin).length) out.push({ group: "Events with no evidence", handle: h });
+    // Events nothing supports yet: pinned ones, and those of pinned people
+    // and families, each listed once (Pin puts an unpinned one up).
+    const noEvidence = new Set<string>();
+    for (const h of onBoard) {
+      if (isUnproven(working[h])) noEvidence.add(h);
+      for (const e of unprovenEventsOf(working[h], withKin)) noEvidence.add(e);
+    }
+    for (const h of noEvidence) out.push({ group: "No evidence yet", handle: h, ...(onBoard.has(h) ? {} : { pin: "Event" as const }) });
+    for (const h of onBoard) {
+      const missing = whatsMissing(working[h], withKin);
+      if (missing.length) out.push({ group: "What's next?", handle: h, what: missing });
+    }
     for (const h of onBoard) if (isUndatedPhoto(working[h])) out.push({ group: "When was it taken?", handle: h });
     return out;
   }, [yarn, onBoard, working, withKin]);
@@ -1303,7 +1321,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             file={file}
             changes={changes}
             questions={questions}
-            records={working}
+            records={withKin}
             canSave={canSave}
             onCaseField={(field, value) => setFile((f) => f && { ...f, [field]: value })}
             onTakeBack={(id) => void takeBackChange(id)}
@@ -1318,6 +1336,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
               setSelection({ kind: "card", id: h });
               canvas.current?.reveal([h]);
             }}
+            onPinUp={(cls, h) => void pinUp(cls, h)}
             onSave={() => setSaveOpen(true)}
             onDownload={() => downloadCase(file, opened.base, changes.map((c) => c.label))}
             discussion={!opened.note ? "unsaved" : topic === null ? "loading" : topic !== "none" ? "open" : hasPermissions("AddObject") ? "none" : "cantStart"}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { addEventRef, addMediaRef, addRepoRef, cite, linkParentChild, linkPartners, newCitation, newEvent, newPerson, newPlace, newRepository, newSource, setEventPlace } from "../board/links";
 import { blank, type GrampsRecord, type Records } from "../board/records";
-import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf } from "../board/view";
+import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf, whatsMissing } from "../board/view";
 
 /** The Miller case: John & Ruth's family with child Anna, their wedding (cited from
  * a source kept at a court) at Springfield, Anna's birth, and a photo of Ruth. */
@@ -84,5 +84,42 @@ describe("yarn", () => {
     expect(yarn.filter((y) => y.kind === "kin")).toHaveLength(3); // drawn from the family only
     const some = deriveYarn(m.records, new Set([m.john, m.fam, m.anna]));
     expect(some.map((y) => y.label).sort()).toEqual(["child", "father"]);
+  });
+});
+
+describe("what's next", () => {
+  it("lists a person's, family's and event's gaps", () => {
+    const m = miller();
+    // John: no birth, no parents. Anna has a birth and parents.
+    expect(whatsMissing(m.records[m.john], m.records)).toEqual(["birth", "parents"]);
+    expect(whatsMissing(m.records[m.anna], m.records)).toEqual([]);
+    // The family has both partners and a marriage.
+    expect(whatsMissing(m.records[m.fam], m.records)).toEqual([]);
+    // The wedding has a date and a place; Anna's birth has no place.
+    expect(whatsMissing(m.records[m.wed], m.records)).toEqual([]);
+    expect(whatsMissing(m.records[m.birth], m.records)).toEqual(["place"]);
+  });
+
+  it("asks for a death only for someone born long ago", () => {
+    const m = miller();
+    expect(whatsMissing(m.records[m.anna], m.records, 2026)).toEqual([]);
+    expect(whatsMissing(m.records[m.anna], m.records, 2045)).toEqual(["death"]);
+  });
+
+  it("doesn't call a birth missing while one of the person's events isn't loaded", () => {
+    const m = miller();
+    const { [m.birth]: _notLoaded, ...withoutBirth } = m.records;
+    expect(whatsMissing(m.records[m.anna], withoutBirth)).toEqual([]);
+  });
+
+  it("asks for the other partner and the marriage of a family", () => {
+    const start: Records = {};
+    const b = new ChangeBuilder(start);
+    const john = newPerson(b, { first: "John", surname: "Miller", gender: "M" });
+    const child = newPerson(b, { first: "Anna", surname: "Miller", gender: "F" });
+    linkParentChild(b, john, child);
+    const records = applyChanges(start, [b.change("x")]);
+    const fam = Object.values(records).find((r) => r._class === "Family")!;
+    expect(whatsMissing(fam, records)).toEqual(["other partner", "marriage"]);
   });
 });
