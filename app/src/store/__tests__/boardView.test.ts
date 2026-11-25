@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { addEventRef, addMediaRef, addRepoRef, cite, linkParentChild, linkPartners, newCitation, newEvent, newPerson, newPlace, newRepository, newSource, setEventPlace } from "../board/links";
 import { blank, type GrampsRecord, type Records } from "../board/records";
-import { deriveYarn, isUndatedPhoto, isUnproven, subtitleOf, titleOf } from "../board/view";
+import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf } from "../board/view";
 
 /** The Miller case: John & Ruth's family with child Anna, their wedding (cited from
  * a source kept at a court) at Springfield, Anna's birth, and a photo of Ruth. */
@@ -49,6 +49,16 @@ describe("card titles", () => {
     expect(isUnproven(m.records[m.wed])).toBe(false);
     expect(isUnproven(m.records[m.birth])).toBe(true);
     expect(isUndatedPhoto(m.records.M1)).toBe(true);
+  });
+});
+
+describe("family group sheet", () => {
+  it("lists the father, mother and every child, and counts children it can't name", () => {
+    const m = miller();
+    const details = detailsOf(m.fam, m.records);
+    expect(details.slice(0, 3)).toEqual(["Father: John Miller", "Mother: Ruth Carter", "Children: Anna Miller"]);
+    const { [m.anna]: _hidden, ...withoutAnna } = m.records;
+    expect(detailsOf(m.fam, withoutAnna)[2]).toBe("Children: 1 you can't see");
   });
 });
 

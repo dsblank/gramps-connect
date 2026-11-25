@@ -239,8 +239,13 @@ export function detailsOf(handle: string, records: Records): string[] {
       break;
     }
     case "Family": {
+      // A family group sheet lists the whole family, pinned or not: the
+      // caller passes the members' records too (BoardView loads them).
+      if (named(handles([r.father_handle]))) out.push(`Father: ${named(handles([r.father_handle]))}`);
+      if (named(handles([r.mother_handle]))) out.push(`Mother: ${named(handles([r.mother_handle]))}`);
       const children = refs(r.child_ref_list).map((c) => c.ref);
-      if (named(children)) out.push(`Children: ${named(children)}`);
+      const unseen = children.filter((h) => !records[h]).length;
+      if (children.length) out.push(`Children: ${[named(children), unseen ? `${unseen} you can't see` : ""].filter(Boolean).join(", ")}`);
       for (const e of refs(r.event_ref_list)) {
         const event = records[e.ref];
         if (event) out.push(`${typeName(event.type, "EventType")}: ${shortDate(event.date) || "no date"}`);

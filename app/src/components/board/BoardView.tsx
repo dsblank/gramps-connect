@@ -222,6 +222,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     },
     [working],
   );
+  // A family card names its whole family (parents and every child), pinned
+  // or not: their records are loaded into `peek` below.
+  const withKin = useMemo(() => ({ ...peek, ...working }), [peek, working]);
   const cards: CardView[] = useMemo(
     () =>
       (file?.cards ?? [])
@@ -229,9 +232,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         .map((c) => ({
           handle: c.handle,
           cls: working[c.handle]._class,
-          title: titleOf(c.handle, working),
+          title: titleOf(c.handle, working[c.handle]._class === "Family" ? withKin : working),
           subtitle: subtitleOf(c.handle, working),
-          details: c.size === "expanded" ? detailsOf(c.handle, working) : [],
+          details: c.size === "expanded" ? detailsOf(c.handle, working[c.handle]._class === "Family" ? withKin : working) : [],
           size: c.size,
           unproven: isUnproven(working[c.handle]),
           undated: isUndatedPhoto(working[c.handle]),
@@ -240,7 +243,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           photo: photoOf(c.handle),
           coords: working[c.handle]._class === "Place" ? parseCoords(String(working[c.handle].lat ?? ""), String(working[c.handle].long ?? "")) : null,
         })),
-    [file, working, opened, updated, photoOf],
+    [file, working, withKin, opened, updated, photoOf],
   );
   const photoUrls = useMemo(() => {
     const out: Record<string, string | null> = {};
@@ -802,6 +805,28 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       cancelled = true;
     };
   }, [selection, working, peek]);
+
+  // Family cards' members (parents and children) not pinned up: loaded for
+  // their names. Each handle is tried once, so ones the user can't see
+  // (private) aren't asked for again and again.
+  const kinTried = useRef(new Set<string>());
+  useEffect(() => {
+    const wanted = new Set<string>();
+    for (const r of Object.values(working)) {
+      if (r._class !== "Family" || !onBoard.has(r.handle)) continue;
+      for (const h of [r.father_handle, r.mother_handle, ...(Array.isArray(r.child_ref_list) ? r.child_ref_list.map((c) => (c as { ref?: unknown }).ref) : [])])
+        if (typeof h === "string" && h && !working[h] && !kinTried.current.has(h)) wanted.add(h);
+    }
+    if (!wanted.size) return;
+    for (const h of wanted) kinTried.current.add(h);
+    // Not cancelled when the board changes again: these handles are marked
+    // tried, so this load is the only one that will fetch them.
+    loadRecords("Person", [...wanted])
+      .catch(() => ({}) as Records)
+      .then((found) => {
+        if (Object.keys(found).length) setPeek((p) => ({ ...p, ...found }));
+      });
+  }, [working, onBoard]);
 
   // Who's marked in the selected photo, from every record whose reference
   // to it has a region (usually people's faces).
