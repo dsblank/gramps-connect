@@ -13,28 +13,28 @@ function render(id: string, values: Record<string, string>): string {
 
 describe("built-in param types", () => {
   it("renders a standard Gramps type as its value", () => {
-    expect(render("event-type", { eventType: "Birth" })).toBe("((type.value == 12))");
+    expect(render("event-type", { eventType: "Birth" })).toBe("((type == 'Birth'))");
   });
 
   it("renders an unknown type name as a custom type, quotes stripped", () => {
-    expect(render("event-type", { eventType: "LV'G" })).toBe("((type.value == 0 and type.string == 'LVG'))");
+    expect(render("event-type", { eventType: "LV'G" })).toBe("((type == 'LVG'))");
   });
 
   it("renders a type condition on a comprehension variable", () => {
-    expect(render("event-note-type", { noteType: "Event Note" })).toBe("(any((n.type.value == 10) for n in notes))");
+    expect(render("event-note-type", { noteType: "Event Note" })).toBe("(any((n.type == 'Event Note') for n in notes))");
   });
 
   it("renders the repository type and source attribute tables", () => {
-    expect(render("repository-type", { repositoryType: "Library" })).toBe("((type.value == 1))");
+    expect(render("repository-type", { repositoryType: "Library" })).toBe("((type == 'Library'))");
     expect(render("source-attribute", { attributeType: "Book Cover Type", value: "paper" })).toBe(
-      "(any((a.type.value == 0 and a.type.string == 'Book Cover Type') and 'paper' in a.value for a in attribute_list))",
+      "(any((a.type == 'Book Cover Type') and 'paper' in a.value for a in attribute_list))",
     );
   });
 
-  it("uses FamilyRelType's own Custom value (4), where Married is 0", () => {
-    expect(render("family-relationship-type", { relType: "Married" })).toBe("((type.value == 0))");
+  it("leaves standard vs custom (FamilyRelType's Custom is 4) to GOQL", () => {
+    expect(render("family-relationship-type", { relType: "Married" })).toBe("((type == 'Married'))");
     expect(render("family-relationship-type", { relType: "Living Apart" })).toBe(
-      "((type.value == 4 and type.string == 'Living Apart'))",
+      "((type == 'Living Apart'))",
     );
   });
 

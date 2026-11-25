@@ -171,7 +171,7 @@ describe("fetchTopicMessages", () => {
     await fetchTopicMessages("tok", "N-TOPIC-1", 200);
 
     const call = vi.mocked(fetchPage).mock.calls[0];
-    expect(call[4]).toBe("type.string == 'topic-message' and ('N-TOPIC-1\\n' in text.string)");
+    expect(call[4]).toBe("type == 'topic-message' and ('N-TOPIC-1\\n' in text.string)");
     expect(call[5]).toEqual([{ column: "change", direction: "desc" }]);
     expect(call[6]).toBe(200);
   });
@@ -236,7 +236,7 @@ describe("deleteAllTopicMessages", () => {
     await deleteAllTopicMessages("tok", "N-TOPIC-1");
 
     const call = vi.mocked(fetchPage).mock.calls[0];
-    expect(call[4]).toBe("type.string == 'topic-message' and ('N-TOPIC-1\\n' in text.string)");
+    expect(call[4]).toBe("type == 'topic-message' and ('N-TOPIC-1\\n' in text.string)");
   });
 });
 

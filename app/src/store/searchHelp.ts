@@ -80,7 +80,7 @@ const MEDIA_FIELDS: HelpEntry[] = [
 const NOTE_FIELDS: HelpEntry[] = [
   GRAMPS_ID,
   { name: "text.string", description: "The note's text -- the Text column" },
-  { name: "type.value", description: "The kind of note: NoteType.GENERAL, .RESEARCH, .TODO, .TRANSCRIPT, ..." },
+  { name: "type", description: "The kind of note: 'General', 'Research', 'To Do', 'Transcript', ..." },
   { name: "format", description: "Note.FLOWED or Note.FORMATTED" },
   PRIVATE,
   CHANGE,
@@ -137,7 +137,7 @@ const FAMILY_HELP: SearchHelp = {
   ],
   fields: [
     GRAMPS_ID,
-    { name: "type.value", description: "FamilyRelType.MARRIED, .UNMARRIED, .CIVIL_UNION, .UNKNOWN or .CUSTOM" },
+    { name: "type", description: "'Married', 'Unmarried', 'Civil Union', 'Unknown', or a name of your own" },
     { name: "father_handle", description: "The father's internal id -- father below is usually what you want" },
     { name: "mother_handle", description: "The mother's internal id" },
     PRIVATE,
@@ -166,7 +166,7 @@ const EVENT_HELP: SearchHelp = {
   ],
   fields: [
     GRAMPS_ID,
-    { name: "type.value", description: "EventType.BIRTH, .DEATH, .MARRIAGE, .BURIAL, .CENSUS, ... -- the Type column" },
+    { name: "type", description: "'Birth', 'Death', 'Marriage', 'Burial', 'Census', ... -- the Type column" },
     { name: "description", description: "The event's description" },
     { name: "date.sortval", description: "The date as one comparable number; compare it against Date('...')" },
     { name: "date.modifier", description: "Date.MOD_ABOUT, .MOD_BEFORE, .MOD_AFTER, .MOD_RANGE, .MOD_SPAN" },
@@ -193,7 +193,7 @@ const PLACE_HELP: SearchHelp = {
     GRAMPS_ID,
     { name: "title", description: "The full name, enclosing places included -- the Title column" },
     { name: "name.value", description: "The place's own name, without the places around it" },
-    { name: "place_type.value", description: "PlaceType.CITY, .TOWN, .COUNTY, .STATE, .COUNTRY, .FARM, ..." },
+    { name: "place_type", description: "'City', 'Town', 'County', 'State', 'Country', 'Farm', ..." },
     { name: "lat", description: "Latitude, stored as text ('' when not recorded)" },
     { name: "long", description: "Longitude, stored as text" },
     { name: "code", description: "Postal code" },
@@ -219,7 +219,7 @@ const REPOSITORY_HELP: SearchHelp = {
   fields: [
     GRAMPS_ID,
     { name: "name", description: "The repository's name -- the Name column" },
-    { name: "type.value", description: "RepositoryType.LIBRARY, .ARCHIVE, .CHURCH, .CEMETERY, .WEBSITE, ..." },
+    { name: "type", description: "'Library', 'Archive', 'Church', 'Cemetery', 'Web site', ..." },
     PRIVATE,
     CHANGE,
   ],

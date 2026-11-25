@@ -140,7 +140,7 @@ describe("fetchRecentTopics", () => {
     await fetchRecentTopics("tok", 5);
 
     const call = vi.mocked(fetchPage).mock.calls[0];
-    expect(call[4]).toBe("type.string == 'topic'");
+    expect(call[4]).toBe("type == 'topic'");
   });
 });
 
@@ -165,7 +165,7 @@ describe("fetchLatestStories", () => {
     await fetchLatestStories("tok", 5);
 
     const call = vi.mocked(fetchPage).mock.calls[0];
-    expect(call[4]).toBe("type.string == 'story'");
+    expect(call[4]).toBe("type == 'story'");
   });
 });
 

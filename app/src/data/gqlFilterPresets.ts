@@ -110,9 +110,10 @@ export interface GqlFilterParam {
  *   (add_time() + time.mktime()) does the same.
  * - "choice": one of `options`, spliced raw; anything else is rejected.
  * - "gramps-type": a type name from `table` (or a custom name), replaced by
- *   a whole condition on `field` -- `(field.value == 12)` for a standard
- *   type, `(field.value == 0 and field.string == 'name')` for a custom one,
- *   the same equality gramps-core's GrampsType uses. */
+ *   a whole condition on `field`, `(field == 'name')`. GOQL (0.5.20+) turns
+ *   that into the stored value for a standard type, or the table's Custom
+ *   value plus the name for a custom one -- gramps-core's GrampsType
+ *   equality. `table` lists the choices. */
 export type GqlPresetParam =
   | GqlFilterParam
   | { name: string; label: string; type: "regex" | "datetime" }
@@ -677,7 +678,7 @@ const handWrittenPresets: GqlFilterPreset[] = [
     category: "Properties",
     namespace: "Person",
     sourceRule: "HaveAltFamilies",
-    expr: "any(ref for ref in child_refs if ref.frel.value == ChildRefType.ADOPTED or ref.mrel.value == ChildRefType.ADOPTED)",
+    expr: "any(ref for ref in child_refs if ref.frel == 'Adopted' or ref.mrel == 'Adopted')",
     supported: true,
     notes:
       "The real rule (HaveAltFamilies) finds, for each of a person's parent families, the ChildRef entry whose `ref` is this person's own handle, then checks that entry's own frel/mrel against ChildRefType.ADOPTED. GOQL's child_refs is a new kind of collection built for exactly this: a *self-linked* Collection whose condition is about a field on the join/link itself (the specific ChildRef entry naming this person), not the joined Family row's own fields. Verified exact match against gramps-core's own example.gramps fixture (2/2).",

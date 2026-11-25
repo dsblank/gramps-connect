@@ -10,7 +10,6 @@
  */
 
 import type { GqlFilterNamespace, GqlFilterPreset, GqlPresetParam } from "../data/gqlFilterPresets";
-import { GRAMPS_TYPE_TABLES } from "../data/grampsTypeTables";
 
 export interface FilterPresetNode {
   kind: "preset";
@@ -82,15 +81,11 @@ export function datetimeParamToSeconds(raw: string): number | null {
   return Math.floor(date.getTime() / 1000);
 }
 
-/** A "gramps-type" param's whole condition: the standard type's value, or
- * the table's Custom value (0 everywhere but FamilyRelType, where it's 4)
- * plus the custom name -- GrampsType's own equality. */
+/** A "gramps-type" param's whole condition: the type compared with its
+ * name, which GOQL (0.5.20+) resolves to the standard type's value, or to
+ * the class's Custom value plus the name -- GrampsType's own equality. */
 function grampsTypeCondition(param: Extract<GqlPresetParam, { type: "gramps-type" }>, raw: string): string {
-  const name = raw.trim();
-  const table = GRAMPS_TYPE_TABLES[param.table];
-  const value = table[name];
-  if (value !== undefined && name !== "Custom") return `(${param.field}.value == ${value})`;
-  return `(${param.field}.value == ${table.Custom} and ${param.field}.string == '${sanitizeTextParam(name)}')`;
+  return `(${param.field} == '${sanitizeTextParam(raw.trim())}')`;
 }
 
 function fillParam(preset: GqlFilterPreset, param: GqlPresetParam, raw: string): string {
