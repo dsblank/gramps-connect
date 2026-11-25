@@ -282,6 +282,15 @@ export function setMediaRegion(b: ChangeBuilder, target: string, media: string, 
   b.set(target, "media_list", list.map((r) => (r.ref === media ? { ...r, rect: cleanRegion(rect) } : r)));
 }
 
+/** Moves `target`'s reference to `media` to the front of its media list,
+ * which makes it their main photo (the one on their card, as in Gramps). */
+export function makeMainPhoto(b: ChangeBuilder, target: string, media: string): void {
+  const list = refs(need(b, target).media_list);
+  const i = list.findIndex((r) => r.ref === media);
+  if (i <= 0) return;
+  b.set(target, "media_list", [list[i], ...list.slice(0, i), ...list.slice(i + 1)]);
+}
+
 export function removeMediaRef(b: ChangeBuilder, target: string, media: string): void {
   b.pull(target, "media_list", media, true);
 }

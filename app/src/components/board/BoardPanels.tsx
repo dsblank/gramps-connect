@@ -2,7 +2,7 @@
 // dropped, the card and yarn panels on the right, Case notes, the Save
 // dialog and the Add menu. All of them only report what the user chose;
 // BoardView stages it as a loose end.
-import { Anchor, Badge, Box, Tooltip, UnstyledButton, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Anchor, Badge, Box, Menu, Tooltip, UnstyledButton, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { parseCoords } from "../../store/visualData";
 import { formatHash } from "../../hash";
@@ -20,6 +20,7 @@ import { summaryLine } from "../related/summary";
 import { useApiImageSrc } from "../../store/apiImage";
 import { snippetFor } from "../visuals/searchSnippet";
 import { TreeMark } from "./TreeMark";
+import { photosOf, type PhotoSubject } from "../../store/board/faces";
 
 export const CLASS_LABEL: Record<GrampsClass, string> = {
   Person: "Person", Family: "Family", Event: "Event", Place: "Place", Source: "Source",
@@ -177,22 +178,80 @@ function PanelFrame({ eyebrow, title, sub, onClose, children }: { eyebrow: strin
   );
 }
 
-function FaceThumb({ url }: { url: string | null }) {
+/** A crop of a photo to someone's face; a dashed "?" when no face is marked. */
+function FaceThumb({ url, size = 32 }: { url: string | null; size?: number }) {
   const { src, onError } = useApiImageSrc(url);
   return src ? (
-    <img src={src} onError={onError} alt="" width={32} height={32} style={{ objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+    <img src={src} onError={onError} alt="" width={size} height={size} style={{ objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
   ) : (
-    <Box w={32} h={32} style={{ flexShrink: 0 }} />
+    <Box w={size} h={size} title={t("No face marked")} style={{ flexShrink: 0, border: "1px dashed var(--mantine-color-dimmed)", borderRadius: 4, display: "grid", placeItems: "center" }}>
+      <Text size="xs" c="dimmed">?</Text>
+    </Box>
   );
 }
 
-/** Someone (or something) marked in a photo. */
-export interface InPhoto {
-  cls: GrampsClass;
-  handle: string;
-  label: string;
-  /** A crop of the photo to just their region. */
-  faceUrl: string | null;
+/** Find a person in the tree (for "Add someone who's in it"). */
+function PersonSearch({ placeholder, exclude, all, onPick }: { placeholder: string; exclude: Set<string>; all: Records; onPick: (handle: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<{ value: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setFound([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const { hits } = await fetchSearch(await getToken(), q, 1, 10, "person", ctrl.signal);
+        setFound(hits.map((h) => ({ value: h.handle, label: summaryLine(h.object_type, h.object) })));
+      } catch {
+        /* aborted or failed: keep the last results */
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [query]);
+  const lower = query.trim().toLowerCase();
+  const seen = new Set<string>(exclude);
+  const data: { value: string; label: string }[] = [];
+  for (const r of Object.values(all)) {
+    if (r._class !== "Person" || seen.has(r.handle)) continue;
+    const label = titleOf(r.handle, all);
+    if (lower.length >= 2 && label.toLowerCase().includes(lower)) {
+      seen.add(r.handle);
+      data.push({ value: r.handle, label });
+    }
+  }
+  for (const o of found) if (!seen.has(o.value)) {
+    seen.add(o.value);
+    data.push(o);
+  }
+  return (
+    <Select
+      size="xs"
+      placeholder={placeholder}
+      searchable
+      value={null}
+      data={data}
+      searchValue={query}
+      onSearchChange={setQuery}
+      filter={({ options }) => options}
+      nothingFoundMessage={lower.length < 2 ? t("Type a name") : loading ? t("Searching…") : t("No one found")}
+      rightSection={loading ? <Loader size="xs" /> : undefined}
+      onChange={(v) => {
+        if (!v) return;
+        setQuery("");
+        onPick(v);
+      }}
+    />
+  );
 }
 
 /** Text in the toolbar that turns into a field when clicked (the case's
@@ -295,8 +354,15 @@ export function CardPanel(props: {
   readOnly?: boolean;
   /** Shows the card's photo full screen, when it has one. */
   onViewPhoto?: () => void;
-  /** For a photo: who's marked in it (null while loading). */
-  inPhoto?: InPhoto[] | null;
+  /** For a photo: who's in it (null while loading). */
+  inPhoto?: PhotoSubject[] | null;
+  /** A crop of photo `media` to `rect`, or null without a region. */
+  faceUrl: (media: string, rect: number[] | null) => string | null;
+  /** Opens the face editor (and adds the person to the photo on save). */
+  onFace: (person: string, media: string) => void;
+  onNotInPhoto: (person: string, media: string) => void;
+  /** Makes `media` the photo on the person's card. */
+  onMainPhoto: (person: string, media: string) => void;
   onPinUpMany: (items: { cls: GrampsClass; handle: string }[]) => void;
   onSize: (size: CardSize) => void;
   onEdit: (edit: CardEdit) => void;
@@ -306,7 +372,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -426,6 +492,7 @@ export function CardPanel(props: {
           <Text size="xs" c="dimmed">{t("Edits here change the tree when you save.")}</Text>
         </Group>
       )}
+      {r._class === "Person" && <PersonPhoto person={handle} all={all} readOnly={readOnly} faceUrl={faceUrl} onFace={onFace} onNotInPhoto={onNotInPhoto} onMainPhoto={onMainPhoto} />}
       {inPhoto !== undefined && (
         <Box>
           <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("In this photo")}{inPhoto ? ` (${inPhoto.length})` : ""}</Text>
@@ -434,16 +501,29 @@ export function CardPanel(props: {
           <Stack gap={4} mt={4}>
             {inPhoto?.map((p) => (
               <Group key={p.handle} gap="xs" wrap="nowrap">
-                <FaceThumb url={p.faceUrl} />
+                <FaceThumb url={faceUrl(handle, p.rect)} />
                 <Text size="sm" style={{ flex: 1, minWidth: 0 }} truncate>{p.label}</Text>
                 {onBoard.has(p.handle) ? (
                   <Button size="compact-xs" variant="subtle" onClick={() => onShow(p.handle)}>{t("Show")}</Button>
                 ) : (
                   <Button size="compact-xs" variant="light" onClick={() => onPinUp(p.cls, p.handle)}>{t("Pin")}</Button>
                 )}
+                {p.cls === "Person" && !readOnly && (
+                  <FaceMenu marked={!!p.rect} who={p.label} onFace={() => onFace(p.handle, handle)} onNotInPhoto={() => onNotInPhoto(p.handle, handle)} />
+                )}
               </Group>
             ))}
           </Stack>
+          {inPhoto && !readOnly && (
+            <Box mt={6}>
+              <PersonSearch
+                placeholder={t("Add someone who's in it…")}
+                exclude={new Set(inPhoto.map((p) => p.handle))}
+                all={all}
+                onPick={(person) => onFace(person, handle)}
+              />
+            </Box>
+          )}
           {inPhoto && inPhoto.filter((p) => !onBoard.has(p.handle)).length > 1 && (
             <Button size="xs" variant="light" mt={6} onClick={() => onPinUpMany(inPhoto.filter((p) => !onBoard.has(p.handle)))}>{t("Pin everyone")}</Button>
           )}
@@ -494,6 +574,71 @@ export function CardPanel(props: {
 }
 
 const YARN_NAME: Record<Yarn["kind"], string> = { kin: "Family", when: "When and where", evidence: "Evidence", other: "Photo or note" };
+
+/** "⋯" beside someone in a photo: mark or change their face, or take
+ * them out of the photo. */
+function FaceMenu({ marked, who, onFace, onNotInPhoto }: { marked: boolean; who: string; onFace: () => void; onNotInPhoto: () => void }) {
+  return (
+    <Menu position="bottom-end" withinPortal>
+      <Menu.Target>
+        <ActionIcon size="sm" variant="subtle" color="gray" aria-label={`${t("Face and photo")}: ${who}`}>⋯</ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item onClick={onFace}>{marked ? t("Change face…") : t("Mark face…")}</Menu.Item>
+        <Menu.Item onClick={onNotInPhoto} rightSection={<TreeMark />}>{t("Not in this photo")}</Menu.Item>
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
+/** A person's card: the photo on their card and their face in it. */
+function PersonPhoto({ person, all, readOnly, faceUrl, onFace, onNotInPhoto, onMainPhoto }: {
+  person: string;
+  all: Records;
+  readOnly?: boolean;
+  faceUrl: (media: string, rect: number[] | null) => string | null;
+  onFace: (person: string, media: string) => void;
+  onNotInPhoto: (person: string, media: string) => void;
+  onMainPhoto: (person: string, media: string) => void;
+}) {
+  const photos = photosOf(person, all);
+  const [main, ...others] = photos;
+  return (
+    <Box>
+      <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Photo")}</Text>
+      {!main ? (
+        <Text size="xs" c="dimmed">
+          {readOnly ? t("No photo yet.") : t("No photo yet. To add one, select a photo's card and use “Add someone who's in it”.")}
+        </Text>
+      ) : (
+        <Group gap="sm" wrap="nowrap" align="flex-start" mt={4}>
+          <FaceThumb url={faceUrl(main.media, main.rect)} size={56} />
+          <Stack gap={4} style={{ minWidth: 0 }}>
+            <Text size="sm" truncate>{titleOf(main.media, all) || t("Photo")}</Text>
+            {!readOnly && (
+              <Group gap={4}>
+                <Button size="compact-xs" variant="light" onClick={() => onFace(person, main.media)}>{main.rect ? t("Change face…") : t("Mark face…")}</Button>
+                <Button size="compact-xs" variant="subtle" color="gray" onClick={() => onNotInPhoto(person, main.media)} rightSection={<TreeMark />}>{t("Not in this photo")}</Button>
+              </Group>
+            )}
+          </Stack>
+        </Group>
+      )}
+      {!readOnly && others.length > 0 && (
+        <Stack gap={2} mt={6}>
+          <Text size="xs" c="dimmed">{t("Also in")}:</Text>
+          {others.map((o) => (
+            <Group key={o.media} gap="xs" wrap="nowrap">
+              <FaceThumb url={faceUrl(o.media, o.rect)} size={24} />
+              <Text size="xs" style={{ flex: 1, minWidth: 0 }} truncate>{titleOf(o.media, all) || t("Photo")}</Text>
+              <Button size="compact-xs" variant="subtle" onClick={() => onMainPhoto(person, o.media)} rightSection={<TreeMark />}>{t("Use on the card")}</Button>
+            </Group>
+          ))}
+        </Stack>
+      )}
+    </Box>
+  );
+}
 
 export function YarnPanel({ yarn, records, state, readOnly, onSnip, onRetie, onPullOut, onClose }: {
   yarn: Yarn;

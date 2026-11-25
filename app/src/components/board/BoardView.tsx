@@ -20,7 +20,7 @@ import { type CardSize, type CaseCard, type CaseFile } from "../../store/board/c
 import { clearDraft, writeDraft } from "../../store/board/caseDraft";
 import { AFTER_OWN_SAVE, draftOf, openCase, openUnsavedCase, type OpenedCase } from "../../store/board/caseLoad";
 import { connectOptions, newTypesFor, snip, standIn, type ConnectOption } from "../../store/board/connect";
-import { newEvent, newNote, newPerson, newPlace, newRepository, newSource, setEventPlace, setEventType, setPersonName } from "../../store/board/links";
+import { makeMainPhoto, newEvent, newNote, newPerson, newPlace, newRepository, newSource, removeMediaRef, setEventPlace, setEventType, setMediaRegion, setPersonName, type Region } from "../../store/board/links";
 import { makeDate } from "@gramps-connect/gramps-date";
 import { GRAMPS_CLASSES, loadRecords, type GrampsClass, type Records } from "../../store/board/records";
 import { saveBoard, undoSave } from "../../store/board/save";
@@ -32,7 +32,9 @@ import { getViewStore } from "../../store/registry";
 import { fetchObjectExtended } from "../../store/objectDetail";
 import { openTopicWindow } from "../../store/topicWindows";
 import { findCaseTopic, startCaseTopic } from "../../store/board/caseTopic";
-import { extractRegions, ImageLightbox, type Region } from "../related/ImageLightbox";
+import { ImageLightbox } from "../related/ImageLightbox";
+import { MediaRegionDialog } from "../related/MediaRegionDialog";
+import { subjectsFromBacklinks, subjectsOnBoard, type PhotoSubject } from "../../store/board/faces";
 import { hasPermissions } from "../../auth/auth";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
 import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
@@ -97,8 +99,11 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const [peek, setPeek] = useState<Records>({});
   /** The photo shown full screen, if any. */
   const [lightbox, setLightbox] = useState<string | null>(null);
-  /** Who's marked in the selected photo (null while loading). */
-  const [inPhoto, setInPhoto] = useState<{ media: string; regions: Region[] | null } | null>(null);
+  /** Who the tree has in the selected photo (null while loading); the
+   * sidebar shows it with the board's unsaved changes laid over. */
+  const [inPhoto, setInPhoto] = useState<{ media: string; subjects: PhotoSubject[] | null } | null>(null);
+  /** The face being marked: whose, in which photo, and where it was. */
+  const [faceEdit, setFaceEdit] = useState<{ person: string; media: string; rect: number[] | null } | null>(null);
   /** The case's discussion: its topic handle, "none" yet, or not known yet. */
   const [topic, setTopic] = useState<string | "none" | null>(null);
   const canvas = useRef<BoardCanvasHandle | null>(null);
@@ -221,12 +226,14 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
 
   // --- staging loose ends -------------------------------------------------------------
   /** Stages one user action. `merge`: an edit that may replace the last loose
-   * end if that was the same edit (typing a name twice is one loose end). */
+   * end if that was the same edit (typing a name twice is one loose end).
+   * `justLoaded`: records loadIntoBase() fetched in this same click, which
+   * `opened.base` won't show until the next render. */
   const stage = useCallback(
-    (label: string, build: (b: ChangeBuilder) => void, merge = false) => {
+    (label: string, build: (b: ChangeBuilder) => void, merge = false, justLoaded: Records = {}) => {
       if (!opened) return null;
       const base = merge && changes.length && changes[changes.length - 1].label === label ? changes.slice(0, -1) : changes;
-      const b = new ChangeBuilder(applyChanges(opened.base, base));
+      const b = new ChangeBuilder(applyChanges({ ...justLoaded, ...opened.base }, base));
       build(b);
       const change = b.change(label);
       if (!change.steps.length) return null;
@@ -262,6 +269,58 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     seenChange: (records[handle]?.change as number) ?? 0, x: at.x, y: at.y, size: "compact",
   });
 
+  /** Makes sure the board has `items` loaded (so it can change them or pin
+   * them up): the ones it doesn't have yet are fetched and added to the
+   * records it loaded. Resolves to all of them that exist. */
+  async function loadIntoBase(items: { cls: GrampsClass; handle: string }[]): Promise<Records> {
+    const loaded: Records = {};
+    const missing: typeof items = [];
+    for (const i of items) {
+      const known = working[i.handle] ?? peek[i.handle];
+      if (known) loaded[i.handle] = known;
+      else missing.push(i);
+    }
+    for (const cls of GRAMPS_CLASSES) {
+      const hs = missing.filter((i) => i.cls === cls).map((i) => i.handle);
+      if (hs.length) Object.assign(loaded, await loadRecords(cls, hs));
+    }
+    if (items.some((i) => !loaded[i.handle])) notifications.show({ color: "red", message: t("That record isn't in the tree any more, or you can't see it.") });
+    const newToBase = Object.fromEntries(items.filter((i) => loaded[i.handle] && !working[i.handle]).map((i) => [i.handle, loaded[i.handle]]));
+    if (Object.keys(newToBase).length) setOpened((o) => o && { ...o, base: { ...o.base, ...newToBase } });
+    return loaded;
+  }
+
+  // --- faces in photos ------------------------------------------------------------
+  const photoTitle = (media: string) => `“${titleOf(media, { ...peek, ...working }) || t("the photo")}”`;
+
+  /** Opens the face editor for `person` in photo `media` (which also adds
+   * them to the photo, once the face is marked). */
+  async function openFace(person: string, media: string) {
+    const loaded = await loadIntoBase([{ cls: "Person", handle: person }]);
+    const r = loaded[person];
+    if (!r) return;
+    const ref = (Array.isArray(r.media_list) ? (r.media_list as { ref?: string; rect?: number[] | null }[]) : []).find((m) => m.ref === media);
+    setFaceEdit({ person, media, rect: ref?.rect ?? null });
+  }
+
+  function saveFace(person: string, media: string, rect: number[] | null) {
+    const who = titleOf(person, working);
+    stage(
+      rect ? `${t("Face")}: ${who}, ${photoTitle(media)}` : `${t("Face cleared")}: ${who}, ${photoTitle(media)}`,
+      (b) => setMediaRegion(b, person, media, rect as Region | null),
+    );
+  }
+
+  async function notInPhoto(person: string, media: string) {
+    const loaded = await loadIntoBase([{ cls: "Person", handle: person }]);
+    if (!loaded[person]) return;
+    stage(`${t("Not in the photo")}: ${titleOf(person, loaded)}, ${photoTitle(media)}`, (b) => removeMediaRef(b, person, media), false, loaded);
+  }
+
+  function mainPhoto(person: string, media: string) {
+    stage(`${t("Photo on the card")}: ${titleOf(person, working)} → ${photoTitle(media)}`, (b) => makeMainPhoto(b, person, media));
+  }
+
   /** Pins up records (loading the ones not loaded yet), near card `near`
    * or the middle of the screen. One record is selected after (unless
    * `keepSelection`, for pins from the sidebar's lists, which stay on the
@@ -274,22 +333,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       canvas.current?.reveal(items.map((i) => i.handle));
       return;
     }
-    const loaded: Records = {};
-    const missing: typeof fresh = [];
-    for (const i of fresh) {
-      const known = working[i.handle] ?? peek[i.handle];
-      if (known) loaded[i.handle] = known;
-      else missing.push(i);
-    }
-    for (const cls of GRAMPS_CLASSES) {
-      const hs = missing.filter((i) => i.cls === cls).map((i) => i.handle);
-      if (hs.length) Object.assign(loaded, await loadRecords(cls, hs));
-    }
+    const loaded = await loadIntoBase(fresh);
     const found = fresh.filter((i) => loaded[i.handle]);
-    if (found.length < fresh.length) notifications.show({ color: "red", message: t("That record isn't in the tree any more, or you can't see it.") });
     if (!found.length) return;
-    const newToBase = Object.fromEntries(found.filter((i) => !working[i.handle]).map((i) => [i.handle, loaded[i.handle]]));
-    if (Object.keys(newToBase).length) setOpened((o) => o && { ...o, base: { ...o.base, ...newToBase } });
     const p = near && positions[near] ? { x: positions[near].x + 260, y: positions[near].y } : canvas.current?.center() ?? { x: 0, y: 0 };
     const records = { ...working, ...loaded };
     addCards(found.map((i) => cardFor(i.handle, i.cls, p, records)), found.length === 1 && !keepSelection ? found[0].handle : undefined);
@@ -516,14 +562,14 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       return;
     }
     const media = selectedHandle;
-    setInPhoto({ media, regions: null });
+    setInPhoto({ media, subjects: null });
     const controller = new AbortController();
     (async () => {
       try {
         const detail = await fetchObjectExtended(await getToken(), MEDIA_VIEW, media, controller.signal);
-        setInPhoto({ media, regions: extractRegions(detail, media) });
+        setInPhoto({ media, subjects: subjectsFromBacklinks(detail, media) });
       } catch {
-        if (!controller.signal.aborted) setInPhoto({ media, regions: [] });
+        if (!controller.signal.aborted) setInPhoto({ media, subjects: [] });
       }
     })();
     return () => controller.abort();
@@ -827,13 +873,12 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             readOnly={!canSave}
             onViewPhoto={selectedPhoto ? () => setLightbox(selectedPhoto.media) : undefined}
             inPhoto={inPhoto && inPhoto.media === selectedCard.handle
-              ? inPhoto.regions && inPhoto.regions.map((r) => ({
-                  cls: VIEW_CLASS[r.type] ?? "Person",
-                  handle: r.handle,
-                  label: r.label,
-                  faceUrl: token ? mediaThumbnailUrl(selectedCard.handle, 96, token, { rect: r.rect }) : null,
-                }))
+              ? inPhoto.subjects && subjectsOnBoard(inPhoto.subjects, working, inPhoto.media)
               : undefined}
+            faceUrl={(media, rect) => (token && rect ? mediaThumbnailUrl(media, 96, token, { rect }) : null)}
+            onFace={(person, media) => void openFace(person, media)}
+            onNotInPhoto={(person, media) => void notInPhoto(person, media)}
+            onMainPhoto={mainPhoto}
             onPinUpMany={(items) => void pinUpMany(items, selectedCard.handle, true)}
             onSize={(size) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === selectedCard.handle ? { ...c, size } : c)) })}
             onEdit={(edit) => editCard(selectedCard.handle, edit)}
@@ -892,6 +937,20 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           onClose={() => setLightbox(null)}
           regionAction="Pin"
           onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox, true)}
+        />
+      )}
+      {faceEdit && (
+        <MediaRegionDialog
+          opened
+          handle={faceEdit.media}
+          initialRect={faceEdit.rect}
+          onClose={() => setFaceEdit(null)}
+          title={`${t("Mark the face of")} ${titleOf(faceEdit.person, working)}`}
+          hint={t("Drag a box around the face. Drag the box to move it, or its corners to resize it.")}
+          saveLabel={t("Use this face")}
+          saveIcon={<TreeMark />}
+          clearLabel={t("Clear the face")}
+          onSave={(rect) => saveFace(faceEdit.person, faceEdit.media, rect)}
         />
       )}
       <AddMenu

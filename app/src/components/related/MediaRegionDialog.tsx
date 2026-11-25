@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import { Button, Group, Loader, Modal } from "@mantine/core";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { Button, Group, Loader, Modal, Text } from "@mantine/core";
 import { getToken } from "../../auth/auth";
 import { fetchAuthedBlobUrl } from "../../store/authedFetch";
 import { clampPct } from "../../store/mediaCrop";
@@ -46,12 +46,19 @@ type DragState =
  * gramps-web-api's crop_image(), which interprets a MediaRef's rect the
  * same way against the EXIF-oriented display image a plain <img> already
  * shows, so no orientation math is needed here. */
-export function MediaRegionDialog({ opened, onClose, handle, initialRect, onSave }: {
+export function MediaRegionDialog({ opened, onClose, handle, initialRect, onSave, title, hint, saveLabel, saveIcon, clearLabel }: {
   opened: boolean;
   onClose: () => void;
   handle: string;
   initialRect?: number[] | null;
   onSave: (rect: number[] | null) => void | Promise<void>;
+  /** Wording for other uses (the Evidence Board's face marking); the
+   * defaults are the Media section's. */
+  title?: string;
+  hint?: string;
+  saveLabel?: string;
+  saveIcon?: ReactNode;
+  clearLabel?: string;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [rect, setRect] = useState<number[] | null>(null);
@@ -153,7 +160,8 @@ export function MediaRegionDialog({ opened, onClose, handle, initialRect, onSave
   }
 
   return (
-    <Modal opened={opened} onClose={onClose} size="xl" title={t("Select region")}>
+    <Modal opened={opened} onClose={onClose} size="xl" title={title ?? t("Select region")}>
+      {hint && <Text size="sm" c="dimmed" mb="sm">{hint}</Text>}
       {!src ? (
         <Loader />
       ) : (
@@ -209,10 +217,10 @@ export function MediaRegionDialog({ opened, onClose, handle, initialRect, onSave
       <Group justify="flex-end" mt="md">
         <Button variant="default" onClick={onClose} disabled={saving}>{t("Cancel")}</Button>
         {rect && (
-          <Button variant="default" onClick={() => save(null)} loading={saving}>{t("Clear region")}</Button>
+          <Button variant="default" onClick={() => save(null)} loading={saving}>{clearLabel ?? t("Clear region")}</Button>
         )}
-        <Button onClick={() => save(rect ? rect.map(clampPct) : null)} loading={saving} disabled={!rect}>
-          {t("Save")}
+        <Button onClick={() => save(rect ? rect.map(clampPct) : null)} loading={saving} disabled={!rect} rightSection={saveIcon}>
+          {saveLabel ?? t("Save")}
         </Button>
       </Group>
     </Modal>
