@@ -15,7 +15,7 @@ import { formatHash, isNewBoardHandle } from "../../hash";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { t } from "../../i18n/i18n";
 import { canChangeData } from "../../pyodidePoc/grampletCommit";
-import { applyChanges, ChangeBuilder, takeBack, toggleChange, type Change } from "../../store/board/changes";
+import { applyChanges, ChangeBuilder, sameValue, takeBack, toggleChange, type Change } from "../../store/board/changes";
 import { type CardSize, type CaseCard, type CaseFile } from "../../store/board/caseFile";
 import { clearDraft, writeDraft } from "../../store/board/caseDraft";
 import { AFTER_OWN_SAVE, draftOf, openCase, openUnsavedCase, type OpenedCase } from "../../store/board/caseLoad";
@@ -1212,6 +1212,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             onBoard={onBoard}
             size={selectedCard.size}
             isDraft={!opened.base[selectedCard.handle]}
+            changedHere={!!opened.base[selectedCard.handle] && !sameValue(opened.base[selectedCard.handle], working[selectedCard.handle])}
             readOnly={!canSave}
             onViewPhoto={selectedPhoto ? () => setLightbox({ media: selectedPhoto.media }) : undefined}
             // A person's card shows just the area identified as them, when there is one.

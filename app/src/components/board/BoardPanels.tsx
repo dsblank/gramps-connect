@@ -30,6 +30,12 @@ export const CLASS_LABEL: Record<GrampsClass, string> = {
   Person: "Person", Family: "Family", Event: "Event", Place: "Place", Source: "Source",
   Citation: "Citation", Repository: "Repository", Media: "Photo or document", Note: "Note",
 };
+/** The card panel's link to the record's own list view (same wording as
+ * the Gramplet object buttons). A plain link, so Ctrl/⌘-click opens a tab. */
+const OPEN_IN: Record<GrampsClass, string> = {
+  Person: "Open in People", Family: "Open in Family", Event: "Open in Events", Place: "Open in Places", Source: "Open in Sources",
+  Citation: "Open in Citations", Repository: "Open in Repositories", Media: "Open in Media", Note: "Open in Notes",
+};
 const SEARCH_TYPE: Record<string, GrampsClass> = {
   person: "Person", family: "Family", event: "Event", place: "Place", source: "Source",
   citation: "Citation", repository: "Repository", media: "Media", note: "Note",
@@ -300,6 +306,8 @@ export function CardPanel(props: {
   onBoard: Set<string>;
   size: CardSize;
   isDraft: boolean;
+  /** The board has changes to this record that aren't saved to the tree yet. */
+  changedHere?: boolean;
   /** View only: fields can't be changed (no Editor rights). */
   readOnly?: boolean;
   /** Shows the card's photo full screen, when it has one. */
@@ -327,7 +335,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, photoUrl, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, relatives, onRelate, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, changedHere, readOnly, onViewPhoto, photoUrl, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, relatives, onRelate, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -439,6 +447,12 @@ export function CardPanel(props: {
           <Button size="xs" variant="default" onClick={onTakeOff}>{t("Unpin")}</Button>
         </Tooltip>
       </Group>
+      {!isDraft && (
+        <Box>
+          <Anchor size="xs" href={formatHash({ viewKey: r._class.toLowerCase(), handle })}>{t(OPEN_IN[r._class])}</Anchor>
+          {changedHere && <Text size="xs" c="dimmed">{t("Your unsaved changes on the board won't show there yet.")}</Text>}
+        </Box>
+      )}
       {onViewPhoto && photoUrl && <SidebarPhoto url={photoUrl} onClick={onViewPhoto} />}
       {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{readOnly ? t("View full size") : t("View full size and identify people")}</Button>}
       {fields}
