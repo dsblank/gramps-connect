@@ -647,6 +647,27 @@ export function RelationPanel({ from, to, records, revision, unsaved, onPinPath,
   );
 }
 
+/** A sticky note: a hunch, kept with the case and never in the tree. */
+export function StickyPanel({ text, onText, onRemove, onClose }: { text: string; onText: (text: string) => void; onRemove: () => void; onClose: () => void }) {
+  return (
+    <PanelFrame eyebrow={t("Sticky note")} title={t("A hunch")} sub={t("On this board only. Saved with the case, never in the tree.")} onClose={onClose}>
+      <Textarea
+        label={t("Note")}
+        autosize
+        minRows={4}
+        maxRows={12}
+        autoFocus={!text}
+        value={text}
+        placeholder={t("e.g. Could the “Mary” in the 1880 census be Ruth's mother?")}
+        onChange={(e) => onText(e.currentTarget.value)}
+      />
+      <Group>
+        <Button size="xs" color="red" variant="light" onClick={onRemove}>{t("Throw it away")}</Button>
+      </Group>
+    </PanelFrame>
+  );
+}
+
 export function YarnPanel({ yarn, records, state, readOnly, onSnip, onRetie, onPullOut, onClose }: {
   yarn: Yarn;
   readOnly?: boolean;
@@ -789,8 +810,10 @@ export function SaveDialog({ opened, changes, layoutOnly, onToggle, onSave, onCl
 
 /** Pin up from the tree (one search across every kind of record), or
  * create something new. */
-export function AddMenu({ opened, onClose, onPick, onCreate, canCreate = true }: {
+export function AddMenu({ opened, onClose, onPick, onCreate, onSticky, canCreate = true }: {
   canCreate?: boolean;
+  /** Adds a sticky note (board only). */
+  onSticky?: () => void;
   opened: boolean;
   onClose: () => void;
   onPick: (cls: GrampsClass, handle: string) => void;
@@ -859,6 +882,16 @@ export function AddMenu({ opened, onClose, onPick, onCreate, canCreate = true }:
             <Button key={cls} size="xs" variant="light" onClick={() => onCreate(cls)} rightSection={<TreeMark />}>{t(`New ${CLASS_LABEL[cls].toLowerCase()}`)}</Button>
           ))}
         </Group>
+        {onSticky && (
+          <>
+            <Divider />
+            <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("On this board only")}</Text>
+            <Group gap="xs" wrap="nowrap" align="center">
+              <Button size="xs" variant="light" color="yellow" onClick={onSticky}>{t("Sticky note")}</Button>
+              <Text size="xs" c="dimmed">{t("A hunch to keep in mind. Saved with the case, never in the tree.")}</Text>
+            </Group>
+          </>
+        )}
       </Stack>
     </Modal>
   );

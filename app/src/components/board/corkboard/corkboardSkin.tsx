@@ -330,7 +330,27 @@ const CORK = (() => {
   return Array.from({ length: 240 }, () => [r() * 160, r() * 160, 0.6 + r() * 2.3, 0.4 + r() * 1.5, r() < 0.55 ? 1 : 0, 0.25 + r() * 0.5, r() * 180]);
 })();
 
+const STICKY_W = 176;
+const stickyLines = (text: string) => wrap(text, 19, 7);
+
 export const corkboardSkin: BoardSkin = {
+  stickyBox: (text) => ({ x0: -STICKY_W / 2, y0: -10, w: STICKY_W, h: 30 + Math.max(1, stickyLines(text).length) * 22 }),
+
+  renderSticky(text, box, { selected, placeholder }) {
+    const lines = stickyLines(text);
+    return (
+      <>
+        <Shadow box={box} />
+        <rect className={css.sticky} x={box.x0} y={box.y0} width={box.w} height={box.h} />
+        {lines.length
+          ? lines.map((ln, i) => <text key={i} className={css.stickyText} x={box.x0 + 12} y={20 + i * 22}>{ln}</text>)
+          : <text className={css.stickyPlaceholder} x={box.x0 + 12} y={20}>{placeholder}</text>}
+        <rect className={css.tape} x={-26} y={-18} width={52} height={16} transform="rotate(-4)" />
+        {selected && <path className={css.marker} d={markerLoop(box)} />}
+      </>
+    );
+  },
+
   key: "corkboard",
   className: css.root,
 

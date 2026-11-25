@@ -11,6 +11,7 @@ import "d3-transition";
 import { zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { t } from "../../i18n/i18n";
+import type { CaseSticky } from "../../store/board/caseFile";
 import type { Yarn } from "../../store/board/view";
 import { BoardPhysics, jiggle, swingTransform, yarnPath, type YarnGeometry } from "./physics";
 import type { BoardSkin, CardBox, CardView } from "./skin";
@@ -23,7 +24,11 @@ export interface Point {
 
 /** One card, one yarn, or two people (Ctrl/Cmd+click the second) to see
  * how they're related. */
-export type BoardSelection = { kind: "card"; id: string } | { kind: "yarn"; id: string } | { kind: "pair"; ids: [string, string] } | null;
+export type BoardSelection = { kind: "card"; id: string } | { kind: "yarn"; id: string } | { kind: "pair"; ids: [string, string] } | { kind: "sticky"; id: string } | null;
+
+/** A sticky note's key among the board's positions (never a record handle). */
+export const stickyKey = (id: string) => `sticky:${id}`;
+const isStickyKey = (key: string) => key.startsWith("sticky:");
 
 export interface BoardCanvasHandle {
   fit: () => void;
@@ -46,6 +51,9 @@ interface Props {
   photoUrls: Record<string, string | null>;
   /** Map pictures for place cards, by handle. */
   mapUrls?: Record<string, string | null>;
+  /** Sticky notes (hunches): dragged like cards, moved through onMove with
+   * their stickyKey(), never tied with yarn. */
+  stickies?: CaseSticky[];
   selection: BoardSelection;
   /** `additive`: Ctrl/Cmd was held (adds a second person). */
   onSelect: (selection: BoardSelection, additive?: boolean) => void;
@@ -61,7 +69,11 @@ interface Props {
 const reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 export function BoardCanvas(props: Props) {
-  const { skin, cards, positions, yarn, newYarn, cutYarn = [], photoUrls, mapUrls = {}, selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
+  const { skin, cards, positions: cardPositions, yarn, newYarn, cutYarn = [], photoUrls, mapUrls = {}, stickies = [], selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
+  const positions = useMemo(
+    () => ({ ...cardPositions, ...Object.fromEntries(stickies.map((n) => [stickyKey(n.id), { x: n.x, y: n.y }])) }),
+    [cardPositions, stickies],
+  );
   const svgRef = useRef<SVGSVGElement>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [view, setView] = useState<ZoomTransform>(zoomIdentity.translate(80, 90));
@@ -72,7 +84,10 @@ export function BoardCanvas(props: Props) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [pull, setPull] = useState<{ from: string; to: Point } | null>(null);
 
-  const boxes = useMemo(() => Object.fromEntries(cards.map((c) => [c.handle, skin.cardBox(c)])), [cards, skin]);
+  const boxes = useMemo(
+    () => ({ ...Object.fromEntries(cards.map((c) => [c.handle, skin.cardBox(c)])), ...Object.fromEntries(stickies.map((n) => [stickyKey(n.id), skin.stickyBox(n.text)])) }),
+    [cards, stickies, skin],
+  );
   const boxesRef = useRef(boxes);
   boxesRef.current = boxes;
   const positionsRef = useRef(positions);
@@ -81,10 +96,10 @@ export function BoardCanvas(props: Props) {
   // New cards drop in and swing.
   const seen = useRef<Set<string> | null>(null);
   useEffect(() => {
-    const now = new Set(cards.map((c) => c.handle));
+    const now = new Set([...cards.map((c) => c.handle), ...stickies.map((n) => stickyKey(n.id))]);
     for (const h of now) if (seen.current && !seen.current.has(h)) physics.dropIn(h);
     seen.current = now;
-  }, [cards, physics]);
+  }, [cards, stickies, physics]);
 
   // Zoom and pan: wheel anywhere; drag only on the empty board.
   useEffect(() => {
@@ -190,13 +205,13 @@ export function BoardCanvas(props: Props) {
   const cardAt = (p: Point, except: string): string | null => {
     for (const [h, pos] of Object.entries(positionsRef.current)) {
       const b = boxesRef.current[h];
-      if (h === except || !b) continue;
+      if (h === except || !b || isStickyKey(h)) continue;
       if (p.x >= pos.x + b.x0 && p.x <= pos.x + b.x0 + b.w && p.y >= pos.y + b.y0 - 8 && p.y <= pos.y + b.y0 + b.h) return h;
     }
     return null;
   };
 
-  const onCardDown = (e: ReactPointerEvent, handle: string) => {
+  const onCardDown = (e: ReactPointerEvent, handle: string, selectAs: BoardSelection = { kind: "card", id: handle }) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     const start = { x: e.clientX, y: e.clientY };
@@ -228,7 +243,7 @@ export function BoardCanvas(props: Props) {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       if (!moved) {
-        onSelect({ kind: "card", id: handle }, e.ctrlKey || e.metaKey);
+        onSelect(selectAs, e.ctrlKey || e.metaKey);
         physics.kickCard(handle, jiggle(40));
         return;
       }
@@ -363,6 +378,26 @@ export function BoardCanvas(props: Props) {
     );
   };
 
+  const stickyEl = (n: CaseSticky) => {
+    const key = stickyKey(n.id);
+    const box = boxes[key];
+    if (!box) return null;
+    return (
+      <g
+        key={key}
+        className={dragging === key ? LIFTED_CLASS : undefined}
+        transform={`translate(${n.x.toFixed(1)} ${n.y.toFixed(1)})`}
+        data-nozoom
+        style={{ cursor: dragging === key ? "grabbing" : "grab" }}
+        onPointerDown={(e) => onCardDown(e, key, { kind: "sticky", id: n.id })}
+      >
+        <g ref={(el) => physics.attachCard(key, el)} transform={swingTransform(physics.card(key))}>
+          {skin.renderSticky(n.text, box, { selected: selection?.kind === "sticky" && selection.id === n.id, placeholder: t("A hunch…") })}
+        </g>
+      </g>
+    );
+  };
+
   const still = cards.filter((c) => c.handle !== dragging);
   const lifted = cards.find((c) => c.handle === dragging);
   let pullEl = null;
@@ -386,10 +421,12 @@ export function BoardCanvas(props: Props) {
       <g transform={view.toString()}>
         {still.map(cardEl)}
         {lifted && cardEl(lifted)}
+        {stickies.filter((n) => stickyKey(n.id) !== dragging).map(stickyEl)}
         <g>{yarnEls}{cutEls}</g>
         {still.map(pinEl)}
         {lifted && pinEl(lifted)}
         {pullEl}
+        {stickies.filter((n) => stickyKey(n.id) === dragging).map(stickyEl)}
       </g>
     </svg>
   );

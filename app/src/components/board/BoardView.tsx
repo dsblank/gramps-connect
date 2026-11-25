@@ -37,13 +37,14 @@ import { MediaRegionDialog } from "../related/MediaRegionDialog";
 import { subjectsFromBacklinks, subjectsOnBoard, type PhotoSubject } from "../../store/board/faces";
 import { buildFace, faceWhoLabel, type FaceWho } from "../../store/markFace";
 import { hasPermissions } from "../../auth/auth";
-import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
+import { BoardCanvas, stickyKey, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
+import { createHandle } from "../../store/objectsApi";
 import { LeadGuide, NEW_LEAD, type LeadActions, type LeadState } from "./LeadGuide";
 import { addLeadEvent, addLeadPerson, addLeadRepository, addLeadSource, citeExistingEvent, setLeadRole } from "../../store/board/lead";
 import { uploadMediaFiles } from "../../store/addMedia";
 import { deleteObject } from "../../store/objectsApi";
 import { getHomePersonHandle, setHomePersonHandle } from "../../store/homePersonPreference";
-import { AddMenu, CardPanel, PanelFrame, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, RelationPanel, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
+import { AddMenu, CardPanel, PanelFrame, StickyPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, RelationPanel, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
 import { pathCards } from "../../store/board/relationPath";
 import type { PathStep } from "../../store/relationshipPath";
 import { cleanUp } from "./cleanUp";
@@ -288,7 +289,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const layoutChanged = !!opened && !!file && JSON.stringify(file) !== JSON.stringify(opened.file);
   /** Set when Close discards, so a pending autosave can't bring it back. */
   const discarded = useRef(false);
-  const dirty = changes.length > 0 || layoutChanged || (!!opened && !opened.note && !!file?.cards.length);
+  const dirty = changes.length > 0 || layoutChanged || (!!opened && !opened.note && !!(file?.cards.length || file?.stickies.length));
   useEffect(() => {
     if (!opened || !file) return;
     const timer = setTimeout(() => {
@@ -558,6 +559,17 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     onAnother: () => setLead({ ...NEW_LEAD }),
     onClose: () => setLead(null),
   };
+
+  /** A new, empty sticky note near the middle of the screen, selected so
+   * it can be written straight away. */
+  function addSticky() {
+    setAdding(false);
+    const c = canvas.current?.center() ?? { x: 0, y: 0 };
+    const id = createHandle();
+    setFile((f) => f && { ...f, stickies: [...f.stickies, { id, text: "", x: c.x + (f.stickies.length % 4) * 24, y: c.y - 80 + (f.stickies.length % 4) * 24 }] });
+    setLead(null);
+    setSelection({ kind: "sticky", id });
+  }
 
   function mainPhoto(person: string, media: string) {
     stage(`${t("Photo on the card")}: ${titleOf(person, working)} → ${photoTitle(media)}`, (b) => makeMainPhoto(b, person, media));
@@ -982,6 +994,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   ].filter(Boolean);
   const selectedYarn = selection?.kind === "yarn" ? [...yarn, ...cutYarn].find((y) => y.id === selection.id) : undefined;
   const selectedCard = selection?.kind === "card" ? file.cards.find((c) => c.handle === selection.id) : undefined;
+  const selectedSticky = selection?.kind === "sticky" ? file.stickies.find((n) => n.id === selection.id) : undefined;
   const selectedPair = selection?.kind === "pair" && selection.ids.every((h) => working[h]) ? selection.ids : undefined;
   const selectedPhoto = selectedCard ? photoOf(selectedCard.handle) : null;
 
@@ -1095,7 +1108,11 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             setSelection(withSecondPerson(s, additive));
             setMenu(null);
           }}
-          onMove={(h, to) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, x: to.x, y: to.y } : c)) })}
+          stickies={file.stickies}
+          onMove={(h, to) =>
+            setFile((f) => f && (h.startsWith("sticky:")
+              ? { ...f, stickies: f.stickies.map((n) => (stickyKey(n.id) === h ? { ...n, x: to.x, y: to.y } : n)) }
+              : { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, x: to.x, y: to.y } : c)) }))}
           onCycleSize={(h) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, size: NEXT_SIZE[c.size] } : c)) })}
           onPull={(from, to, at, screen) => {
             if (canSave) setMenu(to ? { kind: "connect", from, to, screen } : { kind: "new", from, at, screen });
@@ -1103,7 +1120,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           }}
           canvasRef={(c) => (canvas.current = c)}
         />
-        {!cards.length && !lead && (
+        {!cards.length && !file.stickies.length && !lead && (
           <Stack align="center" justify="center" p="md" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <Paper shadow="lg" p="lg" maw={470} style={{ pointerEvents: "auto", transform: "rotate(-0.8deg)" }}>
               <Title order={3} mb={6}>{t("New case file")}</Title>
@@ -1192,6 +1209,17 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             }}
             onTakeOff={() => takeOff(selectedCard.handle)}
             onDiscard={() => discardDraft(selectedCard.handle)}
+            onClose={() => setSelection(null)}
+          />
+        ) : selectedSticky ? (
+          <StickyPanel
+            key={selectedSticky.id}
+            text={selectedSticky.text}
+            onText={(text) => setFile((f) => f && { ...f, stickies: f.stickies.map((n) => (n.id === selectedSticky.id ? { ...n, text } : n)) })}
+            onRemove={() => {
+              setFile((f) => f && { ...f, stickies: f.stickies.filter((n) => n.id !== selectedSticky.id) });
+              setSelection(null);
+            }}
             onClose={() => setSelection(null)}
           />
         ) : selectedPair ? (
@@ -1287,6 +1315,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           void pinUp(cls, h);
         }}
         onCreate={createLoose}
+        onSticky={addSticky}
         canCreate={canSave}
       />
       <Modal opened={closeAsk} onClose={() => setCloseAsk(false)} title={t("Close the board?")} size="sm">

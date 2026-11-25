@@ -76,4 +76,8 @@ export interface BoardSkin {
   renderLighting?(): ReactNode;
   /** The yarn being pulled from a pin to the pointer. */
   renderPull(d: string): ReactNode;
+  /** A sticky note's outline (a hunch: board only, never in the tree). */
+  stickyBox(text: string): CardBox;
+  /** Drawn inside the note's swinging group, origin at its top middle. */
+  renderSticky(text: string, box: CardBox, opts: { selected: boolean; placeholder: string }): ReactNode;
 }
