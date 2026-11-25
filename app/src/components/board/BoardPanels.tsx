@@ -280,7 +280,6 @@ export type CardEdit =
   /** `place` null clears it; `name` is for the loose end's label. */
   | { kind: "eventPlace"; place: string | null; name: string }
   | { kind: "eventNewPlace"; name: string }
-  | { kind: "placeCoords"; lat: string; long: string }
   | { kind: "noteText"; text: string };
 
 export function CardPanel(props: {
@@ -372,17 +371,12 @@ export function CardPanel(props: {
       break;
     }
     case "Place": {
-      const lat = String(r.lat ?? "");
-      const long = String(r.long ?? "");
-      const at = parseCoords(lat, long);
+      // Coordinates aren't typed here (a map picker may come later); a
+      // place that has them shows its map.
+      const at = parseCoords(String(r.lat ?? ""), String(r.long ?? ""));
       fields = (
         <>
           <CommitField readOnly={readOnly} label={t("Name")} value={titleOf(handle, records)} onCommit={(v) => onEdit({ kind: "placeName", name: v })} />
-          <Group grow>
-            <CommitField readOnly={readOnly} label={t("Latitude")} value={lat} onCommit={(v) => onEdit({ kind: "placeCoords", lat: v.trim(), long })} />
-            <CommitField readOnly={readOnly} label={t("Longitude")} value={long} onCommit={(v) => onEdit({ kind: "placeCoords", lat, long: v.trim() })} />
-          </Group>
-          {(lat || long) && !at && <Text size="xs" c="red">{t("These coordinates can't be read, so there's no map.")}</Text>}
           {at && (
             <>
               <Suspense fallback={<Loader size="xs" />}>

@@ -519,12 +519,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         if (change && opened) pinMadeAlongTheWay([made], [{ x: positions[handle].x + 200, y: positions[handle].y }], applyChanges(opened.base, [...changes, change]));
         break;
       }
-      case "placeCoords":
-        stage(`${who}: ${t("coordinates")}`, (b) => {
-          b.set(handle, "lat", edit.lat);
-          b.set(handle, "long", edit.long);
-        }, true);
-        break;
       case "noteText":
         stage(`${who}: ${t("text")}`, (b) => b.set(handle, "text", { ...(working[handle].text as Record<string, unknown>), string: edit.text }), true);
         break;
