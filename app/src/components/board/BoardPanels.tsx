@@ -9,7 +9,9 @@ import { t } from "../../i18n/i18n";
 import type { Change } from "../../store/board/changes";
 import type { CardSize, CaseFile } from "../../store/board/caseFile";
 import { GENDER, type GrampsClass, type GrampsRecord, type Records } from "../../store/board/records";
-import { leadsOf, titleOf, typeName, type Yarn } from "../../store/board/view";
+import { leadsOf, shortDate, titleOf, typeName, type Yarn } from "../../store/board/view";
+import type { GrampsDate } from "@gramps-connect/gramps-date";
+import { DateInput } from "../DateInput";
 import shapes from "../../data/grampsRecordShapes.json";
 import { fetchSearch, type SearchHit } from "../../store/searchApi";
 import { summaryLine } from "../related/summary";
@@ -24,6 +26,88 @@ const SEARCH_TYPE: Record<string, GrampsClass> = {
   person: "Person", family: "Family", event: "Event", place: "Place", source: "Source",
   citation: "Citation", repository: "Repository", media: "Media", note: "Note",
 };
+
+const NEW_PLACE = "\u0000new";
+
+/** An event's place: one already known to the board, or one found in the
+ * tree as you type, or a new one by that name. Picking only sets the event's
+ * place; the place card can be pinned up from the card's leads. */
+function EventPlacePicker({ value, all, readOnly, onPick, onNew }: {
+  value: string | null;
+  all: Records;
+  readOnly?: boolean;
+  onPick: (place: string | null, name: string) => void;
+  onNew: (name: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
+  const [found, setFound] = useState<{ value: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const currentLabel = value ? titleOf(value, all) || t("Place") : "";
+  useEffect(() => {
+    const q = query.trim();
+    if (!focused || q.length < 2 || q === currentLabel) {
+      setFound([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const { hits } = await fetchSearch(await getToken(), q, 1, 10, "place", ctrl.signal);
+        setFound(hits.map((h) => ({ value: h.handle, label: summaryLine(h.object_type, h.object) })));
+      } catch {
+        /* aborted or failed: keep the last results */
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [query, focused, currentLabel]);
+  const q = query.trim();
+  const lower = q.toLowerCase();
+  const known = Object.values(all)
+    .filter((r) => r._class === "Place")
+    .map((r) => ({ value: r.handle, label: titleOf(r.handle, all) || t("Place") }));
+  const seen = new Set<string>();
+  const data: { value: string; label: string }[] = [];
+  const add = (o: { value: string; label: string }) => {
+    if (seen.has(o.value)) return;
+    seen.add(o.value);
+    data.push(o);
+  };
+  if (value) add({ value, label: currentLabel });
+  for (const o of known) if (!q || q === currentLabel || o.label.toLowerCase().includes(lower)) add(o);
+  for (const o of found) add(o);
+  if (q.length >= 2 && q !== currentLabel && !data.some((o) => o.label.toLowerCase() === lower)) {
+    data.push({ value: NEW_PLACE, label: `${t("New place")}: ${q}` });
+  }
+  return (
+    <Select
+      label={t("Place")}
+      placeholder={readOnly ? undefined : t("Type to find or add a place")}
+      disabled={readOnly}
+      searchable
+      clearable
+      value={value}
+      data={data}
+      searchValue={query}
+      onSearchChange={setQuery}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      filter={({ options }) => options}
+      nothingFoundMessage={q.length < 2 ? t("Type a place name") : loading ? t("Searching…") : t("No places found")}
+      rightSection={loading ? <Loader size="xs" /> : undefined}
+      onChange={(v) => {
+        if (v === NEW_PLACE) onNew(q);
+        else if (v !== value) onPick(v, v ? data.find((o) => o.value === v)?.label ?? "" : "");
+      }}
+    />
+  );
+}
 
 /** A small floating panel on the board, at a screen point. */
 export function FloatingMenu({ at, title, children, onClose }: { at: { x: number; y: number }; title: string; children: ReactNode; onClose: () => void }) {
@@ -187,6 +271,10 @@ export type CardEdit =
   | { kind: "field"; field: string; value: unknown; label: string }
   | { kind: "eventType"; typeKey: string | null; name: string }
   | { kind: "placeName"; name: string }
+  | { kind: "eventDate"; date: GrampsDate | null }
+  /** `place` null clears it; `name` is for the loose end's label. */
+  | { kind: "eventPlace"; place: string | null; name: string }
+  | { kind: "eventNewPlace"; name: string }
   | { kind: "noteText"; text: string };
 
 export function CardPanel(props: {
@@ -251,7 +339,18 @@ export function CardPanel(props: {
             onChange={(v) => v && onEdit({ kind: "eventType", typeKey: EVENT_TYPE_CODE[v] ?? null, name: v })}
           />
           <CommitField readOnly={readOnly} label={t("Description")} value={String(r.description ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "description", value: v, label: "description" })} />
-          <Text size="xs" c="dimmed">{t("Dates are edited in the event's own editor for now.")}</Text>
+          {readOnly ? (
+            <TextInput readOnly label={t("Date")} value={shortDate(r.date)} />
+          ) : (
+            <DateInput id={`board-${handle}-date`} label={t("Date")} value={(r.date as GrampsDate | undefined) ?? null} onChange={(date) => onEdit({ kind: "eventDate", date })} />
+          )}
+          <EventPlacePicker
+            readOnly={readOnly}
+            value={typeof r.place === "string" && r.place ? r.place : null}
+            all={all}
+            onPick={(place, placeName) => onEdit({ kind: "eventPlace", place, name: placeName })}
+            onNew={(placeName) => onEdit({ kind: "eventNewPlace", name: placeName })}
+          />
         </>
       );
       break;

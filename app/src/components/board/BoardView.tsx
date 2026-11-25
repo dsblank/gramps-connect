@@ -18,7 +18,8 @@ import { type CardSize, type CaseCard, type CaseFile } from "../../store/board/c
 import { clearDraft, writeDraft } from "../../store/board/caseDraft";
 import { AFTER_OWN_SAVE, draftOf, openCase, openUnsavedCase, type OpenedCase } from "../../store/board/caseLoad";
 import { connectOptions, newTypesFor, snip, standIn, type ConnectOption } from "../../store/board/connect";
-import { newEvent, newNote, newPerson, newPlace, newRepository, newSource, setEventType, setPersonName } from "../../store/board/links";
+import { newEvent, newNote, newPerson, newPlace, newRepository, newSource, setEventPlace, setEventType, setPersonName } from "../../store/board/links";
+import { makeDate } from "@gramps-connect/gramps-date";
 import { GRAMPS_CLASSES, loadRecords, type GrampsClass, type Records } from "../../store/board/records";
 import { saveBoard, undoSave } from "../../store/board/save";
 import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
@@ -340,6 +341,23 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           b.set(handle, "title", edit.name);
         });
         break;
+      case "eventDate":
+        // Named by the field, so changing it again replaces this loose end.
+        stage(`${who}: ${t("date")}`, (b) => b.set(handle, "date", edit.date ?? makeDate({})), true);
+        break;
+      case "eventPlace":
+        stage(`${who}: ${t("place")}`, (b) => setEventPlace(b, handle, edit.place), true);
+        break;
+      case "eventNewPlace": {
+        let made = "";
+        const change = stage(`${who}: ${t("new place")} ${edit.name}`, (b) => {
+          made = newPlace(b, edit.name);
+          setEventPlace(b, handle, made);
+        });
+        // A new record gets a card, like any made along the way.
+        if (change && opened) pinMadeAlongTheWay([made], [{ x: positions[handle].x + 200, y: positions[handle].y }], applyChanges(opened.base, [...changes, change]));
+        break;
+      }
       case "noteText":
         stage(`${who}: ${t("text")}`, (b) => b.set(handle, "text", { ...(working[handle].text as Record<string, unknown>), string: edit.text }), true);
         break;
