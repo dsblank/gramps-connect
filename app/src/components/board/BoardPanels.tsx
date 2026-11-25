@@ -2,7 +2,7 @@
 // dropped, the card and yarn panels on the right, Case notes, the Save
 // dialog and the Add menu. All of them only report what the user chose;
 // BoardView stages it as a loose end.
-import { Badge, Box, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
+import { Badge, Box, Tooltip, UnstyledButton, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { getToken } from "../../auth/auth";
 import { t } from "../../i18n/i18n";
@@ -81,16 +81,67 @@ function PanelFrame({ eyebrow, title, sub, onClose, children }: { eyebrow: strin
   );
 }
 
+/** Text in the toolbar that turns into a field when clicked (the case's
+ * name and question). Enter or leaving it keeps the edit, Escape doesn't. */
+export function InlineText({ value, placeholder, onCommit, readOnly, strong }: { value: string; placeholder: string; onCommit: (v: string) => void; readOnly?: boolean; strong?: boolean }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(value);
+  if (readOnly) {
+    return value ? <Text fw={strong ? 600 : undefined} c={strong ? undefined : "dimmed"} size={strong ? undefined : "sm"}>{value}</Text> : null;
+  }
+  if (editing) {
+    const done = (keep: boolean) => {
+      setEditing(false);
+      const next = v.trim();
+      if (keep && next !== value && (next || !strong)) onCommit(next);
+    };
+    return (
+      <TextInput
+        size="xs"
+        autoFocus
+        value={v}
+        placeholder={t(placeholder)}
+        onChange={(e) => setV(e.currentTarget.value)}
+        onBlur={() => done(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") done(true);
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            done(false);
+          }
+        }}
+        w={strong ? 240 : 320}
+        aria-label={t(placeholder)}
+      />
+    );
+  }
+  return (
+    <Tooltip label={t("Click to change")} openDelay={500}>
+      <UnstyledButton
+        onClick={() => {
+          setV(value);
+          setEditing(true);
+        }}
+        style={{ borderBottom: "1px dashed var(--mantine-color-default-border)" }}
+      >
+        <Text fw={strong ? 600 : undefined} c={strong && value ? undefined : "dimmed"} size={strong ? undefined : "sm"} fs={value ? undefined : "italic"}>
+          {value || t(placeholder)}
+        </Text>
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
+
 /** A text field that reports its value when it loses focus (one loose end
  * per edit, not one per keystroke). */
-function CommitField({ label, value, onCommit, multiline }: { label: string; value: string; onCommit: (v: string) => void; multiline?: boolean }) {
+function CommitField({ label, value, onCommit, multiline, readOnly }: { label: string; value: string; onCommit: (v: string) => void; multiline?: boolean; readOnly?: boolean }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   const commit = () => v !== value && onCommit(v);
   return multiline ? (
-    <Textarea label={label} value={v} onChange={(e) => setV(e.currentTarget.value)} onBlur={commit} autosize minRows={3} />
+    <Textarea label={label} value={v} readOnly={readOnly} onChange={(e) => setV(e.currentTarget.value)} onBlur={commit} autosize minRows={3} />
   ) : (
-    <TextInput label={label} value={v} onChange={(e) => setV(e.currentTarget.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
+    <TextInput label={label} value={v} readOnly={readOnly} onChange={(e) => setV(e.currentTarget.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
   );
 }
 
@@ -121,6 +172,8 @@ export function CardPanel(props: {
   onBoard: Set<string>;
   size: CardSize;
   isDraft: boolean;
+  /** View only: fields can't be changed (no Editor rights). */
+  readOnly?: boolean;
   onSize: (size: CardSize) => void;
   onEdit: (edit: CardEdit) => void;
   onPinUp: (cls: GrampsClass, handle: string) => void;
@@ -129,7 +182,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, readOnly, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -141,10 +194,11 @@ export function CardPanel(props: {
       fields = (
         <>
           <Group grow>
-            <CommitField label={t("First name")} value={name?.first_name ?? ""} onCommit={(v) => onEdit({ kind: "personName", first: v, surname: name?.surname_list?.[0]?.surname ?? "" })} />
-            <CommitField label={t("Surname")} value={name?.surname_list?.[0]?.surname ?? ""} onCommit={(v) => onEdit({ kind: "personName", first: name?.first_name ?? "", surname: v })} />
+            <CommitField readOnly={readOnly} label={t("First name")} value={name?.first_name ?? ""} onCommit={(v) => onEdit({ kind: "personName", first: v, surname: name?.surname_list?.[0]?.surname ?? "" })} />
+            <CommitField readOnly={readOnly} label={t("Surname")} value={name?.surname_list?.[0]?.surname ?? ""} onCommit={(v) => onEdit({ kind: "personName", first: name?.first_name ?? "", surname: v })} />
           </Group>
           <Select
+            disabled={readOnly}
             label={t("Sex")}
             value={String(r.gender)}
             allowDeselect={false}
@@ -159,6 +213,7 @@ export function CardPanel(props: {
       fields = (
         <>
           <Select
+            disabled={readOnly}
             label={t("Type")}
             value={current}
             searchable
@@ -166,34 +221,34 @@ export function CardPanel(props: {
             data={[...new Set([current, ...EVENT_TYPES])].filter(Boolean).map((n) => ({ value: n, label: t(n) }))}
             onChange={(v) => v && onEdit({ kind: "eventType", typeKey: EVENT_TYPE_CODE[v] ?? null, name: v })}
           />
-          <CommitField label={t("Description")} value={String(r.description ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "description", value: v, label: "description" })} />
+          <CommitField readOnly={readOnly} label={t("Description")} value={String(r.description ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "description", value: v, label: "description" })} />
           <Text size="xs" c="dimmed">{t("Dates are edited in the event's own editor for now.")}</Text>
         </>
       );
       break;
     }
     case "Place":
-      fields = <CommitField label={t("Name")} value={titleOf(handle, records)} onCommit={(v) => onEdit({ kind: "placeName", name: v })} />;
+      fields = <CommitField readOnly={readOnly} label={t("Name")} value={titleOf(handle, records)} onCommit={(v) => onEdit({ kind: "placeName", name: v })} />;
       break;
     case "Source":
       fields = (
         <>
-          <CommitField label={t("Title")} value={String(r.title ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "title", value: v, label: "title" })} />
-          <CommitField label={t("Author")} value={String(r.author ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "author", value: v, label: "author" })} />
+          <CommitField readOnly={readOnly} label={t("Title")} value={String(r.title ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "title", value: v, label: "title" })} />
+          <CommitField readOnly={readOnly} label={t("Author")} value={String(r.author ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "author", value: v, label: "author" })} />
         </>
       );
       break;
     case "Citation":
-      fields = <CommitField label={t("Where in the source (page, entry)")} value={String(r.page ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "page", value: v, label: "page" })} />;
+      fields = <CommitField readOnly={readOnly} label={t("Where in the source (page, entry)")} value={String(r.page ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "page", value: v, label: "page" })} />;
       break;
     case "Repository":
-      fields = <CommitField label={t("Name")} value={String(r.name ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "name", value: v, label: "name" })} />;
+      fields = <CommitField readOnly={readOnly} label={t("Name")} value={String(r.name ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "name", value: v, label: "name" })} />;
       break;
     case "Media":
-      fields = <CommitField label={t("Description")} value={String(r.desc ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "desc", value: v, label: "description" })} />;
+      fields = <CommitField readOnly={readOnly} label={t("Description")} value={String(r.desc ?? "")} onCommit={(v) => onEdit({ kind: "field", field: "desc", value: v, label: "description" })} />;
       break;
     case "Note":
-      fields = <CommitField label={t("Text")} multiline value={String((r.text as { string?: string } | undefined)?.string ?? "")} onCommit={(v) => onEdit({ kind: "noteText", text: v })} />;
+      fields = <CommitField readOnly={readOnly} label={t("Text")} multiline value={String((r.text as { string?: string } | undefined)?.string ?? "")} onCommit={(v) => onEdit({ kind: "noteText", text: v })} />;
       break;
   }
   const citations = Array.isArray(r.citation_list) ? (r.citation_list as string[]) : [];
@@ -241,7 +296,7 @@ export function CardPanel(props: {
       <Divider />
       <Group gap="xs">
         <Button size="xs" variant="default" onClick={onTakeOff}>{t("Take off the board")}</Button>
-        {isDraft && <Button size="xs" color="red" variant="light" onClick={onDiscard}>{t("Discard this draft")}</Button>}
+        {isDraft && !readOnly && <Button size="xs" color="red" variant="light" onClick={onDiscard}>{t("Discard this draft")}</Button>}
       </Group>
       <Text size="xs" c="dimmed">
         {isDraft ? t("Discarding removes it, and anything that depends on it, from your loose ends.") : t("Taking a card off the board never changes the tree.")}
@@ -252,8 +307,9 @@ export function CardPanel(props: {
 
 const YARN_NAME: Record<Yarn["kind"], string> = { kin: "Family", when: "When and where", evidence: "Evidence", other: "Photo or note" };
 
-export function YarnPanel({ yarn, records, state, onSnip, onRetie, onPullOut, onClose }: {
+export function YarnPanel({ yarn, records, state, readOnly, onSnip, onRetie, onPullOut, onClose }: {
   yarn: Yarn;
+  readOnly?: boolean;
   records: Records;
   state: "saved" | "new" | "cut";
   onSnip: () => void;
@@ -265,12 +321,13 @@ export function YarnPanel({ yarn, records, state, onSnip, onRetie, onPullOut, on
     <PanelFrame eyebrow={t(YARN_NAME[yarn.kind])} title={`${titleOf(yarn.a, records)} — ${t(yarn.label)} — ${titleOf(yarn.b, records)}`} onClose={onClose}>
       {state === "new" && <Text size="sm">{t("New yarn. It's only tacked on until you save.")}</Text>}
       {state === "cut" && <Text size="sm">{t("Snipped. The connection goes when you save. Both records stay in the tree.")}</Text>}
-      <Group gap="xs">
+      {readOnly && <Text size="sm" c="dimmed">{t("Snipping and tying yarn need Editor rights.")}</Text>}
+      <Group gap="xs" display={readOnly ? "none" : undefined}>
         {state === "saved" && <Button size="xs" color="red" variant="light" onClick={onSnip}>{t("Snip this yarn")}</Button>}
         {state === "cut" && <Button size="xs" onClick={onRetie}>{t("Retie it")}</Button>}
         {state === "new" && <Button size="xs" color="red" variant="light" onClick={onPullOut}>{t("Pull out this new yarn")}</Button>}
       </Group>
-      {state === "saved" && <Text size="xs" c="dimmed">{t("Snipping only takes away the connection. Both records stay, and you can retie it before saving.")}</Text>}
+      {state === "saved" && !readOnly && <Text size="xs" c="dimmed">{t("Snipping only takes away the connection. Both records stay, and you can retie it before saving.")}</Text>}
     </PanelFrame>
   );
 }
@@ -280,8 +337,9 @@ export interface OpenQuestion {
   handle: string;
 }
 
-export function CaseNotesPanel({ file, changes, questions, records, onCaseField, onTakeBack, onShowChange, onShow, onSave, canSave, onClose }: {
+export function CaseNotesPanel({ file, changes, questions, records, onCaseField, onTakeBack, onShowChange, onShow, onSave, onDownload, canSave, onClose }: {
   file: CaseFile;
+  onDownload: () => void;
   changes: Change[];
   questions: OpenQuestion[];
   records: Records;
@@ -296,9 +354,9 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
   const groups = [...new Set(questions.map((q) => q.group))];
   return (
     <PanelFrame eyebrow={t("The case so far")} title={t("Case notes")} onClose={onClose}>
-      <CommitField label={t("Name of this case")} value={file.name} onCommit={(v) => onCaseField("name", v)} />
-      <CommitField label={t("The question it's trying to answer")} value={file.question} onCommit={(v) => onCaseField("question", v)} />
-      <CommitField label={t("Notes on the case")} multiline value={file.description} onCommit={(v) => onCaseField("description", v)} />
+      <CommitField label={t("Name of this case")} readOnly={!canSave} value={file.name} onCommit={(v) => v.trim() && onCaseField("name", v.trim())} />
+      <CommitField label={t("The question it's trying to answer")} readOnly={!canSave} value={file.question} onCommit={(v) => onCaseField("question", v)} />
+      <CommitField label={t("Notes on the case")} readOnly={!canSave} multiline value={file.description} onCommit={(v) => onCaseField("description", v)} />
       <Divider />
       <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Loose ends: not saved yet")} ({changes.length})</Text>
       {changes.length === 0 && <Text size="xs" c="dimmed">{t("Nothing waiting. Anything you add, tie, snip or edit shows up here until you save.")}</Text>}
@@ -326,6 +384,11 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
           ))}
         </Box>
       ))}
+      <Divider />
+      <Box>
+        <Button size="xs" variant="default" onClick={onDownload}>{t("Download this case file")}</Button>
+        <Text size="xs" c="dimmed" mt={4}>{t("A file with the case, its board and a copy of every pinned record, to keep or share. Loose ends not saved yet are only listed.")}</Text>
+      </Box>
     </PanelFrame>
   );
 }
@@ -350,7 +413,7 @@ export function SaveDialog({ opened, changes, layoutOnly, onToggle, onSave, onCl
             ))}
           </Stack>
         ) : (
-          <Text size="sm">{layoutOnly ? t("Only the board's layout changed.") : t("No loose ends.")}</Text>
+          <Text size="sm">{layoutOnly ? t("Only the case file changed: its name, notes or the board's layout.") : t("No loose ends.")}</Text>
         )}
         <Text size="xs" c="dimmed">
           {t("Saved as one change in the tree's History, so one Undo takes all of it back. Unticking a change also unticks anything that depends on it.")}
@@ -368,7 +431,8 @@ export function SaveDialog({ opened, changes, layoutOnly, onToggle, onSave, onCl
 
 /** Pin up from the tree (one search across every kind of record), or
  * create something new. */
-export function AddMenu({ opened, onClose, onPick, onCreate }: {
+export function AddMenu({ opened, onClose, onPick, onCreate, canCreate = true }: {
+  canCreate?: boolean;
   opened: boolean;
   onClose: () => void;
   onPick: (cls: GrampsClass, handle: string) => void;
@@ -430,9 +494,9 @@ export function AddMenu({ opened, onClose, onPick, onCreate }: {
           ))}
           {query.trim().length >= 2 && !loading && hits.length === 0 && <Text size="xs" c="dimmed">{t("Nothing matches.")}</Text>}
         </Stack>
-        <Divider />
-        <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Create something new")}</Text>
-        <Group gap="xs">
+        <Divider display={canCreate ? undefined : "none"} />
+        <Text size="xs" fw={600} c="dimmed" tt="uppercase" display={canCreate ? undefined : "none"}>{t("Create something new")}</Text>
+        <Group gap="xs" display={canCreate ? undefined : "none"}>
           {(["Person", "Family", "Event", "Place", "Source", "Citation", "Repository", "Note"] as GrampsClass[]).map((cls) => (
             <Button key={cls} size="xs" variant="light" onClick={() => onCreate(cls)}>{t(`New ${CLASS_LABEL[cls].toLowerCase()}`)}</Button>
           ))}

@@ -5,7 +5,7 @@
 // Save, which writes the tree changes and the case file as one transaction
 // (store/board/save.ts), with an Undo. Unsaved work is kept in this browser
 // between visits (store/board/caseDraft.ts).
-import { Alert, Anchor, Box, Button, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
+import { Alert, Anchor, Badge, Box, Button, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentUsername, getToken } from "../../auth/auth";
@@ -26,7 +26,9 @@ import { mediaThumbnailUrl } from "../../store/mediaCrop";
 import { TransactionConflictError } from "../../store/transactionsApi";
 import { CASE_FILE_VIEW } from "../../store/views";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
-import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, MenuChoice, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
+import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
+import { cleanUp } from "./cleanUp";
+import { downloadCase } from "../../store/board/caseExport";
 import { corkboardSkin } from "./corkboard/corkboardSkin";
 import type { CardView } from "./skin";
 
@@ -313,6 +315,40 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     }
   }
 
+  /** Moves cards to `targets` over a moment, so the eye can follow them. */
+  const glide = useRef<number | null>(null);
+  function glideTo(targets: Record<string, Point>, then?: () => void) {
+    if (!file) return;
+    if (glide.current) cancelAnimationFrame(glide.current);
+    const from = Object.fromEntries(file.cards.map((c) => [c.handle, { x: c.x, y: c.y }]));
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const start = performance.now();
+    const ms = reduce ? 0 : 450;
+    const step = (now: number) => {
+      const k = ms ? Math.min(1, (now - start) / ms) : 1;
+      const e = 1 - Math.pow(1 - k, 3);
+      setFile((f) => f && {
+        ...f,
+        cards: f.cards.map((c) => {
+          const a = from[c.handle];
+          const b = targets[c.handle];
+          return a && b ? { ...c, x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e } : c;
+        }),
+      });
+      if (k < 1) glide.current = requestAnimationFrame(step);
+      else {
+        glide.current = null;
+        then?.();
+      }
+    };
+    glide.current = requestAnimationFrame(step);
+  }
+
+  function tidy() {
+    const items = cards.map((c) => ({ handle: c.handle, x: positions[c.handle].x, y: positions[c.handle].y, box: corkboardSkin.cardBox(c) }));
+    glideTo(cleanUp(items), () => canvas.current?.fit());
+  }
+
   /** Takes back loose end `id` (and what depends on it), and takes the
    * cards of any records it had made off the board. */
   function takeBackChange(id: string): Change[] {
@@ -551,17 +587,24 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   return (
     <Box style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
       <Group gap="xs" px="sm" py={6} wrap="wrap" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
-        <Text fw={600}>{file.name}</Text>
-        {file.question && <Text c="dimmed" size="sm">{file.question}</Text>}
+        <InlineText strong value={file.name} placeholder="Name this case" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, name: v })} />
+        <InlineText value={file.question} placeholder="What are you trying to find out?" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, question: v })} />
         <Box style={{ flex: 1 }} />
-        <Button size="xs" variant="default" onClick={() => setAdding(true)}>{t("Add…")}</Button>
+        <Button size="xs" variant="default" onClick={() => setAdding(true)}>{canSave ? t("Add…") : t("Pin up…")}</Button>
+        <Tooltip label={t("Straighten the cards and move them closer together")} openDelay={400}>
+          <Button size="xs" variant="default" onClick={tidy} disabled={cards.length < 2}>{t("Clean up")}</Button>
+        </Tooltip>
         <Button size="xs" variant="default" onClick={() => canvas.current?.fit()}>{t("Fit")}</Button>
         <Button size="xs" variant={panel === "notes" ? "filled" : "default"} onClick={() => setPanel(panel === "notes" ? null : "notes")}>
           {t("Case notes")}{notesCount ? ` · ${notesCount}` : ""}
         </Button>
-        <Tooltip label={t("Saving needs Editor rights or above.")} disabled={canSave}>
-          <Button size="xs" onClick={() => setSaveOpen(true)} disabled={!canSave || !dirty}>{t("Save")}</Button>
-        </Tooltip>
+        {canSave ? (
+          <Button size="xs" onClick={() => setSaveOpen(true)} disabled={!dirty}>{t("Save")}</Button>
+        ) : (
+          <Tooltip multiline w={260} label={t("You can look around, pin up records and arrange the board; your arrangement is kept in this browser. Changing the tree or the case file needs Editor rights.")}>
+            <Badge variant="light" color="gray">{t("View only")}</Badge>
+          </Tooltip>
+        )}
       </Group>
       {notices.length > 0 && (
         <Alert color="yellow" py={6} radius={0}>
@@ -590,7 +633,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           }}
           onMove={(h, to) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, x: to.x, y: to.y } : c)) })}
           onCycleSize={(h) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, size: NEXT_SIZE[c.size] } : c)) })}
-          onPull={(from, to, at, screen) => setMenu(to ? { kind: "connect", from, to, screen } : { kind: "new", from, at, screen })}
+          onPull={(from, to, at, screen) => {
+            if (canSave) setMenu(to ? { kind: "connect", from, to, screen } : { kind: "new", from, at, screen });
+            else notifications.show({ id: "board-view-only", message: t("Tying yarn needs Editor rights. You can still look around and arrange the board.") });
+          }}
           canvasRef={(c) => (canvas.current = c)}
         />
         {!cards.length && (
@@ -609,6 +655,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             onBoard={onBoard}
             size={selectedCard.size}
             isDraft={!opened.base[selectedCard.handle]}
+            readOnly={!canSave}
             onSize={(size) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === selectedCard.handle ? { ...c, size } : c)) })}
             onEdit={(edit) => editCard(selectedCard.handle, edit)}
             onPinUp={(cls, h) => void pinUp(cls, h, selectedCard.handle)}
@@ -629,6 +676,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             yarn={selectedYarn}
             records={working}
             state={cutYarn.some((y) => y.id === selectedYarn.id) ? "cut" : newYarn.has(selectedYarn.id) ? "new" : "saved"}
+            readOnly={!canSave}
             onSnip={() => snipYarn(selectedYarn)}
             onRetie={() => retie(selectedYarn)}
             onPullOut={() => pullOut(selectedYarn)}
@@ -659,6 +707,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
               canvas.current?.reveal([h]);
             }}
             onSave={() => setSaveOpen(true)}
+            onDownload={() => downloadCase(file, opened.base, changes.map((c) => c.label))}
             onClose={() => setPanel(null)}
           />
         )}
@@ -671,6 +720,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           void pinUp(cls, h);
         }}
         onCreate={createLoose}
+        canCreate={canSave}
       />
       <SaveDialog
         opened={saveOpen}
