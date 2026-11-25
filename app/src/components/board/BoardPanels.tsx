@@ -498,15 +498,15 @@ export function YarnPanel({ yarn, records, state, readOnly, onSnip, onRetie, onP
 }) {
   return (
     <PanelFrame eyebrow={t(YARN_NAME[yarn.kind])} title={`${titleOf(yarn.a, records)} — ${t(yarn.label)} — ${titleOf(yarn.b, records)}`} onClose={onClose}>
-      {state === "new" && <Text size="sm">{t("New yarn. It's only tacked on until you save.")}</Text>}
-      {state === "cut" && <Text size="sm">{t("Snipped. The connection goes when you save. Both records stay in the tree.")}</Text>}
-      {readOnly && <Text size="sm" c="dimmed">{t("Snipping and tying yarn need Editor rights.")}</Text>}
+      {state === "new" && <Text size="sm">{t("New connection. It goes into the tree when you save.")}</Text>}
+      {state === "cut" && <Text size="sm">{t("Removed. The connection goes from the tree when you save. Both records stay.")}</Text>}
+      {readOnly && <Text size="sm" c="dimmed">{t("Removing and adding connections need Editor rights.")}</Text>}
       <Group gap="xs" display={readOnly ? "none" : undefined}>
-        {state === "saved" && <Button size="xs" color="red" variant="light" onClick={onSnip}>{t("Snip this yarn")}</Button>}
-        {state === "cut" && <Button size="xs" onClick={onRetie}>{t("Retie it")}</Button>}
-        {state === "new" && <Button size="xs" color="red" variant="light" onClick={onPullOut}>{t("Pull out this new yarn")}</Button>}
+        {state === "saved" && <Button size="xs" color="red" variant="light" onClick={onSnip}>{t("Remove connection")}</Button>}
+        {state === "cut" && <Button size="xs" onClick={onRetie}>{t("Put it back")}</Button>}
+        {state === "new" && <Button size="xs" color="red" variant="light" onClick={onPullOut}>{t("Remove this new connection")}</Button>}
       </Group>
-      {state === "saved" && !readOnly && <Text size="xs" c="dimmed">{t("Snipping only takes away the connection. Both records stay, and you can retie it before saving.")}</Text>}
+      {state === "saved" && !readOnly && <Text size="xs" c="dimmed">{t("This only takes away the connection. Both records stay, and you can put it back before saving.")}</Text>}
     </PanelFrame>
   );
 }

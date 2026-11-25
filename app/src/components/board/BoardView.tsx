@@ -456,7 +456,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   }
 
   function snipYarn(y: Yarn) {
-    stage(`${t("Snip")}: ${titleOf(y.a, working)} — ${t(y.label)} — ${titleOf(y.b, working)}`, (b) => snip(b, y));
+    stage(`${t("Remove connection")}: ${titleOf(y.a, working)} — ${t(y.label)} — ${titleOf(y.b, working)}`, (b) => snip(b, y));
   }
   /** Retie: take back the loose end that snipped it. */
   function retie(y: Yarn) {
