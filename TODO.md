@@ -356,6 +356,14 @@ Roughly by value, most first:
   they close every tab).
 - Allow gramplets to create objects (a `new()` call; changing and deleting
   already work, creating was left out of scope).
+- **What's Next gramplet for the whole tree**: a port of Gramps' What's
+  Next gramplet to the Gramplet Store (Python, using `filter()`/
+  `get_object()`). It would walk out from the Home person generation by
+  generation and list what to research next, the way the original does.
+  The Evidence Board's "What's next?" (`whatsMissing()` in
+  `store/board/view.ts`) covers only a case's pinned records, including
+  unsaved board changes, and stays in TypeScript. The two share only a
+  short checklist, so keep two small copies rather than coupling them.
 - Allow more types of addons: tools, reports.
 - Ability to generate PDF forms (add PDF importer).
 - Move under gramps-project — would this enable translations?
