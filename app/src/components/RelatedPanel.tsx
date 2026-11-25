@@ -614,7 +614,7 @@ export function RelatedPanel({
           {view.key === "story" && <StoryActions detail={detail} />}
           {view.key === "casefile" && (
             <Button size="xs" component="a" href={formatHash({ viewKey: BOARD_KEY, handle: detail.handle })}>
-              {t("Open evidence board")}
+              {t("Open Evidence Board")}
             </Button>
           )}
           {draftStack && <EditButton view={view} detail={detail} draftStack={draftStack} />}

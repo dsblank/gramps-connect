@@ -1056,7 +1056,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       <Group gap="xs" px="sm" py={6} wrap="wrap" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
         <Group gap={6} wrap="nowrap">
           <img src={caseBoardIcon} width={20} height={20} alt="" />
-          <Text fz="lg" style={{ whiteSpace: "nowrap", fontFamily: BOARD_TYPEWRITER }}>{t("Evidence board")}</Text>
+          <Text fz="lg" style={{ whiteSpace: "nowrap", fontFamily: BOARD_TYPEWRITER }}>{t("Evidence Board")}</Text>
         </Group>
         <Divider orientation="vertical" />
         <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>{t("Case file")}:</Text>
