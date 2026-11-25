@@ -4,7 +4,7 @@
 // always open. The first box starts on the Home person, the second on the
 // chart's root; picking in either only changes this chart, never the root.
 import { ActionIcon, Box, Button, Group, Modal, Stack, Text, Tooltip } from "@mantine/core";
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 import { t } from "../../i18n/i18n";
 import type { PersonMenuOptions } from "../../pyodidePoc/ObjectCellButton";
 import { usePeople } from "../../pyodidePoc/RelationshipChart";
@@ -77,7 +77,10 @@ function PersonBox({ handle, name, onPick }: { handle: string | null; name: stri
   );
 }
 
-export function RelationshipGraph({ pair }: { pair: RelationshipPair }) {
+/** The element holding the chart, for TreeView's "Export image": the
+ * chart itself is the `[data-export-root]` inside it
+ * (RelationshipChart.tsx), found by relationshipChartElement. */
+export function RelationshipGraph({ pair, exportRef }: { pair: RelationshipPair; exportRef?: RefObject<HTMLDivElement> }) {
   const { first, second } = pair;
   const people = usePeople([first, second].filter((h): h is string => !!h));
   const name = (h: string | null) => (h ? people.get(h)?.name : undefined);
@@ -100,7 +103,7 @@ export function RelationshipGraph({ pair }: { pair: RelationshipPair }) {
         </Tooltip>
         <PersonBox handle={second} name={name(second)} onPick={pair.setSecond} />
       </Group>
-      <Box style={{ flex: 1, minHeight: 0 }}>
+      <Box ref={exportRef} style={{ flex: 1, minHeight: 0 }}>
         {first && second && first !== second ? (
           <RelationshipBetween from={first} to={second} revision={0} chart="always" menu={menu} />
         ) : (
@@ -117,4 +120,10 @@ export function RelationshipGraph({ pair }: { pair: RelationshipPair }) {
       </Box>
     </Stack>
   );
+}
+
+/** The drawn chart inside RelationshipGraph's `exportRef`, or null while
+ * there's none (no two different people picked, or still loading). */
+export function relationshipChartElement(exportRef: RefObject<HTMLDivElement>): HTMLElement | null {
+  return exportRef.current?.querySelector<HTMLElement>("[data-export-root]") ?? null;
 }

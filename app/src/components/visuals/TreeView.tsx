@@ -15,6 +15,7 @@ import {
 import { isManualExpandEnabled, setManualExpandEnabled } from "../../store/treeExpandPreference";
 import { PERSON_VIEW } from "../../store/views";
 import { DownloadImageButton } from "./DownloadImageButton";
+import { snapshotHtmlChart } from "../../store/chartExport/htmlToSvg";
 import { FamilyGraphView } from "./FamilyGraphView";
 import { FanChart, type FanChartHandle } from "./FanChart";
 import { trimTreeToDepth, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
@@ -26,7 +27,8 @@ import { loadChartColorPreference, saveChartColorPreference } from "../../store/
 import { attributeTypesIn, buildAttributeColoring, buildFilterColoring, buildTagColoring, type TagInfo } from "../../charts/personColors";
 import { fetchAllTags } from "../../store/tagList";
 import { VisualFrame } from "./VisualFrame";
-import { RelationshipGraph, useRelationshipPair } from "./RelationshipGraph";
+import { relationshipChartElement, RelationshipGraph, useRelationshipPair } from "./RelationshipGraph";
+import { usePeople } from "../../pyodidePoc/RelationshipChart";
 import { t } from "../../i18n/i18n";
 import { lifeEventDate } from "../../store/lifeEventDates";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
@@ -118,6 +120,10 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // Relationship mode's two people: the Home person and the root until
   // others are picked (RelationshipGraph.tsx).
   const relationshipPair = useRelationshipPair(root?.handle ?? null);
+  const relationshipRef = useRef<HTMLDivElement>(null);
+  const relationshipPeople = usePeople(
+    chartStyle === "relationship" ? [relationshipPair.first, relationshipPair.second].filter((h): h is string => !!h) : [],
+  );
   // Fan mode's own "Show lifespan" toggle -- each wedge's own radius
   // becomes that person's actual birth/death year on a shared calendar
   // axis (fanChart.ts's own nodeRadii) instead of a fixed per-generation
@@ -135,6 +141,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   const [fanDisplayDepth, setFanDisplayDepth] = useState(FAN_BASE_ANC);
   const fanChartRef = useRef<FanChartHandle>(null);
   const treeChartRef = useRef<TreeChartHandle>(null);
+  const familyGraphRef = useRef<HTMLDivElement>(null);
   // Fan mode's own wedge-color scheme: generation, age at death, or a
   // person coloring (tag/attribute/filter, charts/personColors.ts).
   // The Color choices below start from what was picked last time
@@ -1016,7 +1023,23 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
         ) : undefined
       }
       status={
-        chartStyle === "relationship" ? undefined : chartStyle === "fan" ? (
+        chartStyle === "relationship" ? (
+          relationshipPair.first && relationshipPair.second && relationshipPair.first !== relationshipPair.second ? (
+            <Group justify="space-between" wrap="nowrap" gap="xs">
+              <Text size="xs" c="dimmed">
+                {t("click a person to open them, or to use them as the first or second person")}
+              </Text>
+              <Group gap="sm" wrap="nowrap">
+                <DownloadImageButton
+                  getSvg={() => snapshotHtmlChart(relationshipChartElement(relationshipRef))}
+                  filename={`relationship-${[relationshipPair.first, relationshipPair.second]
+                    .map((h) => (relationshipPeople.get(h)?.name ?? "person").replace(/[^\p{L}\p{N}]+/gu, "-"))
+                    .join("-")}`}
+                />
+              </Group>
+            </Group>
+          ) : undefined
+        ) : chartStyle === "fan" ? (
           fanTree ? (
             <Stack gap={6}>
             {personColoring && <ChartLegend entries={personColoring.legend} />}
@@ -1120,6 +1143,10 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
                   checked={familyCompact}
                   onChange={(e) => setFamilyCompact(e.currentTarget.checked)}
                 />
+                <DownloadImageButton
+                  getSvg={() => snapshotHtmlChart(familyGraphRef.current, { legend: personColoring?.legend })}
+                  filename={`generations-${(root?.label ?? "tree").replace(/[^\p{L}\p{N}]+/gu, "-")}`}
+                />
               </Group>
             </Group>
             </Stack>
@@ -1162,7 +1189,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
       }
     >
       {chartStyle === "relationship" && root && (
-        <RelationshipGraph pair={relationshipPair} />
+        <RelationshipGraph pair={relationshipPair} exportRef={relationshipRef} />
       )}
       {chartStyle === "fan" && fanDisplayTree && (
         <FanChart
@@ -1195,6 +1222,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           spouseClustersByHandle={spouseClustersByHandle}
           compact={familyCompact}
           personColoring={personColoring}
+          exportRootRef={familyGraphRef}
         />
       )}
       {chartStyle === "box" && trees && (

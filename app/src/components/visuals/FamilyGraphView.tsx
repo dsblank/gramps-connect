@@ -17,7 +17,7 @@
 // free, same as before, just organized by row instead of by branch.
 import {
   useCallback, useEffect, useLayoutEffect, useRef, useState,
-  type MouseEvent as ReactMouseEvent, type ReactNode,
+  type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject,
 } from "react";
 import { ActionIcon, Avatar, Badge, Divider, Group, Paper, Stack, Text } from "@mantine/core";
 import { NO_DATA_COLOR, type PersonColoring } from "../../charts/personColors";
@@ -329,6 +329,8 @@ function ExpandMarker({ position, onClick, expanding }: { position: "top" | "bot
         onClick();
       }}
       aria-label={position === "top" ? t("Expand parents and siblings") : t("Expand children")}
+      // Interactive, not part of the chart: left out of an exported image.
+      data-export-exclude=""
       style={{
         position: "absolute",
         [position]: -10,
@@ -360,6 +362,8 @@ function CollapseMarker({ position, onClick }: { position: "top" | "bottom"; onC
         onClick();
       }}
       aria-label={position === "top" ? t("Collapse parents and siblings") : t("Collapse children")}
+      // Interactive, not part of the chart: left out of an exported image.
+      data-export-exclude=""
       style={{
         position: "absolute",
         [position]: -10,
@@ -902,6 +906,9 @@ export interface FamilyGraphViewProps extends Omit<SharedProps, "getCardRef" | "
    * gets an undo button, so a freshly-opened graph's base-depth rows (most
    * of what's on screen) don't all sprout a "-" nobody asked for. */
   expandedDownKeys: ReadonlySet<string>;
+  /** Set to the element the whole graph is drawn in, for "Export image"
+   * (TreeView.tsx, htmlToSvg.ts). */
+  exportRootRef?: RefObject<HTMLDivElement>;
   /** "-" markers, the reverse of onExpandUp/onExpandDown -- both just drop
    * the relevant key/label back out of expanded state (see TreeView.tsx's
    * own collapseFamilyUp/collapseFamilyDown), never touch `data` itself, so
@@ -940,7 +947,7 @@ export interface FamilyGraphViewProps extends Omit<SharedProps, "getCardRef" | "
  * motion visible at all instead of being masked by a hard redraw. */
 export function FamilyGraphView({
   ancestorCluster, descendantTree, onExpandUp, onExpandDown, expandedUpKeys, expandingUpKeys, expandingDownKeys,
-  expandedDownKeys, onCollapseUp, onCollapseDown, rootHandle, ...shared
+  expandedDownKeys, onCollapseUp, onCollapseDown, rootHandle, exportRootRef, ...shared
 }: FamilyGraphViewProps) {
   const cardNodes = useRef<Map<string, HTMLDivElement>>(new Map());
   const refCallbacks = useRef<Map<string, (el: HTMLDivElement | null) => void>>(new Map());
@@ -1012,7 +1019,8 @@ export function FamilyGraphView({
     [onExpandDown, scrollToAndPulse],
   );
 
-  const graphContainerRef = useRef<HTMLDivElement>(null);
+  const ownContainerRef = useRef<HTMLDivElement>(null);
+  const graphContainerRef = exportRootRef ?? ownContainerRef;
 
   // Click-and-drag panning for the plain scrollable wrapper below -- mouse
   // only (touch already gets native scrolling for free). Deliberately *not*

@@ -18,6 +18,8 @@
 // setExportCloneHook to redo that part on the copy.
 // An SVG without `data-export-content` can still be exported, just only
 // as "current view".
+// A chart made of page elements instead of SVG gets an SVG copy of itself
+// from htmlToSvg.ts, which marks it up the same way.
 import { apiFetch } from "../apiFetch";
 import { drawLegend, exportLegendOf, layoutLegend, type LegendLayout } from "./legend";
 
@@ -180,19 +182,41 @@ function measureChartFrame(svg: SVGSVGElement, area: ExportArea, keepRotation: b
  * that could drift from them. Custom properties' computed values already
  * have nested var()s substituted. */
 function resolveCustomProperties(names: Iterable<string>, colors: ExportColors): Map<string, string> {
+  return withColorScheme(colors, () => {
+    const style = getComputedStyle(document.documentElement);
+    const values = new Map<string, string>();
+    for (const name of names) values.set(name, style.getPropertyValue(name).trim());
+    return values;
+  });
+}
+
+/** Runs `read` with the light color scheme forced on when `colors` is
+ * "light" -- see resolveCustomProperties on why the screen never shows it.
+ * `read` must only read styles, synchronously. */
+export function withColorScheme<T>(colors: ExportColors, read: () => T): T {
   const root = document.documentElement;
   const previous = root.getAttribute("data-mantine-color-scheme");
   const flip = colors === "light" && previous !== "light";
   if (flip) root.setAttribute("data-mantine-color-scheme", "light");
   try {
-    const style = getComputedStyle(root);
-    const values = new Map<string, string>();
-    for (const name of names) values.set(name, style.getPropertyValue(name).trim());
-    return values;
+    return read();
   } finally {
     if (flip) {
       if (previous === null) root.removeAttribute("data-mantine-color-scheme");
       else root.setAttribute("data-mantine-color-scheme", previous);
+    }
+  }
+}
+
+/** Copies that carry their light-theme colors as `data-light-<attr>`
+ * (htmlToSvg.ts: colors read off the page are literals, not var()s) get
+ * those swapped in for a light export; the markers go either way. */
+function applyLightVariants(svg: SVGSVGElement, colors: ExportColors): void {
+  for (const el of [svg, ...Array.from(svg.querySelectorAll("*"))]) {
+    for (const attr of Array.from(el.attributes)) {
+      if (!attr.name.startsWith("data-light-")) continue;
+      if (colors === "light") el.setAttribute(attr.name.slice("data-light-".length), attr.value);
+      el.removeAttribute(attr.name);
     }
   }
 }
@@ -220,7 +244,7 @@ async function inlineImages(svg: SVGSVGElement): Promise<void> {
       if (!cache.has(href)) {
         cache.set(
           href,
-          apiFetch(href)
+          (href.startsWith("blob:") ? fetch(href) : apiFetch(href))
             .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
             .then(blobToDataUrl)
             .catch(() => null),
@@ -292,6 +316,7 @@ export async function prepareExportSvg(live: SVGSVGElement, options: PrepareOpti
   const legend = legendLayoutFor(live, frame.width);
   if (legend) drawLegend(svg, legend, frame.x + WHOLE_CHART_MARGIN, frame.y + frame.height - legend.height);
 
+  applyLightVariants(svg, options.colors);
   const backgroundColor = bakeCustomProperties(svg, options.colors);
   if (options.background) {
     const rect = document.createElementNS(SVG_NS, "rect");

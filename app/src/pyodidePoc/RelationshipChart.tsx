@@ -415,7 +415,9 @@ export function RelationshipChart({
         </Group>
       )}
       <div style={{ overflowX: "auto" }}>
-        <div style={{ position: "relative", width: layout.width, height: layout.height }}>
+        {/* data-export-root: what the Graphs view's "Export image" copies
+            (RelationshipGraph.tsx). */}
+        <div data-export-root="" style={{ position: "relative", width: layout.width, height: layout.height }}>
           <svg width={layout.width} height={layout.height} style={{ position: "absolute", inset: 0 }} aria-hidden>
             {layout.lines.map((points, i) => (
               <path

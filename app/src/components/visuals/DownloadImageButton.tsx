@@ -16,7 +16,9 @@ interface DownloadImageButtonProps {
 /** One button meant to work the same way for every chart this app draws
  * into an SVG (the fan chart and the box tree today) -- opens
  * ChartExportDialog, the same "export this chart" the original Gramps
- * desktop offers per chart, rather than a browser screenshot. */
+ * desktop offers per chart, rather than a browser screenshot. Charts built
+ * from page elements rather than SVG (Generations, Relationship) pass
+ * store/chartExport/htmlToSvg.ts's snapshotHtmlChart as `getSvg`. */
 export function DownloadImageButton({ getSvg, filename }: DownloadImageButtonProps) {
   const [opened, setOpened] = useState(false);
   return (
