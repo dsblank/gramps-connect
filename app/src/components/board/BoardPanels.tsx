@@ -428,12 +428,17 @@ export function CardPanel(props: {
   const citations = Array.isArray(r.citation_list) ? (r.citation_list as string[]) : [];
   return (
     <PanelFrame eyebrow={t("Case file")} title={titleOf(handle, records)} sub={`${t(CLASS_LABEL[r._class])} · ${r.gramps_id || t("draft, not saved yet")}`} onClose={onClose}>
-      <SegmentedControl
-        size="xs"
-        value={size}
-        onChange={(v) => onSize(v as CardSize)}
-        data={[{ value: "icon", label: t("Icon") }, { value: "compact", label: t("Card") }, { value: "expanded", label: t("Dossier") }]}
-      />
+      <Group gap="xs" wrap="nowrap">
+        <SegmentedControl
+          size="xs"
+          value={size}
+          onChange={(v) => onSize(v as CardSize)}
+          data={[{ value: "icon", label: t("Icon") }, { value: "compact", label: t("Card") }, { value: "expanded", label: t("Dossier") }]}
+        />
+        <Tooltip label={t("Unpinning a card never changes the tree.")} openDelay={400} withArrow>
+          <Button size="xs" variant="default" onClick={onTakeOff}>{t("Unpin")}</Button>
+        </Tooltip>
+      </Group>
       {onViewPhoto && photoUrl && <SidebarPhoto url={photoUrl} onClick={onViewPhoto} />}
       {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{readOnly ? t("View full size") : t("View full size and identify people")}</Button>}
       {fields}
@@ -514,14 +519,15 @@ export function CardPanel(props: {
           ))}
         </Stack>
       </Box>
-      <Divider />
-      <Group gap="xs">
-        <Button size="xs" variant="default" onClick={onTakeOff}>{t("Unpin")}</Button>
-        {isDraft && !readOnly && <Button size="xs" color="red" variant="light" onClick={onDiscard}>{t("Discard this draft")}</Button>}
-      </Group>
-      <Text size="xs" c="dimmed">
-        {isDraft ? t("Discarding removes it, and anything that depends on it, from your loose ends.") : t("Unpinning a card never changes the tree.")}
-      </Text>
+      {isDraft && !readOnly && (
+        <>
+          <Divider />
+          <Group gap="xs">
+            <Button size="xs" color="red" variant="light" onClick={onDiscard}>{t("Discard this draft")}</Button>
+          </Group>
+          <Text size="xs" c="dimmed">{t("Discarding removes it, and anything that depends on it, from your loose ends.")}</Text>
+        </>
+      )}
     </PanelFrame>
   );
 }
