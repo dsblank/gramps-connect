@@ -257,13 +257,14 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   });
 
   /** Pins up records (loading the ones not loaded yet), near card `near`
-   * or the middle of the screen. One record is selected after; several are
-   * shown together. */
-  async function pinUpMany(items: { cls: GrampsClass; handle: string }[], near?: string) {
+   * or the middle of the screen. One record is selected after (unless
+   * `keepSelection`, for pins from the sidebar's lists, which stay on the
+   * card being read); several are shown together. */
+  async function pinUpMany(items: { cls: GrampsClass; handle: string }[], near?: string, keepSelection = false) {
     if (!opened || !file) return;
     const fresh = items.filter((i) => !file.cards.some((c) => c.handle === i.handle));
     if (!fresh.length) {
-      if (items.length === 1) setSelection({ kind: "card", id: items[0].handle });
+      if (items.length === 1 && !keepSelection) setSelection({ kind: "card", id: items[0].handle });
       canvas.current?.reveal(items.map((i) => i.handle));
       return;
     }
@@ -285,9 +286,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     if (Object.keys(newToBase).length) setOpened((o) => o && { ...o, base: { ...o.base, ...newToBase } });
     const p = near && positions[near] ? { x: positions[near].x + 260, y: positions[near].y } : canvas.current?.center() ?? { x: 0, y: 0 };
     const records = { ...working, ...loaded };
-    addCards(found.map((i) => cardFor(i.handle, i.cls, p, records)), found.length === 1 ? found[0].handle : undefined);
+    addCards(found.map((i) => cardFor(i.handle, i.cls, p, records)), found.length === 1 && !keepSelection ? found[0].handle : undefined);
   }
-  const pinUp = (cls: GrampsClass, handle: string, near?: string) => pinUpMany([{ cls, handle }], near);
+  const pinUp = (cls: GrampsClass, handle: string, near?: string, keepSelection = false) => pinUpMany([{ cls, handle }], near, keepSelection);
 
   function createNew(b: ChangeBuilder, cls: GrampsClass): string {
     switch (cls) {
@@ -826,10 +827,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
                   faceUrl: token ? mediaThumbnailUrl(selectedCard.handle, 96, token, { rect: r.rect }) : null,
                 }))
               : undefined}
-            onPinUpMany={(items) => void pinUpMany(items, selectedCard.handle)}
+            onPinUpMany={(items) => void pinUpMany(items, selectedCard.handle, true)}
             onSize={(size) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === selectedCard.handle ? { ...c, size } : c)) })}
             onEdit={(edit) => editCard(selectedCard.handle, edit)}
-            onPinUp={(cls, h) => void pinUp(cls, h, selectedCard.handle)}
+            onPinUp={(cls, h) => void pinUp(cls, h, selectedCard.handle, true)}
             onShow={(h) => {
               setSelection({ kind: "card", id: h });
               canvas.current?.reveal([h]);
@@ -883,7 +884,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           handle={lightbox}
           onClose={() => setLightbox(null)}
           regionAction="Pin"
-          onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox)}
+          onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox, true)}
         />
       )}
       <AddMenu
