@@ -68,7 +68,7 @@ export interface AnniversaryOptions {
 }
 
 const BASE_EXPR =
-  "type.value in [EventType.BIRTH, EventType.DEATH, EventType.MARRIAGE]" +
+  "type in ['Birth', 'Death', 'Marriage']" +
   " and date.modifier == Date.MOD_NONE and date.quality == Date.QUAL_NONE" +
   " and date.calendar == Date.CAL_GREGORIAN" +
   " and date.dateval[0] > 0 and date.dateval[1] > 0";
@@ -132,7 +132,7 @@ export function windowExpr(start: Date, end: Date, living: { fromYear: number } 
     : [piece(start.getFullYear(), onOrAfter(sm, sd), onOrBefore(12, 31)),
       piece(end.getFullYear(), onOrAfter(1, 1), onOrBefore(em, ed))];
   const types = living
-    ? ` and type.value != EventType.DEATH and (date.dateval[2] == 0 or date.dateval[2] >= ${living.fromYear})`
+    ? ` and type != 'Death' and (date.dateval[2] == 0 or date.dateval[2] >= ${living.fromYear})`
     : "";
   return `${BASE_EXPR}${types} and (${pieces.join(" or ")})`;
 }

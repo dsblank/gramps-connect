@@ -60,16 +60,10 @@ def assert_goql_matches_rule(
 # -- Rules with values (gqlFilterPresets.ts's detailPresets() and
 # typeSpecificPresets) --------------------------------------------------------
 
-from gramps.gen.lib import AttributeType, EventType, FamilyRelType, NoteType, PlaceType, RepositoryType, SrcAttributeType
 
 ITER = {
     "Person": "iter_people", "Family": "iter_families", "Event": "iter_events", "Place": "iter_places", "Repository": "iter_repositories", "Source": "iter_sources",
     "Citation": "iter_citations", "Media": "iter_media", "Note": "iter_notes",
-}
-
-TYPE_TABLES = {
-    "EventType": EventType, "PlaceType": PlaceType, "NoteType": NoteType, "AttributeType": AttributeType,
-    "SrcAttributeType": SrcAttributeType, "RepositoryType": RepositoryType, "FamilyRelType": FamilyRelType,
 }
 
 
@@ -93,12 +87,11 @@ def fill(preset, **values):
 
 
 def type_condition(param, name):
-    table = TYPE_TABLES[param["table"]]
-    value = next((m[0] for m in table._DATAMAP if m[2] == name), None)
-    field = param["field"]
-    if value is not None and value != table._CUSTOM:
-        return f"({field}.value == {value})"
-    return f"({field}.value == {table._CUSTOM} and {field}.string == '{name}')"
+    """The type compared with its name; GOQL (0.5.20+) resolves a standard
+    name to its value and any other name to the class's CUSTOM plus the
+    name."""
+    clean = name.strip().replace("'", "").replace("\\", "")
+    return f"({param['field']} == '{clean}')"
 
 
 def objects(db, ns):

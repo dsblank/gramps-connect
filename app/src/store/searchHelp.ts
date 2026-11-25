@@ -80,7 +80,7 @@ const MEDIA_FIELDS: HelpEntry[] = [
 const NOTE_FIELDS: HelpEntry[] = [
   GRAMPS_ID,
   { name: "text.string", description: "The note's text -- the Text column" },
-  { name: "type.value", description: "The kind of note: NoteType.GENERAL, .RESEARCH, .TODO, .TRANSCRIPT, ..." },
+  { name: "type", description: "The kind of note: 'General', 'Research', 'To Do', 'Transcript', ..." },
   { name: "format", description: "Note.FLOWED or Note.FORMATTED" },
   PRIVATE,
   CHANGE,
@@ -106,7 +106,7 @@ const PERSON_HELP: SearchHelp = {
     { name: "gender", description: "Person.MALE, Person.FEMALE, Person.UNKNOWN or Person.OTHER" },
     { name: "primary_name.nick", description: "Nickname; .suffix, .title and .call work the same way" },
     { name: "primary_name.surname_list[1].surname", description: "A second recorded surname, when there is one ([0] is the first)" },
-    { name: "primary_name.type.value", description: "NameType.BIRTH, .MARRIED, .AKA, ..." },
+    { name: "primary_name.type", description: "The name's type: 'Birth Name', 'Married Name', 'Also Known As', ..." },
     PRIVATE,
     CHANGE,
   ],
@@ -133,11 +133,11 @@ const FAMILY_HELP: SearchHelp = {
     { expr: "any(c.given_name == 'Steve' for c in children)", description: "At least one child named Steve" },
     { expr: "len([c for c in children]) > 2", description: "More than two children recorded" },
     { expr: "not any(c for c in children)", description: "No children recorded at all" },
-    { expr: "type.value == FamilyRelType.MARRIED", description: "Married couples only" },
+    { expr: "type == 'Married'", description: "Married couples only" },
   ],
   fields: [
     GRAMPS_ID,
-    { name: "type.value", description: "FamilyRelType.MARRIED, .UNMARRIED, .CIVIL_UNION, .UNKNOWN or .CUSTOM" },
+    { name: "type", description: "'Married', 'Unmarried', 'Civil Union', 'Unknown', or a name of your own" },
     { name: "father_handle", description: "The father's internal id -- father below is usually what you want" },
     { name: "mother_handle", description: "The mother's internal id" },
     PRIVATE,
@@ -157,7 +157,7 @@ const FAMILY_HELP: SearchHelp = {
 const EVENT_HELP: SearchHelp = {
   typeName: "Event",
   examples: [
-    { expr: "type.value == EventType.BIRTH", description: "Births only" },
+    { expr: "type == 'Birth'", description: "Births only" },
     { expr: "place.title == 'Chicago, Cook, Illinois, USA'", description: "Everything that happened at one place" },
     { expr: "like(place.title, '%Illinois%')", description: "Anywhere whose name mentions Illinois" },
     { expr: "'accident' in description", description: "The description mentions an accident" },
@@ -166,7 +166,7 @@ const EVENT_HELP: SearchHelp = {
   ],
   fields: [
     GRAMPS_ID,
-    { name: "type.value", description: "EventType.BIRTH, .DEATH, .MARRIAGE, .BURIAL, .CENSUS, ... -- the Type column" },
+    { name: "type", description: "'Birth', 'Death', 'Marriage', 'Burial', 'Census', ... -- the Type column" },
     { name: "description", description: "The event's description" },
     { name: "date.sortval", description: "The date as one comparable number; compare it against Date('...')" },
     { name: "date.modifier", description: "Date.MOD_ABOUT, .MOD_BEFORE, .MOD_AFTER, .MOD_RANGE, .MOD_SPAN" },
@@ -184,7 +184,7 @@ const PLACE_HELP: SearchHelp = {
   typeName: "Place",
   examples: [
     { expr: "like(title, '%, TX')", description: "Every place ending in Texas" },
-    { expr: "place_type.value == PlaceType.CITY", description: "Cities only" },
+    { expr: "place_type == 'City'", description: "Cities only" },
     { expr: "enclosed_by.title == 'Cook County'", description: "Places directly inside one county" },
     { expr: "enclosed_by.enclosed_by.title == 'Illinois'", description: "Two levels up -- skipping the county to reach the state" },
     { expr: "lat == ''", description: "No coordinates recorded yet" },
@@ -193,7 +193,7 @@ const PLACE_HELP: SearchHelp = {
     GRAMPS_ID,
     { name: "title", description: "The full name, enclosing places included -- the Title column" },
     { name: "name.value", description: "The place's own name, without the places around it" },
-    { name: "place_type.value", description: "PlaceType.CITY, .TOWN, .COUNTY, .STATE, .COUNTRY, .FARM, ..." },
+    { name: "place_type", description: "'City', 'Town', 'County', 'State', 'Country', 'Farm', ..." },
     { name: "lat", description: "Latitude, stored as text ('' when not recorded)" },
     { name: "long", description: "Longitude, stored as text" },
     { name: "code", description: "Postal code" },
@@ -213,13 +213,13 @@ const REPOSITORY_HELP: SearchHelp = {
   typeName: "Repository",
   examples: [
     { expr: "like(name, '%Library%')", description: "Anything with Library in its name" },
-    { expr: "type.value == RepositoryType.CEMETERY", description: "Cemeteries only" },
+    { expr: "type == 'Cemetery'", description: "Cemeteries only" },
     { expr: "not any(n for n in notes)", description: "No notes written about it" },
   ],
   fields: [
     GRAMPS_ID,
     { name: "name", description: "The repository's name -- the Name column" },
-    { name: "type.value", description: "RepositoryType.LIBRARY, .ARCHIVE, .CHURCH, .CEMETERY, .WEBSITE, ..." },
+    { name: "type", description: "'Library', 'Archive', 'Church', 'Cemetery', 'Web site', ..." },
     PRIVATE,
     CHANGE,
   ],
@@ -297,7 +297,7 @@ const NOTE_HELP: SearchHelp = {
   examples: [
     { expr: "'TODO' in text.string", description: "Notes mentioning TODO anywhere" },
     { expr: "like(text.string, 'Check %')", description: "Notes starting with 'Check '" },
-    { expr: "type.value == NoteType.RESEARCH", description: "Research notes only" },
+    { expr: "type == 'Research'", description: "Research notes only" },
     { expr: "any(t.name == 'todo' for t in tags)", description: "Notes carrying a particular tag" },
   ],
   fields: NOTE_FIELDS,

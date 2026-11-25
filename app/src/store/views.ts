@@ -520,7 +520,7 @@ export const EVENT_VIEW: ViewConfig = {
   // Events have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-event.sqlite",
-  wherePlaceholder: 'e.g. type.value == 12',
+  wherePlaceholder: 'e.g. type == "Birth"',
   simpleSearch: {
     placeholder: "Enter a Gramps ID, description, or place…",
     // place.name.value too: with desktop's "Automate Place Format" a
@@ -914,7 +914,7 @@ export const TOPICS_VIEW: ViewConfig = {
   icon: iconChat,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "type.string == 'topic'",
+  baseFilter: "type == 'topic'",
   // No separator of its own -- GENERATED_VIEW's divider already opens this
   // "not an ordinary object type" group in the sidebar; Topics just
   // continues it rather than starting a second one.
@@ -975,7 +975,7 @@ export const STORY_VIEW: ViewConfig = {
   icon: iconStory,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "type.string == 'story'",
+  baseFilter: "type == 'story'",
   // Continues the same "not an ordinary object type" sidebar group
   // GENERATED_VIEW/TOPICS_VIEW opened -- no separator of its own.
   orderBy: [{ column: "change", direction: "desc" }],
@@ -1039,9 +1039,8 @@ export const BLOG_VIEW: ViewConfig = {
 
 // Evidence Board case files (EVIDENCE_BOARD_PLAN.md, Phase 2): standalone
 // Notes of the custom type "Case File" whose text is the board's JSON
-// (store/board/caseFile.ts). Same fixed-type-filter trick as STORY_VIEW. The
-// filter must compare `type.string`: plain `type == "Case File"` doesn't
-// match a custom type (checked live, 2026-11-24). Columns read single
+// (store/board/caseFile.ts). Same fixed-type-filter trick as STORY_VIEW
+// (comparing a type with its name needs GOQL 0.5.20+). Columns read single
 // fields out of the JSON as each row is cached -- deliberately lenient, as
 // the board's own parseCaseFile() is, and kept here rather than importing
 // the board modules into this widely imported file.
@@ -1067,7 +1066,7 @@ export const CASE_FILE_VIEW: ViewConfig = {
   icon: iconCaseBoard,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: `type.string == '${CASE_FILE_NOTE_TYPE}'`,
+  baseFilter: `type == '${CASE_FILE_NOTE_TYPE}'`,
   orderBy: [{ column: "change", direction: "desc" }],
   opfsFilename: "app-cache-casefile.sqlite",
   wherePlaceholder: 'e.g. "Carter" in text.string',
@@ -1115,7 +1114,7 @@ export const TOPIC_MESSAGES_VIEW: ViewConfig = {
   icon: iconChat,
   table: "note",
   endpoint: "/api/notes/query/",
-  baseFilter: "type.string == 'topic-message'",
+  baseFilter: "type == 'topic-message'",
   orderBy: [{ column: "change", direction: "desc" }],
   opfsFilename: "app-cache-topic-message.sqlite",
   // Never actually shown -- TOPIC_MESSAGES_VIEW has no FilterBar (it's
@@ -1148,7 +1147,7 @@ export const NOTE_VIEW: ViewConfig = {
   // Topic-message notes (TOPIC_MESSAGES_VIEW above) are excluded the same
   // way, even though that ViewConfig itself is never in VIEWS -- this
   // NOTE_VIEW is.
-  baseFilter: "type.string != 'topic' and type.string != 'story' and type.string != 'topic-message' and type.string != 'Case File'",
+  baseFilter: "type not in ['topic', 'story', 'topic-message', 'Case File']",
   // Notes have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-note.sqlite",

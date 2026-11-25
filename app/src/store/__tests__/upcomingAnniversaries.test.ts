@@ -126,7 +126,7 @@ describe("fetchAnniversaryWindow", () => {
       expect(win.items.map((i) => i.eventHandle)).toEqual(["b-alive", "m-alive", "b2"]);
       // Stopped with b3 and a further cursor unchecked: may be more.
       expect(win.more).toBeNull();
-      expect(fetchPage.mock.calls[0][4]).toContain("type.value != EventType.DEATH");
+      expect(fetchPage.mock.calls[0][4]).toContain("type != 'Death'");
       expect(fetchPage.mock.calls[0][3]).toBe(false); // no count needed
       // The first batch left the card short: the second continues from it.
       expect(fetchPage.mock.calls[1][2]).toBe("c1");

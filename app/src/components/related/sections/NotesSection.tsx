@@ -24,7 +24,7 @@ interface RawNote {
   // responses ("story", "topic", or a standard type's name like "General")
   // rather than the {_class, value, string} shape the query endpoint's
   // json_data uses internally (see views.ts's TOPICS_VIEW/STORY_VIEW
-  // baseFilter, which target .string against that internal shape instead)
+  // baseFilter, which compare against that internal shape instead)
   // -- confirmed by fetching a person with extend=all and inspecting
   // extended.notes.
   type?: string;
