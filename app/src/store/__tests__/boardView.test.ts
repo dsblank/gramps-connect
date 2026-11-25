@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { addEventRef, addMediaRef, addRepoRef, cite, linkParentChild, linkPartners, newCitation, newEvent, newPerson, newPlace, newRepository, newSource, setEventPlace } from "../board/links";
 import { blank, type GrampsRecord, type Records } from "../board/records";
-import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf } from "../board/view";
+import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf } from "../board/view";
 
 /** The Miller case: John & Ruth's family with child Anna, their wedding (cited from
  * a source kept at a court) at Springfield, Anna's birth, and a photo of Ruth. */
@@ -49,6 +49,16 @@ describe("card titles", () => {
     expect(isUnproven(m.records[m.wed])).toBe(false);
     expect(isUnproven(m.records[m.birth])).toBe(true);
     expect(isUndatedPhoto(m.records.M1)).toBe(true);
+  });
+
+  it("counts a person's or family's events with no evidence, among those loaded", () => {
+    const m = miller();
+    expect(unprovenEventsOf(m.records[m.anna], m.records)).toEqual([m.birth]);
+    expect(unprovenEventsOf(m.records[m.fam], m.records)).toEqual([]);
+    expect(unprovenEventsOf(m.records[m.john], m.records)).toEqual([]);
+    const { [m.birth]: _notLoaded, ...withoutBirth } = m.records;
+    expect(unprovenEventsOf(m.records[m.anna], withoutBirth)).toEqual([]);
+    expect(unprovenEventsOf(m.records[m.birth], m.records)).toEqual([]);
   });
 });
 

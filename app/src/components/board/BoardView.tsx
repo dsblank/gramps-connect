@@ -24,7 +24,7 @@ import { makeMainPhoto, newEvent, newNote, newPerson, newPlace, newRepository, n
 import { makeDate } from "@gramps-connect/gramps-date";
 import { GRAMPS_CLASSES, loadRecords, type GrampsClass, type Records } from "../../store/board/records";
 import { saveBoard, undoSave } from "../../store/board/save";
-import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
+import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, unprovenEventsOf, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
 import { mediaThumbnailUrl } from "../../store/mediaCrop";
 import { TransactionConflictError } from "../../store/transactionsApi";
 import { CASE_FILE_VIEW, MEDIA_VIEW } from "../../store/views";
@@ -237,6 +237,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           details: c.size === "expanded" ? detailsOf(c.handle, working[c.handle]._class === "Family" ? withKin : working) : [],
           size: c.size,
           unproven: isUnproven(working[c.handle]),
+          unprovenEvents: unprovenEventsOf(working[c.handle], withKin).length,
           undated: isUndatedPhoto(working[c.handle]),
           draft: !opened?.base[c.handle],
           updated: updated.has(c.handle),
@@ -287,9 +288,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     const out: OpenQuestion[] = [];
     if (onBoard.size > 1) for (const h of onBoard) if (!tied.has(h)) out.push({ group: "Not tied to anything on the board", handle: h });
     for (const h of onBoard) if (isUnproven(working[h])) out.push({ group: "Unproven: where does it come from?", handle: h });
+    for (const h of onBoard) if (unprovenEventsOf(working[h], withKin).length) out.push({ group: "Events with no evidence", handle: h });
     for (const h of onBoard) if (isUndatedPhoto(working[h])) out.push({ group: "When was it taken?", handle: h });
     return out;
-  }, [yarn, onBoard, working]);
+  }, [yarn, onBoard, working, withKin]);
 
   // --- unsaved work, kept in this browser -------------------------------------------
   const layoutChanged = !!opened && !!file && JSON.stringify(file) !== JSON.stringify(opened.file);
@@ -805,6 +807,28 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       cancelled = true;
     };
   }, [selection, working, peek]);
+
+  // People's and families' events not pinned up: loaded so their cards can
+  // count the ones with no evidence. Tried once each, like family members below.
+  const eventsTried = useRef(new Set<string>());
+  useEffect(() => {
+    const wanted = new Set<string>();
+    for (const h of onBoard) {
+      const r = working[h];
+      if (r._class !== "Person" && r._class !== "Family") continue;
+      for (const e of Array.isArray(r.event_ref_list) ? r.event_ref_list : []) {
+        const ref = (e as { ref?: unknown }).ref;
+        if (typeof ref === "string" && ref && !working[ref] && !eventsTried.current.has(ref)) wanted.add(ref);
+      }
+    }
+    if (!wanted.size) return;
+    for (const h of wanted) eventsTried.current.add(h);
+    loadRecords("Event", [...wanted])
+      .catch(() => ({}) as Records)
+      .then((found) => {
+        if (Object.keys(found).length) setPeek((p) => ({ ...p, ...found }));
+      });
+  }, [working, onBoard]);
 
   // Family cards' members (parents and children) not pinned up: loaded for
   // their names. Each handle is tried once, so ones the user can't see

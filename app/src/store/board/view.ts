@@ -206,6 +206,18 @@ export function isUnproven(record: GrampsRecord | undefined): boolean {
   return !!record && record._class === "Event" && handles(record.citation_list).length === 0;
 }
 
+/** A person's or family's events that nothing supports yet (no citation):
+ * the board circles their count on the card. Only events in `records` are
+ * counted, so ones not loaded (or private) are left out rather than guessed. */
+export function unprovenEventsOf(record: GrampsRecord | undefined, records: Records): string[] {
+  if (!record || (record._class !== "Person" && record._class !== "Family")) return [];
+  const out: string[] = [];
+  for (const e of refs(record.event_ref_list)) {
+    if (!out.includes(e.ref) && isUnproven(records[e.ref])) out.push(e.ref);
+  }
+  return out;
+}
+
 /** A photo with no date: the board pencils "date?" on it. */
 export function isUndatedPhoto(record: GrampsRecord | undefined): boolean {
   return !!record && record._class === "Media" && !yearOf(record.date) && !(record.date as { text?: string } | undefined)?.text;

@@ -387,6 +387,15 @@ export const corkboardSkin: BoardSkin = {
             <text textAnchor="middle" y={5}>UNPROVEN</text>
           </g>
         )}
+        {view.unprovenEvents > 0 && (
+          // A red-ink count over the card's top right corner: how many of
+          // this person's or family's events nothing supports yet.
+          <g className={css.count} transform={`translate(${x0 + w - 2} ${y0 + 2}) rotate(-6)`}>
+            <title>{view.unprovenEvents === 1 ? "1 event with no evidence" : `${view.unprovenEvents} events with no evidence`}</title>
+            <ellipse rx={view.unprovenEvents > 9 ? 15 : 12} ry={11.5} />
+            <text textAnchor="middle" y={5.5}>{view.unprovenEvents > 99 ? "99+" : view.unprovenEvents}</text>
+          </g>
+        )}
         {view.updated && !l.icon && (
           <text className={css.pencil} x={x0 + w - 12} y={y0 + 16} textAnchor="end">updated</text>
         )}

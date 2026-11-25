@@ -19,6 +19,8 @@ export interface CardView {
   size: CardSize;
   /** An event with no citation. */
   unproven: boolean;
+  /** A person or family: how many of their events have no citation. */
+  unprovenEvents: number;
   /** A photo with no date. */
   undated: boolean;
   /** Created on this board and not saved yet. */

@@ -113,6 +113,8 @@
 .stamp rect { fill: none; stroke: var(--stamp); stroke-width: 2.2; }
 .stamp text { font: 700 12.5px var(--mantine-font-family); letter-spacing: 0.18em; fill: var(--stamp); }
 .pencil { font: 700 17px var(--font-hand); fill: var(--pencil); }
+.count ellipse { fill: var(--tag); stroke: var(--stamp); stroke-width: 2; }
+.count text { font: 700 16px var(--font-hand); fill: var(--stamp); }
 .sticky { fill: var(--sticky); }
 .stickyText { font: 700 18px var(--font-hand); fill: var(--sticky-ink); }
 .stickyPlaceholder { font: 700 18px var(--font-hand); fill: var(--sticky-ink); opacity: 0.45; }

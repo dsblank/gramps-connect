@@ -11,7 +11,7 @@ import { t } from "../../i18n/i18n";
 import type { Change } from "../../store/board/changes";
 import type { CardSize, CaseFile } from "../../store/board/caseFile";
 import { GENDER, type GrampsClass, type GrampsRecord, type Records } from "../../store/board/records";
-import { leadsOf, shortDate, titleOf, typeName, type Yarn } from "../../store/board/view";
+import { leadsOf, shortDate, titleOf, typeName, unprovenEventsOf, type Yarn } from "../../store/board/view";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { DateInput } from "../DateInput";
 import shapes from "../../data/grampsRecordShapes.json";
@@ -340,6 +340,7 @@ export function CardPanel(props: {
   if (!r) return null;
   const all = { ...peek, ...records };
   const leads = leadsOf(r);
+  const unproven = unprovenEventsOf(r, all);
   const name = r.primary_name as { first_name?: string; surname_list?: { surname?: string }[] } | undefined;
   let fields: ReactNode = null;
   switch (r._class) {
@@ -533,6 +534,33 @@ export function CardPanel(props: {
           ))}
         </Stack>
       </Box>
+      {unproven.length > 0 && (
+        <Box>
+          <Group gap={6} align="center">
+            <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Events with no evidence")}</Text>
+            <UnprovenCountMark n={unproven.length} />
+          </Group>
+          <Text size="xs" c="dimmed">
+            {(r._class === "Person"
+              ? t("The red circled number on the card counts {name}'s events that nothing in the tree supports yet. Pin one up and tie a citation or a source to it.")
+              : t("The red circled number on the card counts this family's events that nothing in the tree supports yet. Pin one up and tie a citation or a source to it.")
+            ).replace("{name}", titleOf(handle, records))}
+          </Text>
+          <Stack gap={2} mt={4}>
+            {unproven.map((e) => (
+              <Group key={e} gap="xs" wrap="nowrap">
+                <Text size="sm" style={{ flex: 1, minWidth: 0 }} truncate>{titleOf(e, all)}</Text>
+                <Text size="xs" c="dimmed">{shortDate(all[e].date) || t("no date")}</Text>
+                {onBoard.has(e) ? (
+                  <Button size="compact-xs" variant="subtle" onClick={() => onShow(e)}>{t("Show")}</Button>
+                ) : (
+                  <Button size="compact-xs" variant="light" onClick={() => onPinUp("Event", e)}>{t("Pin")}</Button>
+                )}
+              </Group>
+            ))}
+          </Stack>
+        </Box>
+      )}
       {isDraft && !readOnly && (
         <>
           <Divider />
@@ -543,6 +571,22 @@ export function CardPanel(props: {
         </>
       )}
     </PanelFrame>
+  );
+}
+
+/** The board's red circled count (corkboard skin), drawn the same way in
+ * the sidebar so it's clear what the mark on the card is. */
+function UnprovenCountMark({ n }: { n: number }) {
+  const rx = n > 9 ? 15 : 12;
+  return (
+    <svg width={2 * rx + 4} height={27} viewBox={`${-rx - 2} -13.5 ${2 * rx + 4} 27`} aria-label={String(n)} style={{ flex: "none" }}>
+      <g transform="rotate(-6)">
+        <ellipse rx={rx} ry={11.5} fill="#f5ebd2" stroke="#c3261d" strokeWidth={2} />
+        <text textAnchor="middle" y={5.5} fill="#c3261d" style={{ font: '700 16px "Caveat", "Segoe Print", "Bradley Hand", "Comic Neue", cursive' }}>
+          {n > 99 ? "99+" : n}
+        </text>
+      </g>
+    </svg>
   );
 }
 
