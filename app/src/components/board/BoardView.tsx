@@ -5,7 +5,7 @@
 // Save, which writes the tree changes and the case file as one transaction
 // (store/board/save.ts), with an Undo. Unsaved work is kept in this browser
 // between visits (store/board/caseDraft.ts).
-import { Alert, Anchor, Badge, Box, Button, Group, Loader, Modal, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
+import { Alert, Anchor, Badge, Box, Button, Divider, Group, Loader, Modal, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
 import { parseCoords } from "../../store/visualData";
 import { placeMapSnapshot } from "./placeMapSnapshot";
 import { notifications } from "@mantine/notifications";
@@ -43,6 +43,7 @@ import { pathCards } from "../../store/board/relationPath";
 import type { PathStep } from "../../store/relationshipPath";
 import { cleanUp } from "./cleanUp";
 import { TreeMark } from "./TreeMark";
+import caseBoardIcon from "../../assets/icons/case-board.svg";
 import { STORAGE_KEYS } from "../../store/storageKeys";
 import boardCss from "./board.module.css";
 import { downloadCase } from "../../store/board/caseExport";
@@ -877,6 +878,12 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   return (
     <Box style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
       <Group gap="xs" px="sm" py={6} wrap="wrap" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+        <Group gap={6} wrap="nowrap">
+          <img src={caseBoardIcon} width={20} height={20} alt="" />
+          <Text fw={700} style={{ whiteSpace: "nowrap" }}>{t("Evidence board")}</Text>
+        </Group>
+        <Divider orientation="vertical" />
+        <Text size="sm" c="dimmed" style={{ whiteSpace: "nowrap" }}>{t("Case file")}:</Text>
         <InlineText strong value={file.name} placeholder="Name this case" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, name: v })} />
         <InlineText value={file.question} placeholder="What are you trying to find out?" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, question: v })} />
         <Box style={{ flex: 1 }} />
