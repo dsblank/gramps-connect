@@ -106,7 +106,7 @@ const PERSON_HELP: SearchHelp = {
     { name: "gender", description: "Person.MALE, Person.FEMALE, Person.UNKNOWN or Person.OTHER" },
     { name: "primary_name.nick", description: "Nickname; .suffix, .title and .call work the same way" },
     { name: "primary_name.surname_list[1].surname", description: "A second recorded surname, when there is one ([0] is the first)" },
-    { name: "primary_name.type.value", description: "NameType.BIRTH, .MARRIED, .AKA, ..." },
+    { name: "primary_name.type", description: "The name's type: 'Birth Name', 'Married Name', 'Also Known As', ..." },
     PRIVATE,
     CHANGE,
   ],
@@ -133,7 +133,7 @@ const FAMILY_HELP: SearchHelp = {
     { expr: "any(c.given_name == 'Steve' for c in children)", description: "At least one child named Steve" },
     { expr: "len([c for c in children]) > 2", description: "More than two children recorded" },
     { expr: "not any(c for c in children)", description: "No children recorded at all" },
-    { expr: "type.value == FamilyRelType.MARRIED", description: "Married couples only" },
+    { expr: "type == 'Married'", description: "Married couples only" },
   ],
   fields: [
     GRAMPS_ID,
@@ -157,7 +157,7 @@ const FAMILY_HELP: SearchHelp = {
 const EVENT_HELP: SearchHelp = {
   typeName: "Event",
   examples: [
-    { expr: "type.value == EventType.BIRTH", description: "Births only" },
+    { expr: "type == 'Birth'", description: "Births only" },
     { expr: "place.title == 'Chicago, Cook, Illinois, USA'", description: "Everything that happened at one place" },
     { expr: "like(place.title, '%Illinois%')", description: "Anywhere whose name mentions Illinois" },
     { expr: "'accident' in description", description: "The description mentions an accident" },
@@ -184,7 +184,7 @@ const PLACE_HELP: SearchHelp = {
   typeName: "Place",
   examples: [
     { expr: "like(title, '%, TX')", description: "Every place ending in Texas" },
-    { expr: "place_type.value == PlaceType.CITY", description: "Cities only" },
+    { expr: "place_type == 'City'", description: "Cities only" },
     { expr: "enclosed_by.title == 'Cook County'", description: "Places directly inside one county" },
     { expr: "enclosed_by.enclosed_by.title == 'Illinois'", description: "Two levels up -- skipping the county to reach the state" },
     { expr: "lat == ''", description: "No coordinates recorded yet" },
@@ -213,7 +213,7 @@ const REPOSITORY_HELP: SearchHelp = {
   typeName: "Repository",
   examples: [
     { expr: "like(name, '%Library%')", description: "Anything with Library in its name" },
-    { expr: "type.value == RepositoryType.CEMETERY", description: "Cemeteries only" },
+    { expr: "type == 'Cemetery'", description: "Cemeteries only" },
     { expr: "not any(n for n in notes)", description: "No notes written about it" },
   ],
   fields: [
@@ -297,7 +297,7 @@ const NOTE_HELP: SearchHelp = {
   examples: [
     { expr: "'TODO' in text.string", description: "Notes mentioning TODO anywhere" },
     { expr: "like(text.string, 'Check %')", description: "Notes starting with 'Check '" },
-    { expr: "type.value == NoteType.RESEARCH", description: "Research notes only" },
+    { expr: "type == 'Research'", description: "Research notes only" },
     { expr: "any(t.name == 'todo' for t in tags)", description: "Notes carrying a particular tag" },
   ],
   fields: NOTE_FIELDS,

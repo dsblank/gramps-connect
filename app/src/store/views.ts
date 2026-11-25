@@ -520,7 +520,7 @@ export const EVENT_VIEW: ViewConfig = {
   // Events have no flat "name" column -- gramps_id is the stable default.
   orderBy: [{ column: "gramps_id", direction: "asc" }],
   opfsFilename: "app-cache-event.sqlite",
-  wherePlaceholder: 'e.g. type.value == 12',
+  wherePlaceholder: 'e.g. type == "Birth"',
   simpleSearch: {
     placeholder: "Enter a Gramps ID, description, or place…",
     // place.name.value too: with desktop's "Automate Place Format" a
