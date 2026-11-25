@@ -5,7 +5,7 @@
 // Save, which writes the tree changes and the case file as one transaction
 // (store/board/save.ts), with an Undo. Unsaved work is kept in this browser
 // between visits (store/board/caseDraft.ts).
-import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Modal, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
 import { parseCoords } from "../../store/visualData";
 import { placeMapSnapshot } from "./placeMapSnapshot";
 import { notifications } from "@mantine/notifications";
@@ -206,11 +206,13 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
 
   // --- unsaved work, kept in this browser -------------------------------------------
   const layoutChanged = !!opened && !!file && JSON.stringify(file) !== JSON.stringify(opened.file);
+  /** Set when Close discards, so a pending autosave can't bring it back. */
+  const discarded = useRef(false);
   const dirty = changes.length > 0 || layoutChanged || (!!opened && !opened.note && !!file?.cards.length);
   useEffect(() => {
     if (!opened || !file) return;
     const timer = setTimeout(() => {
-      if (dirty) writeDraft(opened.caseKey, draftOf(opened, file, changes));
+      if (dirty && !discarded.current) writeDraft(opened.caseKey, draftOf(opened, file, changes));
     }, 300);
     return () => clearTimeout(timer);
   }, [opened, file, changes, dirty]);
@@ -555,8 +557,20 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
 
   /** Back to the Case Files list, on this case. Unsaved work stays in this
    * browser for next time. */
-  function close() {
-    if (opened && file && dirty) writeDraft(opened.caseKey, draftOf(opened, file, changes));
+  /** Back to Case Files. With unsaved work, asks first: save it, keep it in
+   * this browser for later, or throw it away. */
+  const [closeAsk, setCloseAsk] = useState(false);
+  function close(how: "ask" | "keep" | "discard" = "ask") {
+    if (how === "ask" && dirty && canSave) {
+      setCloseAsk(true);
+      return;
+    }
+    if (opened && file && dirty && how !== "discard") writeDraft(opened.caseKey, draftOf(opened, file, changes));
+    if (opened && how === "discard") {
+      discarded.current = true;
+      clearDraft(opened.caseKey);
+    }
+    setCloseAsk(false);
     window.location.hash = formatHash({ viewKey: CASE_FILE_VIEW.key, handle: opened?.note?.handle });
   }
 
@@ -727,14 +741,14 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     <Box style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
       <Group gap="xs" px="sm" py={6} wrap="wrap" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
         <Tooltip label={t("Close the board, back to Case Files")}>
-          <ActionIcon variant="subtle" color="gray" onClick={close} aria-label={t("Close the board, back to Case Files")}>
+          <ActionIcon variant="subtle" color="gray" onClick={() => close()} aria-label={t("Close the board, back to Case Files")}>
             <Text fw={700} size="lg" lh={1}>←</Text>
           </ActionIcon>
         </Tooltip>
         <InlineText strong value={file.name} placeholder="Name this case" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, name: v })} />
         <InlineText value={file.question} placeholder="What are you trying to find out?" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, question: v })} />
         <Box style={{ flex: 1 }} />
-        <Button size="xs" variant="default" onClick={() => setAdding(true)}>{canSave ? t("Add…") : t("Pin up…")}</Button>
+        <Button size="xs" variant="default" onClick={() => setAdding(true)}>{canSave ? t("Add…") : t("Pin…")}</Button>
         <Tooltip label={t("Straighten the cards and move them closer together")} openDelay={400}>
           <Button size="xs" variant="default" onClick={tidy} disabled={cards.length < 2}>{t("Clean up")}</Button>
         </Tooltip>
@@ -747,7 +761,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         {canSave ? (
           <Button size="xs" onClick={() => setSaveOpen(true)} disabled={!dirty}>{t("Save")}</Button>
         ) : (
-          <Tooltip multiline w={260} label={t("You can look around, pin up records and arrange the board; your arrangement is kept in this browser. Changing the tree or the case file needs Editor rights.")}>
+          <Tooltip multiline w={260} label={t("You can look around, pin records and arrange the board; your arrangement is kept in this browser. Changing the tree or the case file needs Editor rights.")}>
             <Badge variant="light" color="gray">{t("View only")}</Badge>
           </Tooltip>
         )}
@@ -789,7 +803,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         {!cards.length && (
           <Stack align="center" justify="center" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <Text style={{ pointerEvents: "auto", background: "var(--mantine-color-body)", padding: "8px 14px", borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,.3)" }}>
-              {t("An empty board. Pin up the people and records you're investigating with “Add…”.")}
+              {t("An empty board. Pin the people and records you're investigating with “Add…”.")}
             </Text>
           </Stack>
         )}
@@ -870,7 +884,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           opened
           handle={lightbox}
           onClose={() => setLightbox(null)}
-          regionAction="Pin up"
+          regionAction="Pin"
           onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox)}
         />
       )}
@@ -884,6 +898,30 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         onCreate={createLoose}
         canCreate={canSave}
       />
+      <Modal opened={closeAsk} onClose={() => setCloseAsk(false)} title={t("Close the board?")} size="sm">
+        <Stack>
+          <Text size="sm">
+            {changes.length
+              ? t("{n} changes aren't saved yet.").replace("{n}", String(changes.length))
+              : opened?.note
+                ? t("Changes to the case file (its name, notes or layout) aren't saved yet.")
+                : t("This case hasn't been saved yet.")}
+          </Text>
+          <Text size="xs" c="dimmed">{t("Discarding them can't be undone. Keeping them leaves them in this browser for next time.")}</Text>
+          <Group justify="flex-end" gap="xs">
+            <Button variant="subtle" color="red" onClick={() => close("discard")}>{t("Discard changes")}</Button>
+            <Button variant="default" onClick={() => close("keep")}>{t("Keep for later")}</Button>
+            <Button
+              onClick={() => {
+                setCloseAsk(false);
+                setSaveOpen(true);
+              }}
+            >
+              {t("Save…")}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <SaveDialog
         opened={saveOpen}
         changes={changes}

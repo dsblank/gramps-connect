@@ -430,13 +430,13 @@ export function CardPanel(props: {
                 {onBoard.has(p.handle) ? (
                   <Button size="compact-xs" variant="subtle" onClick={() => onShow(p.handle)}>{t("Show")}</Button>
                 ) : (
-                  <Button size="compact-xs" variant="light" onClick={() => onPinUp(p.cls, p.handle)}>{t("Pin up")}</Button>
+                  <Button size="compact-xs" variant="light" onClick={() => onPinUp(p.cls, p.handle)}>{t("Pin")}</Button>
                 )}
               </Group>
             ))}
           </Stack>
           {inPhoto && inPhoto.filter((p) => !onBoard.has(p.handle)).length > 1 && (
-            <Button size="xs" variant="light" mt={6} onClick={() => onPinUpMany(inPhoto.filter((p) => !onBoard.has(p.handle)))}>{t("Pin up everyone")}</Button>
+            <Button size="xs" variant="light" mt={6} onClick={() => onPinUpMany(inPhoto.filter((p) => !onBoard.has(p.handle)))}>{t("Pin everyone")}</Button>
           )}
         </Box>
       )}
@@ -466,7 +466,7 @@ export function CardPanel(props: {
               {onBoard.has(l.handle) ? (
                 <Button size="compact-xs" variant="subtle" onClick={() => onShow(l.handle)}>{t("Show")}</Button>
               ) : (
-                <Button size="compact-xs" variant="light" onClick={() => onPinUp(l.cls, l.handle)}>{t("Pin up")}</Button>
+                <Button size="compact-xs" variant="light" onClick={() => onPinUp(l.cls, l.handle)}>{t("Pin")}</Button>
               )}
             </Group>
           ))}
@@ -548,7 +548,7 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
             <Text size="sm" c="dimmed">{i + 1}.</Text>
             <Text size="sm" style={{ flex: 1 }} td={c.off ? "line-through" : undefined}>{c.label}</Text>
             <Button size="compact-xs" variant="subtle" onClick={() => onShowChange(c)}>{t("Show")}</Button>
-            <Button size="compact-xs" variant="light" onClick={() => onTakeBack(c.id)}>{t("Take back")}</Button>
+            <Button size="compact-xs" variant="light" onClick={() => onTakeBack(c.id)}>{t("Undo")}</Button>
           </Group>
         ))}
       </Stack>
@@ -667,7 +667,7 @@ export function AddMenu({ opened, onClose, onPick, onCreate, canCreate = true }:
   return (
     <Modal opened={opened} onClose={onClose} title={t("Add to the board")} size="lg">
       <Stack>
-        <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Pin up from the tree")}</Text>
+        <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Pin from the tree")}</Text>
         <TextInput
           data-autofocus
           placeholder={t("Find a person, place, source…")}
