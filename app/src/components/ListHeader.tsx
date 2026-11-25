@@ -4,6 +4,7 @@ import { gqlFilterPresets, namespaceForViewKey, type GqlFilterPreset } from "../
 import { customRuleAsPreset, getCachedCustomRules } from "../store/customRuleMedia";
 import { buildContextPresets } from "../store/contextPresets";
 import { getCachedSavedFilters } from "../store/savedFilterMedia";
+import { withBuiltinSavedFilters } from "../store/builtinSavedFilters";
 import { getFilterPickerState, setFilterPickerState } from "../store/filterPickerState";
 import { countRules, createEmptyTree } from "../store/goqlFilterTree";
 import { summarizeFilterTree } from "../store/filterTreeSummary";
@@ -163,5 +164,5 @@ function HomePersonButton() {
 /** For the summary's labels only -- the "Matches saved filter" names come
  * from whatever the Filters dialog last fetched. */
 function withContextPresets(base: GqlFilterPreset[]): GqlFilterPreset[] {
-  return [...base, ...buildContextPresets(base, getCachedSavedFilters())];
+  return [...base, ...buildContextPresets(base, withBuiltinSavedFilters(getCachedSavedFilters()))];
 }

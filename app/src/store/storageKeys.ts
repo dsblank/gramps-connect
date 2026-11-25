@@ -50,6 +50,8 @@ const DEFS = {
   grampletStoreCheck: { key: `${P}grampletStoreCheck`, tag: "setting" },
   newsCheck: { key: `${P}newsCheck`, tag: "setting" },
   citationsSectionOpen: { key: `${P}citationsSectionOpen`, tag: "setting" },
+  // Built-in saved filters hidden in this browser, per tree.
+  hiddenBuiltinFilters: { key: `${P}hiddenBuiltinFilters`, tag: "setting" },
   // localStorage, excluded
   visited: { key: `${P}visited`, tag: "excluded" },
   // A copy of each tree's shared columns (columnSettings.ts), refetched.

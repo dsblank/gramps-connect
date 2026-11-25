@@ -8,6 +8,7 @@ import { buildContextPresets, handleListExpr, SAVED_FILTER_PRESET_PREFIX } from 
 import { customRuleAsPreset, refreshCustomRules } from "./customRuleMedia";
 import { expandColumnRefs } from "./goqlColumnRefs";
 import { fetchSavedFilters } from "./savedFilterMedia";
+import { withBuiltinSavedFilters } from "./builtinSavedFilters";
 import { PERSON_VIEW } from "./views";
 
 export interface ChartFilter {
@@ -24,7 +25,9 @@ export interface ChartFilter {
  * bookmarks, the home person and other saved filters -- so a filter
  * colors exactly the people it lists in People. */
 export async function loadChartFilters(token: string): Promise<ChartFilter[]> {
-  const [rules, saved] = await Promise.all([refreshCustomRules(), fetchSavedFilters()]);
+  const [rules, treeFilters] = await Promise.all([refreshCustomRules(), fetchSavedFilters()]);
+  // Built-in filters color too, like any saved one.
+  const saved = withBuiltinSavedFilters(treeFilters);
   // Only needed by filters using "Bookmarked"; without them those report
   // an error instead of failing the whole list.
   await loadBookmarks(token).catch(() => undefined);

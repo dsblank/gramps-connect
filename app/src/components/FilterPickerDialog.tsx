@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import {
-  Anchor, Button, Checkbox, CloseButton, Collapse, Combobox, Divider, Group, Modal, NumberInput, ScrollArea, Select,
+  Alert, Anchor, Button, Checkbox, CloseButton, Collapse, Combobox, Divider, Group, Modal, NumberInput, ScrollArea, Select,
   SegmentedControl, Stack, Text, Textarea, TextInput, Tooltip,
 } from "@mantine/core";
 import { SelectOrEnter } from "./SelectOrEnter";
@@ -31,6 +32,10 @@ import {
   fetchSavedFilters, removeSavedFilter, saveSavedFilterManifest, uploadSavedFilter, type SavedFilter,
 } from "../store/savedFilterMedia";
 import { confirmDialog } from "../store/confirmDialog";
+import {
+  builtinChangedSinceEdit, builtinHash, findBuiltinSavedFilter, getHiddenBuiltinIds, setBuiltinHidden,
+  showAllBuiltins, withBuiltinSavedFilters,
+} from "../store/builtinSavedFilters";
 import { getSearchHelp } from "../store/searchHelp";
 import { viewForNamespace } from "../store/views";
 import { ColumnRefError, columnRefsToIds, columnRefsToTitles, expandColumnRefs } from "../store/goqlColumnRefs";
@@ -54,6 +59,10 @@ const EMPTY_SAVED_FILTER_VALUE = "__empty__";
  * using that rule on its own, no filter to build first. Their values are
  * this prefix plus the preset id -- never a Media handle, which is hex. */
 const RULE_VALUE_PREFIX = "rule:";
+
+/** A built-in saved filter not edited on this tree has no handle; its
+ * "Choose a filter…" value is this prefix plus its id. */
+const BUILTIN_VALUE_PREFIX = "builtin:";
 
 /** The rule `tree` consists of, when it's exactly one plain rule (not
  * negated, alone in a non-negated root) -- what picking a rule from
@@ -168,6 +177,14 @@ export function FilterPickerDialog({
   // this alone rather than clearing it.
   const [savedFilterHandle, setSavedFilterHandle] = useState<string | undefined>(undefined);
   const [savedFilterName, setSavedFilterName] = useState<string | undefined>(undefined);
+  // A built-in saved filter loaded as it ships (no handle to track) --
+  // store/builtinSavedFilters.ts. Never set together with the handle.
+  const [builtinId, setBuiltinId] = useState<string | undefined>(undefined);
+  // For callbacks that outlive a render (the Undo notification).
+  const builtinIdRef = useRef(builtinId);
+  builtinIdRef.current = builtinId;
+  // Bumped when a built-in is hidden or shown again, to reread the list.
+  const [hiddenVersion, setHiddenVersion] = useState(0);
 
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
@@ -191,7 +208,14 @@ export function FilterPickerDialog({
   const [confirmPending, setConfirmPending] = useState(false);
 
   const [customRules, setCustomRules] = useState<CustomRule[]>([]);
+  // The tree's own Saved Filters (edited built-ins included); the
+  // built-ins are merged in below (allSavedFilters).
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const allSavedFilters = useMemo(() => withBuiltinSavedFilters(savedFilters), [savedFilters]);
+  // The saved filter `tree` was loaded from, built-in or the tree's own.
+  const loaded = savedFilterHandle
+    ? allSavedFilters.find((f) => f.handle === savedFilterHandle)
+    : builtinId ? allSavedFilters.find((f) => f.origin === "builtin" && f.id === builtinId) : undefined;
 
   // Refetched every time the dialog opens (not just once on mount) -- a
   // Custom Rule or Saved Filter another tab/session created since this
@@ -219,8 +243,8 @@ export function FilterPickerDialog({
   const presets = useMemo(
     () => {
       const base = [...gqlFilterPresets, ...customRules.map(customRuleAsPreset)];
-      const editingId = savedFilters.find((f) => f.handle === savedFilterHandle)?.id;
-      const fromState = buildContextPresets(base, savedFilters).map((p) =>
+      const editingId = loaded?.id;
+      const fromState = buildContextPresets(base, allSavedFilters).map((p) =>
         editingId && p.id === SAVED_FILTER_PRESET_PREFIX + editingId
           ? { ...p, unavailableReason: "it's the filter you're editing" }
           : p,
@@ -228,13 +252,17 @@ export function FilterPickerDialog({
       return [...base, ...fromState];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customRules, savedFilters, savedFilterHandle, bookmarksVersion, opened],
+    [customRules, allSavedFilters, loaded?.id, bookmarksVersion, opened],
   );
 
   const savedFiltersForNamespace = useMemo(
-    () => savedFilters.filter((f) => f.namespace === namespace),
-    [savedFilters, namespace],
+    () => allSavedFilters.filter((f) => f.namespace === namespace),
+    [allSavedFilters, namespace],
   );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const hiddenBuiltinIds = useMemo(() => getHiddenBuiltinIds(), [hiddenVersion, opened]);
+  const hiddenBuiltinCount = savedFiltersForNamespace
+    .filter((f) => f.origin === "builtin" && hiddenBuiltinIds.has(f.id)).length;
 
   // The rules "Choose a filter…" offers on their own: this list's rules by
   // category, Custom Rules last. "Matches saved filter" rules are left
@@ -246,12 +274,16 @@ export function FilterPickerDialog({
   );
   const filterChoices = useMemo(() => {
     const groups: { group: string; items: { value: string; label: string }[] }[] = [];
-    if (savedFiltersForNamespace.length > 0) {
-      groups.push({
-        group: t("Saved filters"),
-        items: savedFiltersForNamespace.map((f) => ({ value: f.handle!, label: f.name })),
-      });
+    const own = savedFiltersForNamespace.filter((f) => !f.origin);
+    if (own.length > 0) {
+      groups.push({ group: t("Saved filters"), items: own.map((f) => ({ value: f.handle!, label: f.name })) });
     }
+    const builtins = savedFiltersForNamespace.flatMap((f) => {
+      if (f.origin === "edited-builtin") return [{ value: f.handle!, label: `${f.name} (${t("edited")})` }];
+      if (f.origin === "builtin" && !hiddenBuiltinIds.has(f.id)) return [{ value: BUILTIN_VALUE_PREFIX + f.id, label: f.name }];
+      return [];
+    });
+    if (builtins.length > 0) groups.push({ group: t("Built-in filters"), items: builtins });
     for (const category of CATEGORIES) {
       const items = pickableRules
         .filter((p) => p.category === category)
@@ -263,11 +295,11 @@ export function FilterPickerDialog({
       }
     }
     return [{ value: EMPTY_SAVED_FILTER_VALUE, label: t("New Filter") }, ...groups];
-  }, [savedFiltersForNamespace, pickableRules]);
+  }, [savedFiltersForNamespace, pickableRules, hiddenBuiltinIds]);
 
   // The rule the tree is, when it's a single rule picked (or built) on its
   // own and no saved filter is loaded.
-  const singleRule = savedFilterHandle ? undefined : singleRuleOf(tree);
+  const singleRule = loaded ? undefined : singleRuleOf(tree);
   const singleRulePreset = singleRule ? pickableRules.find((p) => p.id === singleRule.presetId) : undefined;
 
   // Reported out for ListHeader.tsx's own badge/clear-button/summary --
@@ -296,6 +328,7 @@ export function FilterPickerDialog({
     setTree(createEmptyTree(namespace));
     setSavedFilterHandle(undefined);
     setSavedFilterName(undefined);
+    setBuiltinId(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.pickerExpr]);
 
@@ -311,13 +344,10 @@ export function FilterPickerDialog({
   // built from scratch is itself the only copy of that work and counts
   // as dirty -- otherwise switching the Load dropdown to a real saved
   // filter from scratch would silently discard it with no warning.
-  const loadedFilterTree = savedFilterHandle
-    ? savedFiltersForNamespace.find((f) => f.handle === savedFilterHandle)?.tree
-    : undefined;
   // A single rule picked from the dropdown isn't work worth confirming
   // before switching away from it -- picking it again is one click.
-  const isDirty = savedFilterHandle
-    ? (loadedFilterTree ? JSON.stringify(tree) !== JSON.stringify(loadedFilterTree) : false)
+  const isDirty = loaded
+    ? JSON.stringify(tree) !== JSON.stringify(loaded.tree)
     : countRules(tree) > 0 && !singleRulePreset;
 
   // Recomputed on every edit -- cheap (a handful of string-only presets) --
@@ -363,12 +393,14 @@ export function FilterPickerDialog({
     setTree(createEmptyTree(namespace));
     setSavedFilterHandle(undefined);
     setSavedFilterName(undefined);
+    setBuiltinId(undefined);
   }
 
   function handleLoadSavedFilter(filter: SavedFilter) {
     setTree(filter.tree);
     setSavedFilterHandle(filter.handle);
     setSavedFilterName(filter.name);
+    setBuiltinId(filter.handle ? undefined : filter.id);
   }
 
   // Picking a single rule from "Choose a filter…": the tree becomes just
@@ -379,6 +411,7 @@ export function FilterPickerDialog({
     setTree({ ...empty, root: { ...empty.root, children: [createRuleRow(preset.id)] } });
     setSavedFilterHandle(undefined);
     setSavedFilterName(undefined);
+    setBuiltinId(undefined);
   }
 
   // The "Choose a filter…" Select's own onChange -- confirms first
@@ -398,7 +431,10 @@ export function FilterPickerDialog({
       ? pickableRules.find((p) => RULE_VALUE_PREFIX + p.id === value)
       : undefined;
     const found = !rule && value && value !== EMPTY_SAVED_FILTER_VALUE
-      ? savedFiltersForNamespace.find((f) => f.handle === value)
+      ? savedFiltersForNamespace.find((f) =>
+        value.startsWith(BUILTIN_VALUE_PREFIX)
+          ? f.origin === "builtin" && BUILTIN_VALUE_PREFIX + f.id === value
+          : f.handle === value)
       : undefined;
     if (isDirty) {
       setConfirmPending(true);
@@ -429,23 +465,107 @@ export function FilterPickerDialog({
     setSavedFilters((prev) => [...prev, { ...filter, handle }]);
     setSavedFilterHandle(handle);
     setSavedFilterName(name);
+    setBuiltinId(undefined);
     setSaveDialogOpen(false);
   }
 
   // Overwrites the loaded Saved Filter in place with the tree's current
   // content, keeping its existing name (no rename via Update -- "Copy…"
   // under a different name covers that).
+  // A built-in loaded as it ships has no handle: saving it writes the
+  // tree's edited copy, same id, which takes its place on this tree.
   async function handleUpdate() {
-    if (!savedFilterHandle) return;
+    if (!loaded) return;
     setError(null);
     try {
-      const existing = savedFiltersForNamespace.find((f) => f.handle === savedFilterHandle);
-      const filter: SavedFilter = { id: existing?.id ?? crypto.randomUUID(), name: savedFilterName ?? "", namespace, tree };
+      if (loaded.origin === "builtin") {
+        const builtin = findBuiltinSavedFilter(loaded.id);
+        if (!builtin) return;
+        const filter: SavedFilter = {
+          id: loaded.id, name: loaded.name, namespace, tree, builtinHash: builtinHash(builtin),
+        };
+        const handle = await uploadSavedFilter(filter);
+        setSavedFilters((prev) => [...prev, { ...filter, handle }]);
+        setSavedFilterHandle(handle);
+        setBuiltinId(undefined);
+        return;
+      }
+      if (!savedFilterHandle) return;
+      const filter: SavedFilter = {
+        id: loaded.id, name: savedFilterName ?? "", namespace, tree, builtinHash: loaded.builtinHash,
+      };
       await saveSavedFilterManifest(savedFilterHandle, filter);
       setSavedFilters((prev) => prev.map((f) => (f.handle === savedFilterHandle ? { ...filter, handle: savedFilterHandle } : f)));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  // "Restore original": deletes the tree's edited copy of a built-in, so
+  // the built-in is back, and offers Undo (saving the same copy again).
+  async function handleRestoreOriginal(edited: SavedFilter) {
+    const builtin = findBuiltinSavedFilter(edited.id);
+    if (!edited.handle || !builtin) return;
+    setError(null);
+    try {
+      await removeSavedFilter(edited.handle);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    setSavedFilters((prev) => prev.filter((f) => f.handle !== edited.handle));
+    const restored = withBuiltinSavedFilters([]).find((f) => f.id === builtin.id)!;
+    handleLoadSavedFilter(restored);
+    const { handle: _handle, origin: _origin, ...copy } = edited;
+    notifications.show({
+      color: "green",
+      autoClose: 12000,
+      message: (
+        <Group gap="xs">
+          <Text size="sm">{t("Restored the original")}: {restored.name}</Text>
+          <Anchor
+            component="button"
+            size="sm"
+            onClick={async () => {
+              try {
+                const handle = await uploadSavedFilter(copy);
+                setSavedFilters((prev) => [...prev, { ...copy, handle }]);
+                // Still looking at the built-in: show the edited one again.
+                if (builtinIdRef.current === copy.id) handleLoadSavedFilter({ ...copy, handle, origin: "edited-builtin" });
+                notifications.show({ color: "blue", message: t("Undone. Your edited version is back.") });
+              } catch (err) {
+                notifications.show({ color: "red", message: err instanceof Error ? err.message : String(err) });
+              }
+            }}
+          >
+            {t("Undo")}
+          </Anchor>
+        </Group>
+      ),
+    });
+  }
+
+  // "Keep mine" after the built-in changed: records the current built-in
+  // as the one this copy was edited from, so the notice goes away.
+  async function handleKeepMine(edited: SavedFilter) {
+    const builtin = findBuiltinSavedFilter(edited.id);
+    if (!edited.handle || !builtin) return;
+    setError(null);
+    try {
+      const { handle, origin: _origin, ...stored } = edited;
+      const filter: SavedFilter = { ...stored, builtinHash: builtinHash(builtin) };
+      await saveSavedFilterManifest(handle, filter);
+      setSavedFilters((prev) => prev.map((f) => (f.handle === handle ? { ...filter, handle } : f)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Hiding a built-in is per browser, per tree; nothing is written.
+  function handleHideBuiltin(id: string) {
+    setBuiltinHidden(id, true);
+    setHiddenVersion((v) => v + 1);
+    handleClear();
   }
 
   async function handleDeleteSavedFilter(handle: string) {
@@ -538,7 +658,11 @@ export function FilterPickerDialog({
             aria-label={t("Choose a filter…")}
             placeholder={t("Choose a filter…")}
             data={filterChoices}
-            value={savedFilterHandle ?? (singleRulePreset ? RULE_VALUE_PREFIX + singleRulePreset.id : EMPTY_SAVED_FILTER_VALUE)}
+            value={savedFilterHandle
+              ?? (builtinId ? BUILTIN_VALUE_PREFIX + builtinId : undefined)
+              // Nothing picked: no value, so the box shows "Choose a
+              // filter…" rather than the "New Filter" entry.
+              ?? (singleRulePreset ? RULE_VALUE_PREFIX + singleRulePreset.id : null)}
             onChange={handleSelectSavedFilter}
           />
           {/* Only signal this app-worthy while it's actually true:
@@ -548,7 +672,33 @@ export function FilterPickerDialog({
            * the same page session, so this is a discoverability nudge,
            * not a warning about real data loss). */}
           {isDirty && <Text size="xs" c="dimmed">{t("Unsaved changes")}</Text>}
+          {hiddenBuiltinCount > 0 && (
+            <Anchor
+              component="button"
+              type="button"
+              size="xs"
+              onClick={() => { showAllBuiltins(); setHiddenVersion((v) => v + 1); }}
+            >
+              {t("Show hidden built-in filters")} ({hiddenBuiltinCount})
+            </Anchor>
+          )}
         </Group>
+
+        {loaded && builtinChangedSinceEdit(loaded) && (
+          <Alert color="blue" p="xs">
+            <Stack gap="xs">
+              <Text size="sm">
+                {t("The built-in version of this filter has changed since it was edited on this tree.")}
+              </Text>
+              <Group gap="xs">
+                <Button size="xs" variant="default" onClick={() => handleKeepMine(loaded)}>{t("Keep mine")}</Button>
+                <Button size="xs" variant="subtle" onClick={() => handleRestoreOriginal(loaded)}>
+                  {t("Use the new version")}
+                </Button>
+              </Group>
+            </Stack>
+          </Alert>
+        )}
 
         {/* A single rule picked from the dropdown that needs values: its
          * inputs, right here, so using it doesn't mean opening the Filter
@@ -612,15 +762,25 @@ export function FilterPickerDialog({
 
         <Group justify="space-between">
           <Group gap="xs">
-            <Button
-              size="xs"
-              variant="subtle"
-              color="red"
-              disabled={!savedFilterHandle}
-              onClick={() => savedFilterHandle && handleDeleteSavedFilter(savedFilterHandle)}
-            >
-              {t("Delete")}
-            </Button>
+            {loaded?.origin === "builtin" ? (
+              <Button size="xs" variant="subtle" color="gray" onClick={() => handleHideBuiltin(loaded.id)}>
+                {t("Hide")}
+              </Button>
+            ) : loaded?.origin === "edited-builtin" ? (
+              <Button size="xs" variant="subtle" color="gray" onClick={() => handleRestoreOriginal(loaded)}>
+                {t("Restore original")}
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="subtle"
+                color="red"
+                disabled={!savedFilterHandle}
+                onClick={() => savedFilterHandle && handleDeleteSavedFilter(savedFilterHandle)}
+              >
+                {t("Delete")}
+              </Button>
+            )}
             <Button
               variant="subtle"
               color="gray"
@@ -631,7 +791,7 @@ export function FilterPickerDialog({
             </Button>
           </Group>
           <Group gap="xs">
-            {savedFilterHandle ? (
+            {loaded ? (
               <>
                 {/* No "…" -- unlike "Save…"/"Copy…" below, this commits
                  * immediately (no naming dialog); disabled until the
@@ -664,8 +824,8 @@ export function FilterPickerDialog({
 
         <SaveFilterDialog
           opened={saveDialogOpen}
-          mode={savedFilterHandle ? "copy" : "save"}
-          initialName={savedFilterHandle && savedFilterName ? `${savedFilterName} (copy)` : ""}
+          mode={loaded ? "copy" : "save"}
+          initialName={loaded && savedFilterName ? `${savedFilterName} (copy)` : ""}
           existingNames={savedFiltersForNamespace.map((f) => f.name)}
           onSave={handleSaveAsNew}
           onClose={() => setSaveDialogOpen(false)}

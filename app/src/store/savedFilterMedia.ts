@@ -33,6 +33,14 @@ export interface SavedFilter {
   /** The backing Media object's handle -- runtime-only, never part of the
    * stored JSON itself, same convention CustomRule.handle uses. */
   handle?: string;
+  /** Set when this is an edited built-in filter (same `id` as one in
+   * data/builtinSavedFilters.ts): the hash of the built-in it was edited
+   * from, so a later change to the built-in can be noticed. */
+  builtinHash?: string;
+  /** Runtime only, set by builtinSavedFilters.ts's withBuiltinSavedFilters():
+   * "builtin" for one shipped with the app (no handle), "edited-builtin"
+   * for the tree's edited copy of one. Absent for the tree's own. */
+  origin?: "builtin" | "edited-builtin";
 }
 
 function isFilterTree(value: unknown): value is FilterTree {
@@ -51,7 +59,8 @@ function isSavedFilter(value: unknown): value is SavedFilter {
     typeof f.id === "string" &&
     typeof f.name === "string" &&
     isGqlFilterNamespace(f.namespace) &&
-    isFilterTree(f.tree)
+    isFilterTree(f.tree) &&
+    (f.builtinHash === undefined || typeof f.builtinHash === "string")
   );
 }
 
@@ -79,7 +88,8 @@ export async function fetchSavedFilters(): Promise<SavedFilter[]> {
         if (!res.ok) throw new Error(await parseErrorMessage(res));
         const parsed: unknown = JSON.parse(await res.text());
         if (!isSavedFilter(parsed)) throw new Error("not a valid Saved Filter");
-        return { ...parsed, handle: item.handle };
+        const { origin: _origin, ...stored } = parsed;
+        return { ...stored, handle: item.handle };
       } catch (err) {
         console.warn(`[savedFilters] skipping ${item.handle}:`, err);
         return null;
@@ -107,7 +117,7 @@ export function getCachedSavedFilters(): SavedFilter[] {
  * otherwise possible). */
 export async function saveSavedFilterManifest(handle: string, filter: SavedFilter): Promise<void> {
   const token = await getToken();
-  const { handle: _handle, ...manifest } = filter;
+  const { handle: _handle, origin: _origin, ...manifest } = filter;
   const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: SAVED_FILTER_MIME });
   await updateMediaFile(token, handle, blob, SAVED_FILTER_MIME);
   await tagAndDescribeMedia(token, handle, filter.name, await getOrCreateTagHandle(token, SAVED_FILTER_TAG_NAME));
@@ -118,7 +128,7 @@ export async function saveSavedFilterManifest(handle: string, filter: SavedFilte
  * uploadCustomRule()/grampletMedia.ts's uploadGramplet(). */
 export async function uploadSavedFilter(filter: SavedFilter): Promise<string> {
   const token = await getToken();
-  const { handle: _handle, ...manifest } = filter;
+  const { handle: _handle, origin: _origin, ...manifest } = filter;
   const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: SAVED_FILTER_MIME });
   const handle = await uploadMedia(token, blob, SAVED_FILTER_MIME);
   const tagHandle = await getOrCreateTagHandle(token, SAVED_FILTER_TAG_NAME);

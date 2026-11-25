@@ -22,6 +22,9 @@
 // logic-layer function that ends up calling them.
 import { getToken } from "../auth/auth";
 import { deleteMedia } from "../store/jobsApi";
+import { hashCode } from "../store/hash";
+
+export { hashCode };
 import { saveGrampletManifest, uploadGramplet } from "./grampletMedia";
 import type { CatalogEntry, Gramplet } from "./types";
 
@@ -32,20 +35,6 @@ import type { CatalogEntry, Gramplet } from "./types";
 // "Couldn't reach the Gramplet Store" rather than crashing -- see its own
 // doc comment.
 export const DEFAULT_CATALOG_URL = "https://dsblank.github.io/gramps-connect/gramplet-store/catalog.json";
-
-/** A cheap, non-cryptographic checksum (32-bit FNV-1a, hex-encoded) --
- * plenty to detect "this code changed since install", the only thing it's
- * used for (Gramplet.sourceCodeHash, wasEditedSinceInstall() below). Not a
- * security boundary: nobody is protected from a deliberately-constructed
- * collision here, only from silently overwriting an accidental edit. */
-export function hashCode(text: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
 
 /** Fetches and parses the catalog at `catalogUrl` -- plain, unauthenticated
  * fetch() (public static content, unlike every other request this app
