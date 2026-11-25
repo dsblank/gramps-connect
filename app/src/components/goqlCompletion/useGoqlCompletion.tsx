@@ -139,7 +139,9 @@ export function useGoqlCompletion({
 
   function insertCompletion(start: number, cursor: number, name: string) {
     const inserted = insertAt(start, cursor, name);
-    if (/[.[( ]$/.test(name)) show(suggest(inserted.value, inserted.cursor) ?? []);
+    // An opening quote goes on too: a type's names come inside it
+    // (`type == "` -> Census, ...); any other string offers nothing.
+    if (/[.[( ]$/.test(name) || name === '"' || name === "'") show(suggest(inserted.value, inserted.cursor) ?? []);
     else close();
   }
 
@@ -225,6 +227,7 @@ function completionDetail(c: Completion): string {
   if (c.kind === "collection") return c.detail ? `[${t(String(c.detail))}]` : "[…]";
   if (c.kind === "punctuation") return c.detail === "list" ? t("list") : t("text");
   if (c.kind === "index") return t("first item");
+  if (c.kind === "type_name") return String(c.detail);
   if (c.kind === "field") return Array.isArray(c.detail) ? c.detail.join(" | ") : (c.detail ?? "");
   return completionKindLabel(c.kind);
 }
