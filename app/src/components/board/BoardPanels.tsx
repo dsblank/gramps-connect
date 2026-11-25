@@ -21,6 +21,10 @@ import { useApiImageSrc } from "../../store/apiImage";
 import { snippetFor } from "../visuals/searchSnippet";
 import { TreeMark } from "./TreeMark";
 import { photosOf, type PhotoSubject } from "../../store/board/faces";
+import { useRelationshipPaths } from "../../store/relationshipPathsApi";
+import { openRelationshipWindow } from "../../store/relationshipWindow";
+import type { PathStep } from "../../store/relationshipPath";
+import { RelationshipBetween } from "../related/RelationshipBetween";
 
 export const CLASS_LABEL: Record<GrampsClass, string> = {
   Person: "Person", Family: "Family", Event: "Event", Place: "Place", Source: "Source",
@@ -299,6 +303,9 @@ export function CardPanel(props: {
   onNotInPhoto: (person: string, media: string) => void;
   /** Makes `media` the photo on the person's card. */
   onMainPhoto: (person: string, media: string) => void;
+  /** For a person: the other people on the board, for "How is … related to…?". */
+  relatives?: { value: string; label: string }[];
+  onRelate?: (other: string) => void;
   onPinUpMany: (items: { cls: GrampsClass; handle: string }[]) => void;
   onSize: (size: CardSize) => void;
   onEdit: (edit: CardEdit) => void;
@@ -308,7 +315,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, relatives, onRelate, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -427,6 +434,18 @@ export function CardPanel(props: {
           <Text size="xs" c="dimmed" lh={1}><TreeMark /></Text>
           <Text size="xs" c="dimmed">{t("Edits here change the tree when you save.")}</Text>
         </Group>
+      )}
+      {r._class === "Person" && relatives && relatives.length > 0 && onRelate && (
+        <Select
+          size="xs"
+          label={t("How is {name} related to…").replace("{name}", titleOf(handle, records))}
+          description={t("Or Ctrl+click two people on the board (⌘+click on a Mac).")}
+          placeholder={t("Pick someone on the board")}
+          searchable
+          value={null}
+          data={relatives}
+          onChange={(v) => v && onRelate(v)}
+        />
       )}
       {r._class === "Person" && <PersonPhoto person={handle} all={all} readOnly={readOnly} faceUrl={faceUrl} onFace={onFace} onNotInPhoto={onNotInPhoto} onMainPhoto={onMainPhoto} />}
       {inPhoto !== undefined && (
@@ -563,6 +582,54 @@ function PersonPhoto({ person, all, readOnly, faceUrl, onFace, onNotInPhoto, onM
         </Stack>
       )}
     </Box>
+  );
+}
+
+/** Two people selected: how they're related, from the saved tree. */
+export function RelationPanel({ from, to, records, revision, unsaved, onPinPath, onPinUp, onClose }: {
+  from: string;
+  to: string;
+  records: Records;
+  /** Bumped after a Save, so the search runs again on the new tree. */
+  revision: number;
+  /** Loose ends not saved yet: the search can't see them. */
+  unsaved: boolean;
+  onPinPath: (steps: PathStep[]) => void;
+  onPinUp: (handle: string) => void;
+  onClose: () => void;
+}) {
+  // The same search RelationshipBetween runs (shared cache), for the path to pin.
+  const state = useRelationshipPaths(from, to, { revision });
+  const path = state.status === "done" ? state.paths[0] : undefined;
+  const between = path ? path.steps.length - 2 : 0;
+  return (
+    <PanelFrame eyebrow={t("How they're related")} title={`${titleOf(from, records)} & ${titleOf(to, records)}`} onClose={onClose}>
+      {unsaved && (
+        <Text size="xs" c="dimmed">{t("This uses the saved tree. Save to include connections you've made on the board.")}</Text>
+      )}
+      <Box mx={-16}>
+        <RelationshipBetween
+          from={from}
+          to={to}
+          revision={revision}
+          chart="always"
+          menu={{ actions: (h) => [{ label: t("Pin"), onClick: () => onPinUp(h) }] }}
+        />
+      </Box>
+      {path && (
+        <Group gap="xs">
+          {between > 0 && (
+            <Button size="xs" variant="light" onClick={() => onPinPath(path.steps)}>
+              {between === 1 ? t("Pin the person in between") : t("Pin the {n} people in between").replace("{n}", String(between))}
+            </Button>
+          )}
+          <Button size="xs" variant="default" onClick={() => openRelationshipWindow(from, to)}>{t("Graph")}</Button>
+        </Group>
+      )}
+      {path && between > 0 && (
+        <Text size="xs" c="dimmed">{t("Pinning puts their cards, and the families joining them, between these two. It doesn't change the tree.")}</Text>
+      )}
+    </PanelFrame>
   );
 }
 

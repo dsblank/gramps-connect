@@ -38,7 +38,9 @@ import { subjectsFromBacklinks, subjectsOnBoard, type PhotoSubject } from "../..
 import { buildFace, faceWhoLabel, type FaceWho } from "../../store/markFace";
 import { hasPermissions } from "../../auth/auth";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
-import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
+import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, RelationPanel, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
+import { pathCards } from "../../store/board/relationPath";
+import type { PathStep } from "../../store/relationshipPath";
 import { cleanUp } from "./cleanUp";
 import { TreeMark } from "./TreeMark";
 import boardCss from "./board.module.css";
@@ -100,6 +102,8 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const [peek, setPeek] = useState<Records>({});
   /** The photo shown full screen, if any. */
   const [lightbox, setLightbox] = useState<{ media: string } | null>(null);
+  /** Bumped by Save and Undo, so relationship searches run on the new tree. */
+  const [treeRevision, setTreeRevision] = useState(0);
   /** Who the tree has in the selected photo (null while loading); the
    * sidebar shows it with the board's unsaved changes laid over. */
   const [inPhoto, setInPhoto] = useState<{ media: string; subjects: PhotoSubject[] | null } | null>(null);
@@ -332,6 +336,39 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       const near = positions[media] ?? positions[selectedHandle ?? ""];
       pinMadeAlongTheWay([person], [near ? { x: near.x + 220, y: near.y } : canvas.current?.center() ?? { x: 0, y: 0 }], applyChanges(opened.base, [...changes, change]));
     }
+  }
+
+  // --- two people: how they're related --------------------------------------------
+  /** Ctrl/Cmd+click on a person while a person is selected selects both;
+   * anything else selects as usual. */
+  function withSecondPerson(s: BoardSelection, additive?: boolean): BoardSelection {
+    if (!additive || s?.kind !== "card" || working[s.id]?._class !== "Person") return s;
+    const first = selection?.kind === "card" ? selection.id : selection?.kind === "pair" ? selection.ids[0] : null;
+    if (!first || first === s.id || working[first]?._class !== "Person") return s;
+    return { kind: "pair", ids: [first, s.id] };
+  }
+
+  /** Pins everyone on a relationship path, with the families joining them,
+   * in a line between its two ends (already on the board). Cards only: the
+   * tree doesn't change. */
+  async function pinPath(steps: PathStep[]) {
+    if (!file) return;
+    const people = await loadIntoBase(steps.map((st) => ({ cls: "Person" as GrampsClass, handle: st.handle })));
+    const cards = pathCards(steps, { ...working, ...people });
+    const families = await loadIntoBase(cards.filter((c) => c.cls === "Family"));
+    const records = { ...working, ...people, ...families };
+    const a = positions[steps[0].handle];
+    const b = positions[steps[steps.length - 1].handle];
+    if (!a || !b) return;
+    const n = Math.max(1, cards.length - 1);
+    const fresh = cards
+      .map((c, i) => ({ c, at: { x: a.x + ((b.x - a.x) * i) / n, y: a.y + ((b.y - a.y) * i) / n } }))
+      .filter(({ c }) => records[c.handle] && !file.cards.some((x) => x.handle === c.handle));
+    if (!fresh.length) {
+      canvas.current?.reveal(cards.map((c) => c.handle));
+      return;
+    }
+    addCards(fresh.map(({ c, at }) => cardFor(c.handle, c.cls, at, records)));
   }
 
   function mainPhoto(person: string, media: string) {
@@ -689,6 +726,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       // Unticked loose ends stay for later: kept as the new case's draft.
       const rest = changes.filter((c) => c.off).map((c) => ({ ...c, off: false }));
       if (noteHandle && rest.length) writeDraft(noteHandle, { ...draftOf(opened, { ...content, cards: [...content.cards, ...file.cards.filter((c) => unticked.has(c.handle))] }, rest), noteChange: AFTER_OWN_SAVE });
+      setTreeRevision((n) => n + 1);
       if (saved) {
         notifications.show({
           color: "green",
@@ -704,6 +742,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
                 onClick={async () => {
                   try {
                     await undoSave(saved);
+                    setTreeRevision((n) => n + 1);
                     notifications.show({ color: "blue", message: t("Undone. The tree is back to how it was.") });
                     if (opened.note && noteHandle) await load(noteHandle);
                     else window.location.hash = formatHash({ viewKey: CASE_FILE_VIEW.key });
@@ -758,6 +797,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   ].filter(Boolean);
   const selectedYarn = selection?.kind === "yarn" ? [...yarn, ...cutYarn].find((y) => y.id === selection.id) : undefined;
   const selectedCard = selection?.kind === "card" ? file.cards.find((c) => c.handle === selection.id) : undefined;
+  const selectedPair = selection?.kind === "pair" && selection.ids.every((h) => working[h]) ? selection.ids : undefined;
   const selectedPhoto = selectedCard ? photoOf(selectedCard.handle) : null;
 
   let menuEl = null;
@@ -859,8 +899,8 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           photoUrls={photoUrls}
           mapUrls={mapUrls}
           selection={selection}
-          onSelect={(s) => {
-            setSelection(s);
+          onSelect={(s, additive) => {
+            setSelection(withSecondPerson(s, additive));
             setMenu(null);
           }}
           onMove={(h, to) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, x: to.x, y: to.y } : c)) })}
@@ -898,6 +938,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             onFace={(person, media) => void openFace(person, media)}
             onNotInPhoto={(person, media) => void notInPhoto(person, media)}
             onMainPhoto={mainPhoto}
+            relatives={working[selectedCard.handle]?._class === "Person"
+              ? cards.filter((c) => c.cls === "Person" && c.handle !== selectedCard.handle).map((c) => ({ value: c.handle, label: c.title }))
+              : undefined}
+            onRelate={(other) => setSelection({ kind: "pair", ids: [selectedCard.handle, other] })}
             onPinUpMany={(items) => void pinUpMany(items, selectedCard.handle, true)}
             onSize={(size) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === selectedCard.handle ? { ...c, size } : c)) })}
             onEdit={(edit) => editCard(selectedCard.handle, edit)}
@@ -908,6 +952,18 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             }}
             onTakeOff={() => takeOff(selectedCard.handle)}
             onDiscard={() => discardDraft(selectedCard.handle)}
+            onClose={() => setSelection(null)}
+          />
+        ) : selectedPair ? (
+          <RelationPanel
+            key={selectedPair.join("|")}
+            from={selectedPair[0]}
+            to={selectedPair[1]}
+            records={working}
+            revision={treeRevision}
+            unsaved={changes.some((c) => !c.off)}
+            onPinPath={(steps) => void pinPath(steps)}
+            onPinUp={(h) => void pinUp("Person", h, selectedPair[0], true)}
             onClose={() => setSelection(null)}
           />
         ) : selectedYarn ? (

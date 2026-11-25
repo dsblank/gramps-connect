@@ -21,7 +21,9 @@ export interface Point {
   y: number;
 }
 
-export type BoardSelection = { kind: "card"; id: string } | { kind: "yarn"; id: string } | null;
+/** One card, one yarn, or two people (Ctrl/Cmd+click the second) to see
+ * how they're related. */
+export type BoardSelection = { kind: "card"; id: string } | { kind: "yarn"; id: string } | { kind: "pair"; ids: [string, string] } | null;
 
 export interface BoardCanvasHandle {
   fit: () => void;
@@ -45,7 +47,8 @@ interface Props {
   /** Map pictures for place cards, by handle. */
   mapUrls?: Record<string, string | null>;
   selection: BoardSelection;
-  onSelect: (selection: BoardSelection) => void;
+  /** `additive`: Ctrl/Cmd was held (adds a second person). */
+  onSelect: (selection: BoardSelection, additive?: boolean) => void;
   /** A card moved; `done` on the drop. */
   onMove: (handle: string, to: Point, done: boolean) => void;
   onCycleSize: (handle: string) => void;
@@ -225,7 +228,7 @@ export function BoardCanvas(props: Props) {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       if (!moved) {
-        onSelect({ kind: "card", id: handle });
+        onSelect({ kind: "card", id: handle }, e.ctrlKey || e.metaKey);
         physics.kickCard(handle, jiggle(40));
         return;
       }
@@ -257,7 +260,7 @@ export function BoardCanvas(props: Props) {
       setPull(null);
       const end = toBoard(ev.clientX, ev.clientY);
       if (Math.hypot(end.x - start.x, end.y - start.y) < 8) {
-        onSelect({ kind: "card", id: handle });
+        onSelect({ kind: "card", id: handle }, ev.ctrlKey || ev.metaKey);
         return;
       }
       const r = svgRef.current!.getBoundingClientRect();
@@ -286,7 +289,7 @@ export function BoardCanvas(props: Props) {
     const g: YarnGeometry = { x1: A.x, y1: A.y, x2: B.x, y2: B.y, ox: (-dy / len) * off, oy: (dx / len) * off, sag: Math.min(70, 8 + len * 0.09) };
     const { d, mx, my } = yarnPath(g, physics.wobble(y.id));
     const selected = selection?.kind === "yarn" && selection.id === y.id;
-    const touchesSelected = selection?.kind === "card" && (selection.id === y.a || selection.id === y.b);
+    const touchesSelected = (selection?.kind === "card" && (selection.id === y.a || selection.id === y.b)) || (selection?.kind === "pair" && (selection.ids.includes(y.a) || selection.ids.includes(y.b)));
     return (
       <g
         key={y.id}
@@ -321,7 +324,7 @@ export function BoardCanvas(props: Props) {
     const p = positions[c.handle];
     const box: CardBox | undefined = boxes[c.handle];
     if (!p || !box) return null;
-    const selected = selection?.kind === "card" && selection.id === c.handle;
+    const selected = (selection?.kind === "card" && selection.id === c.handle) || (selection?.kind === "pair" && selection.ids.includes(c.handle));
     return (
       <g
         key={c.handle}
