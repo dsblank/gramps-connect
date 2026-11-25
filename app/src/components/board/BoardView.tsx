@@ -151,7 +151,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     setError(null);
     try {
       const result = isNewBoardHandle(key)
-        ? await openUnsavedCase(`new:${key}`, t("New case"), getCurrentUsername() ?? "")
+        ? await openUnsavedCase(`new:${key}`, t("New case file"), getCurrentUsername() ?? "")
         : await openCase(key);
       setOpened(result);
       setFile(result.file);

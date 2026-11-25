@@ -112,7 +112,7 @@ export function AddButton({ view, draftStack }: { view: ViewConfig; draftStack?:
     // Save makes the case file. Saving needs Editor rights, so only editors
     // are offered it.
     if (!canChangeData()) return null;
-    return <Button size="xs" onClick={() => (window.location.hash = newBoardHash())}>{t("New case")}</Button>;
+    return <Button size="xs" onClick={() => (window.location.hash = newBoardHash())}>{t("New case file")}</Button>;
   }
   if (view.key === "media") {
     if (!hasPermissions(PERM_ADD_OBJ)) return null;
