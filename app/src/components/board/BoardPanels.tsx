@@ -720,7 +720,7 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
       {discussion === "cantStart" && <Text size="xs" c="dimmed">{t("No one has started a discussion of this case yet.")}</Text>}
       {(discussion === "none" || discussion === "open") && (
         <Box>
-          <Button size="xs" variant="light" onClick={onDiscuss}>{discussion === "open" ? t("Open the discussion") : t("Discuss this case")}</Button>
+          <Button size="xs" variant="light" onClick={onDiscuss}>{discussion === "open" ? t("Discuss evidence board") : t("Discuss this case")}</Button>
           <Text size="xs" c="dimmed" mt={4}>
             {discussion === "open"
               ? t("Opens in a window you can keep beside the board.")
