@@ -30,6 +30,7 @@ const DEFS = {
   browserNotifications: { key: `${P}browserNotifications`, tag: "setting" },
   largeImageChoice: { key: `${P}largeImageChoice`, tag: "setting" },
   asideWidths: { key: `${P}asideWidths`, tag: "setting" },
+  asideSplits: { key: `${P}asideSplits`, tag: "setting" },
   boardSidebarWidth: { key: `${P}boardSidebarWidth`, tag: "setting" },
   columnWidths: { key: `${P}columnWidths`, tag: "setting" },
   columnLayouts: { key: `${P}columnLayouts`, tag: "setting" },

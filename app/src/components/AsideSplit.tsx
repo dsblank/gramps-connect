@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Box, Group, Stack, Text, UnstyledButton } from "@mantine/core";
 import { useViewStore } from "../hooks/useViewStore";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -11,6 +11,7 @@ import { ReferenceDetail } from "./ReferenceDetail";
 import type { SubSelection } from "./ReferenceDetail";
 import { CurrentPageContext } from "./related/CurrentPageContext";
 import type { UseDraftStack } from "../store/draftStack";
+import { STORAGE_KEYS } from "../store/storageKeys";
 import { t } from "../i18n/i18n";
 
 interface AsideSplitProps {
@@ -23,6 +24,37 @@ interface AsideSplitProps {
   /** Owned by App.tsx -- threaded through to both panes' RelatedPanel so
    * either can offer an Edit button (see RelatedPanel's own doc comment). */
   draftStack?: UseDraftStack;
+}
+
+/** How much of the aside's height the top pane gets while the bottom one
+ * is open, per view (view key -> fraction), once someone drags the strip
+ * between them. A view missing from the map gets an even split, and that
+ * default is never itself stored -- same arrangement as App.tsx's
+ * per-view aside widths. */
+const SPLITS_KEY = STORAGE_KEYS.asideSplits;
+const MIN_SPLIT = 0.15;
+const MAX_SPLIT = 0.85;
+
+function readStoredSplits(): Record<string, number> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(SPLITS_KEY) ?? "{}");
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, number> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "number" && value >= MIN_SPLIT && value <= MAX_SPLIT) out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredSplits(splits: Record<string, number>) {
+  try {
+    localStorage.setItem(SPLITS_KEY, JSON.stringify(splits));
+  } catch {
+    // Storage unavailable: the split still works until a reload.
+  }
 }
 
 /** What the collapsed strip says it's holding. Only ever visible in the
@@ -75,6 +107,45 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
   // section component implements) -- see the layout effect below.
   const lastClickedRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const [splits, setSplits] = useState<Record<string, number>>(readStoredSplits);
+  const [resizing, setResizing] = useState(false);
+  const split = splits[view.key] ?? 0.5;
+
+  // Dragging the top edge of the strip between the panes. Pointer capture
+  // keeps the drag tracking once the cursor leaves the thin handle, as on
+  // App.tsx's aside-width handle.
+  const handleResizeStart = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizing(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const handleResizeMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const box = stackRef.current?.getBoundingClientRect();
+    if (!resizing || !box || box.height <= 0) return;
+    const next = Math.min(Math.max((e.clientY - box.top) / box.height, MIN_SPLIT), MAX_SPLIT);
+    setSplits((s) => ({ ...s, [view.key]: next }));
+  };
+  const handleResizeEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!resizing) return;
+    setResizing(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setSplits((s) => {
+      writeStoredSplits(s);
+      return s;
+    });
+  };
+  const resetSplit = () => {
+    setSplits((s) => {
+      if (!(view.key in s)) return s;
+      const next = { ...s };
+      delete next[view.key];
+      writeStoredSplits(next);
+      return next;
+    });
+  };
+  const resizable = detailOpen && !flow;
 
   useEffect(() => {
     setSubSelection(null);
@@ -150,11 +221,11 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
     // links, e.g. a family's Children list including the very person
     // whose page you're already on).
     <CurrentPageContext.Provider value={{ type: view.key, handles: snapshot.selectedHandles }}>
-      <Stack h={flow ? undefined : "100%"} gap={0}>
+      <Stack ref={stackRef} h={flow ? undefined : "100%"} gap={0}>
         <Box
           ref={topPaneRef}
           onClickCapture={(e) => { lastClickedRef.current = e.target as HTMLElement; }}
-          style={flow ? undefined : { flex: 1, minHeight: 0, overflow: "auto" }}
+          style={flow ? undefined : { flex: resizable ? `${split} 1 0px` : 1, minHeight: 0, overflow: "auto" }}
         >
           {snapshot.selectingAll && (
             // Ctrl/Cmd+A on a list still loading in the background --
@@ -192,7 +263,32 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
             />
           )}
         </Box>
+        <Box style={{ position: "relative", flex: "none" }}>
+        {resizable && (
+          // Straddles the strip's top border, so the grab target is wider
+          // than the 1px line; the rest of the strip still opens and
+          // closes the pane on a click. Double-click goes back to an even
+          // split.
+          <Box
+            onPointerDown={handleResizeStart}
+            onPointerMove={handleResizeMove}
+            onPointerUp={handleResizeEnd}
+            onPointerCancel={handleResizeEnd}
+            onDoubleClick={resetSplit}
+            style={{
+              position: "absolute",
+              insetInline: 0,
+              top: -4,
+              height: 8,
+              cursor: "row-resize",
+              zIndex: 1,
+              touchAction: "none",
+              background: resizing ? "var(--mantine-color-blue-4)" : "transparent",
+            }}
+          />
+        )}
         <UnstyledButton
+          w="100%"
           onClick={() => setDetailOpen((open) => !open)}
           aria-expanded={detailOpen}
           style={{
@@ -210,8 +306,9 @@ export function AsideSplit({ view, flow, draftStack }: AsideSplitProps) {
             <Text size="xs" c="dimmed" fw={600} truncate>{stripLabel(subSelection)}</Text>
           </Group>
         </UnstyledButton>
+        </Box>
         {detailOpen && (
-          <Box ref={bottomPaneRef} style={flow ? undefined : { flex: 1, minHeight: 0, overflow: "auto" }}>
+          <Box ref={bottomPaneRef} style={flow ? undefined : { flex: `${1 - split} 1 0px`, minHeight: 0, overflow: "auto" }}>
             <ReferenceDetail
               flow={flow}
               draftStack={draftStack}
