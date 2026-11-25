@@ -13,6 +13,7 @@ import { EVENT_VIEW, PLACE_VIEW, VIEWS, type ViewConfig } from "./store/views";
 import { getViewStore } from "./store/registry";
 import { HOME_KEY, isBoardKey, isStorelessKey, isVisualKey, setRouteTreeSource, type VisualKey } from "./hash";
 import { BoardView } from "./components/board/BoardView";
+import { startTreeColumnsSync } from "./store/treeColumnMedia";
 import { getAuthSnapshot, getCurrentUsername, getToken, getTreeId, subscribe as subscribeAuth } from "./auth/auth";
 import { loadDisplaySettings } from "./store/displaySettings";
 import { loadNameGroupMappings, watchNameGroupMappings } from "./store/nameGroups";
@@ -478,6 +479,8 @@ function AuthenticatedApp() {
   // installed ones -- see grampletStoreNews.ts. Same once-per-app lifetime.
   useEffect(() => startGrampletStoreCheck(showGrampletStoreNewsToast), []);
   useEffect(() => startBlogNewsCheck(), []);
+  // The tree's shared list columns -- see treeColumnMedia.ts.
+  useEffect(() => startTreeColumnsSync(), []);
 
   // Background username -> full_name resolution for the chat views
   // (ChatBubble.tsx) -- fire-and-forget so it's already warm by the time a

@@ -10,6 +10,8 @@
  */
 
 import type { GqlFilterNamespace, GqlFilterPreset, GqlPresetParam } from "../data/gqlFilterPresets";
+import { ColumnRefError, expandColumnRefs } from "./goqlColumnRefs";
+import { viewForNamespace } from "./views";
 
 export interface FilterPresetNode {
   kind: "preset";
@@ -123,9 +125,23 @@ function fillParam(preset: GqlFilterPreset, param: GqlPresetParam, raw: string):
   }
 }
 
+/** A Custom Rule's column names (`Father`, stored as the column's id) as
+ * the columns' current GOQL -- before its params are filled, so a param's
+ * value can't add a column name. Shared rules may only use columns shared
+ * with the tree. */
+function expandPresetColumns(preset: GqlFilterPreset): string {
+  if (!preset.expr.includes("`")) return preset.expr;
+  try {
+    return expandColumnRefs(preset.expr, viewForNamespace(preset.namespace).key, { sharedOnly: true });
+  } catch (err) {
+    if (err instanceof ColumnRefError) throw new FilterCombineError(`"${preset.label}": ${err.message}`);
+    throw err;
+  }
+}
+
 function fillParams(preset: GqlFilterPreset, values: Record<string, string> | undefined): string {
   const params = preset.params ?? [];
-  let expr = preset.expr;
+  let expr = expandPresetColumns(preset);
   for (const param of params) {
     const raw = values?.[param.name];
     if (raw === undefined || raw === "") {

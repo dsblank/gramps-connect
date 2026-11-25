@@ -6,6 +6,7 @@ import { fetchPage } from "./api";
 import { loadBookmarks } from "./bookmarks";
 import { buildContextPresets, handleListExpr, SAVED_FILTER_PRESET_PREFIX } from "./contextPresets";
 import { customRuleAsPreset, refreshCustomRules } from "./customRuleMedia";
+import { expandColumnRefs } from "./goqlColumnRefs";
 import { fetchSavedFilters } from "./savedFilterMedia";
 import { PERSON_VIEW } from "./views";
 
@@ -52,8 +53,10 @@ export async function fetchMatchingHandles(
   handles: readonly string[],
 ): Promise<Set<string>> {
   const matched = new Set<string>();
+  // A typed query can name People columns (`Grandchildren`).
+  const expanded = expandColumnRefs(whereExpr, PERSON_VIEW.key);
   for (let i = 0; i < handles.length; i += CHUNK) {
-    const expr = `(${whereExpr}) and ${handleListExpr(handles.slice(i, i + CHUNK))}`;
+    const expr = `(${expanded}) and ${handleListExpr(handles.slice(i, i + CHUNK))}`;
     let after: string | null = null;
     do {
       const { page } = await fetchPage(PERSON_VIEW, token, after, false, expr, PERSON_VIEW.orderBy, CHUNK, []);

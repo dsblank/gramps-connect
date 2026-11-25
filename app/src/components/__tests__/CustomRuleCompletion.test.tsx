@@ -9,6 +9,7 @@ vi.mock("../../store/customRuleMedia", async (importOriginal) => ({
 }));
 
 import { CustomRuleForm } from "../FilterPickerDialog";
+import { setTreeColumns } from "../../store/columnSettings";
 
 Element.prototype.scrollIntoView ??= () => {};
 
@@ -55,5 +56,24 @@ describe("Custom Rule expression Tab completion", () => {
     await user.keyboard("{Tab}");
     expect(field.value).toBe("gender == Person.");
     expect(await optionNames()).toHaveLength(4);
+  });
+
+  it("completes a column name in backticks", async () => {
+    setTreeColumns([{ id: "goql_gc", view: "person", expr: "len(children)", title: "Grandchildren", handle: "h1" }]);
+    const { field, user } = setup();
+    // "Gra" would also match the built-in Gramps ID column.
+    await user.type(field, "`Gran");
+    await user.keyboard("{Tab}");
+    expect(field.value).toBe("`Grandchildren`");
+    setTreeColumns([]);
+  });
+
+  it("offers column names where a field could go", async () => {
+    setTreeColumns([{ id: "goql_gc", view: "person", expr: "len(children)", title: "Grandchildren", handle: "h1" }]);
+    const { field, user } = setup();
+    await user.type(field, "gr");
+    await user.keyboard("{Tab}");
+    expect(await optionNames()).toEqual(expect.arrayContaining(["`Grandchildren`list column"]));
+    setTreeColumns([]);
   });
 });

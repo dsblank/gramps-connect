@@ -33,6 +33,7 @@ import {
 import { confirmDialog } from "../store/confirmDialog";
 import { getSearchHelp } from "../store/searchHelp";
 import { viewForNamespace } from "../store/views";
+import { ColumnRefError, columnRefsToIds, columnRefsToTitles, expandColumnRefs } from "../store/goqlColumnRefs";
 import { useViewStore } from "../hooks/useViewStore";
 import { getViewStore } from "../store/registry";
 import { t } from "../i18n/i18n";
@@ -723,6 +724,20 @@ function substituteParamsForValidation(expr: string, params: GqlFilterParam[]): 
   return out;
 }
 
+/** What a rule's text checks as: params filled with placeholders, then
+ * its column names (`Father`) swapped for their GOQL -- or the reason a
+ * name can't be used. */
+function expressionToCheck(
+  expr: string, params: GqlFilterParam[], viewKey: string,
+): { expr: string; error: string | null } {
+  try {
+    return { expr: expandColumnRefs(substituteParamsForValidation(expr, params), viewKey, { sharedOnly: true }), error: null };
+  } catch (err) {
+    if (err instanceof ColumnRefError) return { expr: "", error: err.message };
+    throw err;
+  }
+}
+
 /** Name + raw `where_expr` (+ optional named/typed parameters) form
  * shared by `ManageCustomRulesDialog`'s create ("+ New custom rule…") and
  * edit ("Edit" on an existing row) actions -- same fields either way,
@@ -770,7 +785,10 @@ export function CustomRuleForm({
   onNestedDialogChange?: (open: boolean) => void;
 }) {
   const [name, setName] = useState(initialName);
-  const [whereExpr, setWhereExpr] = useState(initialWhereExpr);
+  // Column names are stored as column ids and shown as titles.
+  const viewKey = viewForNamespace(namespace).key;
+  const [shownInitialExpr] = useState(() => columnRefsToTitles(initialWhereExpr, viewKey));
+  const [whereExpr, setWhereExpr] = useState(shownInitialExpr);
   const [params, setParams] = useState<GqlFilterParam[]>(initialParams);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -791,7 +809,7 @@ export function CustomRuleForm({
       setQueryError(null);
     },
     fieldRef: whereExprRef,
-    locate: (value) => ({ namespace, source: maskTemplateFields(value), offset: 0 }),
+    locate: (value) => ({ namespace, source: maskTemplateFields(value), offset: 0, viewKey, sharedColumnsOnly: true }),
   });
 
   // Trimmed, with a blank label falling back to the param's own name --
@@ -810,9 +828,11 @@ export function CustomRuleForm({
   const [checking, setChecking] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [checkedSubstituted, setCheckedSubstituted] = useState<string | null>(
-    () => substituteParamsForValidation(initialWhereExpr, initialParams).trim() || null,
+    () => expressionToCheck(shownInitialExpr, initialParams, viewKey).expr.trim() || null,
   );
-  const substitutedExpr = paramsValid ? substituteParamsForValidation(whereExpr, trimmedParams) : "";
+  const toCheck = paramsValid ? expressionToCheck(whereExpr, trimmedParams, viewKey) : { expr: "", error: null };
+  const columnError = toCheck.error;
+  const substitutedExpr = toCheck.expr;
   const [debouncedSubstituted] = useDebouncedValue(substitutedExpr, 400);
 
   useEffect(() => {
@@ -848,7 +868,7 @@ export function CustomRuleForm({
     setSaving(true);
     setError("");
     try {
-      await onSubmit(name.trim(), whereExpr.trim(), trimmedParams.length ? trimmedParams : undefined);
+      await onSubmit(name.trim(), columnRefsToIds(whereExpr.trim(), viewKey), trimmedParams.length ? trimmedParams : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSaving(false);
@@ -983,6 +1003,7 @@ export function CustomRuleForm({
       </Stack>
 
       {checking && <Text size="xs" c="dimmed">{t("Checking…")}</Text>}
+      {columnError && <Text size="xs" c="red">{columnError}</Text>}
       {queryError && <Text size="xs" c="red">{queryError}</Text>}
       {error && <Text size="xs" c="red">{error}</Text>}
       <Group gap="xs" justify="flex-end">
@@ -1093,7 +1114,9 @@ function ManageCustomRulesDialog({
             <Group key={rule.id} gap="xs" wrap="nowrap" align="flex-start">
               <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
                 <Text size="sm">{rule.name}</Text>
-                <Text size="xs" c="dimmed" ff="monospace" truncate>{rule.whereExpr}</Text>
+                <Text size="xs" c="dimmed" ff="monospace" truncate>
+                  {columnRefsToTitles(rule.whereExpr, viewForNamespace(rule.namespace).key)}
+                </Text>
                 {rule.params && rule.params.length > 0 && (
                   <Text size="xs" c="dimmed">
                     {t("Parameters")}: {rule.params.map((p) => p.label).join(", ")}

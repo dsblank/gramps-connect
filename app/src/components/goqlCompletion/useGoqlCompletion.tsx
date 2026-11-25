@@ -13,6 +13,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { Combobox, Group, ScrollArea, Text, useCombobox, type ComboboxStore } from "@mantine/core";
 import { commonPrefix, completeGoql, type Completion } from "../../store/goqlCompletion";
+import { maskColumnRefs, namedColumns, openColumnRefAt } from "../../store/goqlColumnRefs";
 import { t } from "../../i18n/i18n";
 
 /** Where a GOQL expression sits inside a field's text. */
@@ -29,6 +30,11 @@ export interface GoqlSpot {
    * string (a Gramplet's Python string), so a suggested string quote uses
    * the other one. */
   enclosingQuote?: string;
+  /** The list whose columns can be named in backticks (`Father`); none
+   * offered when absent. */
+  viewKey?: string;
+  /** Only columns shared with the tree (a Custom Rule). */
+  sharedColumnsOnly?: boolean;
 }
 
 /** Locate the GOQL expression containing `cursor` in `value`, or null when
@@ -102,12 +108,34 @@ export function useGoqlCompletion({
   function suggest(text: string, cursor: number): Completion[] | null {
     const spot = locate(text, cursor);
     if (!spot) return null;
-    return completeGoql(spot.namespace, spot.source, cursor - spot.offset, NO_ENV).map((c) => ({
+    const local = cursor - spot.offset;
+    const columns = spot.viewKey
+      ? namedColumns(spot.viewKey).filter((c) => !(spot.sharedColumnsOnly && c.browserOnly))
+      : [];
+    // Inside a backticked column name: only column titles.
+    const nameStart = spot.viewKey ? openColumnRefAt(spot.source, local) : null;
+    if (nameStart !== null) {
+      const typed = spot.source.slice(nameStart, local).trimStart().toLowerCase();
+      return columns
+        .filter((c) => c.title.toLowerCase().startsWith(typed))
+        .map((c) => ({ name: `${c.title}\``, kind: "list_column" as const, detail: c.expr, start: nameStart + spot.offset }));
+    }
+    const results = completeGoql(spot.namespace, spot.viewKey ? maskColumnRefs(spot.source) : spot.source, local, NO_ENV).map((c) => ({
       ...c,
       // A quote inside a Python "..." string would end it; use '...' there.
       name: c.name === spot.enclosingQuote ? (c.name === '"' ? "'" : '"') : c.name,
       start: c.start + spot.offset,
     }));
+    // Where a field name could go, the list's columns too, by title.
+    const word = /[A-Za-z0-9_]*$/.exec(spot.source.slice(0, local))?.[0] ?? "";
+    const atName = !/\.$/.test(spot.source.slice(0, local - word.length)) &&
+      results.some((r) => r.kind === "field" || r.kind === "column" || r.kind === "relationship" || r.kind === "collection");
+    if (!atName || columns.length === 0) return results;
+    const start = local - word.length + spot.offset;
+    const titled = columns
+      .filter((c) => c.title.toLowerCase().startsWith(word.toLowerCase()))
+      .map((c) => ({ name: `\`${c.title}\``, kind: "list_column" as const, detail: c.expr, start }));
+    return [...titled, ...results];
   }
 
   function close() {
@@ -208,6 +236,7 @@ export function useGoqlCompletion({
 function completionKindLabel(kind: Completion["kind"]): string {
   switch (kind) {
     case "column": return t("column");
+    case "list_column": return t("list column");
     case "keyword": return t("keyword");
     case "function": return t("function");
     case "operator": return t("operator");
@@ -229,6 +258,7 @@ function completionDetail(c: Completion): string {
   if (c.kind === "index") return t("first item");
   if (c.kind === "type_name") return String(c.detail);
   if (c.kind === "field") return Array.isArray(c.detail) ? c.detail.join(" | ") : (c.detail ?? "");
+  if (c.kind === "list_column") return t("list column");
   return completionKindLabel(c.kind);
 }
 

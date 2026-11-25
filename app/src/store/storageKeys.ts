@@ -52,6 +52,8 @@ const DEFS = {
   citationsSectionOpen: { key: `${P}citationsSectionOpen`, tag: "setting" },
   // localStorage, excluded
   visited: { key: `${P}visited`, tag: "excluded" },
+  // A copy of each tree's shared columns (columnSettings.ts), refetched.
+  treeColumns: { key: `${P}treeColumns`, tag: "excluded" },
   activity: { key: `${P}activity`, tag: "excluded" },
   grampletStoreNews: { key: `${P}grampletStoreNews:`, prefix: true, tag: "excluded" },
   // Unsaved Evidence Board work (loose ends and layout) per case: never part of

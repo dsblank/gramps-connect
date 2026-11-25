@@ -387,7 +387,7 @@ describe("sorting custom columns", () => {
     expect(locateSortKey(PERSON_VIEW, "birth.date.sortval")?.rest).toEqual(["sortval"]);
     // No hidden sort column (only birth's link-dependency ones).
     expect(PERSON_VIEW.columns.some((c) => c.key.startsWith("goql_b_") && !c.key.startsWith("goql_b_d"))).toBe(false);
-    expect(layoutChangesCache(PERSON_VIEW, layout(""), layout("Born"))).toBe(false);
+    expect(layoutChangesCache(PERSON_VIEW, layout("").custom, layout("Born").custom)).toBe(false);
     resetViews();
   });
 });
@@ -409,8 +409,8 @@ describe("a custom column's \"then by\"", () => {
     applyColumnSettings(PERSON_VIEW);
     expect(PERSON_VIEW.columns.some((c) => c.key === "goql_c_t")).toBe(false);
     expect(locateSortKey(PERSON_VIEW, "birth.date.sortval")?.cached.key).toBe("birth_date");
-    expect(layoutChangesCache(PERSON_VIEW, layout(), layout("birth.date"))).toBe(false);
-    expect(layoutChangesCache(PERSON_VIEW, layout(), layout("gramps_id"))).toBe(false);
+    expect(layoutChangesCache(PERSON_VIEW, layout().custom, layout("birth.date").custom)).toBe(false);
+    expect(layoutChangesCache(PERSON_VIEW, layout().custom, layout("gramps_id").custom)).toBe(false);
     resetViews();
   });
 
@@ -428,7 +428,7 @@ describe("a custom column's \"then by\"", () => {
     expect(PERSON_VIEW.dependsOn?.some((d) => d.via?.startsWith("goql_c_t_d"))).toBe(true);
     const custom = PERSON_VIEW.columns.find((c) => c.key === "goql_c")!;
     expect(columnSort(PERSON_VIEW, custom)?.keys.slice(0, 2)).toEqual(["len(citations)", "birth.place.title"]);
-    expect(layoutChangesCache(PERSON_VIEW, layout(), layout("birth.place.title"))).toBe(true);
+    expect(layoutChangesCache(PERSON_VIEW, layout().custom, layout("birth.place.title").custom)).toBe(true);
     resetViews();
   });
 
@@ -437,5 +437,61 @@ describe("a custom column's \"then by\"", () => {
     const { customColumnConfig } = await import("../columnSettings");
     const column = customColumnConfig({ id: "goql_c", expr: "len(citations)", thenBy: "birth.type" });
     expect(columnSort(PERSON_VIEW, column)?.keys).toEqual(["len(citations)", "surname", "given_name"]);
+  });
+});
+
+describe("tree columns", () => {
+  beforeEach(async () => {
+    const { setTreeColumns } = await import("../columnSettings");
+    treeId = "tree-a";
+    localStorage.clear();
+    setTreeColumns([]);
+    resetViews();
+  });
+
+  it("shows the tree columns a list includes, then this browser's own", async () => {
+    const { listCustomColumns, setTreeColumns } = await import("../columnSettings");
+    setTreeColumns([
+      { id: "goql_t1", view: "person", expr: "len(citations)", title: "Sources", handle: "h1" },
+      { id: "goql_t2", view: "person", expr: "birth.place.title", handle: "h2" },
+      { id: "goql_f1", view: "family", expr: "len(child_ref_list)", handle: "h3" },
+    ]);
+    setColumnLayout("person", {
+      shared: ["goql_t2", "goql_gone", "goql_f1"],
+      custom: [{ id: "goql_l", expr: "gramps_id" }],
+      order: [],
+      hidden: [],
+    });
+    // Deleted from the tree, or another list's: skipped.
+    expect(listCustomColumns("person").map((c) => c.id)).toEqual(["goql_t2", "goql_l"]);
+    applyColumnSettings(PERSON_VIEW);
+    expect(PERSON_VIEW.columns.some((c) => c.key === "goql_t2")).toBe(true);
+    expect(PERSON_VIEW.columns.some((c) => c.key === "goql_t1")).toBe(false);
+  });
+
+  it("follows an edit to a tree column", async () => {
+    const { setTreeColumns } = await import("../columnSettings");
+    setTreeColumns([{ id: "goql_t1", view: "person", expr: "len(citations)", handle: "h1" }]);
+    setColumnLayout("person", { shared: ["goql_t1"], custom: [], order: [], hidden: [] });
+    applyColumnSettings(PERSON_VIEW);
+    expect(setTreeColumns([{ id: "goql_t1", view: "person", expr: "len(notes)", handle: "h1" }])).toBe(true);
+    expect(applyColumnSettings(PERSON_VIEW)).toBe(true);
+    expect(PERSON_VIEW.columns.find((c) => c.key === "goql_t1")?.select).toEqual({ goql: "len(notes)" });
+    // The same columns again change nothing.
+    expect(setTreeColumns([{ id: "goql_t1", view: "person", expr: "len(notes)", handle: "h1" }])).toBe(false);
+  });
+
+  it("keeps each tree's columns apart, across reloads", async () => {
+    const { getTreeColumns, setTreeColumns } = await import("../columnSettings");
+    setTreeColumns([{ id: "goql_t1", view: "person", expr: "len(citations)", handle: "h1" }]);
+    treeId = "tree-b";
+    expect(getTreeColumns("person")).toEqual([]);
+    treeId = "tree-a";
+    expect(JSON.parse(localStorage.getItem("gramps-connect:treeColumns")!)["tree-a"]).toHaveLength(1);
+  });
+
+  it("knows which lists have applied their columns", async () => {
+    const { wasApplied } = await import("../columnSettings");
+    expect(wasApplied(PERSON_VIEW)).toBe(true); // resetViews() applied it
   });
 });

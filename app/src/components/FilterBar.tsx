@@ -11,6 +11,7 @@ import type { ViewConfig } from "../store/views";
 import { t } from "../i18n/i18n";
 import { logActivity } from "../store/activityLog";
 import { goqlNamespaceForEndpoint } from "../store/goqlCompletion";
+import { expandColumnRefs } from "../store/goqlColumnRefs";
 import { GoqlCompletionDropdown, useGoqlCompletion, COMPLETION_Z_INDEX } from "./goqlCompletion/useGoqlCompletion";
 
 interface FilterBarProps {
@@ -74,7 +75,7 @@ export function FilterBar({ view }: FilterBarProps) {
     setValue: handleTextChange,
     fieldRef: inputRef,
     locate: (value) =>
-      goqlActive && goqlNamespace ? { namespace: goqlNamespace, source: value, offset: 0 } : null,
+      goqlActive && goqlNamespace ? { namespace: goqlNamespace, source: value, offset: 0, viewKey: view.key } : null,
   });
 
   // The store's filter can also be cleared from outside this component --
@@ -172,8 +173,18 @@ export function FilterBar({ view }: FilterBarProps) {
   // Plain-text mode translates through simpleSearch.buildExpr (null for
   // too-short input clears the filter, same as an empty box); GOQL mode
   // sends the box's contents straight through as a where_expr.
+  // A column named in backticks (`Father`) is swapped for its GOQL here
+  // (goqlColumnRefs.ts); the box keeps what was typed.
   function submit() {
-    const whereExpr = view.simpleSearch && !useGoql ? view.simpleSearch.buildExpr(input) : input.trim() || null;
+    let whereExpr: string | null;
+    try {
+      whereExpr = view.simpleSearch && !useGoql
+        ? view.simpleSearch.buildExpr(input)
+        : expandColumnRefs(input.trim(), view.key) || null;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    }
     apply(whereExpr).then((ok) => {
       if (!ok) return;
       setDirty(false);

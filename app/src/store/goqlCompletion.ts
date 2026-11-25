@@ -74,6 +74,8 @@ export interface Vocabulary {
 }
 
 export type CompletionKind =
+  /** A list's column, named in backticks (goqlColumnRefs.ts). */
+  | "list_column"
   | "column"
   | "field"
   | "relationship"

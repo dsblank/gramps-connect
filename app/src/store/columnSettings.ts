@@ -1,7 +1,14 @@
 // Per-list column settings, chosen in the list's Columns dialog
 // (ColumnSettingsDialog.tsx): extra columns defined by a GOQL expression,
-// plus the order and visibility of every column. Per browser, per tree:
-// one localStorage blob keyed by tree id, then view key.
+// plus the order and visibility of every column.
+//
+// Custom columns are tree columns: shared with everyone on the tree, each
+// stored as a tagged Media object (treeColumnMedia.ts, which keeps the
+// synchronous copy here fresh). Which of them a list shows, the order and
+// what's hidden are per browser, per tree: one localStorage blob keyed by
+// tree id, then view key. A column made before columns were shared, or by
+// someone who can't add to the tree, stays in that blob (`custom`), in
+// this browser only.
 //
 // Custom columns are real cache columns: applyColumnSettings() appends them
 // to the view's own `columns`, so the local SQLite table, the /query/
@@ -41,7 +48,20 @@ export interface CustomColumn {
 
 export { SORT_ROW_LIMIT };
 
+/** A custom column shared with the whole tree (treeColumnMedia.ts). */
+export interface TreeColumn extends CustomColumn {
+  /** The list it belongs to (a view key, "person"). */
+  view: string;
+  /** The backing Media object's handle -- runtime only, never stored in
+   * the JSON itself. */
+  handle?: string;
+}
+
 export interface ColumnLayout {
+  /** Tree columns this list shows, by id. Ids of columns since deleted
+   * from the tree are skipped. */
+  shared?: string[];
+  /** Columns in this browser only. */
   custom: CustomColumn[];
   /** Column keys in display order. Keys not listed (a built-in column
    * added in a later version) go after the listed ones, in their own
@@ -101,7 +121,75 @@ function currentLayout(viewKey: string): ColumnLayout {
 }
 
 export function isDefaultLayout(layout: ColumnLayout): boolean {
-  return layout.custom.length === 0 && layout.order.length === 0 && layout.hidden.length === 0;
+  return (
+    (layout.shared ?? []).length === 0 && layout.custom.length === 0 && layout.order.length === 0 && layout.hidden.length === 0
+  );
+}
+
+// --- tree columns -----------------------------------------------------------
+//
+// The last fetched copy of each tree's columns, kept in localStorage so a
+// list's first load already has them (its cache is shaped by its columns);
+// treeColumnMedia.ts refreshes it in the background.
+
+const TREE_COLUMNS_KEY = STORAGE_KEYS.treeColumns;
+const treeColumnsByTree = new Map<string, TreeColumn[]>();
+
+function readTreeColumnsCache(): Record<string, TreeColumn[]> {
+  try {
+    const raw = localStorage.getItem(TREE_COLUMNS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, TreeColumn[]>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** This tree's columns, for one list when `viewKey` is given. */
+export function getTreeColumns(viewKey?: string): TreeColumn[] {
+  const tree = treeKey();
+  let columns = treeColumnsByTree.get(tree);
+  if (!columns) {
+    columns = readTreeColumnsCache()[tree] ?? [];
+    treeColumnsByTree.set(tree, columns);
+  }
+  return viewKey === undefined ? columns : columns.filter((c) => c.view === viewKey);
+}
+
+function definitionSignature(columns: TreeColumn[]): string {
+  return JSON.stringify(
+    columns.map((c) => [c.id, c.view, c.expr, c.title ?? "", c.thenBy ?? "", c.handle ?? ""]).sort(),
+  );
+}
+
+/** Replaces this tree's columns with a fresh fetch. True when anything
+ * changed. */
+export function setTreeColumns(columns: TreeColumn[]): boolean {
+  const tree = treeKey();
+  const changed = definitionSignature(getTreeColumns()) !== definitionSignature(columns);
+  treeColumnsByTree.set(tree, columns);
+  if (changed) {
+    try {
+      const all = readTreeColumnsCache();
+      all[tree] = columns;
+      localStorage.setItem(TREE_COLUMNS_KEY, JSON.stringify(all));
+    } catch {
+      // Storage blocked: fetched again next session.
+    }
+    bump();
+  }
+  return changed;
+}
+
+/** The custom columns `viewKey`'s list shows: its tree columns, then the
+ * ones in this browser only. */
+export function listCustomColumns(viewKey: string, layout: ColumnLayout = currentLayout(viewKey)): CustomColumn[] {
+  const byId = new Map(getTreeColumns(viewKey).map((c) => [c.id, c]));
+  const shared = (layout.shared ?? []).flatMap((id) => {
+    const column = byId.get(id);
+    return column ? [{ id: column.id, expr: column.expr, title: column.title, thenBy: column.thenBy }] : [];
+  });
+  const sharedIds = new Set(shared.map((c) => c.id));
+  return [...shared, ...layout.custom.filter((c) => !sharedIds.has(c.id))];
 }
 
 /** A fresh custom column key, unique enough to never meet another. */
@@ -441,14 +529,14 @@ export function customColumnConfig(column: CustomColumn): ColumnConfig {
   };
 }
 
-/** Whether going from layout `before` to `after` changes what `view`
- * caches (so saving refetches the list) -- for the dialog's warning. */
-export function layoutChangesCache(view: ViewConfig, before: ColumnLayout, after: ColumnLayout | null): boolean {
+/** Whether going from custom columns `before` to `after` changes what
+ * `view` caches (so saving refetches the list) -- for the dialog's
+ * warning. */
+export function layoutChangesCache(view: ViewConfig, before: CustomColumn[], after: CustomColumn[]): boolean {
   const namespace = goqlNamespaceForEndpoint(view.endpoint) ?? "";
-  const signature = (layout: ColumnLayout | null) =>
+  const signature = (custom: CustomColumn[]) =>
     columnSignature(
-      customColumnsFor(view, (layout?.custom ?? []).filter((c) => c.expr.trim() && !structuredValueError(namespace, c.expr)))
-        .columns,
+      customColumnsFor(view, custom.filter((c) => c.expr.trim() && !structuredValueError(namespace, c.expr))).columns,
     );
   return signature(before) !== signature(after);
 }
@@ -501,8 +589,9 @@ function columnSignature(columns: ColumnConfig[]): string {
  * list has to be refetched; a title change alone returns false. */
 export function applyColumnSettings(view: ViewConfig): boolean {
   const base = captureBuiltins(view);
+  applied.add(view);
   const namespace = goqlNamespaceForEndpoint(view.endpoint) ?? "";
-  const custom = currentLayout(view.key).custom.filter(
+  const custom = listCustomColumns(view.key).filter(
     (c) => c.expr.trim() && !brokenMessage(view.key, c.id) && !structuredValueError(namespace, c.expr),
   );
   const added = customColumnsFor(view, custom);
@@ -513,6 +602,14 @@ export function applyColumnSettings(view: ViewConfig): boolean {
   view.dependsOn = dependsOn.length > 0 ? dependsOn : undefined;
   bump();
   return changed;
+}
+
+const applied = new WeakSet<ViewConfig>();
+
+/** Whether `view` has had its columns applied (its list has loaded), so a
+ * change to the tree's columns has to be re-applied to it. */
+export function wasApplied(view: ViewConfig): boolean {
+  return applied.has(view);
 }
 
 /** The custom columns currently applied to `view`. */

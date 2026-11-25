@@ -54,6 +54,7 @@ export function GoqlSyntaxReference() {
             <SymbolRow symbol="regex(field, 'J|M')" meaning={t("A regular expression, if you already know them")} />
             <SymbolRow symbol="is None" meaning={t("Nothing recorded in that field at all")} />
             <SymbolRow symbol="Date('Jan 1, 1968')" meaning={t("A date to compare against, written the way you would say it")} />
+            <SymbolRow symbol="`Column name`" meaning={t("A column of the list, by its title: stands for the GOQL that column shows")} />
           </Table.Tbody>
         </Table>
       </Section>
