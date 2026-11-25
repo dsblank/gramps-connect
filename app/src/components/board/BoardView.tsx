@@ -35,6 +35,7 @@ import { findCaseTopic, startCaseTopic } from "../../store/board/caseTopic";
 import { ImageLightbox } from "../related/ImageLightbox";
 import { MediaRegionDialog } from "../related/MediaRegionDialog";
 import { subjectsFromBacklinks, subjectsOnBoard, type PhotoSubject } from "../../store/board/faces";
+import { buildFace, faceWhoLabel, type FaceWho } from "../../store/markFace";
 import { hasPermissions } from "../../auth/auth";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
 import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
@@ -98,7 +99,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   /** Records looked at but not pinned up (a card's leads), for their names. */
   const [peek, setPeek] = useState<Records>({});
   /** The photo shown full screen, if any. */
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ media: string; mark?: boolean } | null>(null);
   /** Who the tree has in the selected photo (null while loading); the
    * sidebar shows it with the board's unsaved changes laid over. */
   const [inPhoto, setInPhoto] = useState<{ media: string; subjects: PhotoSubject[] | null } | null>(null);
@@ -315,6 +316,22 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     const loaded = await loadIntoBase([{ cls: "Person", handle: person }]);
     if (!loaded[person]) return;
     stage(`${t("Not in the photo")}: ${titleOf(person, loaded)}, ${photoTitle(media)}`, (b) => removeMediaRef(b, person, media), false, loaded);
+  }
+
+  /** A box drawn in the full-size view and named: an existing person
+   * (loaded first, if need be) or a new one, who gets a card by the photo. */
+  async function addFace(media: string, rect: number[], who: FaceWho) {
+    const loaded = "handle" in who ? await loadIntoBase([{ cls: "Person", handle: who.handle }]) : {};
+    if ("handle" in who && !loaded[who.handle]) return;
+    let person = "";
+    const label = "handle" in who ? titleOf(who.handle, loaded) : faceWhoLabel(who);
+    const change = stage(`${t("Face")}: ${label}, ${photoTitle(media)}`, (b) => {
+      person = buildFace(b, media, rect, who);
+    }, false, loaded);
+    if (change && opened && change.creates.includes(person)) {
+      const near = positions[media] ?? positions[selectedHandle ?? ""];
+      pinMadeAlongTheWay([person], [near ? { x: near.x + 220, y: near.y } : canvas.current?.center() ?? { x: 0, y: 0 }], applyChanges(opened.base, [...changes, change]));
+    }
   }
 
   function mainPhoto(person: string, media: string) {
@@ -556,12 +573,14 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   // to it has a region (usually people's faces).
   const selectedHandle = selection?.kind === "card" ? selection.id : null;
   const selectedIsPhoto = !!selectedHandle && working[selectedHandle]?._class === "Media" && !!opened?.base[selectedHandle];
+  // The photo shown full size, else the selected photo card.
+  const photoInView = lightbox?.media ?? (selectedIsPhoto ? selectedHandle : null);
   useEffect(() => {
-    if (!selectedHandle || !selectedIsPhoto) {
+    if (!photoInView) {
       setInPhoto(null);
       return;
     }
-    const media = selectedHandle;
+    const media = photoInView;
     setInPhoto({ media, subjects: null });
     const controller = new AbortController();
     (async () => {
@@ -573,7 +592,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       }
     })();
     return () => controller.abort();
-  }, [selectedHandle, selectedIsPhoto]);
+  }, [photoInView]);
 
   // The case's discussion, once it's saved.
   const noteHandle = opened?.note?.handle ?? null;
@@ -871,7 +890,8 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             size={selectedCard.size}
             isDraft={!opened.base[selectedCard.handle]}
             readOnly={!canSave}
-            onViewPhoto={selectedPhoto ? () => setLightbox(selectedPhoto.media) : undefined}
+            onViewPhoto={selectedPhoto ? () => setLightbox({ media: selectedPhoto.media }) : undefined}
+            onMarkSomeone={selectedPhoto && canSave ? () => setLightbox({ media: selectedPhoto.media, mark: true }) : undefined}
             inPhoto={inPhoto && inPhoto.media === selectedCard.handle
               ? inPhoto.subjects && subjectsOnBoard(inPhoto.subjects, working, inPhoto.media)
               : undefined}
@@ -933,10 +953,22 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       {lightbox && (
         <ImageLightbox
           opened
-          handle={lightbox}
+          handle={lightbox.media}
+          startMarking={lightbox.mark}
           onClose={() => setLightbox(null)}
           regionAction="Pin"
-          onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox, true)}
+          onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox.media, true)}
+          faces={canSave ? {
+            // The board's own list, so faces marked here but not saved show too.
+            regions: inPhoto?.media === lightbox.media && inPhoto.subjects
+              ? subjectsOnBoard(inPhoto.subjects, working, lightbox.media)
+                  .filter((p) => p.rect)
+                  .map((p) => ({ type: p.cls.toLowerCase(), handle: p.handle, label: p.label, rect: p.rect! }))
+              : undefined,
+            known: Object.values(working).filter((x) => x._class === "Person" && onBoard.has(x.handle)).map((x) => ({ value: x.handle, label: titleOf(x.handle, working) })),
+            saveIcon: <TreeMark />,
+            onAdd: (rect, who) => addFace(lightbox.media, rect, who),
+          } : undefined}
         />
       )}
       {faceEdit && (

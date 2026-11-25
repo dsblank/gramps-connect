@@ -190,70 +190,6 @@ function FaceThumb({ url, size = 32 }: { url: string | null; size?: number }) {
   );
 }
 
-/** Find a person in the tree (for "Add someone who's in it"). */
-function PersonSearch({ placeholder, exclude, all, onPick }: { placeholder: string; exclude: Set<string>; all: Records; onPick: (handle: string) => void }) {
-  const [query, setQuery] = useState("");
-  const [found, setFound] = useState<{ value: string; label: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setFound([]);
-      return;
-    }
-    const ctrl = new AbortController();
-    setLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const { hits } = await fetchSearch(await getToken(), q, 1, 10, "person", ctrl.signal);
-        setFound(hits.map((h) => ({ value: h.handle, label: summaryLine(h.object_type, h.object) })));
-      } catch {
-        /* aborted or failed: keep the last results */
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      ctrl.abort();
-    };
-  }, [query]);
-  const lower = query.trim().toLowerCase();
-  const seen = new Set<string>(exclude);
-  const data: { value: string; label: string }[] = [];
-  for (const r of Object.values(all)) {
-    if (r._class !== "Person" || seen.has(r.handle)) continue;
-    const label = titleOf(r.handle, all);
-    if (lower.length >= 2 && label.toLowerCase().includes(lower)) {
-      seen.add(r.handle);
-      data.push({ value: r.handle, label });
-    }
-  }
-  for (const o of found) if (!seen.has(o.value)) {
-    seen.add(o.value);
-    data.push(o);
-  }
-  return (
-    <Select
-      size="xs"
-      placeholder={placeholder}
-      searchable
-      value={null}
-      data={data}
-      searchValue={query}
-      onSearchChange={setQuery}
-      filter={({ options }) => options}
-      nothingFoundMessage={lower.length < 2 ? t("Type a name") : loading ? t("Searching…") : t("No one found")}
-      rightSection={loading ? <Loader size="xs" /> : undefined}
-      onChange={(v) => {
-        if (!v) return;
-        setQuery("");
-        onPick(v);
-      }}
-    />
-  );
-}
-
 /** Text in the toolbar that turns into a field when clicked (the case's
  * name and question). Enter or leaving it keeps the edit, Escape doesn't. */
 export function InlineText({ value, placeholder, onCommit, readOnly, strong }: { value: string; placeholder: string; onCommit: (v: string) => void; readOnly?: boolean; strong?: boolean }) {
@@ -354,6 +290,8 @@ export function CardPanel(props: {
   readOnly?: boolean;
   /** Shows the card's photo full screen, when it has one. */
   onViewPhoto?: () => void;
+  /** Opens it full screen ready to draw a box around someone (editors). */
+  onMarkSomeone?: () => void;
   /** For a photo: who's in it (null while loading). */
   inPhoto?: PhotoSubject[] | null;
   /** A crop of photo `media` to `rect`, or null without a region. */
@@ -372,7 +310,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, onMarkSomeone, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -514,15 +452,8 @@ export function CardPanel(props: {
               </Group>
             ))}
           </Stack>
-          {inPhoto && !readOnly && (
-            <Box mt={6}>
-              <PersonSearch
-                placeholder={t("Add someone who's in it…")}
-                exclude={new Set(inPhoto.map((p) => p.handle))}
-                all={all}
-                onPick={(person) => onFace(person, handle)}
-              />
-            </Box>
+          {inPhoto && onMarkSomeone && (
+            <Button size="xs" variant="light" mt={6} onClick={onMarkSomeone}>{t("Mark someone in the photo…")}</Button>
           )}
           {inPhoto && inPhoto.filter((p) => !onBoard.has(p.handle)).length > 1 && (
             <Button size="xs" variant="light" mt={6} onClick={() => onPinUpMany(inPhoto.filter((p) => !onBoard.has(p.handle)))}>{t("Pin everyone")}</Button>
@@ -608,7 +539,7 @@ function PersonPhoto({ person, all, readOnly, faceUrl, onFace, onNotInPhoto, onM
       <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Photo")}</Text>
       {!main ? (
         <Text size="xs" c="dimmed">
-          {readOnly ? t("No photo yet.") : t("No photo yet. To add one, select a photo's card and use “Add someone who's in it”.")}
+          {readOnly ? t("No photo yet.") : t("No photo yet. To add one, open a photo full size and draw a box around their face.")}
         </Text>
       ) : (
         <Group gap="sm" wrap="nowrap" align="flex-start" mt={4}>

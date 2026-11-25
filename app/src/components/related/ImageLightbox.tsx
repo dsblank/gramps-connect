@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { ActionIcon, Box, Loader, Modal, Tooltip } from "@mantine/core";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { ActionIcon, Anchor, Box, Group, Loader, Modal, Text, Tooltip } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { canChangeData } from "../../pyodidePoc/grampletCommit";
+import { faceWhoLabel, markFaceNow, undoMarkFace, type FaceWho } from "../../store/markFace";
+import { clampPct } from "../../store/mediaCrop";
+import { FaceWhoPicker } from "./FaceWhoPicker";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import type { ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 import { FullscreenDownloadButton } from "./FullscreenDownloadButton";
@@ -20,6 +25,23 @@ const BUTTON_FACTOR = 1.5;
 /** Class on the region boxes, excluded from the library's panning so a
  * click on one always lands as a click. */
 const REGION_CLASS = "lightbox-region";
+/** A drawn box smaller than this (percent of the photo, either way) was a
+ * click, not a box. */
+const MIN_BOX_PCT = 2;
+
+/** Marking someone in the photo: what to do with a box once it's named.
+ * Without this, the lightbox writes it to the tree at once (with an Undo
+ * notice) when the user may change data. */
+export interface LightboxFaces {
+  /** The regions to draw instead of fetching them (the Evidence Board's,
+   * with its unsaved faces). */
+  regions?: Region[];
+  /** People to offer first in "Who is this?". */
+  known?: { value: string; label: string }[];
+  onAdd: (rect: number[], who: FaceWho) => void | Promise<void>;
+  /** Shown on the confirming buttons (the board's tree mark). */
+  saveIcon?: ReactNode;
+}
 
 /** The raw stored file, not a thumbnail -- same /file endpoint
  * MapItemEditorDialog.tsx uses for map overlays. One image at a time (this
@@ -91,7 +113,7 @@ export function extractRegions(detail: { extended?: Record<string, unknown> } | 
  * once the image loads late). The region overlays are positioned by percent
  * inside that same box, so they ride along on the one transform with no
  * measuring. */
-export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction }: {
+export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction, faces, startMarking }: {
   opened: boolean;
   onClose: () => void;
   handle: string;
@@ -100,9 +122,23 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
   onRegion?: (region: Region) => void;
   /** Tooltip words for that click, e.g. "Pin up". */
   regionAction?: string;
+  faces?: LightboxFaces;
+  /** Open with "Mark someone" already on. */
+  startMarking?: boolean;
 }) {
   const [src, setSrc] = useState<string | null>(null);
-  const [regions, setRegions] = useState<Region[]>([]);
+  const [fetchedRegions, setRegions] = useState<Region[]>([]);
+  const regions = faces?.regions ?? fetchedRegions;
+  /** Bumped after a face is written here, to fetch the regions again. */
+  const [reload, setReload] = useState(0);
+  const canMark = !!faces || canChangeData();
+  /** "Mark someone" is on: dragging draws a box instead of panning. */
+  const [marking, setMarking] = useState(false);
+  /** The box being drawn or named, in percent of the photo. */
+  const [box, setBox] = useState<number[] | null>(null);
+  const drawFrom = useRef<{ x: number; y: number } | null>(null);
+  /** Where "Who is this?" opens (frame coordinates), once a box is drawn. */
+  const [askAt, setAskAt] = useState<{ left: number; top: number } | null>(null);
   const [scale, setScale] = useState(1);
   const zoomRef = useRef<ReactZoomPanPinchContentRef>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -146,8 +182,9 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
   // every other object that also references this same photo). Best-effort:
   // a failure here still lets the photo itself display, it just draws no
   // regions.
+  const regionsGiven = !!faces?.regions;
   useEffect(() => {
-    if (!opened) return;
+    if (!opened || regionsGiven) return;
     let cancelled = false;
     const controller = new AbortController();
     (async () => {
@@ -162,8 +199,13 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
     return () => {
       cancelled = true;
       controller.abort();
-      setRegions([]);
     };
+  }, [opened, handle, regionsGiven, reload]);
+  useEffect(() => {
+    setRegions([]);
+    setMarking(!!startMarking && opened);
+    setBox(null);
+    setAskAt(null);
   }, [opened, handle]);
 
   // Buttons and keys zoom toward the screen's center, multiplicatively.
@@ -182,6 +224,8 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
     if (!opened) return;
     function handleKey(e: KeyboardEvent) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       const z = zoomRef.current;
       if (!z) return;
       if (e.key === "+" || e.key === "=") zoomCentered(BUTTON_FACTOR);
@@ -198,6 +242,94 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
     return () => window.removeEventListener("keydown", handleKey);
   }, [opened]);
 
+  // Escape steps back out of marking (the box first) before it closes.
+  function onEscape() {
+    if (askAt || box) {
+      setBox(null);
+      setAskAt(null);
+    } else if (marking) setMarking(false);
+    else onClose();
+  }
+
+  function pct(e: ReactPointerEvent): { x: number; y: number } {
+    const b = imgBoxRef.current?.getBoundingClientRect();
+    if (!b) return { x: 0, y: 0 };
+    return { x: clampPct(((e.clientX - b.left) / b.width) * 100), y: clampPct(((e.clientY - b.top) / b.height) * 100) };
+  }
+  function drawStart(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!marking || askAt) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const p = pct(e);
+    drawFrom.current = p;
+    setBox([p.x, p.y, p.x, p.y]);
+  }
+  function drawMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const from = drawFrom.current;
+    if (!from) return;
+    const p = pct(e);
+    setBox([Math.min(from.x, p.x), Math.min(from.y, p.y), Math.max(from.x, p.x), Math.max(from.y, p.y)]);
+  }
+  function drawEnd() {
+    if (!drawFrom.current) return;
+    drawFrom.current = null;
+    if (!box || box[2] - box[0] < MIN_BOX_PCT || box[3] - box[1] < MIN_BOX_PCT) {
+      setBox(null);
+      return;
+    }
+    const img = imgBoxRef.current?.getBoundingClientRect();
+    const frame = frameRef.current?.getBoundingClientRect();
+    if (!img || !frame) return;
+    const left = img.left + (box[0] / 100) * img.width - frame.left;
+    const bottom = img.top + (box[3] / 100) * img.height - frame.top;
+    setAskAt({
+      left: Math.max(8, Math.min(left, frame.width - 310)),
+      top: Math.max(64, Math.min(bottom + 8, frame.height - 260)),
+    });
+  }
+
+  async function name(who: FaceWho) {
+    const rect = box;
+    if (!rect) return;
+    setBox(null);
+    setAskAt(null);
+    if (faces) {
+      await faces.onAdd(rect, who);
+      return;
+    }
+    try {
+      const saved = await markFaceNow(handle, rect, who);
+      setReload((n) => n + 1);
+      if (!saved) return;
+      notifications.show({
+        color: "green",
+        autoClose: 12000,
+        message: (
+          <Group gap="xs">
+            <Text size="sm">{t("Marked")}: {faceWhoLabel(who)}</Text>
+            <Anchor
+              component="button"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await undoMarkFace(saved);
+                  setReload((n) => n + 1);
+                  notifications.show({ color: "blue", message: t("Undone. The tree is back to how it was.") });
+                } catch (err) {
+                  notifications.show({ color: "red", message: err instanceof Error ? err.message : String(err) });
+                }
+              }}
+            >
+              {t("Undo")}
+            </Anchor>
+          </Group>
+        ),
+      });
+    } catch (err) {
+      notifications.show({ color: "red", title: t("Not saved"), message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   function goToRegion(r: Region) {
     if (onRegion) onRegion(r);
     else window.location.hash = formatHash({ viewKey: r.type, handle: r.handle });
@@ -207,7 +339,7 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
   return (
     <Modal
       opened={opened}
-      onClose={onClose}
+      onClose={onEscape}
       fullScreen
       withCloseButton={false}
       styles={{ body: { height: "100vh", padding: 0, background: "#000" }, content: { background: "#000" } }}
@@ -225,7 +357,9 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
           // or on a corner button, doesn't.
           const start = pressAt.current;
           if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return;
-          if ((e.target as HTMLElement).closest("button")) return;
+          if ((e.target as HTMLElement).closest("button, [data-lightbox-keep]")) return;
+          // While marking, a stray click never throws the work away.
+          if (marking) return;
           const box = imgBoxRef.current?.getBoundingClientRect();
           if (box && e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) return;
           onClose();
@@ -242,7 +376,7 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
             maxScale={MAX_SCALE}
             centerOnInit
             centerZoomedOut
-            panning={{ excluded: [REGION_CLASS] }}
+            panning={{ disabled: marking, excluded: [REGION_CLASS] }}
             doubleClick={{ disabled: true }}
             onTransform={(_ref, state) => setScale(state.scale)}
           >
@@ -256,10 +390,15 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
                   // clicked spot (the library's own "toggle" mode only
                   // steps out, it doesn't snap back to fitted).
                   onDoubleClick={(e) => {
+                    if (marking) return;
                     if (controls.state.scale > 1) controls.resetTransform(200);
                     else controls.zoomToPoint(DOUBLE_CLICK_SCALE, e.clientX, e.clientY, 200);
                   }}
-                  style={{ position: "relative", lineHeight: 0, cursor: scale > 1 ? "grab" : "default" }}
+                  onPointerDown={drawStart}
+                  onPointerMove={drawMove}
+                  onPointerUp={drawEnd}
+                  onPointerCancel={drawEnd}
+                  style={{ position: "relative", lineHeight: 0, cursor: marking ? "crosshair" : scale > 1 ? "grab" : "default", touchAction: marking ? "none" : undefined }}
                 >
                   <img
                     src={src}
@@ -291,6 +430,8 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
                         border: "2px solid rgba(255, 255, 255, 0.85)",
                         boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.6)",
                         cursor: "pointer",
+                        // While marking, boxes can be drawn over them.
+                        pointerEvents: marking ? "none" : undefined,
                       }}
                     >
                       <span
@@ -306,6 +447,17 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
                       </span>
                     </div>
                   ))}
+                  {box && (
+                    <div
+                      style={{
+                        position: "absolute", pointerEvents: "none",
+                        left: `${box[0]}%`, top: `${box[1]}%`,
+                        width: `${box[2] - box[0]}%`, height: `${box[3] - box[1]}%`,
+                        border: "2px solid var(--mantine-color-yellow-4)",
+                        boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.35)",
+                      }}
+                    />
+                  )}
                 </div>
               </TransformComponent>
             )}
@@ -331,6 +483,50 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction 
             </ActionIcon>
           </Tooltip>
         ))}
+        {canMark && (
+          <Tooltip label={marking ? t("Stop marking") : t("Mark someone in this photo")} withArrow position="bottom">
+            <ActionIcon
+              variant="filled" color={marking ? "yellow" : "dark"} size={36} radius="xl"
+              onClick={() => {
+                setMarking((m) => !m);
+                setBox(null);
+                setAskAt(null);
+              }}
+              disabled={!src}
+              aria-label={t("Mark someone in this photo")}
+              aria-pressed={marking}
+              style={{ position: "absolute", top: 16, right: 192, zIndex: 3 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
+                <circle cx="12" cy="10" r="2.5" />
+                <path d="M8 16.5c.8-1.6 2.3-2.5 4-2.5s3.2.9 4 2.5" />
+              </svg>
+            </ActionIcon>
+          </Tooltip>
+        )}
+        {marking && !askAt && (
+          <Text
+            size="sm"
+            style={{ position: "absolute", top: 22, left: "50%", transform: "translateX(-50%)", zIndex: 3, color: "#fff", background: "rgba(0, 0, 0, 0.65)", padding: "4px 10px", borderRadius: 4, pointerEvents: "none" }}
+          >
+            {t("Drag a box around someone's face. Esc to stop.")}
+          </Text>
+        )}
+        {askAt && (
+          <Box style={{ position: "absolute", left: askAt.left, top: askAt.top, zIndex: 4 }} data-lightbox-keep>
+            <FaceWhoPicker
+              known={faces?.known}
+              exclude={new Set(regions.map((r) => r.handle))}
+              saveIcon={faces?.saveIcon}
+              onPick={(who) => void name(who)}
+              onCancel={() => {
+                setBox(null);
+                setAskAt(null);
+              }}
+            />
+          </Box>
+        )}
         <FullscreenDownloadButton handle={handle} blobUrl={src} />
         <ActionIcon
           variant="filled" color="dark" size={36} radius="xl" onClick={onClose} aria-label={t("Close")}

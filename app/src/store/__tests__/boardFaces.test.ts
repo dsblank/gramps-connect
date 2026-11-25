@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { photosOf, subjectsFromBacklinks, subjectsOnBoard, type PhotoSubject } from "../board/faces";
 import { makeMainPhoto, removeMediaRef, setMediaRegion } from "../board/links";
+import { buildFace } from "../markFace";
 import { blank, type GrampsRecord, type Records } from "../board/records";
 
 const person = (handle: string, first: string, media_list: unknown[] = []) =>
@@ -78,5 +79,20 @@ describe("photosOf and makeMainPhoto", () => {
     records = act(records, (b) => makeMainPhoto(b, "anna", "M2"));
     expect((records.anna.media_list as { ref: string }[]).map((m) => m.ref)).toEqual(["M2", "DOC", "M1"]);
     expect(photosOf("anna", records)[0].media).toBe("M2");
+  });
+});
+
+describe("buildFace", () => {
+  it("adds an existing person to the photo with their face", () => {
+    let records: Records = { anna: person("anna", "Anna") };
+    records = act(records, (b) => buildFace(b, "M1", [10, 10, 30, 40], { handle: "anna", label: "Anna Miller" }));
+    expect(records.anna.media_list).toEqual([expect.objectContaining({ ref: "M1", rect: [10, 10, 30, 40] })]);
+  });
+
+  it("creates a new person, in the photo, in the same change", () => {
+    const b = new ChangeBuilder({});
+    const made = buildFace(b, "M1", [1, 2, 20, 25], { first: "Edith", surname: "Hall" });
+    const after = applyChanges({}, [b.change("x")]);
+    expect(subjectsOnBoard([], after, "M1")).toEqual([{ cls: "Person", handle: made, label: "Edith Hall", rect: [1, 2, 20, 25] }]);
   });
 });
