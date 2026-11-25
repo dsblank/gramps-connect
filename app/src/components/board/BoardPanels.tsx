@@ -41,7 +41,7 @@ const NEW_PLACE = "\u0000new";
 /** An event's place: one already known to the board, or one found in the
  * tree as you type, or a new one by that name. Picking only sets the event's
  * place; the place card can be pinned up from the card's leads. */
-function EventPlacePicker({ value, all, readOnly, onPick, onNew }: {
+export function EventPlacePicker({ value, all, readOnly, onPick, onNew }: {
   value: string | null;
   all: Records;
   readOnly?: boolean;
@@ -160,7 +160,7 @@ export function MenuChoice({ children, onClick, changesTree }: { children: React
 }
 
 /** One panel of the sidebar beside the board. */
-function PanelFrame({ eyebrow, title, sub, onClose, children }: { eyebrow: string; title: string; sub?: string; onClose?: () => void; children: ReactNode }) {
+export function PanelFrame({ eyebrow, title, sub, onClose, children }: { eyebrow: string; title: string; sub?: string; onClose?: () => void; children: ReactNode }) {
   return (
     <Box style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <Group justify="space-between" align="flex-start" wrap="nowrap" p="sm" pb={0}>

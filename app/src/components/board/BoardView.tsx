@@ -5,7 +5,7 @@
 // Save, which writes the tree changes and the case file as one transaction
 // (store/board/save.ts), with an Undo. Unsaved work is kept in this browser
 // between visits (store/board/caseDraft.ts).
-import { Alert, Anchor, Badge, Box, Button, Divider, Group, Loader, Modal, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
+import { Alert, Anchor, Badge, Box, Button, Checkbox, Divider, Group, Paper, Title, Loader, Modal, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
 import { parseCoords } from "../../store/visualData";
 import { placeMapSnapshot } from "./placeMapSnapshot";
 import { notifications } from "@mantine/notifications";
@@ -38,7 +38,12 @@ import { subjectsFromBacklinks, subjectsOnBoard, type PhotoSubject } from "../..
 import { buildFace, faceWhoLabel, type FaceWho } from "../../store/markFace";
 import { hasPermissions } from "../../auth/auth";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
-import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, RelationPanel, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
+import { LeadGuide, NEW_LEAD, type LeadActions, type LeadState } from "./LeadGuide";
+import { addLeadEvent, addLeadPerson, addLeadRepository, addLeadSource, citeExistingEvent, setLeadRole } from "../../store/board/lead";
+import { uploadMediaFiles } from "../../store/addMedia";
+import { deleteObject } from "../../store/objectsApi";
+import { getHomePersonHandle, setHomePersonHandle } from "../../store/homePersonPreference";
+import { AddMenu, CardPanel, PanelFrame, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, RelationPanel, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
 import { pathCards } from "../../store/board/relationPath";
 import type { PathStep } from "../../store/relationshipPath";
 import { cleanUp } from "./cleanUp";
@@ -80,6 +85,31 @@ const VIEW_CLASS: Record<string, GrampsClass> = {
   person: "Person", family: "Family", event: "Event", place: "Place", source: "Source",
   citation: "Citation", repository: "Repository", media: "Media", note: "Note",
 };
+
+/** One way to start, on the empty board's card. */
+function EmptyChoice({ title, text, onClick }: { title: string; text: string; onClick: () => void }) {
+  return (
+    <Button variant="default" onClick={onClick} h="auto" py={8} justify="flex-start" styles={{ label: { whiteSpace: "normal", textAlign: "left", display: "block" } }}>
+      <Text fw={600} size="sm">{title}</Text>
+      <Text size="xs" c="dimmed" fw={400}>{text}</Text>
+    </Button>
+  );
+}
+
+/** Deletes files the guide uploaded for a case that's being discarded. */
+async function deleteUploaded(handles: string[]) {
+  const token = await getToken();
+  let failed = 0;
+  for (const h of handles) {
+    try {
+      await deleteObject(token, MEDIA_VIEW, h);
+    } catch {
+      failed++;
+    }
+  }
+  getViewStore(MEDIA_VIEW.key).requeryDebounced();
+  if (failed) notifications.show({ color: "red", message: t("{n} uploaded files couldn't be deleted. They're still in Media.").replace("{n}", String(failed)) });
+}
 
 const NEXT_SIZE: Record<CardSize, CardSize> = { compact: "expanded", expanded: "icon", icon: "compact" };
 
@@ -133,6 +163,13 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const [sidebarW, setSidebarW] = useState(readSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const sidebarDrag = useRef<{ x: number; w: number } | null>(null);
+  /** "Got a lead?" in progress, if any. */
+  const [lead, setLead] = useState<LeadState | null>(null);
+  const [home, setHome] = useState<string | null>(() => getHomePersonHandle());
+  /** Files uploaded for this case in this session (the guide's scans):
+   * already in the tree, so Discard offers to delete them. */
+  const uploaded = useRef<string[]>([]);
+  const [deleteUploads, setDeleteUploads] = useState(true);
   /** Bumped by Save and Undo, so relationship searches run on the new tree. */
   const [treeRevision, setTreeRevision] = useState(0);
   /** Who the tree has in the selected photo (null while loading); the
@@ -308,11 +345,11 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   /** Makes sure the board has `items` loaded (so it can change them or pin
    * them up): the ones it doesn't have yet are fetched and added to the
    * records it loaded. Resolves to all of them that exist. */
-  async function loadIntoBase(items: { cls: GrampsClass; handle: string }[]): Promise<Records> {
+  async function loadIntoBase(items: { cls: GrampsClass; handle: string }[], fetched: Records = {}): Promise<Records> {
     const loaded: Records = {};
     const missing: typeof items = [];
     for (const i of items) {
-      const known = working[i.handle] ?? peek[i.handle];
+      const known = working[i.handle] ?? peek[i.handle] ?? fetched[i.handle];
       if (known) loaded[i.handle] = known;
       else missing.push(i);
     }
@@ -401,6 +438,126 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     }
     addCards(fresh.map(({ c, at }) => cardFor(c.handle, c.cls, at, records)));
   }
+
+  // --- "Got a lead?" ---------------------------------------------------------------
+  /** Pins records a guide step made or used, around card `anchor` (or the
+   * middle of the screen), at the given offsets. */
+  function pinAround(change: Change | null, spots: [string | null | undefined, number, number][], anchor: string | null, justLoaded: Records = {}) {
+    if (!opened) return;
+    const records = applyChanges({ ...justLoaded, ...opened.base }, change ? [...changes, change] : changes);
+    const a = (anchor && positions[anchor]) || canvas.current?.center() || { x: 0, y: 0 };
+    addCards(spots.filter(([h]) => h && records[h]).map(([h, dx, dy]) => cardFor(h!, records[h!]._class, { x: a.x + dx, y: a.y + dy }, records)));
+  }
+  const leadDoc = () => ({ media: lead?.media ?? null, citation: lead?.citation ?? null });
+  const leadAnchor = () => lead?.citation ?? lead?.media ?? lead?.source ?? null;
+
+  const leadActions: LeadActions = {
+    async onFile(f) {
+      const [media] = await uploadMediaFiles([f]);
+      if (!media) return;
+      uploaded.current.push(media);
+      getViewStore(MEDIA_VIEW.key).requeryDebounced();
+      notifications.show({ color: "green", message: t("Added to the tree's Media: {name}").replace("{name}", f.name) });
+      const loaded = await loadIntoBase([{ cls: "Media", handle: media }]);
+      pinAround(null, [[media, -240, -120]], null, loaded);
+      setLead((l) => l && { ...l, media, step: "what" });
+    },
+    onWhat(title) {
+      let made = { source: "", citation: "" };
+      const change = stage(`${t("New source")}: ${title}`, (b) => {
+        made = addLeadSource(b, title, lead?.media ?? null);
+      });
+      if (!change) return;
+      pinAround(change, [[made.source, 260, 0], [made.citation, 260, 240]], lead?.media ?? null);
+      setLead((l) => l && { ...l, title, source: made.source, citation: made.citation, step: "where" });
+    },
+    async onWhere(repo) {
+      const source = lead?.source;
+      if (!source) return setLead((l) => l && { ...l, step: "who" });
+      const loaded = "handle" in repo ? await loadIntoBase([{ cls: "Repository", handle: repo.handle }]) : {};
+      let made = "";
+      const change = stage(`${t("Kept at")}: ${"handle" in repo ? titleOf(repo.handle, loaded) : repo.name}`, (b) => {
+        made = addLeadRepository(b, source, repo);
+      }, false, loaded);
+      pinAround(change, [[made, 520, 0]], source, loaded);
+      setLead((l) => l && { ...l, step: "who" });
+    },
+    async onPerson(who) {
+      const loaded = "handle" in who ? await loadIntoBase([{ cls: "Person", handle: who.handle }]) : {};
+      if ("handle" in who && !loaded[who.handle]) return;
+      let person = "";
+      const name = "handle" in who ? titleOf(who.handle, loaded) : [who.first, who.surname].filter(Boolean).join(" ");
+      const change = stage(`${t("In")} “${lead?.title || t("the document")}”: ${name}`, (b) => {
+        person = addLeadPerson(b, leadDoc(), who);
+      }, false, loaded);
+      if (!person && "handle" in who) person = who.handle;
+      if (!person) return;
+      const n = lead?.people.length ?? 0;
+      pinAround(change, [[person, -260 + 220 * (n % 3), 260 + 220 * Math.floor(n / 3)]], leadAnchor(), loaded);
+      const isNew = !("handle" in who);
+      setLead((l) => l && { ...l, people: [...l.people, person], newPeople: isNew ? [...l.newPeople, person] : l.newPeople });
+    },
+    async onRelate(person, choice, label, recs) {
+      if (choice) {
+        // Tying someone in needs their relatives' records (and families) on the board.
+        const items = Object.values(recs).filter((r) => (r._class === "Person" || r._class === "Family") && !working[r.handle]).map((r) => ({ cls: r._class, handle: r.handle }));
+        const loaded = items.length ? await loadIntoBase(items, recs) : {};
+        const change = stage(`${titleOf(person, working)}: ${label}`, choice.build, false, loaded);
+        if (change && opened) pinMadeAlongTheWay(change.creates, [positions[person] ?? canvas.current?.center() ?? { x: 0, y: 0 }], applyChanges({ ...loaded, ...opened.base }, [...changes, change]));
+      }
+      setLead((l) => l && { ...l, rels: { ...l.rels, [person]: label } });
+    },
+    async onEvent({ occasion, who1, who2, existing, date, place, otherName, records: recs }) {
+      const wedding = occasion.type === "MARRIAGE";
+      const need: { cls: GrampsClass; handle: string }[] = [];
+      for (const h of [who1, wedding ? who2 : null]) {
+        if (!h) continue;
+        need.push({ cls: "Person", handle: h });
+        for (const f of Array.isArray(recs[h]?.family_list) ? (recs[h].family_list as string[]) : []) need.push({ cls: "Family", handle: f });
+      }
+      if (existing) {
+        need.push({ cls: "Event", handle: existing.event });
+        if (existing.family) need.push({ cls: "Family", handle: existing.family });
+      }
+      if (place && "handle" in place) need.push({ cls: "Place", handle: place.handle });
+      const loaded = await loadIntoBase(need, recs);
+      const eventPeople = wedding ? [who1, who2].filter((h): h is string => !!h) : who1 ? [who1] : [];
+      const whoNames = eventPeople.map((h) => titleOf(h, { ...loaded, ...working })).join(" & ");
+      let event = "";
+      let spots: [string | undefined, number, number][] = [];
+      let change;
+      if (existing) {
+        event = existing.event;
+        change = stage(`${t("Evidence for")}: ${titleOf(event, loaded)}`, (b) => citeExistingEvent(b, event, leadDoc()), false, loaded);
+        spots = [[event, 260, 30], [existing.family, 260, -220]];
+      } else {
+        let made: { event: string; family?: string; place?: string } = { event: "" };
+        change = stage(`${t("New")} ${t(occasion.label).toLowerCase()}${whoNames ? `: ${whoNames}` : ""}`, (b) => {
+          made = addLeadEvent(b, leadDoc(), occasion, { who1, who2: wedding ? who2 : null, date, place, otherName });
+        }, false, loaded);
+        event = made.event;
+        spots = [[made.event, 260, 30], [made.place, 520, 30], [made.family, 260, -220]];
+      }
+      if (!event) return;
+      pinAround(change ?? null, spots, leadAnchor(), loaded);
+      const others = (lead?.people ?? []).filter((h) => !eventPeople.includes(h));
+      setLead((l) => l && { ...l, event, eventPeople, step: others.length ? "roles" : "done" });
+    },
+    onRole(person, role) {
+      const event = lead?.event;
+      if (!event) return;
+      stage(`${titleOf(person, working)} ${t("was")} ${t(role.phrase)}: ${titleOf(event, { ...peek, ...working })}`, (b) => setLeadRole(b, person, event, role, !!lead?.roles[person]));
+      setLead((l) => l && { ...l, roles: { ...l.roles, [person]: role.label } });
+    },
+    onHome(h) {
+      setHomePersonHandle(h);
+      setHome(h);
+    },
+    onSave: () => setSaveOpen(true),
+    onStep: (step) => setLead((l) => l && { ...l, step }),
+    onAnother: () => setLead({ ...NEW_LEAD }),
+    onClose: () => setLead(null),
+  };
 
   function mainPhoto(person: string, media: string) {
     stage(`${t("Photo on the card")}: ${titleOf(person, working)} → ${photoTitle(media)}`, (b) => makeMainPhoto(b, person, media));
@@ -703,6 +860,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     if (opened && how === "discard") {
       discarded.current = true;
       clearDraft(opened.caseKey);
+      if (deleteUploads && uploaded.current.length) void deleteUploaded(uploaded.current.splice(0));
     }
     setCloseAsk(false);
     window.location.hash = formatHash({ viewKey: CASE_FILE_VIEW.key, handle: opened?.note?.handle });
@@ -752,6 +910,8 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       const rest = changes.filter((c) => c.off).map((c) => ({ ...c, off: false }));
       if (noteHandle && rest.length) writeDraft(noteHandle, { ...draftOf(opened, { ...content, cards: [...content.cards, ...file.cards.filter((c) => unticked.has(c.handle))] }, rest), noteChange: AFTER_OWN_SAVE });
       setTreeRevision((n) => n + 1);
+      // Saved records may use the files uploaded so far: Discard no longer offers to delete them.
+      uploaded.current = [];
       if (saved) {
         notifications.show({
           color: "green",
@@ -887,6 +1047,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         <InlineText strong value={file.name} placeholder="Name this case" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, name: v })} />
         <InlineText value={file.question} placeholder="What are you trying to find out?" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, question: v })} />
         <Box style={{ flex: 1 }} />
+        {canSave && <Button size="xs" variant="default" onClick={() => setLead({ ...NEW_LEAD })}>{t("Got a lead?")}</Button>}
         <Button size="xs" variant="default" onClick={() => setAdding(true)}>{canSave ? t("Add…") : t("Pin…")}</Button>
         <Tooltip label={t("Straighten the cards and move them closer together")} openDelay={400}>
           <Button size="xs" variant="default" onClick={tidy} disabled={cards.length < 2}>{t("Clean up")}</Button>
@@ -942,11 +1103,20 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           }}
           canvasRef={(c) => (canvas.current = c)}
         />
-        {!cards.length && (
-          <Stack align="center" justify="center" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-            <Text style={{ pointerEvents: "auto", background: "var(--mantine-color-body)", padding: "8px 14px", borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,.3)" }}>
-              {t("An empty board. Pin the people and records you're investigating with “Add…”.")}
-            </Text>
+        {!cards.length && !lead && (
+          <Stack align="center" justify="center" p="md" style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+            <Paper shadow="lg" p="lg" maw={470} style={{ pointerEvents: "auto", transform: "rotate(-0.8deg)" }}>
+              <Title order={3} mb={6}>{t("An empty board")}</Title>
+              <Text size="sm" c="dimmed" mb="md">
+                {canSave
+                  ? t("Pin the people and records you're investigating, tie them together with yarn, and save when the case holds up. Nothing goes into the tree until then.")
+                  : t("Pin the people and records you're investigating and arrange them. Your board is kept in this browser.")}
+              </Text>
+              <Stack gap="xs">
+                <EmptyChoice title={t("Find someone in the tree")} text={t("Pin the people, events and sources you're working on.")} onClick={() => setAdding(true)} />
+                {canSave && <EmptyChoice title={t("Got a lead?")} text={t("A photo or a certificate. A few questions turn it into records that cite it.")} onClick={() => setLead({ ...NEW_LEAD })} />}
+              </Stack>
+            </Paper>
           </Stack>
         )}
         {menuEl}
@@ -985,7 +1155,11 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             background: sidebarResizing ? "var(--mantine-color-blue-4)" : "transparent",
           }}
         />
-        {selectedCard ? (
+        {lead ? (
+          <PanelFrame eyebrow={t("Got a lead?")} title={lead.title || t("A new lead")} onClose={() => setLead(null)}>
+            <LeadGuide lead={lead} records={{ ...peek, ...working }} home={home} actions={leadActions} />
+          </PanelFrame>
+        ) : selectedCard ? (
           <CardPanel key={selectedCard.handle}
             handle={selectedCard.handle}
             records={working}
@@ -1125,6 +1299,14 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
                 : t("This case hasn't been saved yet.")}
           </Text>
           <Text size="xs" c="dimmed">{t("Discarding them can't be undone. Keeping them leaves them in this browser for next time.")}</Text>
+          {uploaded.current.length > 0 && (
+            <Checkbox
+              size="xs"
+              checked={deleteUploads}
+              onChange={(e) => setDeleteUploads(e.currentTarget.checked)}
+              label={uploaded.current.length === 1 ? t("When discarding, also delete the file uploaded for this case") : t("When discarding, also delete the {n} files uploaded for this case").replace("{n}", String(uploaded.current.length))}
+            />
+          )}
           <Group justify="flex-end" gap="xs">
             <Button variant="subtle" color="red" onClick={() => close("discard")}>{t("Discard changes")}</Button>
             <Button variant="default" onClick={() => close("keep")}>{t("Keep for later")}</Button>
