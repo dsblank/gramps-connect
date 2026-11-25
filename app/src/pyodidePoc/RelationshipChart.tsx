@@ -13,7 +13,7 @@
 // lines are SVG, drawn underneath.
 import { Group, Pagination, Paper, Text, UnstyledButton, useComputedColorScheme } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { getToken } from "../auth/auth";
 import { GENDER_LABEL, genderAccent } from "../charts/genderColors";
 import { t } from "../i18n/i18n";
@@ -25,11 +25,13 @@ import { displayName, PERSON_VIEW } from "../store/views";
 import { ObjectMenu, type PersonMenuOptions } from "./ObjectCellButton";
 
 const CARD_W = 188;
-const CARD_H = 76; // room for a name on two lines
+/** The least a card is tall: room for a name on two lines. A card is
+ * taller where the text is bigger (a larger browser font size or minimum
+ * font size) -- see useCardHeight(). */
+const CARD_H = 76;
 const ROW_GAP = 34; // between one generation's cards and the next
 const LEG_GAP = 24; // between the two legs' cards
 const PAD = 8;
-const ROW_H = CARD_H + ROW_GAP;
 
 export interface PersonInfo {
   name: string;
@@ -188,11 +190,12 @@ interface Slot {
  * genealogist's "inverted V", and a chain through marriages is several of
  * them side by side. If anything would overlap (a chain that doubles back
  * on itself), every person gets a column of their own instead. */
-export function layoutRelationshipChart(path: RelationshipPath, startLabel: string): Layout {
-  return layout(path, startLabel, false) ?? layout(path, startLabel, true)!;
+export function layoutRelationshipChart(path: RelationshipPath, startLabel: string, cardH = CARD_H): Layout {
+  return layout(path, startLabel, false, cardH) ?? layout(path, startLabel, true, cardH)!;
 }
 
-function layout(path: RelationshipPath, startLabel: string, staircase: boolean): Layout | null {
+function layout(path: RelationshipPath, startLabel: string, staircase: boolean, cardH: number): Layout | null {
+  const rowH = cardH + ROW_GAP;
   const steps = path.steps;
   const last = steps.length - 1;
   const turn = (i: number) => !staircase && isTurn(steps, i);
@@ -248,9 +251,9 @@ function layout(path: RelationshipPath, startLabel: string, staircase: boolean):
   const maxRow = Math.max(...slots.map((s) => s.row));
   const X = (v: number) => PAD + (v - minV) * COL_W;
   const cx = (v: number) => X(v) + CARD_W / 2;
-  const top = (row: number) => PAD + (row - minRow) * ROW_H;
-  const bottom = (row: number) => top(row) + CARD_H;
-  const mid = (row: number) => top(row) + CARD_H / 2;
+  const top = (row: number) => PAD + (row - minRow) * rowH;
+  const bottom = (row: number) => top(row) + cardH;
+  const mid = (row: number) => top(row) + cardH / 2;
 
   const lines: Point[][] = [];
   const rings: Point[] = [];
@@ -317,18 +320,70 @@ function layout(path: RelationshipPath, startLabel: string, staircase: boolean):
     lines,
     rings,
     width: Math.max(...cards.map((c) => c.x)) + CARD_W + PAD,
-    height: top(maxRow) + CARD_H + PAD,
+    height: top(maxRow) + cardH + PAD,
   };
+}
+
+/** What's inside a card. Nothing in it may shrink: in a card too short for
+ * it, the clipped name and label would lose their bottoms (descenders, a
+ * name's second line) instead of the card growing. */
+function CardText({ name, years, label, accent }: { name: string; years: string; label: string; accent: string | null | undefined }) {
+  return (
+    <>
+      <div style={{ width: 4, margin: "6px 0", borderRadius: 2, background: accent ?? "transparent", flex: "none" }} />
+      <div style={{ padding: "4px 8px 4px 10px", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <Text size="sm" fw={600} lineClamp={2} lh={1.25} style={{ flex: "none" }}>
+          {name}
+        </Text>
+        <Text size="xs" c="dimmed" lh={1.4} style={{ flex: "none" }}>
+          {years}
+        </Text>
+        <Text size="xs" fs="italic" truncate lh={1.4} style={{ flex: "none", color: "var(--mantine-primary-color-light-color)" }}>
+          {label}
+        </Text>
+      </div>
+    </>
+  );
+}
+
+/** How tall a card has to be for a two-line name, a line of years and a
+ * label, measured from a hidden sample card: the text's size is the
+ * browser's (its font size, minimum font size and fonts), not ours. */
+function useCardHeight(): [number, ReactNode] {
+  const probe = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(CARD_H);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const h = probe.current?.offsetHeight;
+      if (h) setHeight(Math.max(CARD_H, Math.ceil(h)));
+    };
+    measure();
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+    };
+  }, []);
+  const sample = (
+    <div ref={probe} aria-hidden style={{ position: "absolute", visibility: "hidden", pointerEvents: "none", width: CARD_W, left: 0, top: 0 }}>
+      <Paper withBorder radius="md" style={{ display: "flex", borderWidth: 2 }}>
+        <CardText name={"Wg ".repeat(40)} years="1900–1999" label="gy" accent={undefined} />
+      </Paper>
+    </div>
+  );
+  return [height, sample];
 }
 
 function PersonCard({
   card,
+  cardH,
   info,
   dark,
   interactive,
   menu,
 }: {
   card: PlacedCard;
+  cardH: number;
   info: PersonInfo | undefined;
   dark: boolean;
   interactive: boolean;
@@ -342,7 +397,7 @@ function PersonCard({
   const body = (
     <UnstyledButton
       title={tooltip}
-      style={{ position: "absolute", left: card.x, top: card.y, width: CARD_W, height: CARD_H }}
+      style={{ position: "absolute", left: card.x, top: card.y, width: CARD_W, height: cardH }}
     >
       <Paper
         withBorder
@@ -356,18 +411,7 @@ function PersonCard({
           borderWidth: card.kind === "end" ? 2 : undefined,
         }}
       >
-        <div style={{ width: 4, margin: "6px 0", borderRadius: 2, background: accent ?? "transparent", flex: "none" }} />
-        <div style={{ padding: "4px 8px 4px 10px", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <Text size="sm" fw={600} lineClamp={2} lh={1.25}>
-            {name}
-          </Text>
-          <Text size="xs" c="dimmed" lh={1.4}>
-            {years}
-          </Text>
-          <Text size="xs" fs="italic" truncate lh={1.4} style={{ color: "var(--mantine-primary-color-light-color)" }}>
-            {card.label}
-          </Text>
-        </div>
+        <CardText name={name} years={years} label={card.label} accent={accent} />
       </Paper>
     </UnstyledButton>
   );
@@ -401,7 +445,8 @@ export function RelationshipChart({
   const dark = useComputedColorScheme("light") === "dark";
   const [index, setIndex] = useState(0);
   const path = paths[Math.min(index, paths.length - 1)];
-  const layout = layoutRelationshipChart(path, startLabel ?? t("Home person"));
+  const [cardH, sample] = useCardHeight();
+  const layout = layoutRelationshipChart(path, startLabel ?? t("Home person"), cardH);
   const people = usePeople(layout.cards.map((c) => c.node.handle));
   const end = path.steps[path.steps.length - 1];
   return (
@@ -414,7 +459,8 @@ export function RelationshipChart({
           </Text>
         </Group>
       )}
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto", position: "relative" }}>
+        {sample}
         {/* data-export-root: what the Graphs view's "Export image" copies
             (RelationshipGraph.tsx). */}
         <div data-export-root="" style={{ position: "relative", width: layout.width, height: layout.height }}>
@@ -441,6 +487,7 @@ export function RelationshipChart({
             <PersonCard
               key={`${card.node.handle}-${i}`}
               card={card}
+              cardH={cardH}
               info={people.get(card.node.handle)}
               dark={dark}
               interactive={interactive}
