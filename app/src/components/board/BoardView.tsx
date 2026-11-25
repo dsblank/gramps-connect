@@ -5,7 +5,7 @@
 // Save, which writes the tree changes and the case file as one transaction
 // (store/board/save.ts), with an Undo. Unsaved work is kept in this browser
 // between visits (store/board/caseDraft.ts).
-import { Alert, Anchor, Badge, Box, Button, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentUsername, getToken } from "../../auth/auth";
@@ -24,13 +24,25 @@ import { saveBoard, undoSave } from "../../store/board/save";
 import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
 import { mediaThumbnailUrl } from "../../store/mediaCrop";
 import { TransactionConflictError } from "../../store/transactionsApi";
-import { CASE_FILE_VIEW } from "../../store/views";
+import { CASE_FILE_VIEW, MEDIA_VIEW } from "../../store/views";
+import { getViewStore } from "../../store/registry";
+import { fetchObjectExtended } from "../../store/objectDetail";
+import { openTopicWindow } from "../../store/topicWindows";
+import { findCaseTopic, startCaseTopic } from "../../store/board/caseTopic";
+import { extractRegions, ImageLightbox, type Region } from "../related/ImageLightbox";
+import { hasPermissions } from "../../auth/auth";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
 import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
 import { cleanUp } from "./cleanUp";
 import { downloadCase } from "../../store/board/caseExport";
 import { corkboardSkin } from "./corkboard/corkboardSkin";
 import type { CardView } from "./skin";
+
+/** A view key (as region and search results name types) to its class. */
+const VIEW_CLASS: Record<string, GrampsClass> = {
+  person: "Person", family: "Family", event: "Event", place: "Place", source: "Source",
+  citation: "Citation", repository: "Repository", media: "Media", note: "Note",
+};
 
 const NEXT_SIZE: Record<CardSize, CardSize> = { compact: "expanded", expanded: "icon", icon: "compact" };
 
@@ -65,7 +77,6 @@ type Menu =
   | { kind: "connect"; from: string; to: string; screen: Point }
   | { kind: "new"; from: string; at: Point; screen: Point; cls?: GrampsClass }
   | null;
-type Panel = "card" | "yarn" | "notes" | null;
 
 export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSaved: (noteHandle: string) => void }) {
   const [opened, setOpened] = useState<OpenedCase | null>(null);
@@ -73,13 +84,18 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const [file, setFile] = useState<CaseFile | null>(null);
   const [changes, setChanges] = useState<Change[]>([]);
   const [selection, setSelection] = useState<BoardSelection>(null);
-  const [panel, setPanel] = useState<Panel>(null);
   const [menu, setMenu] = useState<Menu>(null);
   const [adding, setAdding] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   /** Records looked at but not pinned up (a card's leads), for their names. */
   const [peek, setPeek] = useState<Records>({});
+  /** The photo shown full screen, if any. */
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  /** Who's marked in the selected photo (null while loading). */
+  const [inPhoto, setInPhoto] = useState<{ media: string; regions: Region[] | null } | null>(null);
+  /** The case's discussion: its topic handle, "none" yet, or not known yet. */
+  const [topic, setTopic] = useState<string | "none" | null>(null);
   const canvas = useRef<BoardCanvasHandle | null>(null);
   const token = useToken();
   const canSave = canChangeData();
@@ -206,7 +222,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     });
     if (select) {
       setSelection({ kind: "card", id: select });
-      setPanel("card");
     }
     setTimeout(() => canvas.current?.reveal(newCards.map((c) => c.handle)), 120);
   }, []);
@@ -216,22 +231,38 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     seenChange: (records[handle]?.change as number) ?? 0, x: at.x, y: at.y, size: "compact",
   });
 
-  async function pinUp(cls: GrampsClass, handle: string, near?: string) {
+  /** Pins up records (loading the ones not loaded yet), near card `near`
+   * or the middle of the screen. One record is selected after; several are
+   * shown together. */
+  async function pinUpMany(items: { cls: GrampsClass; handle: string }[], near?: string) {
     if (!opened || !file) return;
-    if (file.cards.some((c) => c.handle === handle)) {
-      setSelection({ kind: "card", id: handle });
-      canvas.current?.reveal([handle]);
+    const fresh = items.filter((i) => !file.cards.some((c) => c.handle === i.handle));
+    if (!fresh.length) {
+      if (items.length === 1) setSelection({ kind: "card", id: items[0].handle });
+      canvas.current?.reveal(items.map((i) => i.handle));
       return;
     }
-    const loaded = working[handle] ? { [handle]: working[handle] } : peek[handle] ? { [handle]: peek[handle] } : await loadRecords(cls, [handle]);
-    if (!loaded[handle]) {
-      notifications.show({ color: "red", message: t("That record isn't in the tree any more, or you can't see it.") });
-      return;
+    const loaded: Records = {};
+    const missing: typeof fresh = [];
+    for (const i of fresh) {
+      const known = working[i.handle] ?? peek[i.handle];
+      if (known) loaded[i.handle] = known;
+      else missing.push(i);
     }
-    if (!opened.base[handle] && !working[handle]) setOpened({ ...opened, base: { ...opened.base, ...loaded } });
-    const p = near && positions[near] ? { x: positions[near].x + 260, y: positions[near].y + 240 } : canvas.current?.center() ?? { x: 0, y: 0 };
-    addCards([cardFor(handle, cls, p, { ...working, ...loaded })], handle);
+    for (const cls of GRAMPS_CLASSES) {
+      const hs = missing.filter((i) => i.cls === cls).map((i) => i.handle);
+      if (hs.length) Object.assign(loaded, await loadRecords(cls, hs));
+    }
+    const found = fresh.filter((i) => loaded[i.handle]);
+    if (found.length < fresh.length) notifications.show({ color: "red", message: t("That record isn't in the tree any more, or you can't see it.") });
+    if (!found.length) return;
+    const newToBase = Object.fromEntries(found.filter((i) => !working[i.handle]).map((i) => [i.handle, loaded[i.handle]]));
+    if (Object.keys(newToBase).length) setOpened((o) => o && { ...o, base: { ...o.base, ...newToBase } });
+    const p = near && positions[near] ? { x: positions[near].x + 260, y: positions[near].y } : canvas.current?.center() ?? { x: 0, y: 0 };
+    const records = { ...working, ...loaded };
+    addCards(found.map((i) => cardFor(i.handle, i.cls, p, records)), found.length === 1 ? found[0].handle : undefined);
   }
+  const pinUp = (cls: GrampsClass, handle: string, near?: string) => pinUpMany([{ cls, handle }], near);
 
   function createNew(b: ChangeBuilder, cls: GrampsClass): string {
     switch (cls) {
@@ -362,7 +393,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   function takeOff(handle: string) {
     setFile((f) => f && { ...f, cards: f.cards.filter((c) => c.handle !== handle) });
     setSelection(null);
-    setPanel(null);
     notifications.show({ message: t("Taken off the board. Nothing in the tree changed.") });
   }
 
@@ -374,7 +404,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     }
     setFile((f) => f && { ...f, cards: f.cards.filter((c) => c.handle !== handle) });
     setSelection(null);
-    setPanel(null);
   }
 
   function snipYarn(y: Yarn) {
@@ -398,7 +427,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       if (!deriveYarn(applyChanges(opened.base, without), onBoard).some((x) => x.id === y.id)) {
         takeBackChange(changes[i].id);
         setSelection(null);
-        setPanel(null);
         return;
       }
     }
@@ -423,6 +451,69 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     };
   }, [selection, working, peek]);
 
+  // Who's marked in the selected photo, from every record whose reference
+  // to it has a region (usually people's faces).
+  const selectedHandle = selection?.kind === "card" ? selection.id : null;
+  const selectedIsPhoto = !!selectedHandle && working[selectedHandle]?._class === "Media" && !!opened?.base[selectedHandle];
+  useEffect(() => {
+    if (!selectedHandle || !selectedIsPhoto) {
+      setInPhoto(null);
+      return;
+    }
+    const media = selectedHandle;
+    setInPhoto({ media, regions: null });
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const detail = await fetchObjectExtended(await getToken(), MEDIA_VIEW, media, controller.signal);
+        setInPhoto({ media, regions: extractRegions(detail, media) });
+      } catch {
+        if (!controller.signal.aborted) setInPhoto({ media, regions: [] });
+      }
+    })();
+    return () => controller.abort();
+  }, [selectedHandle, selectedIsPhoto]);
+
+  // The case's discussion, once it's saved.
+  const noteHandle = opened?.note?.handle ?? null;
+  useEffect(() => {
+    setTopic(null);
+    if (!noteHandle) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const found = await findCaseTopic(await getToken(), noteHandle);
+        if (!cancelled) setTopic(found ?? "none");
+      } catch {
+        if (!cancelled) setTopic("none");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [noteHandle]);
+
+  async function discuss() {
+    if (!noteHandle || !file) return;
+    try {
+      let handle = topic && topic !== "none" ? topic : null;
+      if (!handle) {
+        handle = await startCaseTopic(await getToken(), noteHandle, file.name, file.question);
+        setTopic(handle);
+      }
+      openTopicWindow(handle);
+    } catch (err) {
+      notifications.show({ color: "red", message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  /** Back to the Case Files list, on this case. Unsaved work stays in this
+   * browser for next time. */
+  function close() {
+    if (opened && file && dirty) writeDraft(opened.caseKey, draftOf(opened, file, changes));
+    window.location.hash = formatHash({ viewKey: CASE_FILE_VIEW.key, handle: opened?.note?.handle });
+  }
+
   // Ctrl/Cmd+Z takes back the last loose end; Escape closes menus.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -436,7 +527,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       if (e.key === "Escape") {
         setMenu(null);
         setSelection(null);
-        setPanel(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -460,6 +550,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       const saved = await saveBoard(opened.base, changes, `Evidence Board: ${file.name}`, { caseFile: { note: opened.note, content } });
       clearDraft(opened.caseKey);
       setSaveOpen(false);
+      // The Case Files list shows the case's name and card count from the
+      // case file: bring it up to date now rather than on the next poll.
+      getViewStore(CASE_FILE_VIEW.key).requeryDebounced();
       const noteHandle = saved?.caseNote?.handle ?? opened.note?.handle;
       // Unticked loose ends stay for later: kept as the new case's draft.
       const rest = changes.filter((c) => c.off).map((c) => ({ ...c, off: false }));
@@ -533,7 +626,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   ].filter(Boolean);
   const selectedYarn = selection?.kind === "yarn" ? [...yarn, ...cutYarn].find((y) => y.id === selection.id) : undefined;
   const selectedCard = selection?.kind === "card" ? file.cards.find((c) => c.handle === selection.id) : undefined;
-  const notesCount = looseEnds + questions.length;
+  const selectedPhoto = selectedCard ? photoOf(selectedCard.handle) : null;
 
   let menuEl = null;
   if (menu?.kind === "connect" && working[menu.from] && working[menu.to]) {
@@ -587,6 +680,11 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   return (
     <Box style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
       <Group gap="xs" px="sm" py={6} wrap="wrap" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
+        <Tooltip label={t("Close the board, back to Case Files")}>
+          <ActionIcon variant="subtle" color="gray" onClick={close} aria-label={t("Close the board, back to Case Files")}>
+            <Text fw={700} size="lg" lh={1}>←</Text>
+          </ActionIcon>
+        </Tooltip>
         <InlineText strong value={file.name} placeholder="Name this case" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, name: v })} />
         <InlineText value={file.question} placeholder="What are you trying to find out?" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, question: v })} />
         <Box style={{ flex: 1 }} />
@@ -595,9 +693,11 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           <Button size="xs" variant="default" onClick={tidy} disabled={cards.length < 2}>{t("Clean up")}</Button>
         </Tooltip>
         <Button size="xs" variant="default" onClick={() => canvas.current?.fit()}>{t("Fit")}</Button>
-        <Button size="xs" variant={panel === "notes" ? "filled" : "default"} onClick={() => setPanel(panel === "notes" ? null : "notes")}>
-          {t("Case notes")}{notesCount ? ` · ${notesCount}` : ""}
-        </Button>
+        {canSave && (
+          <Text size="xs" c="dimmed">
+            {looseEnds ? (looseEnds === 1 ? t("1 loose end not saved") : t("{n} loose ends not saved").replace("{n}", String(looseEnds))) : dirty ? t("Not saved yet") : t("Everything saved")}
+          </Text>
+        )}
         {canSave ? (
           <Button size="xs" onClick={() => setSaveOpen(true)} disabled={!dirty}>{t("Save")}</Button>
         ) : (
@@ -616,7 +716,8 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           )}
         </Alert>
       )}
-      <Box style={{ flex: 1, minHeight: 0, position: "relative", overflow: "hidden" }}>
+      <Box style={{ flex: 1, minHeight: 0, display: "flex" }}>
+      <Box style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
         <BoardCanvas
           skin={corkboardSkin}
           cards={cards}
@@ -629,7 +730,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           onSelect={(s) => {
             setSelection(s);
             setMenu(null);
-            setPanel(s ? (s.kind === "card" ? "card" : "yarn") : panel === "notes" ? "notes" : null);
           }}
           onMove={(h, to) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, x: to.x, y: to.y } : c)) })}
           onCycleSize={(h) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === h ? { ...c, size: NEXT_SIZE[c.size] } : c)) })}
@@ -647,8 +747,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           </Stack>
         )}
         {menuEl}
-        {panel === "card" && selectedCard && (
-          <CardPanel
+      </Box>
+      <Box w={340} style={{ flexShrink: 0, borderLeft: "1px solid var(--mantine-color-default-border)", background: "var(--mantine-color-body)", minHeight: 0 }}>
+        {selectedCard ? (
+          <CardPanel key={selectedCard.handle}
             handle={selectedCard.handle}
             records={working}
             peek={peek}
@@ -656,6 +758,16 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             size={selectedCard.size}
             isDraft={!opened.base[selectedCard.handle]}
             readOnly={!canSave}
+            onViewPhoto={selectedPhoto ? () => setLightbox(selectedPhoto.media) : undefined}
+            inPhoto={inPhoto && inPhoto.media === selectedCard.handle
+              ? inPhoto.regions && inPhoto.regions.map((r) => ({
+                  cls: VIEW_CLASS[r.type] ?? "Person",
+                  handle: r.handle,
+                  label: r.label,
+                  faceUrl: token ? mediaThumbnailUrl(selectedCard.handle, 96, token, { rect: r.rect }) : null,
+                }))
+              : undefined}
+            onPinUpMany={(items) => void pinUpMany(items, selectedCard.handle)}
             onSize={(size) => setFile((f) => f && { ...f, cards: f.cards.map((c) => (c.handle === selectedCard.handle ? { ...c, size } : c)) })}
             onEdit={(edit) => editCard(selectedCard.handle, edit)}
             onPinUp={(cls, h) => void pinUp(cls, h, selectedCard.handle)}
@@ -665,13 +777,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             }}
             onTakeOff={() => takeOff(selectedCard.handle)}
             onDiscard={() => discardDraft(selectedCard.handle)}
-            onClose={() => {
-              setPanel(null);
-              setSelection(null);
-            }}
+            onClose={() => setSelection(null)}
           />
-        )}
-        {panel === "yarn" && selectedYarn && (
+        ) : selectedYarn ? (
           <YarnPanel
             yarn={selectedYarn}
             records={working}
@@ -680,13 +788,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             onSnip={() => snipYarn(selectedYarn)}
             onRetie={() => retie(selectedYarn)}
             onPullOut={() => pullOut(selectedYarn)}
-            onClose={() => {
-              setPanel(null);
-              setSelection(null);
-            }}
+            onClose={() => setSelection(null)}
           />
-        )}
-        {panel === "notes" && (
+        ) : (
           <CaseNotesPanel
             file={file}
             changes={changes}
@@ -708,10 +812,21 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             }}
             onSave={() => setSaveOpen(true)}
             onDownload={() => downloadCase(file, opened.base, changes.map((c) => c.label))}
-            onClose={() => setPanel(null)}
+            discussion={!opened.note ? "unsaved" : topic === null ? "loading" : topic !== "none" ? "open" : hasPermissions("AddObject") ? "none" : "cantStart"}
+            onDiscuss={() => void discuss()}
           />
         )}
       </Box>
+      </Box>
+      {lightbox && (
+        <ImageLightbox
+          opened
+          handle={lightbox}
+          onClose={() => setLightbox(null)}
+          regionAction="Pin up"
+          onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox)}
+        />
+      )}
       <AddMenu
         opened={adding}
         onClose={() => setAdding(false)}

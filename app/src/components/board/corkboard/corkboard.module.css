@@ -35,6 +35,8 @@
   --y-evidence: #2e7d3b;
   --y-other: #3a332d;
   --y-fiber: rgba(255, 255, 255, 0.38);
+  --vignette: rgba(70, 40, 15, 0.38);
+  --lamp: rgba(255, 244, 214, 0);
   --font-type: "Special Elite", "Courier Prime", "Courier New", Courier, monospace;
   --font-hand: "Caveat", "Segoe Print", "Bradley Hand", "Comic Neue", cursive;
   --font-head: "Playfair Display", Georgia, "Times New Roman", serif;
@@ -66,6 +68,8 @@
   --y-evidence: #55aa62;
   --y-other: #d8cfc0;
   --y-fiber: rgba(255, 255, 255, 0.28);
+  --vignette: rgba(0, 0, 0, 0.66);
+  --lamp: rgba(255, 210, 140, 0.13);
 }
 
 .shadow rect { fill: var(--shadow); }
@@ -125,3 +129,5 @@
 .pull { fill: none; stroke: var(--y-kin); stroke-width: 2.6; stroke-linecap: round; opacity: 0.9; pointer-events: none; }
 .yarn .fray { fill: none; stroke: var(--yc); stroke-width: 1.4; stroke-linecap: round; }
 .yarn.cut .tag text { fill: var(--stamp); text-decoration: line-through; }
+.vignetteStop { stop-color: var(--vignette); }
+.lampStop { stop-color: var(--lamp); }

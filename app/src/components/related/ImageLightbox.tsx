@@ -32,7 +32,7 @@ function filePath(handle: string): string {
   return `/api/media/${encodeURIComponent(handle)}/file`;
 }
 
-interface Region {
+export interface Region {
   type: string;
   handle: string;
   label: string;
@@ -49,7 +49,7 @@ interface Region {
  * BacklinksSection.tsx's per-item ref metadata (which genuinely isn't
  * recoverable -- see its own doc comment; that's about *this* object's ref
  * *into* the backlink, not the backlink's ref back to *this* media). */
-function extractRegions(detail: { extended?: Record<string, unknown> } | null, handle: string): Region[] {
+export function extractRegions(detail: { extended?: Record<string, unknown> } | null, handle: string): Region[] {
   const backlinks = (detail?.extended?.backlinks as Record<string, { handle: string; media_list?: { ref: string; rect?: number[] }[] }[]> | undefined) ?? {};
   const regions: Region[] = [];
   for (const [type, objs] of Object.entries(backlinks)) {
@@ -91,10 +91,15 @@ function extractRegions(detail: { extended?: Record<string, unknown> } | null, h
  * once the image loads late). The region overlays are positioned by percent
  * inside that same box, so they ride along on the one transform with no
  * measuring. */
-export function ImageLightbox({ opened, onClose, handle }: {
+export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction }: {
   opened: boolean;
   onClose: () => void;
   handle: string;
+  /** What clicking a region does instead of opening its record's page (the
+   * Evidence Board pins the person up rather than leaving the board). */
+  onRegion?: (region: Region) => void;
+  /** Tooltip words for that click, e.g. "Pin up". */
+  regionAction?: string;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [regions, setRegions] = useState<Region[]>([]);
@@ -194,7 +199,8 @@ export function ImageLightbox({ opened, onClose, handle }: {
   }, [opened]);
 
   function goToRegion(r: Region) {
-    window.location.hash = formatHash({ viewKey: r.type, handle: r.handle });
+    if (onRegion) onRegion(r);
+    else window.location.hash = formatHash({ viewKey: r.type, handle: r.handle });
     onClose();
   }
 
@@ -267,6 +273,7 @@ export function ImageLightbox({ opened, onClose, handle }: {
                       className={REGION_CLASS}
                       role="button"
                       tabIndex={0}
+                      title={regionAction ? `${t(regionAction)}: ${r.label}` : undefined}
                       onClick={(e) => {
                         e.stopPropagation();
                         goToRegion(r);

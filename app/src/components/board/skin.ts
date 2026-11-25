@@ -69,6 +69,9 @@ export interface BoardSkin {
   renderYarn(drawing: YarnDrawing): ReactNode;
   /** <defs> and the background, in board coordinates. */
   renderBackground(): ReactNode;
+  /** Drawn over the background but under the cards, fixed to the screen
+   * (not panned or zoomed): light and shade on the board itself. */
+  renderLighting?(): ReactNode;
   /** The yarn being pulled from a pin to the pointer. */
   renderPull(d: string): ReactNode;
 }

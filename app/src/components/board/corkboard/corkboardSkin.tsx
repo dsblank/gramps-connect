@@ -1,6 +1,7 @@
 // The corkboard skin: each kind of record is a different piece of paper,
 // held by a pin in its record type's colour (a paperclip while it's a draft
 // not saved yet), with yarn sagging between pins. Ported from the prototype.
+import { retryApiImageOnError } from "../../../store/apiImage";
 import type { ReactNode } from "react";
 import type { GrampsClass } from "../../../store/board/records";
 import type { BoardSkin, CardBox, CardView, YarnDrawing } from "../skin";
@@ -205,7 +206,7 @@ function Paper({ view, l, photoUrl }: { view: CardView; l: Layout; photoUrl: str
         <rect className={css.white} x={x0} y={y0} width={w} height={h} rx={1.5} />
         <rect className={css.photoBg} x={x0 + inset} y={top} width={pw} height={ph} />
         {photoUrl ? (
-          <image href={photoUrl} x={x0 + inset} y={top} width={pw} height={ph} preserveAspectRatio="xMidYMid slice" />
+          <image href={photoUrl} x={x0 + inset} y={top} width={pw} height={ph} preserveAspectRatio="xMidYMid slice" onError={(e) => retryApiImageOnError(e.currentTarget)} />
         ) : cls === "Person" ? (
           figure(0, 1)
         ) : (
@@ -445,6 +446,27 @@ export const corkboardSkin: BoardSkin = {
         </defs>
         <rect data-board-background x={-20000} y={-20000} width={40000} height={40000} fill="url(#board-cork)" />
       </>
+    );
+  },
+
+  renderLighting(): ReactNode {
+    // A lamp over the upper left (only shows at night) and the board's edges
+    // falling into shade, as in the prototype.
+    return (
+      <g pointerEvents="none">
+        <defs>
+          <radialGradient id="board-lamp" cx="38%" cy="34%" r="60%">
+            <stop offset="0" className={css.lampStop} />
+            <stop offset="0.7" stopOpacity={0} />
+          </radialGradient>
+          <radialGradient id="board-vignette" cx="50%" cy="50%" r="75%">
+            <stop offset="0.55" stopOpacity={0} />
+            <stop offset="1" className={css.vignetteStop} />
+          </radialGradient>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#board-lamp)" />
+        <rect width="100%" height="100%" fill="url(#board-vignette)" />
+      </g>
     );
   },
 

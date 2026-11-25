@@ -13,6 +13,7 @@ import { leadsOf, titleOf, typeName, type Yarn } from "../../store/board/view";
 import shapes from "../../data/grampsRecordShapes.json";
 import { fetchSearch, type SearchHit } from "../../store/searchApi";
 import { summaryLine } from "../related/summary";
+import { useApiImageSrc } from "../../store/apiImage";
 import { snippetFor } from "../visuals/searchSnippet";
 
 export const CLASS_LABEL: Record<GrampsClass, string> = {
@@ -63,22 +64,45 @@ export function MenuChoice({ children, onClick }: { children: ReactNode; onClick
   );
 }
 
-function PanelFrame({ eyebrow, title, sub, onClose, children }: { eyebrow: string; title: string; sub?: string; onClose: () => void; children: ReactNode }) {
+/** One panel of the sidebar beside the board. */
+function PanelFrame({ eyebrow, title, sub, onClose, children }: { eyebrow: string; title: string; sub?: string; onClose?: () => void; children: ReactNode }) {
   return (
-    <Paper withBorder shadow="md" radius={0} style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 360, zIndex: 15, display: "flex", flexDirection: "column" }} data-nozoom>
+    <Box style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
       <Group justify="space-between" align="flex-start" wrap="nowrap" p="sm" pb={0}>
         <Box style={{ minWidth: 0 }}>
           <Text size="xs" fw={700} c="red.7" tt="uppercase" style={{ letterSpacing: ".14em" }}>{eyebrow}</Text>
           <Title order={4} style={{ overflowWrap: "anywhere" }}>{title}</Title>
           {sub && <Text size="xs" c="dimmed">{sub}</Text>}
         </Box>
-        <CloseButton onClick={onClose} aria-label={t("Close")} />
+        {onClose && (
+          <Tooltip label={t("Back to the case notes")}>
+            <CloseButton onClick={onClose} aria-label={t("Back to the case notes")} />
+          </Tooltip>
+        )}
       </Group>
       <ScrollArea style={{ flex: 1 }} p="sm">
         <Stack gap="sm">{children}</Stack>
       </ScrollArea>
-    </Paper>
+    </Box>
   );
+}
+
+function FaceThumb({ url }: { url: string | null }) {
+  const { src, onError } = useApiImageSrc(url);
+  return src ? (
+    <img src={src} onError={onError} alt="" width={32} height={32} style={{ objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+  ) : (
+    <Box w={32} h={32} style={{ flexShrink: 0 }} />
+  );
+}
+
+/** Someone (or something) marked in a photo. */
+export interface InPhoto {
+  cls: GrampsClass;
+  handle: string;
+  label: string;
+  /** A crop of the photo to just their region. */
+  faceUrl: string | null;
 }
 
 /** Text in the toolbar that turns into a field when clicked (the case's
@@ -174,6 +198,11 @@ export function CardPanel(props: {
   isDraft: boolean;
   /** View only: fields can't be changed (no Editor rights). */
   readOnly?: boolean;
+  /** Shows the card's photo full screen, when it has one. */
+  onViewPhoto?: () => void;
+  /** For a photo: who's marked in it (null while loading). */
+  inPhoto?: InPhoto[] | null;
+  onPinUpMany: (items: { cls: GrampsClass; handle: string }[]) => void;
   onSize: (size: CardSize) => void;
   onEdit: (edit: CardEdit) => void;
   onPinUp: (cls: GrampsClass, handle: string) => void;
@@ -182,7 +211,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, readOnly, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -260,7 +289,31 @@ export function CardPanel(props: {
         onChange={(v) => onSize(v as CardSize)}
         data={[{ value: "icon", label: t("Icon") }, { value: "compact", label: t("Card") }, { value: "expanded", label: t("Dossier") }]}
       />
+      {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{t("View full size")}</Button>}
       {fields}
+      {inPhoto !== undefined && (
+        <Box>
+          <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("In this photo")}{inPhoto ? ` (${inPhoto.length})` : ""}</Text>
+          {inPhoto === null && <Loader size="xs" />}
+          {inPhoto?.length === 0 && <Text size="xs" c="dimmed">{t("No one is marked in this photo yet.")}</Text>}
+          <Stack gap={4} mt={4}>
+            {inPhoto?.map((p) => (
+              <Group key={p.handle} gap="xs" wrap="nowrap">
+                <FaceThumb url={p.faceUrl} />
+                <Text size="sm" style={{ flex: 1, minWidth: 0 }} truncate>{p.label}</Text>
+                {onBoard.has(p.handle) ? (
+                  <Button size="compact-xs" variant="subtle" onClick={() => onShow(p.handle)}>{t("Show")}</Button>
+                ) : (
+                  <Button size="compact-xs" variant="light" onClick={() => onPinUp(p.cls, p.handle)}>{t("Pin up")}</Button>
+                )}
+              </Group>
+            ))}
+          </Stack>
+          {inPhoto && inPhoto.filter((p) => !onBoard.has(p.handle)).length > 1 && (
+            <Button size="xs" variant="light" mt={6} onClick={() => onPinUpMany(inPhoto.filter((p) => !onBoard.has(p.handle)))}>{t("Pin up everyone")}</Button>
+          )}
+        </Box>
+      )}
       {["Person", "Family", "Event"].includes(r._class) && (
         <Box>
           <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Evidence")}</Text>
@@ -337,9 +390,13 @@ export interface OpenQuestion {
   handle: string;
 }
 
-export function CaseNotesPanel({ file, changes, questions, records, onCaseField, onTakeBack, onShowChange, onShow, onSave, onDownload, canSave, onClose }: {
+export function CaseNotesPanel({ file, changes, questions, records, onCaseField, onTakeBack, onShowChange, onShow, onSave, onDownload, canSave, discussion, onDiscuss }: {
   file: CaseFile;
   onDownload: () => void;
+  /** The case's discussion: "unsaved" (case not saved yet), "loading",
+   * "none" yet, "cantStart" (none, and no right to start one), or "open". */
+  discussion: "unsaved" | "loading" | "none" | "cantStart" | "open";
+  onDiscuss: () => void;
   changes: Change[];
   questions: OpenQuestion[];
   records: Records;
@@ -349,11 +406,10 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
   onShow: (handle: string) => void;
   onSave: () => void;
   canSave: boolean;
-  onClose: () => void;
 }) {
   const groups = [...new Set(questions.map((q) => q.group))];
   return (
-    <PanelFrame eyebrow={t("The case so far")} title={t("Case notes")} onClose={onClose}>
+    <PanelFrame eyebrow={t("The case so far")} title={t("Case notes")}>
       <CommitField label={t("Name of this case")} readOnly={!canSave} value={file.name} onCommit={(v) => v.trim() && onCaseField("name", v.trim())} />
       <CommitField label={t("The question it's trying to answer")} readOnly={!canSave} value={file.question} onCommit={(v) => onCaseField("question", v)} />
       <CommitField label={t("Notes on the case")} readOnly={!canSave} multiline value={file.description} onCommit={(v) => onCaseField("description", v)} />
@@ -384,6 +440,21 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
           ))}
         </Box>
       ))}
+      <Divider />
+      <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Discussion")}</Text>
+      {discussion === "unsaved" && <Text size="xs" c="dimmed">{t("Save the case first, then others can discuss it with you.")}</Text>}
+      {discussion === "loading" && <Loader size="xs" />}
+      {discussion === "cantStart" && <Text size="xs" c="dimmed">{t("No one has started a discussion of this case yet.")}</Text>}
+      {(discussion === "none" || discussion === "open") && (
+        <Box>
+          <Button size="xs" variant="light" onClick={onDiscuss}>{discussion === "open" ? t("Open the discussion") : t("Discuss this case")}</Button>
+          <Text size="xs" c="dimmed" mt={4}>
+            {discussion === "open"
+              ? t("Opens in a window you can keep beside the board.")
+              : t("Starts a discussion others can join from Discussions, with a link back to this board.")}
+          </Text>
+        </Box>
+      )}
       <Divider />
       <Box>
         <Button size="xs" variant="default" onClick={onDownload}>{t("Download this case file")}</Button>

@@ -376,8 +376,9 @@ export function BoardCanvas(props: Props) {
         if (e.target === svgRef.current || (e.target as Element).hasAttribute("data-board-background")) onSelect(null);
       }}
     >
+      <g transform={view.toString()}>{skin.renderBackground()}</g>
+      {skin.renderLighting?.()}
       <g transform={view.toString()}>
-        {skin.renderBackground()}
         {still.map(cardEl)}
         {lifted && cardEl(lifted)}
         <g>{yarnEls}{cutEls}</g>

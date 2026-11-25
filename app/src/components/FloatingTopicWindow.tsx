@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Alert, Box, Group, Loader, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
+import { Alert, Anchor, Box, Group, Loader, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
 import { getToken } from "../auth/auth";
-import { formatHash } from "../hash";
+import { BOARD_KEY, formatHash } from "../hash";
 import { fetchObjectExtended, getBacklinks, type ObjectDetail } from "../store/objectDetail";
 import { parseTopicSpec } from "../store/topicsApi";
 import {
@@ -117,6 +117,9 @@ export function FloatingTopicWindow({ handle, minimized, rightOffset }: { handle
           {state.status === "ready" && (
             <Stack gap="sm">
               {spec?.description && <Text size="sm" c="dimmed">{spec.description}</Text>}
+              {spec?.caseFile && (
+                <Anchor size="xs" href={formatHash({ viewKey: BOARD_KEY, handle: spec.caseFile })}>{t("Open the case's Evidence Board")}</Anchor>
+              )}
               {spec?.participants && spec.participants.length > 0 && (
                 <Text size="xs" c="dimmed">{t("With")}: {spec.participants.join(", ")}</Text>
               )}

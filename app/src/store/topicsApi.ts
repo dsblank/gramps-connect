@@ -27,6 +27,9 @@ export interface TopicSpec {
    * (FloatingTopicWindow.tsx, RelatedPanel.tsx's topic header), same
    * honesty about `private` already documented in createTopic below. */
   participants?: string[];
+  /** The Evidence Board case file this topic discusses (its note handle):
+   * the board's "Discuss this case" finds the topic by it. */
+  caseFile?: string;
 }
 
 function addedHandle(trans: { type: string; handle: string }[]): string {
@@ -59,10 +62,11 @@ export function parseTopicSpec(raw: string | null | undefined): TopicSpec {
  * `title` stays the *only* key for a caller that gives neither -- what
  * openOrCreateUserTopic's own dedup fragment (`JSON.stringify({title})`)
  * assumes it can match exactly. */
-export async function createTopic(token: string, title: string, description?: string, participants?: string[]): Promise<string> {
+export async function createTopic(token: string, title: string, description?: string, participants?: string[], caseFile?: string): Promise<string> {
   const spec: TopicSpec = { title };
   if (description) spec.description = description;
   if (participants && participants.length > 0) spec.participants = participants;
+  if (caseFile) spec.caseFile = caseFile;
   const res = await apiFetch(`${API_BASE}/api/notes/`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -85,7 +89,11 @@ export async function updateTopic(token: string, handle: string, spec: TopicSpec
   });
   if (!getRes.ok) throw new Error(await parseErrorMessage(getRes));
   const obj = await getRes.json();
-  obj.text = { string: JSON.stringify(spec) };
+  // Keeps what the edit form doesn't know about (the case file a board
+  // discussion belongs to).
+  const before = parseTopicSpec(obj.text?.string);
+  const kept: TopicSpec = before.caseFile && spec.caseFile === undefined ? { ...spec, caseFile: before.caseFile } : spec;
+  obj.text = { string: JSON.stringify(kept) };
   const putRes = await apiFetch(`${API_BASE}/api/notes/${encodeURIComponent(handle)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -234,7 +242,7 @@ export async function deleteTopicMessage(token: string, handle: string): Promise
  * string literal -- same idea as dmText.ts's goqlSafe, but escaping rather
  * than stripping, since this fragment (a JSON substring built by this same
  * module) needs to match exactly, not just avoid breaking the query. */
-function goqlLiteral(s: string): string {
+export function goqlLiteral(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
