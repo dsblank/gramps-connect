@@ -245,7 +245,6 @@ function Paper({ view, l, photoUrl, mapUrl }: { view: CardView; l: Layout; photo
             <path key={i} className={css.mapLine} d={`M${x0} ${yy}C${x0 + w * 0.3} ${yy - 12 + r() * 24} ${x0 + w * 0.65} ${yy - 12 + r() * 24} ${x0 + w} ${yy + (r() - 0.5) * 14}`} />
           ))}
           <path className={css.river} d={`M${x0 + w * 0.62} ${y0}C${x0 + w * 0.5} ${y0 + h * 0.35} ${x0 + w * 0.86} ${y0 + h * 0.6} ${x0 + w * 0.74} ${y0 + h}`} />
-          <path className={css.mapX} d={`M${x0 + w - 30} ${y0 + h - 30}l10 10m0 -10l-10 10`} />
           {l.photoH > 0 && (() => {
             // A clipping of the real map, centred on the place, with a pin.
             const mx = x0 + (w - SNAPSHOT_W) / 2;

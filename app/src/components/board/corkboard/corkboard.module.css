@@ -85,7 +85,6 @@
 .photoFig { fill: var(--sepia-fig); opacity: 0.5; }
 .mapLine { fill: none; stroke: var(--map-line); stroke-width: 1.2; }
 .river { fill: none; stroke: var(--river); stroke-width: 3; stroke-linecap: round; opacity: 0.8; }
-.mapX { stroke: var(--stamp); stroke-width: 2.2; stroke-linecap: round; }
 .mapFrame { fill: none; stroke: var(--type-muted); stroke-width: 0.8; opacity: 0.6; }
 .mapPin { fill: var(--stamp); stroke: #fff; stroke-width: 1.2; }
 .mapPinDot { fill: #fff; }
