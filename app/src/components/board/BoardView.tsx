@@ -5,7 +5,7 @@
 // Save, which writes the tree changes and the case file as one transaction
 // (store/board/save.ts), with an Undo. Unsaved work is kept in this browser
 // between visits (store/board/caseDraft.ts).
-import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Modal, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
+import { Alert, Anchor, Badge, Box, Button, Group, Loader, Modal, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
 import { parseCoords } from "../../store/visualData";
 import { placeMapSnapshot } from "./placeMapSnapshot";
 import { notifications } from "@mantine/notifications";
@@ -740,11 +740,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   return (
     <Box style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
       <Group gap="xs" px="sm" py={6} wrap="wrap" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
-        <Tooltip label={t("Close the board, back to Case Files")}>
-          <ActionIcon variant="subtle" color="gray" onClick={() => close()} aria-label={t("Close the board, back to Case Files")}>
-            <Text fw={700} size="lg" lh={1}>←</Text>
-          </ActionIcon>
-        </Tooltip>
         <InlineText strong value={file.name} placeholder="Name this case" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, name: v })} />
         <InlineText value={file.question} placeholder="What are you trying to find out?" readOnly={!canSave} onCommit={(v) => setFile((f) => f && { ...f, question: v })} />
         <Box style={{ flex: 1 }} />
@@ -765,6 +760,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             <Badge variant="light" color="gray">{t("View only")}</Badge>
           </Tooltip>
         )}
+        <Tooltip label={t("Back to Case Files")} openDelay={400}>
+          <Button size="xs" variant="default" onClick={() => close()}>{t("Close")}</Button>
+        </Tooltip>
       </Group>
       {notices.length > 0 && (
         <Alert color="yellow" py={6} radius={0}>
