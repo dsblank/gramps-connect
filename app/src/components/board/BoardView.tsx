@@ -99,7 +99,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   /** Records looked at but not pinned up (a card's leads), for their names. */
   const [peek, setPeek] = useState<Records>({});
   /** The photo shown full screen, if any. */
-  const [lightbox, setLightbox] = useState<{ media: string; mark?: boolean } | null>(null);
+  const [lightbox, setLightbox] = useState<{ media: string } | null>(null);
   /** Who the tree has in the selected photo (null while loading); the
    * sidebar shows it with the board's unsaved changes laid over. */
   const [inPhoto, setInPhoto] = useState<{ media: string; subjects: PhotoSubject[] | null } | null>(null);
@@ -891,7 +891,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             isDraft={!opened.base[selectedCard.handle]}
             readOnly={!canSave}
             onViewPhoto={selectedPhoto ? () => setLightbox({ media: selectedPhoto.media }) : undefined}
-            onMarkSomeone={selectedPhoto && canSave ? () => setLightbox({ media: selectedPhoto.media, mark: true }) : undefined}
             inPhoto={inPhoto && inPhoto.media === selectedCard.handle
               ? inPhoto.subjects && subjectsOnBoard(inPhoto.subjects, working, inPhoto.media)
               : undefined}
@@ -954,7 +953,6 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         <ImageLightbox
           opened
           handle={lightbox.media}
-          startMarking={lightbox.mark}
           onClose={() => setLightbox(null)}
           regionAction="Pin"
           onRegion={(r) => void pinUpMany([{ cls: VIEW_CLASS[r.type] ?? "Person", handle: r.handle }], lightbox.media, true)}

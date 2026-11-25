@@ -290,8 +290,6 @@ export function CardPanel(props: {
   readOnly?: boolean;
   /** Shows the card's photo full screen, when it has one. */
   onViewPhoto?: () => void;
-  /** Opens it full screen ready to draw a box around someone (editors). */
-  onMarkSomeone?: () => void;
   /** For a photo: who's in it (null while loading). */
   inPhoto?: PhotoSubject[] | null;
   /** A crop of photo `media` to `rect`, or null without a region. */
@@ -310,7 +308,7 @@ export function CardPanel(props: {
   onDiscard: () => void;
   onClose: () => void;
 }) {
-  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, onMarkSomeone, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
+  const { handle, records, peek, onBoard, size, isDraft, readOnly, onViewPhoto, inPhoto, faceUrl, onFace, onNotInPhoto, onMainPhoto, onPinUpMany, onSize, onEdit, onPinUp, onShow, onTakeOff, onDiscard, onClose } = props;
   const r = records[handle];
   if (!r) return null;
   const all = { ...peek, ...records };
@@ -452,9 +450,6 @@ export function CardPanel(props: {
               </Group>
             ))}
           </Stack>
-          {inPhoto && onMarkSomeone && (
-            <Button size="xs" variant="light" mt={6} onClick={onMarkSomeone}>{t("Mark someone in the photo…")}</Button>
-          )}
           {inPhoto && inPhoto.filter((p) => !onBoard.has(p.handle)).length > 1 && (
             <Button size="xs" variant="light" mt={6} onClick={() => onPinUpMany(inPhoto.filter((p) => !onBoard.has(p.handle)))}>{t("Pin everyone")}</Button>
           )}

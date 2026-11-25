@@ -113,7 +113,7 @@ export function extractRegions(detail: { extended?: Record<string, unknown> } | 
  * once the image loads late). The region overlays are positioned by percent
  * inside that same box, so they ride along on the one transform with no
  * measuring. */
-export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction, faces, startMarking }: {
+export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction, faces }: {
   opened: boolean;
   onClose: () => void;
   handle: string;
@@ -123,8 +123,6 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction,
   /** Tooltip words for that click, e.g. "Pin up". */
   regionAction?: string;
   faces?: LightboxFaces;
-  /** Open with "Mark someone" already on. */
-  startMarking?: boolean;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [fetchedRegions, setRegions] = useState<Region[]>([]);
@@ -203,7 +201,7 @@ export function ImageLightbox({ opened, onClose, handle, onRegion, regionAction,
   }, [opened, handle, regionsGiven, reload]);
   useEffect(() => {
     setRegions([]);
-    setMarking(!!startMarking && opened);
+    setMarking(false);
     setBox(null);
     setAskAt(null);
   }, [opened, handle]);
