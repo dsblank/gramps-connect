@@ -19,6 +19,7 @@ import { fetchSearch, type SearchHit } from "../../store/searchApi";
 import { summaryLine } from "../related/summary";
 import { useApiImageSrc } from "../../store/apiImage";
 import { snippetFor } from "../visuals/searchSnippet";
+import { TreeMark } from "./TreeMark";
 
 export const CLASS_LABEL: Record<GrampsClass, string> = {
   Person: "Person", Family: "Family", Event: "Event", Place: "Place", Source: "Source",
@@ -143,9 +144,11 @@ export function FloatingMenu({ at, title, children, onClose }: { at: { x: number
   );
 }
 
-export function MenuChoice({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+/** One choice in a floating menu. `changesTree`: choosing it stages a loose
+ * end, so it carries the TreeMark. */
+export function MenuChoice({ children, onClick, changesTree }: { children: ReactNode; onClick: () => void; changesTree?: boolean }) {
   return (
-    <Button variant="subtle" justify="flex-start" fullWidth size="xs" onClick={onClick} styles={{ label: { whiteSpace: "normal", textAlign: "left" } }} h="auto" py={6}>
+    <Button variant="subtle" justify="flex-start" fullWidth size="xs" onClick={onClick} rightSection={changesTree ? <TreeMark /> : undefined} styles={{ label: { whiteSpace: "normal", textAlign: "left", flex: 1 } }} h="auto" py={6}>
       {children}
     </Button>
   );
@@ -417,6 +420,12 @@ export function CardPanel(props: {
       />
       {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{t("View full size")}</Button>}
       {fields}
+      {fields && !readOnly && (
+        <Group gap={6} wrap="nowrap">
+          <Text size="xs" c="dimmed" lh={1}><TreeMark /></Text>
+          <Text size="xs" c="dimmed">{t("Edits here change the tree when you save.")}</Text>
+        </Group>
+      )}
       {inPhoto !== undefined && (
         <Box>
           <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("In this photo")}{inPhoto ? ` (${inPhoto.length})` : ""}</Text>
@@ -502,7 +511,7 @@ export function YarnPanel({ yarn, records, state, readOnly, onSnip, onRetie, onP
       {state === "cut" && <Text size="sm">{t("Removed. The connection goes from the tree when you save. Both records stay.")}</Text>}
       {readOnly && <Text size="sm" c="dimmed">{t("Removing and adding connections need Editor rights.")}</Text>}
       <Group gap="xs" display={readOnly ? "none" : undefined}>
-        {state === "saved" && <Button size="xs" color="red" variant="light" onClick={onSnip}>{t("Remove connection")}</Button>}
+        {state === "saved" && <Button size="xs" color="red" variant="light" onClick={onSnip} rightSection={<TreeMark />}>{t("Remove connection")}</Button>}
         {state === "cut" && <Button size="xs" onClick={onRetie}>{t("Put it back")}</Button>}
         {state === "new" && <Button size="xs" color="red" variant="light" onClick={onPullOut}>{t("Remove this new connection")}</Button>}
       </Group>
@@ -541,7 +550,7 @@ export function CaseNotesPanel({ file, changes, questions, records, onCaseField,
       <CommitField label={t("Notes on the case")} readOnly={!canSave} multiline value={file.description} onCommit={(v) => onCaseField("description", v)} />
       <Divider />
       <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Loose ends: not saved yet")} ({changes.length})</Text>
-      {changes.length === 0 && <Text size="xs" c="dimmed">{t("Nothing waiting. Anything you add, tie, snip or edit shows up here until you save.")}</Text>}
+      {changes.length === 0 && <Text size="xs" c="dimmed">{t("Nothing waiting. Anything marked with the little tree (adding, connecting, removing a connection, editing) shows up here until you save.")}</Text>}
       <Stack gap={4}>
         {changes.map((c, i) => (
           <Group key={c.id} gap="xs" wrap="nowrap" align="flex-start">
@@ -613,7 +622,7 @@ export function SaveDialog({ opened, changes, layoutOnly, onToggle, onSave, onCl
           <Text size="sm">{layoutOnly ? t("Only the case file changed: its name, notes or the board's layout.") : t("No loose ends.")}</Text>
         )}
         <Text size="xs" c="dimmed">
-          {t("Saved as one change in the tree's History, so one Undo takes all of it back. Unticking a change also unticks anything that depends on it.")}
+          {t("The ticked changes go into the tree together, as one change in its History, so one Undo there takes all of it back. If someone else changed one of these records since you pinned it, nothing is saved and the board tells you which. The case file (its notes and the board's layout) is saved with it. Unticking a change also unticks anything that depends on it.")}
         </Text>
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>{t("Keep working")}</Button>
@@ -695,7 +704,7 @@ export function AddMenu({ opened, onClose, onPick, onCreate, canCreate = true }:
         <Text size="xs" fw={600} c="dimmed" tt="uppercase" display={canCreate ? undefined : "none"}>{t("Create something new")}</Text>
         <Group gap="xs" display={canCreate ? undefined : "none"}>
           {(["Person", "Family", "Event", "Place", "Source", "Citation", "Repository", "Note"] as GrampsClass[]).map((cls) => (
-            <Button key={cls} size="xs" variant="light" onClick={() => onCreate(cls)}>{t(`New ${CLASS_LABEL[cls].toLowerCase()}`)}</Button>
+            <Button key={cls} size="xs" variant="light" onClick={() => onCreate(cls)} rightSection={<TreeMark />}>{t(`New ${CLASS_LABEL[cls].toLowerCase()}`)}</Button>
           ))}
         </Group>
       </Stack>

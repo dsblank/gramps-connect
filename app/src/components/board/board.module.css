@@ -1,0 +1,12 @@
+/* Evidence Board chrome outside the skin (the skin's own look is in corkboard/). */
+.treeMark { flex: none; vertical-align: -1px; }
+
+/* The toolbar's loose-ends count, pulsed when a change is staged. */
+.pulse { animation: boardPulse 0.9s ease-out; border-radius: 4px; }
+@keyframes boardPulse {
+  0% { background: var(--mantine-color-yellow-3); color: var(--mantine-color-black); }
+  100% { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse { animation: none; }
+}

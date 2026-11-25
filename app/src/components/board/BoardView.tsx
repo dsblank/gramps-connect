@@ -37,6 +37,8 @@ import { hasPermissions } from "../../auth/auth";
 import { BoardCanvas, type BoardCanvasHandle, type BoardSelection, type Point } from "./BoardCanvas";
 import { AddMenu, CardPanel, CaseNotesPanel, CLASS_LABEL, FloatingMenu, InlineText, MenuChoice, SaveDialog, YarnPanel, type CardEdit, type OpenQuestion } from "./BoardPanels";
 import { cleanUp } from "./cleanUp";
+import { TreeMark } from "./TreeMark";
+import boardCss from "./board.module.css";
 import { downloadCase } from "../../store/board/caseExport";
 import { corkboardSkin } from "./corkboard/corkboardSkin";
 import type { CardView } from "./skin";
@@ -229,6 +231,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       const change = b.change(label);
       if (!change.steps.length) return null;
       setChanges([...base, change]);
+      // One notice, updated in place, so a run of edits doesn't stack them.
+      const notice = { id: "board-staged", icon: <TreeMark size={14} />, title: t("Added to loose ends"), message: `${label}. ${t("It goes into the tree when you save.")}` };
+      notifications.show(notice);
+      notifications.update(notice);
       return change;
     },
     [opened, changes],
@@ -697,7 +703,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         {options.length ? (
           <>
             <Text size="xs" c="dimmed" mb={4}>{t("What's the connection?")}</Text>
-            {options.map((o) => <MenuChoice key={o.label} onClick={() => tie(o, menu.from, menu.to)}>{o.label}</MenuChoice>)}
+            {options.map((o) => <MenuChoice key={o.label} changesTree onClick={() => tie(o, menu.from, menu.to)}>{o.label}</MenuChoice>)}
           </>
         ) : (
           <Text size="sm">{t("These two can't be tied directly. Try tying each of them to an event or a citation.")}</Text>
@@ -713,6 +719,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           {newTypesFor(working, from).map((cls) => (
             <MenuChoice
               key={cls}
+              changesTree
               onClick={() => {
                 const options = connectOptions(working, from, standIn(cls));
                 if (options.length === 1) createTied(menu.from, cls, 0, menu.at);
@@ -730,7 +737,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         <FloatingMenu at={menu.screen} title={`${t(`New ${CLASS_LABEL[cls].toLowerCase()}`)}, ${t("tied to")} ${titleOf(menu.from, working)}`} onClose={() => setMenu(null)}>
           <Text size="xs" c="dimmed" mb={4}>{t("How are they connected?")}</Text>
           {connectOptions(working, from, standIn(cls)).map((o, i) => (
-            <MenuChoice key={o.label} onClick={() => createTied(menu.from, cls, i, menu.at)}>{o.label}</MenuChoice>
+            <MenuChoice key={o.label} changesTree onClick={() => createTied(menu.from, cls, i, menu.at)}>{o.label}</MenuChoice>
           ))}
           <MenuChoice onClick={() => setMenu({ ...menu, cls: undefined })}>{t("Back")}</MenuChoice>
         </FloatingMenu>
@@ -750,7 +757,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         </Tooltip>
         <Button size="xs" variant="default" onClick={() => canvas.current?.fit()}>{t("Fit")}</Button>
         {canSave && (
-          <Text size="xs" c="dimmed">
+          <Text key={looseEnds} size="xs" c="dimmed" px={4} className={looseEnds ? boardCss.pulse : undefined}>
             {looseEnds ? (looseEnds === 1 ? t("1 loose end not saved") : t("{n} loose ends not saved").replace("{n}", String(looseEnds))) : dirty ? t("Not saved yet") : t("Everything saved")}
           </Text>
         )}
