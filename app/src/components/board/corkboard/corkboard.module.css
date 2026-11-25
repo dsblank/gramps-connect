@@ -86,6 +86,10 @@
 .mapLine { fill: none; stroke: var(--map-line); stroke-width: 1.2; }
 .river { fill: none; stroke: var(--river); stroke-width: 3; stroke-linecap: round; opacity: 0.8; }
 .mapX { stroke: var(--stamp); stroke-width: 2.2; stroke-linecap: round; }
+.mapFrame { fill: none; stroke: var(--type-muted); stroke-width: 0.8; opacity: 0.6; }
+.mapPin { fill: var(--stamp); stroke: #fff; stroke-width: 1.2; }
+.mapPinDot { fill: #fff; }
+.mapCredit { font: 7px system-ui, sans-serif; fill: #333; paint-order: stroke; stroke: rgba(255, 255, 255, 0.8); stroke-width: 2px; }
 .ruleRed { stroke: var(--rule-red); stroke-width: 1.1; }
 .ruleBlue { stroke: var(--rule-blue); stroke-width: 0.8; }
 .ruleFaint { stroke: var(--type-muted); stroke-width: 0.6; opacity: 0.35; }

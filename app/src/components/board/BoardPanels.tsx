@@ -2,8 +2,10 @@
 // dropped, the card and yarn panels on the right, Case notes, the Save
 // dialog and the Add menu. All of them only report what the user chose;
 // BoardView stages it as a loose end.
-import { Badge, Box, Tooltip, UnstyledButton, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Anchor, Badge, Box, Tooltip, UnstyledButton, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { parseCoords } from "../../store/visualData";
+import { formatHash } from "../../hash";
 import { getToken } from "../../auth/auth";
 import { t } from "../../i18n/i18n";
 import type { Change } from "../../store/board/changes";
@@ -27,6 +29,7 @@ const SEARCH_TYPE: Record<string, GrampsClass> = {
   citation: "Citation", repository: "Repository", media: "Media", note: "Note",
 };
 
+const PlaceMiniMap = lazy(() => import("./PlaceMiniMap"));
 const NEW_PLACE = "\u0000new";
 
 /** An event's place: one already known to the board, or one found in the
@@ -275,6 +278,7 @@ export type CardEdit =
   /** `place` null clears it; `name` is for the loose end's label. */
   | { kind: "eventPlace"; place: string | null; name: string }
   | { kind: "eventNewPlace"; name: string }
+  | { kind: "placeCoords"; lat: string; long: string }
   | { kind: "noteText"; text: string };
 
 export function CardPanel(props: {
@@ -355,9 +359,32 @@ export function CardPanel(props: {
       );
       break;
     }
-    case "Place":
-      fields = <CommitField readOnly={readOnly} label={t("Name")} value={titleOf(handle, records)} onCommit={(v) => onEdit({ kind: "placeName", name: v })} />;
+    case "Place": {
+      const lat = String(r.lat ?? "");
+      const long = String(r.long ?? "");
+      const at = parseCoords(lat, long);
+      fields = (
+        <>
+          <CommitField readOnly={readOnly} label={t("Name")} value={titleOf(handle, records)} onCommit={(v) => onEdit({ kind: "placeName", name: v })} />
+          <Group grow>
+            <CommitField readOnly={readOnly} label={t("Latitude")} value={lat} onCommit={(v) => onEdit({ kind: "placeCoords", lat: v.trim(), long })} />
+            <CommitField readOnly={readOnly} label={t("Longitude")} value={long} onCommit={(v) => onEdit({ kind: "placeCoords", lat, long: v.trim() })} />
+          </Group>
+          {(lat || long) && !at && <Text size="xs" c="red">{t("These coordinates can't be read, so there's no map.")}</Text>}
+          {at && (
+            <>
+              <Suspense fallback={<Loader size="xs" />}>
+                <PlaceMiniMap lat={at[0]} long={at[1]} />
+              </Suspense>
+              {!isDraft && (
+                <Anchor size="xs" href={formatHash({ viewKey: "map", subject: { type: "place", handle } })}>{t("Open in Maps")}</Anchor>
+              )}
+            </>
+          )}
+        </>
+      );
       break;
+    }
     case "Source":
       fields = (
         <>

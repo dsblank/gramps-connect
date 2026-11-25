@@ -42,6 +42,8 @@ interface Props {
   /** Yarn snipped on this board and not saved yet (drawn cut). */
   cutYarn?: Yarn[];
   photoUrls: Record<string, string | null>;
+  /** Map pictures for place cards, by handle. */
+  mapUrls?: Record<string, string | null>;
   selection: BoardSelection;
   onSelect: (selection: BoardSelection) => void;
   /** A card moved; `done` on the drop. */
@@ -56,7 +58,7 @@ interface Props {
 const reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 export function BoardCanvas(props: Props) {
-  const { skin, cards, positions, yarn, newYarn, cutYarn = [], photoUrls, selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
+  const { skin, cards, positions, yarn, newYarn, cutYarn = [], photoUrls, mapUrls = {}, selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [view, setView] = useState<ZoomTransform>(zoomIdentity.translate(80, 90));
@@ -335,7 +337,7 @@ export function BoardCanvas(props: Props) {
         }}
       >
         <g ref={(el) => physics.attachCard(c.handle, el)} transform={swingTransform(physics.card(c.handle))}>
-          {skin.renderCard(c, box, { selected, photoUrl: photoUrls[c.handle] ?? null })}
+          {skin.renderCard(c, box, { selected, photoUrl: photoUrls[c.handle] ?? null, mapUrl: mapUrls[c.handle] ?? null })}
         </g>
       </g>
     );

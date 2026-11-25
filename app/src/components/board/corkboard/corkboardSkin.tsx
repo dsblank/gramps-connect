@@ -1,6 +1,7 @@
 // The corkboard skin: each kind of record is a different piece of paper,
 // held by a pin in its record type's colour (a paperclip while it's a draft
 // not saved yet), with yarn sagging between pins. Ported from the prototype.
+import { SNAPSHOT_H, SNAPSHOT_W } from "../placeMapSnapshot";
 import { retryApiImageOnError } from "../../../store/apiImage";
 import type { ReactNode } from "react";
 import type { GrampsClass } from "../../../store/board/records";
@@ -118,7 +119,8 @@ function layout(view: CardView): Layout {
   const x0 = -w / 2;
   const y0 = -12;
   const pad = cls === "Note" ? 30 : 13;
-  const photoH = PHOTO_H[cls] ? (ex ? 170 : PHOTO_H[cls]!) : 0;
+  // A place with coordinates shows a piece of map at the Dossier size.
+  const photoH = PHOTO_H[cls] ? (ex ? 170 : PHOTO_H[cls]!) : cls === "Place" && ex && view.coords ? SNAPSHOT_H : 0;
   const inner = w - pad - 13;
   const lines: Line[] = [];
   const rules: number[] = [];
@@ -182,7 +184,7 @@ function Shadow({ box }: { box: CardBox }) {
   );
 }
 
-function Paper({ view, l, photoUrl }: { view: CardView; l: Layout; photoUrl: string | null }) {
+function Paper({ view, l, photoUrl, mapUrl }: { view: CardView; l: Layout; photoUrl: string | null; mapUrl: string | null }) {
   const { x0, y0, w, h } = l.box;
   const cls = view.cls;
   const seed = seedOf(view.handle);
@@ -244,6 +246,23 @@ function Paper({ view, l, photoUrl }: { view: CardView; l: Layout; photoUrl: str
           ))}
           <path className={css.river} d={`M${x0 + w * 0.62} ${y0}C${x0 + w * 0.5} ${y0 + h * 0.35} ${x0 + w * 0.86} ${y0 + h * 0.6} ${x0 + w * 0.74} ${y0 + h}`} />
           <path className={css.mapX} d={`M${x0 + w - 30} ${y0 + h - 30}l10 10m0 -10l-10 10`} />
+          {l.photoH > 0 && (() => {
+            // A clipping of the real map, centred on the place, with a pin.
+            const mx = x0 + (w - SNAPSHOT_W) / 2;
+            const my = y0 + 10;
+            const cx = mx + SNAPSHOT_W / 2;
+            const cy = my + l.photoH / 2;
+            return (
+              <g>
+                <rect className={css.photoBg} x={mx} y={my} width={SNAPSHOT_W} height={l.photoH} />
+                {mapUrl && <image href={mapUrl} x={mx} y={my} width={SNAPSHOT_W} height={l.photoH} preserveAspectRatio="xMidYMid slice" />}
+                <rect className={css.mapFrame} x={mx} y={my} width={SNAPSHOT_W} height={l.photoH} />
+                <path className={css.mapPin} d={`M${cx} ${cy}c-5 -6 -8 -10 -8 -14a8 8 0 0 1 16 0c0 4 -3 8 -8 14z`} />
+                <circle className={css.mapPinDot} cx={cx} cy={cy - 14} r={2.6} />
+                {mapUrl && <text className={css.mapCredit} x={mx + SNAPSHOT_W - 3} y={my + l.photoH - 3} textAnchor="end">© OpenStreetMap</text>}
+              </g>
+            );
+          })()}
         </>
       );
     }
@@ -318,13 +337,13 @@ export const corkboardSkin: BoardSkin = {
 
   cardBox: (view) => layout(view).box,
 
-  renderCard(view, box, { selected, photoUrl }): ReactNode {
+  renderCard(view, box, { selected, photoUrl, mapUrl }): ReactNode {
     const l = layout(view);
     const { x0, y0, w, h } = box;
     return (
       <>
         <Shadow box={box} />
-        <Paper view={view} l={l} photoUrl={photoUrl} />
+        <Paper view={view} l={l} photoUrl={photoUrl} mapUrl={mapUrl ?? null} />
         {l.rules.map((y, i) => (
           <line key={`r${i}`} className={css.kRule} x1={x0 + l.pad} x2={x0 + w - 13} y1={y} y2={y} />
         ))}

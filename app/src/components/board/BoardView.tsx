@@ -5,7 +5,9 @@
 // Save, which writes the tree changes and the case file as one transaction
 // (store/board/save.ts), with an Undo. Unsaved work is kept in this browser
 // between visits (store/board/caseDraft.ts).
-import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Anchor, Badge, Box, Button, Group, Loader, Stack, Text, Tooltip, useComputedColorScheme } from "@mantine/core";
+import { parseCoords } from "../../store/visualData";
+import { placeMapSnapshot } from "./placeMapSnapshot";
 import { notifications } from "@mantine/notifications";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentUsername, getToken } from "../../auth/auth";
@@ -152,6 +154,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           draft: !opened?.base[c.handle],
           updated: updated.has(c.handle),
           photo: photoOf(c.handle),
+          coords: working[c.handle]._class === "Place" ? parseCoords(String(working[c.handle].lat ?? ""), String(working[c.handle].long ?? "")) : null,
         })),
     [file, working, opened, updated, photoOf],
   );
@@ -161,6 +164,25 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     for (const c of cards) if (c.photo) out[c.handle] = mediaThumbnailUrl(c.photo.media, 300, token, { rect: c.photo.rect });
     return out;
   }, [cards, token]);
+  // Map pictures for place cards at the Dossier size.
+  const dark = useComputedColorScheme("light") === "dark";
+  const [mapUrls, setMapUrls] = useState<Record<string, string | null>>({});
+  const wantMaps = cards.filter((c) => c.size === "expanded" && c.coords).map((c) => `${c.handle}@${c.coords!.join(",")}`).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    for (const c of cards) {
+      if (c.size !== "expanded" || !c.coords) continue;
+      const [lat, long] = c.coords;
+      placeMapSnapshot(lat, long, dark).then((url) => {
+        if (!cancelled) setMapUrls((m) => (m[c.handle] === url ? m : { ...m, [c.handle]: url }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // Only when which places need a map, or the colour scheme, changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantMaps, dark]);
   const yarn = useMemo(() => deriveYarn(working, onBoard), [working, onBoard]);
   const savedYarn = useMemo(() => (opened ? deriveYarn(opened.base, onBoard) : []), [opened, onBoard]);
   const newYarn = useMemo(() => {
@@ -358,6 +380,12 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         if (change && opened) pinMadeAlongTheWay([made], [{ x: positions[handle].x + 200, y: positions[handle].y }], applyChanges(opened.base, [...changes, change]));
         break;
       }
+      case "placeCoords":
+        stage(`${who}: ${t("coordinates")}`, (b) => {
+          b.set(handle, "lat", edit.lat);
+          b.set(handle, "long", edit.long);
+        }, true);
+        break;
       case "noteText":
         stage(`${who}: ${t("text")}`, (b) => b.set(handle, "text", { ...(working[handle].text as Record<string, unknown>), string: edit.text }), true);
         break;
@@ -744,6 +772,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           newYarn={newYarn}
           cutYarn={cutYarn}
           photoUrls={photoUrls}
+          mapUrls={mapUrls}
           selection={selection}
           onSelect={(s) => {
             setSelection(s);

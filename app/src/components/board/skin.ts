@@ -28,6 +28,8 @@ export interface CardView {
   /** A photo to show: the media record and, for a person, the region of
    * it that is their face ([l, t, r, b] percent). */
   photo: { media: string; rect: number[] | null } | null;
+  /** A place's [latitude, longitude], when it has readable ones. */
+  coords?: [number, number] | null;
 }
 
 /** A card's outline, relative to its pin (0, 0). */
@@ -61,7 +63,7 @@ export interface BoardSkin {
   className: string;
   cardBox(view: CardView): CardBox;
   /** Drawn inside the card's swinging group, origin at the pin. */
-  renderCard(view: CardView, box: CardBox, opts: { selected: boolean; photoUrl: string | null }): ReactNode;
+  renderCard(view: CardView, box: CardBox, opts: { selected: boolean; photoUrl: string | null; mapUrl?: string | null }): ReactNode;
   /** Drawn above the yarn, not swinging, origin at the pin. */
   renderPin(view: CardView): ReactNode;
   /** One piece of yarn. Paths that wobble must carry class "yp", the tag
