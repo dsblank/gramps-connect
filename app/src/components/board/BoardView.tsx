@@ -43,12 +43,38 @@ import { pathCards } from "../../store/board/relationPath";
 import type { PathStep } from "../../store/relationshipPath";
 import { cleanUp } from "./cleanUp";
 import { TreeMark } from "./TreeMark";
+import { STORAGE_KEYS } from "../../store/storageKeys";
 import boardCss from "./board.module.css";
 import { downloadCase } from "../../store/board/caseExport";
 import { corkboardSkin } from "./corkboard/corkboardSkin";
 import type { CardView } from "./skin";
 
 /** A view key (as region and search results name types) to its class. */
+const SIDEBAR_DEFAULT = 340;
+const SIDEBAR_MIN = 260;
+/** Never wider than this share of the window, so the cork stays usable. */
+const SIDEBAR_MAX_SHARE = 0.6;
+const clampSidebar = (w: number) => Math.round(Math.max(SIDEBAR_MIN, Math.min(w, window.innerWidth * SIDEBAR_MAX_SHARE)));
+
+function readSidebarWidth(): number {
+  try {
+    const w = Number(localStorage.getItem(STORAGE_KEYS.boardSidebarWidth));
+    return w > 0 ? clampSidebar(w) : SIDEBAR_DEFAULT;
+  } catch {
+    return SIDEBAR_DEFAULT;
+  }
+}
+
+/** null forgets it (back to the default). */
+function writeSidebarWidth(w: number | null) {
+  try {
+    if (w === null) localStorage.removeItem(STORAGE_KEYS.boardSidebarWidth);
+    else localStorage.setItem(STORAGE_KEYS.boardSidebarWidth, String(w));
+  } catch {
+    /* storage unavailable: the width just isn't remembered */
+  }
+}
+
 const VIEW_CLASS: Record<string, GrampsClass> = {
   person: "Person", family: "Family", event: "Event", place: "Place", source: "Source",
   citation: "Citation", repository: "Repository", media: "Media", note: "Note",
@@ -102,6 +128,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const [peek, setPeek] = useState<Records>({});
   /** The photo shown full screen, if any. */
   const [lightbox, setLightbox] = useState<{ media: string } | null>(null);
+  /** The sidebar's width (dragged at its left edge; remembered in this browser). */
+  const [sidebarW, setSidebarW] = useState(readSidebarWidth);
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+  const sidebarDrag = useRef<{ x: number; w: number } | null>(null);
   /** Bumped by Save and Undo, so relationship searches run on the new tree. */
   const [treeRevision, setTreeRevision] = useState(0);
   /** Who the tree has in the selected photo (null while loading); the
@@ -920,7 +950,40 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
         )}
         {menuEl}
       </Box>
-      <Box w={340} style={{ flexShrink: 0, borderLeft: "1px solid var(--mantine-color-default-border)", background: "var(--mantine-color-body)", minHeight: 0 }}>
+      <Box w={sidebarW} style={{ position: "relative", flexShrink: 0, borderLeft: "1px solid var(--mantine-color-default-border)", background: "var(--mantine-color-body)", minHeight: 0 }}>
+        {/* The divider: an 8px strip over the border (like the main
+            window's list/details divider), dragged with pointer capture;
+            double-click puts it back. */}
+        <Box
+          aria-label={t("Drag to resize the sidebar")}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            sidebarDrag.current = { x: e.clientX, w: sidebarW };
+            setSidebarResizing(true);
+          }}
+          onPointerMove={(e) => {
+            const d = sidebarDrag.current;
+            if (d) setSidebarW(clampSidebar(d.w + d.x - e.clientX));
+          }}
+          onPointerUp={() => {
+            sidebarDrag.current = null;
+            setSidebarResizing(false);
+            writeSidebarWidth(sidebarW);
+          }}
+          onPointerCancel={() => {
+            sidebarDrag.current = null;
+            setSidebarResizing(false);
+          }}
+          onDoubleClick={() => {
+            setSidebarW(SIDEBAR_DEFAULT);
+            writeSidebarWidth(null);
+          }}
+          style={{
+            position: "absolute", insetBlock: 0, left: -4, width: 8, zIndex: 5,
+            cursor: "col-resize", touchAction: "none",
+            background: sidebarResizing ? "var(--mantine-color-blue-4)" : "transparent",
+          }}
+        />
         {selectedCard ? (
           <CardPanel key={selectedCard.handle}
             handle={selectedCard.handle}
