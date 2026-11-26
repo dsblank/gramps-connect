@@ -1475,6 +1475,44 @@
       ]
     },
     {
+      "namespace": "Note",
+      "source": "any(p.pri for p in backlinks['Person'])",
+      "cursor": 9,
+      "expect": [
+        "primary_name",
+        "private"
+      ],
+      "start": 6
+    },
+    {
+      "namespace": "Note",
+      "source": "backlinks['Person'].pri",
+      "expect": [
+        "primary_name",
+        "private"
+      ]
+    },
+    {
+      "namespace": "Note",
+      "source": "backlinks['Person'][1].birth.da",
+      "expect": [
+        "date"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "any(f for f in backlinks[\"Family\"] if f.fa",
+      "expect": [
+        "father",
+        "father_handle"
+      ]
+    },
+    {
+      "namespace": "Note",
+      "source": "backlinks['Persn'].",
+      "expect": []
+    },
+    {
       "namespace": "Person",
       "source": "any(c for c in child_refs if c.",
       "expect": [
