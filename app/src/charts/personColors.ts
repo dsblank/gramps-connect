@@ -253,12 +253,18 @@ function lerpColor(a: string, b: string, f: number): string {
   return rgbToHex([ar + (br - ar) * f, ag + (bg - ag) * f, ab + (bb - ab) * f]);
 }
 
+/** `f` in [0,1] walked across evenly spaced stops (linear between each
+ * neighboring pair). */
+export function gradientColor(stops: readonly string[], f: number): string {
+  if (stops.length === 1) return stops[0];
+  const pos = Math.min(1, Math.max(0, f)) * (stops.length - 1);
+  const i = Math.min(stops.length - 2, Math.floor(pos));
+  return lerpColor(stops[i], stops[i + 1], pos - i);
+}
+
 /** `f` in [0,1] walked across three stops (two linear segments). */
 export function threeStopGradient(stops: readonly [string, string, string], f: number): string {
-  const clamped = Math.min(1, Math.max(0, f));
-  return clamped <= 0.5
-    ? lerpColor(stops[0], stops[1], clamped * 2)
-    : lerpColor(stops[1], stops[2], (clamped - 0.5) * 2);
+  return gradientColor(stops, f);
 }
 
 function luminance(hex: string): number {
@@ -272,14 +278,17 @@ function luminance(hex: string): number {
 
 /** Near-black or near-white text, whichever contrasts more with `fill`.
  * Tag colors are whatever the tree's editors picked, so a chart can't
- * assume its usual text color stays readable on them. */
+ * assume its usual text color stays readable on them. Dates use the same
+ * full-strength color as names (they're already smaller and not bold):
+ * a see-through gray on a mid-toned wedge made the years hard to read
+ * (issue #63). */
 export function textColorOn(fill: string): { name: string; date: string } {
   const l = luminance(fill);
   // Contrast against black (#0b0b0b ~ 0.0037) vs white (#ffffff = 1).
   const dark = (l + 0.05) / (0.0037 + 0.05) >= (1.05) / (l + 0.05);
   return dark
-    ? { name: "#0b0b0b", date: "rgba(0, 0, 0, 0.65)" }
-    : { name: "#ffffff", date: "rgba(255, 255, 255, 0.8)" };
+    ? { name: "#0b0b0b", date: "#1f1f1f" }
+    : { name: "#ffffff", date: "#f5f5f5" };
 }
 
 /** "Color by filter": people a filter matched get the palette's first slot,

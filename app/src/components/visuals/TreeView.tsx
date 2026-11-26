@@ -18,7 +18,8 @@ import { DownloadImageButton } from "./DownloadImageButton";
 import { snapshotHtmlChart } from "../../store/chartExport/htmlToSvg";
 import { FamilyGraphView } from "./FamilyGraphView";
 import { FanChart, type FanChartHandle } from "./FanChart";
-import { trimTreeToDepth, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
+import { DEATH_COLORS, GEN_FILLS, trimTreeToDepth, treeMaxDepth, type FanColorScheme } from "../../charts/fanChart";
+import { findPalette, ORIGINAL_PALETTE_ID, palettesFor, type FanPalette, type PaletteScheme } from "../../charts/fanPalettes";
 import { TreeChart, type TreeChartHandle } from "./TreeChart";
 import { ChartLegend } from "./ChartLegend";
 import { ChartGoqlInput } from "./ChartGoqlInput";
@@ -71,6 +72,53 @@ function oneOf<T extends string>(value: string, allowed: readonly T[], fallback:
 /** "Color: Filter"'s choice for a typed GOQL query rather than a saved
  * filter. Saved filter ids are generated, so this can't clash. */
 const GOQL_FILTER_ID = "__goql__";
+
+/** A palette's colors as a thin strip, so the list can be compared by eye. */
+function PaletteStrip({ colors }: { colors: readonly string[] }) {
+  return (
+    <Group gap={0} wrap="nowrap" style={{ borderRadius: 2, overflow: "hidden", flexShrink: 0 }}>
+      {colors.map((c, i) => (
+        <div key={i} style={{ width: Math.max(4, Math.round(48 / colors.length)), height: 12, background: c }} />
+      ))}
+    </Group>
+  );
+}
+
+/** The fan chart's "Palette:" choice for Color: Generation or Age at death
+ * (charts/fanPalettes.ts, issue #63). "Original" shows `originalColors`,
+ * the scheme's own colors from fanChart.ts. */
+function PaletteSelect({ scheme, value, onChange, originalColors }: {
+  scheme: PaletteScheme;
+  value: string;
+  onChange: (id: string) => void;
+  originalColors: readonly string[];
+}) {
+  const options = palettesFor(scheme);
+  const colorsOf = (id: string) => findPalette(id, scheme)?.colors ?? originalColors;
+  return (
+    <Select
+      size="xs"
+      w={190}
+      allowDeselect={false}
+      value={findPalette(value, scheme)?.id ?? ORIGINAL_PALETTE_ID}
+      onChange={(v) => v && onChange(v)}
+      data={[
+        { value: ORIGINAL_PALETTE_ID, label: t("Original") },
+        ...options.map((pal) => ({ value: pal.id, label: t(pal.label) })),
+      ]}
+      leftSection={<PaletteStrip colors={colorsOf(value)} />}
+      leftSectionWidth={60}
+      renderOption={({ option }) => (
+        <Group gap="xs" wrap="nowrap">
+          <PaletteStrip colors={colorsOf(option.value)} />
+          {option.label}
+        </Group>
+      )}
+      comboboxProps={{ withinPortal: true }}
+      aria-label={t("Palette")}
+    />
+  );
+}
 
 /** View > Tree, and the "Tree" button on a Person or Family's own page
  * (RelatedPanel's VisualButtons.tsx). Unlike Map/Timeline this always needs
@@ -171,12 +219,21 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
   // "Color by attribute"'s chosen type, shared by every chart; null (or a
   // type no longer in the chart) means the most common one present.
   const [colorAttributeType, setColorAttributeType] = useState<string | null>(savedColors.attributeType);
+  // Fan mode's "Palette:" for Generation and for Age at death, each its own
+  // (charts/fanPalettes.ts); "original" keeps that scheme's usual colors.
+  const [genPalette, setGenPalette] = useState(savedColors.genPalette);
+  const [deathPalette, setDeathPalette] = useState(savedColors.deathPalette);
   useEffect(() => {
     saveChartColorPreference({
       fan: colorScheme, tree: treeColorScheme, family: familyColorScheme,
       attributeType: colorAttributeType, filterId: colorFilterId, goql: colorGoql,
+      genPalette, deathPalette,
     });
-  }, [colorScheme, treeColorScheme, familyColorScheme, colorAttributeType, colorFilterId, colorGoql]);
+  }, [colorScheme, treeColorScheme, familyColorScheme, colorAttributeType, colorFilterId, colorGoql, genPalette, deathPalette]);
+  const fanPalette: FanPalette | null =
+    colorScheme === "gen" ? findPalette(genPalette, "gen")
+    : colorScheme === "death" ? findPalette(deathPalette, "death")
+    : null;
   // The tree's tags, fetched the first time "Color by tag" is picked.
   const [tags, setTags] = useState<Map<string, TagInfo> | null>(null);
   // Generations mode's own "Compact" toggle -- same spot/style as fan
@@ -1070,6 +1127,12 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
                   ]}
                   aria-label={t("Color by")}
                 />
+                {colorScheme === "gen" && (
+                  <PaletteSelect scheme="gen" value={genPalette} onChange={setGenPalette} originalColors={GEN_FILLS} />
+                )}
+                {colorScheme === "death" && (
+                  <PaletteSelect scheme="death" value={deathPalette} onChange={setDeathPalette} originalColors={DEATH_COLORS} />
+                )}
                 {colorScheme === "attribute" && attributeTypeSelect}
                 {colorScheme === "filter" && filterControls}
                 <Checkbox
@@ -1200,6 +1263,7 @@ export function TreeView({ subject }: { subject: VisualSubject | null }) {
           sizeByLifespan={sizeByLifespan}
           colorScheme={colorScheme}
           personColoring={personColoring}
+          palette={fanPalette}
           flipLabels={fanFlipLabels}
         />
       )}

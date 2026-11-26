@@ -30,7 +30,8 @@ import { zoom, zoomIdentity, zoomTransform, type ZoomTransform } from "d3-zoom";
 import type { TreeNode, TreePersonRaw } from "../store/treeData";
 import { lifeEventDate } from "../store/lifeEventDates";
 import { setExportCloneHook } from "../store/chartExport/prepareSvg";
-import { NO_DATA_COLOR, textColorOn, type PersonColoring } from "./personColors";
+import { gradientColor, NO_DATA_COLOR, textColorOn, type PersonColoring } from "./personColors";
+import { generationColor, type FanPalette } from "./fanPalettes";
 
 const RING = 70;
 /** The parent-inherited edge's own inset, per generation -- edgeInset's own
@@ -82,8 +83,12 @@ const GEN_COLORS: readonly (readonly [string, string])[] = [
 /** A 3-stop (pale/mid/dark) gradient for the "Age at death" scheme, walked
  * the same two-segment way harrywind's own
  * `d3.scaleLinear().domain([lo,mid,hi]).range(DEATH_COLORS)` does -- see
- * threeStopGradient below. */
-const DEATH_COLORS: readonly [string, string, string] = ["#eaf1ec", "#5f97c9", "#232449"];
+ * personColors.ts's gradientColor. The "Original" Age at death palette;
+ * charts/fanPalettes.ts has the others. */
+export const DEATH_COLORS: readonly [string, string, string] = ["#eaf1ec", "#5f97c9", "#232449"];
+
+/** GEN_COLORS' fills alone, for the Palette list's "Original" sample. */
+export const GEN_FILLS: readonly string[] = GEN_COLORS.map(([fill]) => fill);
 
 /** "tag"/"attribute"/"filter" color each person from FanChartOptions.personColoring
  * (charts/personColors.ts), built by the caller from the people drawn. */
@@ -97,22 +102,6 @@ function hexToRgb(hex: string): [number, number, number] {
 function rgbToHex([r, g, b]: readonly [number, number, number]): string {
   const c = (v: number) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0");
   return `#${c(r)}${c(g)}${c(b)}`;
-}
-
-function lerpColor(a: string, b: string, t: number): string {
-  const [ar, ag, ab] = hexToRgb(a);
-  const [br, bg, bb] = hexToRgb(b);
-  return rgbToHex([ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t]);
-}
-
-/** The same two-segment walk harrywind's own 3-stop d3.scaleLinear does,
- * hand-rolled since this chart doesn't otherwise depend on d3-scale. `t` is
- * pre-normalized to [0,1] by the caller. */
-function threeStopGradient(stops: readonly [string, string, string], t: number): string {
-  const clamped = Math.min(1, Math.max(0, t));
-  return clamped <= 0.5
-    ? lerpColor(stops[0], stops[1], clamped * 2)
-    : lerpColor(stops[1], stops[2], (clamped - 0.5) * 2);
 }
 
 /** d3's own `color(hex).darker(0.9)` (each channel scaled by 0.7^0.9) --
@@ -233,19 +222,21 @@ function personTooltip(p: TreePersonRaw): string {
  * an exact per-wedge fit; this is the same idea, a fixed depth-based curve
  * instead, since this chart already truncates by an estimated character
  * width (clipString) rather than measuring rendered text). The date line
- * runs 2px smaller than the name, floor DATE_FONT_MIN, matching harrywind's
- * own name/date size relationship. */
+ * runs 1px smaller than the name, floor DATE_FONT_MIN. harrywind's own
+ * labels use 2px and a 5px floor, which made the years too small to read
+ * (issue #63); wedgeLabelLines still drops or shortens a date that doesn't
+ * fit. */
 const NAME_FONT_MAX = 11;
 const NAME_FONT_MIN = 6;
 const NAME_FONT_STEP = 0.7;
-const DATE_FONT_MIN = 5;
+const DATE_FONT_MIN = 6;
 
 function nameFontSize(depth: number): number {
   return Math.max(NAME_FONT_MIN, NAME_FONT_MAX - depth * NAME_FONT_STEP);
 }
 
 function dateFontSize(depth: number): number {
-  return Math.max(DATE_FONT_MIN, nameFontSize(depth) - 2);
+  return Math.max(DATE_FONT_MIN, nameFontSize(depth) - 1);
 }
 
 /** Depth of the deepest branch currently loaded (0 = root only) -- used by
@@ -776,6 +767,9 @@ export interface FanChartOptions {
   colorScheme: FanColorScheme;
   /** Required for the "tag"/"attribute"/"filter" schemes; ignored otherwise. */
   personColoring?: PersonColoring | null;
+  /** The "gen"/"death" schemes' palette (charts/fanPalettes.ts); null or
+   * omitted keeps their Original colors. Ignored for the other schemes. */
+  palette?: FanPalette | null;
   /** The handle to animate the view onto -- components/visuals/FanChart.tsx
    * sets this to whichever wedge was just clicked, the same "target,
    * independent of whether this render actually animates to it" split
@@ -808,7 +802,7 @@ export function renderFanChart(
   ancestorTree: TreeNode | null,
   {
     bboxWidth, bboxHeight, initialZoom, initialRotation, onRotationChange, onSelectPerson, selectedHandle, sizeByLifespan, colorScheme,
-    personColoring, centerHandle, centerOnSelect, flipLabels = true,
+    personColoring, palette = null, centerHandle, centerOnSelect, flipLabels = true,
   }: FanChartOptions,
 ): SVGSVGElement {
   const svg = create("svg").attr("font-family", "var(--mantine-font-family)").attr("font-size", 12);
@@ -1003,8 +997,13 @@ export function renderFanChart(
   const deathAges = wedges.map((w) => ageAtDeath(w.node)).filter((a): a is number => a != null);
   const deathLo = deathAges.length > 0 ? Math.min(...deathAges) : 0;
   const deathHi = deathAges.length > 0 ? Math.max(...deathAges) : 0;
+  const deathStops: readonly string[] = palette ? palette.colors : DEATH_COLORS;
   const deathColorFor = (age: number): string =>
-    deathHi > deathLo ? threeStopGradient(DEATH_COLORS, (age - deathLo) / (deathHi - deathLo)) : DEATH_COLORS[1];
+    gradientColor(deathStops, deathHi > deathLo ? (age - deathLo) / (deathHi - deathLo) : 0.5);
+  // A picked palette for "Generation": gradients run out to the outermost
+  // ring drawn, so they're rebuilt with each "Increase depth" too.
+  const maxDepth = wedges.reduce((m, w) => Math.max(m, w.depth), 0);
+  const genPalette = colorScheme === "gen" ? palette : null;
 
   // No Mantine-token fallback for "no data for this scheme" (a known person
   // missing a birth or death date) -- unlike the hatch pattern, which means
@@ -1032,7 +1031,7 @@ export function renderFanChart(
       const age = ageAtDeath(d.node);
       return age != null ? deathColorFor(age) : NO_SCHEME_DATA;
     }
-    return genFill(d.depth);
+    return genPalette ? generationColor(genPalette, d.depth, maxDepth) : genFill(d.depth);
   };
   const strokeBaseFor = (d: Wedge): string => {
     if (!d.node?.person) return "var(--mantine-color-default-border)";
@@ -1042,7 +1041,7 @@ export function renderFanChart(
       const age = ageAtDeath(d.node);
       return age != null ? darken(deathColorFor(age)) : darken(NO_SCHEME_DATA);
     }
-    return genStroke(d.depth);
+    return genPalette ? darken(generationColor(genPalette, d.depth, maxDepth)) : genStroke(d.depth);
   };
 
   // A true annular sector (d3-arc) for every wedge in both modes -- the
@@ -1141,13 +1140,13 @@ export function renderFanChart(
 
   // Each labeled wedge's lines, stacked centered on the wedge's midpoint:
   // `offset` is a line's center relative to that midpoint, negative =
-  // nearer the outer edge (before any flip). Names in the theme's text
-  // color; dates in a fixed dark tone rather than var(--mantine-color-dimmed):
-  // the wedges' own fills (GEN_COLORS/DEATH_COLORS above) are the same hex
-  // in both themes, but dimmed is a theme-relative gray that goes
-  // light-on-light in dark mode -- too low-contrast against these mid-toned
-  // fills. Orientation (and flip) isn't set here: orientFanLabels does
-  // that from the data-* attributes, now and on every rotation change.
+  // nearer the outer edge (before any flip). Names and dates are black or
+  // white by the wedge's own fill (textColorOn, below), since the fills are
+  // the same hex in both themes; only a hatched wedge, which has no single
+  // fill, uses the theme's text color. Never a see-through or "dimmed"
+  // gray: on these mid-toned fills that made the dates hard to read.
+  // Orientation (and flip) isn't set here: orientFanLabels does that from
+  // the data-* attributes, now and on every rotation change.
   const arcIdPrefix = `fan-arc-${++fanRenderSeq}`;
   let arcCount = 0;
   const arcDefs = defs.append("g");
@@ -1161,11 +1160,12 @@ export function renderFanChart(
     const midR = (d.innerR + d.outerR) / 2;
     const thetaDeg = (((d.drawA0 + d.drawA1) / 2) * 180) / Math.PI;
     const curved = d.depth > 0 && !box.radial;
-    // A person-colored wedge can be any color an editor picked for a tag,
-    // so its text follows the fill; the generation/age palettes keep their
-    // existing look.
+    // Text follows the fill: black or white, whichever reads better on it.
+    // A tag can be any color an editor picked, a palette runs from near
+    // white to near black, and even the Original colors include dark rings
+    // (and the theme's own text color is light in dark mode).
     const fill = fillFor(d);
-    const ink = byPerson && fill.startsWith("#") ? textColorOn(fill) : null;
+    const ink = fill.startsWith("#") ? textColorOn(fill) : null;
     const g = select(this)
       .append("g")
       .attr("class", "fan-label")
@@ -1179,7 +1179,7 @@ export function renderFanChart(
       const text = g
         .append("text")
         .attr("text-anchor", "middle")
-        .attr("fill", line.kind === "name" ? (ink?.name ?? "var(--mantine-color-text)") : (ink?.date ?? "rgba(0, 0, 0, 0.65)"))
+        .attr("fill", line.kind === "name" ? (ink?.name ?? "var(--mantine-color-text)") : (ink?.date ?? "var(--mantine-color-text)"))
         .attr("font-size", line.size)
         .attr("font-weight", line.kind === "name" ? 600 : null);
       if (!curved) {

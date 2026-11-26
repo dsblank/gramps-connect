@@ -7,6 +7,7 @@ import { setExportLegend } from "../../store/chartExport/legend";
 import { t } from "../../i18n/i18n";
 import type { TreeNode } from "../../store/treeData";
 import { useDisplayFormatVersion } from "../../store/placeIndex";
+import type { FanPalette } from "../../charts/fanPalettes";
 
 interface FanChartProps {
   ancestorTree: TreeNode | null;
@@ -20,6 +21,9 @@ interface FanChartProps {
   colorScheme: FanColorScheme;
   /** For the "tag"/"attribute" schemes (charts/personColors.ts). */
   personColoring?: PersonColoring | null;
+  /** TreeView.tsx's own "Palette" choice for the "gen"/"death" schemes
+   * (charts/fanPalettes.ts); null for Original. */
+  palette?: FanPalette | null;
   /** TreeView.tsx's own "Flip labels" checkbox. */
   flipLabels: boolean;
 }
@@ -52,7 +56,7 @@ export interface FanChartHandle {
  *  - a fresh *selection* (not just this handle being still-selected across
  *    an unrelated rebuild) asks renderFanChart to animate-center on it. */
 export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanChart(
-  { ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, personColoring, flipLabels },
+  { ancestorTree, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, personColoring, palette = null, flipLabels },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -128,13 +132,14 @@ export const FanChart = forwardRef<FanChartHandle, FanChartProps>(function FanCh
       sizeByLifespan,
       colorScheme,
       personColoring,
+      palette,
       flipLabels,
       centerHandle: selectedHandle,
       centerOnSelect: justSelected && !shouldFit,
     });
     setExportLegend(svg, personColoring?.legend);
     container.replaceChildren(svg);
-  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, personColoring, flipLabels, displayVersion]);
+  }, [ancestorTree, size.width, size.height, selectedHandle, onSelectPerson, sizeByLifespan, colorScheme, personColoring, palette, flipLabels, displayVersion]);
 
   const wrapped = ((rotation % 360) + 360) % 360;
   const rotated = wrapped > 0.01 && wrapped < 359.99;

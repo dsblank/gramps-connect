@@ -1,5 +1,6 @@
 // The Graphs view's Color choices (fan, tree and Generations charts, plus
-// the attribute, saved filter and GOQL query picked for them), remembered
+// the attribute, saved filter and GOQL query picked for them, and the fan
+// chart's Palette for Generation and for Age at death), remembered
 // across sessions in this browser. One record for all trees: an attribute
 // type or saved filter a tree doesn't have just falls back to that tree's
 // first one, the same as when it was never picked.
@@ -12,10 +13,14 @@ export interface ChartColorPreference {
   attributeType: string | null;
   filterId: string | null;
   goql: string;
+  /** charts/fanPalettes.ts ids; "original" for each scheme's own colors. */
+  genPalette: string;
+  deathPalette: string;
 }
 
 const DEFAULTS: ChartColorPreference = {
   fan: "gen", tree: "gender", family: "none", attributeType: null, filterId: null, goql: "",
+  genPalette: "original", deathPalette: "original",
 };
 
 export function loadChartColorPreference(): ChartColorPreference {
@@ -32,6 +37,8 @@ export function loadChartColorPreference(): ChartColorPreference {
       attributeType: strOrNull(parsed.attributeType),
       filterId: strOrNull(parsed.filterId),
       goql: str(parsed.goql, ""),
+      genPalette: str(parsed.genPalette, DEFAULTS.genPalette),
+      deathPalette: str(parsed.deathPalette, DEFAULTS.deathPalette),
     };
   } catch {
     return DEFAULTS;
