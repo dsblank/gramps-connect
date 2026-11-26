@@ -20,6 +20,9 @@ import { summaryLine } from "../related/summary";
 import { useApiImageSrc } from "../../store/apiImage";
 import { snippetFor } from "../visuals/searchSnippet";
 import { TreeMark } from "./TreeMark";
+import { useListSearch } from "../../store/listSearch";
+import { PLACE_VIEW } from "../../store/views";
+import { pickerResultLabel } from "../RefPickerField";
 import { photosOf, type PhotoSubject } from "../../store/board/faces";
 import { useRelationshipPaths } from "../../store/relationshipPathsApi";
 import { openRelationshipWindow } from "../../store/relationshipWindow";
@@ -59,32 +62,10 @@ export function EventPlacePicker({ value, all, readOnly, onPick, onNew }: {
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  const [found, setFound] = useState<{ value: string; label: string }[]>([]);
-  const [loading, setLoading] = useState(false);
   const currentLabel = value ? titleOf(value, all) || t("Place") : "";
-  useEffect(() => {
-    const q = query.trim();
-    if (!focused || q.length < 2 || q === currentLabel) {
-      setFound([]);
-      return;
-    }
-    const ctrl = new AbortController();
-    setLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const { hits } = await fetchSearch(await getToken(), q, 1, 10, "place", ctrl.signal);
-        setFound(hits.map((h) => ({ value: h.handle, label: summaryLine(h.object_type, h.object) })));
-      } catch {
-        /* aborted or failed: keep the last results */
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      ctrl.abort();
-    };
-  }, [query, focused, currentLabel]);
+  // The Places list's own search, as in every other picker.
+  const { items, loading } = useListSearch(PLACE_VIEW, query, { enabled: focused && query.trim() !== currentLabel });
+  const found = items.map((item) => ({ value: item.handle, label: pickerResultLabel("place", item) }));
   const q = query.trim();
   const lower = q.toLowerCase();
   const known = Object.values(all)

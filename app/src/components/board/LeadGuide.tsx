@@ -6,17 +6,15 @@
 import { Badge, Box, Button, Chip, FileButton, Group, Loader, Paper, Select, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
-import { getToken } from "../../auth/auth";
 import { t } from "../../i18n/i18n";
 import { DOC_KINDS, eventsToLoad, existingEvent, familyToLoad, OCCASIONS, PART_ROLES, relationChoices, relativesOf, type RelationChoice } from "../../store/board/lead";
 import { loadRecords, type GrampsClass, type Records } from "../../store/board/records";
 import { titleOf } from "../../store/board/view";
 import { parseDisplayDate, formatDisplayDate } from "../../store/placeIndex";
-import { fetchSearch } from "../../store/searchApi";
-import { MEDIA_VIEW } from "../../store/views";
+import { MEDIA_VIEW, PERSON_VIEW, REPOSITORY_VIEW } from "../../store/views";
+import { useListSearch } from "../../store/listSearch";
 import { RecordPicker } from "../RecordPicker";
 import { pickerResultLabel } from "../RefPickerField";
-import { summaryLine } from "../related/summary";
 import { EventPlacePicker } from "./BoardPanels";
 import { TreeMark } from "./TreeMark";
 
@@ -100,31 +98,9 @@ function RecordSearch({ type, placeholder, exclude, onPick, newLabel }: {
   newLabel?: string;
 }) {
   const [query, setQuery] = useState("");
-  const [found, setFound] = useState<{ value: string; label: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setFound([]);
-      return;
-    }
-    const ctrl = new AbortController();
-    setLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const { hits } = await fetchSearch(await getToken(), q, 1, 10, type, ctrl.signal);
-        setFound(hits.map((h) => ({ value: h.handle, label: summaryLine(h.object_type, h.object) })));
-      } catch {
-        /* aborted or failed: keep the last results */
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      ctrl.abort();
-    };
-  }, [query, type]);
+  // The record's own list search, as in every other picker.
+  const { items, loading } = useListSearch(type === "person" ? PERSON_VIEW : REPOSITORY_VIEW, query);
+  const found = items.map((item) => ({ value: item.handle, label: pickerResultLabel(type, item) }));
   const q = query.trim();
   const data = found.filter((o) => !exclude?.has(o.value));
   if (newLabel && q.length >= 2) data.push({ value: "\u0000new", label: `${newLabel}: ${q}` });

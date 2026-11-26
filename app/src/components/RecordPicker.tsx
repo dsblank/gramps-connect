@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { Button, Card, Divider, Group, Loader, NavLink, ScrollArea, Stack, Text, TextInput } from "@mantine/core";
-import { getToken } from "../auth/auth";
-import { fetchPage, type QueryItem } from "../store/api";
+import type { QueryItem } from "../store/api";
+import { searchList } from "../store/listSearch";
 import { useNameGroupsVersion } from "../store/nameGroups";
-import { prefixSearchExpr } from "../store/simpleSearch";
 import type { ViewConfig } from "../store/views";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { withGrampsId } from "./related/summary";
@@ -15,11 +14,9 @@ const RESULT_LIMIT = 20;
 
 interface RecordPickerProps {
   view: ViewConfig;
-  /** The flat column to search, matched (`like(<field>, '%<term>%')`) by
-   * default -- e.g. "title" for Place/Source. A caller with its own
-   * multi-field search logic (Family's Person picker's comma-order/
-   * multi-word given+surname parsing) overrides this via `buildExpr`
-   * instead, rather than this component needing to know about it. */
+  /** The flat column to search (`like(<field>, '%<term>%')`), only for a
+   * view with no list search of its own (`view.simpleSearch`), which is
+   * used by default otherwise. `buildExpr` overrides both. */
   searchField: string;
   placeholder: string;
   onPick: (item: QueryItem) => void;
@@ -110,40 +107,23 @@ export function RecordPicker({
     // the user starts typing. Every existing buildExpr (buildSimpleSearchExpr)
     // already returns null for a too-short term on its own, so this is a
     // no-op for every other caller.
-    const whereExpr = buildExpr ? buildExpr(term) : term.length === 0 ? null : `like(${searchField}, '%${term}%')`;
+    // No buildExpr: the record's own list search (views.ts simpleSearch), so
+    // a picker finds what the list's search box would; searchField only for
+    // a view without one.
+    const build = buildExpr ?? view.simpleSearch?.buildExpr;
+    const whereExpr = build ? build(term) : term.length === 0 ? null : `like(${searchField}, '%${term}%')`;
     let cancelled = false;
     setLoading(true);
     // A fresh search invalidates whatever was highlighted from the
     // previous result set (it may not even be shown anymore).
     setSelectedHandle(null);
-    (async () => {
-      const token = await getToken();
-      // The view's default order -- for People, the tree's name format
-      // (views.ts defaultOrderBy), not the static surname-first `orderBy`.
-      const orderBy = view.defaultOrderBy?.() ?? view.orderBy;
-      // Matches that start with the term come first, then the rest of the
-      // contains-matches -- otherwise a short exact name ("USA") sorts
-      // behind 20 alphabetically earlier places that merely contain it
-      // ("Indiana, USA", ...) and can't be picked at all. Two disjoint
-      // queries in parallel, so the total stays exact.
-      const prefixExpr = prefixSearchExpr(whereExpr);
-      if (!prefixExpr) {
-        const { page, totalCount: count } = await fetchPage(view, token, null, true, whereExpr, orderBy, RESULT_LIMIT);
+    searchList(view, whereExpr, RESULT_LIMIT)
+      .then(({ items, totalCount: count }) => {
         if (!cancelled) {
-          setResults(page.items);
+          setResults(items);
           setTotalCount(count);
         }
-        return;
-      }
-      const [first, rest] = await Promise.all([
-        fetchPage(view, token, null, true, prefixExpr, orderBy, RESULT_LIMIT),
-        fetchPage(view, token, null, true, `(${whereExpr}) and not (${prefixExpr})`, orderBy, RESULT_LIMIT),
-      ]);
-      if (!cancelled) {
-        setResults([...first.page.items, ...rest.page.items].slice(0, RESULT_LIMIT));
-        setTotalCount(first.totalCount === null || rest.totalCount === null ? null : first.totalCount + rest.totalCount);
-      }
-    })()
+      })
       .catch(() => {
         if (!cancelled) {
           setResults([]);

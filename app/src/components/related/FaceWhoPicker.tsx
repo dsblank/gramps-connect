@@ -3,12 +3,12 @@
 // Kept inside the lightbox's own DOM (no portals): the lightbox closes on
 // clicks that land outside the photo, and a portaled dropdown would count.
 import { Button, Group, Loader, Paper, Select, Stack, Text, TextInput } from "@mantine/core";
-import { useEffect, useState, type ReactNode } from "react";
-import { getToken } from "../../auth/auth";
+import { useState, type ReactNode } from "react";
 import { t } from "../../i18n/i18n";
-import { fetchSearch } from "../../store/searchApi";
+import { useListSearch } from "../../store/listSearch";
+import { PERSON_VIEW } from "../../store/views";
+import { pickerResultLabel } from "../RefPickerField";
 import type { FaceWho } from "../../store/markFace";
-import { summaryLine } from "./summary";
 
 const NEW_PERSON = "__new_person__";
 
@@ -31,33 +31,10 @@ export function FaceWhoPicker({ known = [], exclude, onPick, onCancel, saveIcon 
   saveIcon?: ReactNode;
 }) {
   const [query, setQuery] = useState("");
-  const [found, setFound] = useState<{ value: string; label: string }[]>([]);
-  const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<{ first: string; surname: string } | null>(null);
-
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length < 2) {
-      setFound([]);
-      return;
-    }
-    const ctrl = new AbortController();
-    setLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const { hits } = await fetchSearch(await getToken(), q, 1, 10, "person", ctrl.signal);
-        setFound(hits.map((h) => ({ value: h.handle, label: summaryLine(h.object_type, h.object) })));
-      } catch {
-        /* aborted or failed: keep the last results */
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      ctrl.abort();
-    };
-  }, [query]);
+  // The People list's own search, as in every other picker.
+  const { items, loading } = useListSearch(PERSON_VIEW, query);
+  const found = items.map((item) => ({ value: item.handle, label: pickerResultLabel("person", item) }));
 
   const q = query.trim();
   const lower = q.toLowerCase();
