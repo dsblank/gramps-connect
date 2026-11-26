@@ -132,6 +132,8 @@ const INDEX_RE = new RegExp(INDEX, "g");
 const BINDING_RE = new RegExp(`\\bfor\\s+(${NAME})\\s+in\\s+(${CHAIN})`, "g");
 // A quoted type name ending the iterated chain: `for a in attribute_list['Age']`
 // loops over the list's entries of that type.
+// `backlinks['Person']` starting a path: the Person records pointing here.
+const TYPED_BACKLINKS_RE = /^backlinks\[(?:'([A-Za-z]+)'|"([A-Za-z]+)")\]/;
 const TYPE_INDEX_AT_END_RE = /\[(?:'[^'\\]*'|"[^"\\]*")\]$/;
 const PARTIAL_OPERATOR_RE = /[=!<>]+$/;
 // The path a value is being written for: `path ==` (any comparison) or
@@ -594,6 +596,33 @@ export function resolveGoqlPath(
   return context.kind === "field" ? context : null;
 }
 
+/** For a path starting `backlinks['Person']`: a Person record (looped
+ * over, the first one read on with `.`, or the n-th with `[n]`), walked on
+ * by the rest -- `{ typed: true, context }`; `{ typed: false }` for any
+ * other path. */
+function typedBacklinksWalk(
+  vocabs: Vocabs,
+  chain: string,
+  iterating = false,
+): { typed: false } | { typed: true; context: Context | null } {
+  const m = TYPED_BACKLINKS_RE.exec(chain);
+  if (!m) return { typed: false };
+  const namespace = m[1] ?? m[2];
+  if (!vocabs[namespace]) return { typed: true, context: null };
+  let rest = chain.slice(m[0].length);
+  let context: Context | null = { kind: "namespace", namespace };
+  const picked = /^\[[0-9]+\]/.exec(rest);
+  if (picked) rest = rest.slice(picked[0].length);
+  if (!rest) return { typed: true, context };
+  if (!rest.startsWith(".")) return { typed: true, context: null };
+  for (const [name, indexes] of segments(rest.slice(1))) {
+    if (!context) return { typed: true, context: null };
+    context = stepIndexed(vocabs, context, name, indexes);
+  }
+  if (iterating && context && context.kind === "field") context = index(context, 1);
+  return { typed: true, context };
+}
+
 /** Comprehension variables in `source` (`for e in events`) and what each
  * iterates over, in source order so a later one can use an earlier one. */
 function bindingsIn(vocabs: Vocabs, root: string, source: string): Map<string, Context | null> {
@@ -601,6 +630,11 @@ function bindingsIn(vocabs: Vocabs, root: string, source: string): Map<string, C
   for (const m of source.matchAll(BINDING_RE)) {
     // `for a in attribute_list['Age']` loops over the list's entries of that
     // type, so `a` is an entry, as with `for a in attribute_list`.
+    const typed = typedBacklinksWalk(vocabs, m[2], true);
+    if (typed.typed) {
+      bindings.set(m[1], typed.context);
+      continue;
+    }
     const iterated = m[2].replace(TYPE_INDEX_AT_END_RE, "");
     bindings.set(m[1], walk(vocabs, root, segments(iterated), bindings, true));
   }
@@ -839,7 +873,8 @@ export function completeFromVocabularies(
       // collection or a list literal belongs.
       const chainStart = start - chain.length - 1;
       const role = expected(before.slice(0, chainStart))[0];
-      const context = walk(vocabs, namespace, segs, bindings);
+      const typed = typedBacklinksWalk(vocabs, chain);
+      const context = typed.typed ? typed.context : walk(vocabs, namespace, segs, bindings);
       candidates = context ? namesAt(vocabs, context) : [];
       if (context && ["operand", "value", "is_value", "number"].includes(role)) {
         // `father.families[0]...`: one entry of a collection, across a hop.
