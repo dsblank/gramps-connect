@@ -22,6 +22,16 @@ describe("parseErrorMessage", () => {
     expect(await parseErrorMessage(res(422, body))).toBe("unknown field 'brith' on Person -- known fields: gender");
   });
 
+  it("finds a list field's message keyed by the bad entry's position", async () => {
+    const body = JSON.stringify({
+      error: {
+        code: 422, message: "Invalid 'select'",
+        messages: { json: { select: { "1": ["invalid select entry 'x as value': unknown field 'x' on Person"] } } },
+      },
+    });
+    expect(await parseErrorMessage(res(422, body))).toBe("invalid select entry 'x as value': unknown field 'x' on Person");
+  });
+
   it("turns a bare abort()'s envelope into a status line", async () => {
     expect(await parseErrorMessage(res(422, '{"code":422,"status":"Unprocessable Entity"}'))).toBe(
       "Request rejected by the server (422 Unprocessable Entity)"

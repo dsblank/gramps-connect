@@ -111,13 +111,22 @@ export async function parseErrorMessage(res: Response): Promise<string> {
     // error.messages.json ({"where_expr": ["unknown field 'brith' on
     // Person -- known fields: ..."]}); that beats the headline
     // ("Invalid 'where_expr'") whenever it's there.
+    // A list field (select, order_by) nests one level deeper, keyed by
+    // the bad entry's position: {"select": {"1": ["invalid select entry ..."]}}.
     const fieldMessages = parsed?.error?.messages?.json;
-    if (fieldMessages && typeof fieldMessages === "object") {
-      for (const value of Object.values(fieldMessages)) {
-        const first = Array.isArray(value) ? value[0] : value;
-        if (typeof first === "string" && first) return first;
+    const firstMessage = (value: unknown, depth: number): string | null => {
+      if (typeof value === "string") return value || null;
+      if (Array.isArray(value)) return firstMessage(value[0], depth);
+      if (value && typeof value === "object" && depth > 0) {
+        for (const inner of Object.values(value)) {
+          const found = firstMessage(inner, depth - 1);
+          if (found) return found;
+        }
       }
-    }
+      return null;
+    };
+    const fieldMessage = firstMessage(fieldMessages, 2);
+    if (fieldMessage) return fieldMessage;
     if (typeof parsed?.error?.message === "string") return parsed.error.message;
     // A bare flask abort(422) etc. carries no message, just flask-smorest's
     // default {"code": 422, "status": "Unprocessable Entity"} -- a status
@@ -247,5 +256,8 @@ export async function testGoqlSelect(view: ViewConfig, token: string, expr: stri
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ select: ["handle", `${expr} as value`], limit: 1, where_expr: view.baseFilter || undefined }),
   });
-  return res.ok ? null : parseErrorMessage(res);
+  if (res.ok) return null;
+  // GOQL quotes the whole entry, including the " as value" added above --
+  // drop that prefix so the message is about what the person typed.
+  return (await parseErrorMessage(res)).replace(/^invalid select entry .*? as value['"]: /s, "");
 }
