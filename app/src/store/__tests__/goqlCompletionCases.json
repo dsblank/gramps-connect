@@ -1382,6 +1382,148 @@
     },
     {
       "namespace": "Event",
+      "source": "any(r. for r in event_refs)",
+      "cursor": 6,
+      "expect": [
+        "attribute_list",
+        "citation_list",
+        "note_list",
+        "private",
+        "ref",
+        "referrer",
+        "role"
+      ],
+      "start": 6,
+      "kind": {
+        "referrer": "relationship",
+        "role": "field"
+      }
+    },
+    {
+      "namespace": "Event",
+      "source": "any(r for r in event_refs if r.referrer.",
+      "contains": [
+        "primary_name",
+        "gender",
+        "father",
+        "mother",
+        "complete",
+        "gramps_id",
+        "birth",
+        "children["
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "any(r for r in event_refs if r.referrer.fa",
+      "expect": [
+        "families[",
+        "family_list",
+        "father",
+        "father_handle"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "any(r.referrer.primary_name.fi for r in event_refs)",
+      "cursor": 30,
+      "expect": [
+        "first_name"
+      ],
+      "start": 28
+    },
+    {
+      "namespace": "Event",
+      "source": "any(r for r in event_refs if r.referrer",
+      "expect": [
+        "referrer."
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "any(r for r in event_refs if r.role == \"Pri",
+      "expect": [
+        "Primary\""
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "any(r for r in event_refs if r.referrer.gender == ",
+      "expect": [
+        "Person."
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "[r for r in event_refs if r.role == \"Primary\"][0].ref",
+      "expect": [
+        "ref",
+        "referrer"
+      ]
+    },
+    {
+      "namespace": "Event",
+      "source": "any(r for r in event_refs['Primary'] if r.",
+      "expect": [
+        "attribute_list",
+        "citation_list",
+        "note_list",
+        "private",
+        "ref",
+        "referrer",
+        "role"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c for c in child_refs if c.",
+      "expect": [
+        "citation_list",
+        "frel",
+        "mrel",
+        "note_list",
+        "private",
+        "ref",
+        "referrer"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c for c in child_refs if c.referrer.",
+      "contains": [
+        "father",
+        "mother",
+        "children[",
+        "gramps_id"
+      ],
+      "excludes": [
+        "primary_name",
+        "gender"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(a. for a in attribute_list['Occupation'])",
+      "cursor": 6,
+      "expect": [
+        "citation_list",
+        "note_list",
+        "private",
+        "type",
+        "value"
+      ],
+      "start": 6
+    },
+    {
+      "namespace": "Person",
+      "source": "len([u for u in urls[\"E-mail\"] if u.pa",
+      "expect": [
+        "path"
+      ],
+      "start": 36
+    },
+    {
+      "namespace": "Event",
       "source": "type == ",
       "expect": [
         "\""
