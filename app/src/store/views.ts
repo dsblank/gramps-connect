@@ -738,6 +738,21 @@ const GRAMPLET_TAG_NAME = "Gramplet";
 // Same tag name as mapOverlays.ts's own OVERLAY_TAG_NAME -- not imported,
 // as mapOverlays.ts imports this file.
 const OVERLAY_TAG_NAME = "Map overlay";
+// Same tag names as customRuleMedia.ts's CUSTOM_RULE_TAG_NAME,
+// savedFilterMedia.ts's SAVED_FILTER_TAG_NAME and treeColumnMedia.ts's
+// TREE_COLUMN_TAG_NAME -- not imported, as all three import this file.
+const CUSTOM_RULE_TAG_NAME = "Custom Rule";
+const SAVED_FILTER_TAG_NAME = "Saved Filter";
+const TREE_COLUMN_TAG_NAME = "List Column";
+
+/** MEDIA_VIEW's hidden 0-or-more count of `tagName` on a row, feeding
+ * mediaCategory below. */
+function tagCountColumn(key: string, label: string, tagName: string): ColumnConfig {
+  return {
+    key, label, select: `len([t for t in tags if t.name == ${JSON.stringify(tagName)}]) as ${key}`,
+    sqlType: "INTEGER", hidden: true,
+  };
+}
 
 /** MEDIA_VIEW's "category" column -- `mime`'s stored value (still the raw
  * MIME type, aliased through unchanged: see the column's own `select`) plus
@@ -750,6 +765,9 @@ const OVERLAY_TAG_NAME = "Map overlay";
  * fact about it. */
 function mediaCategory(mime: unknown, item?: Record<string, unknown>): string {
   if (Number(item?.is_gramplet ?? 0) > 0) return "Gramplet";
+  if (Number(item?.is_custom_rule ?? 0) > 0) return "Custom Rule";
+  if (Number(item?.is_saved_filter ?? 0) > 0) return "Saved Filter";
+  if (Number(item?.is_list_column ?? 0) > 0) return "List Column";
   const value = typeof mime === "string" ? mime : "";
   if (Number(item?.is_map_overlay ?? 0) > 0 && value === GEOJSON_MIME) return "Map overlay";
   // An uploaded KML/GPX/GeoJSON -- what an overlay can be made from.
@@ -800,6 +818,11 @@ export const MEDIA_VIEW: ViewConfig = {
       select: `len([t for t in tags if t.name == ${JSON.stringify(OVERLAY_TAG_NAME)}]) as is_map_overlay`,
       sqlType: "INTEGER", hidden: true,
     },
+    // Hidden: the app's other tagged JSON records, so the Type column
+    // names them instead of calling them all "Document".
+    tagCountColumn("is_custom_rule", "Is Custom Rule", CUSTOM_RULE_TAG_NAME),
+    tagCountColumn("is_saved_filter", "Is Saved Filter", SAVED_FILTER_TAG_NAME),
+    tagCountColumn("is_list_column", "Is List Column", TREE_COLUMN_TAG_NAME),
     // The MIME type column, but shown as what it means to the user
     // (Image/Map overlay/Document/...) rather than the raw string --
     // mediaCategory reads the sibling `mime`/`is_gramplet` columns above via
