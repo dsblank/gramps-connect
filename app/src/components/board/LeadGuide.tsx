@@ -4,6 +4,7 @@
 // becomes loose ends and cards on the board at once, so stopping halfway
 // loses nothing and the rest can be done by hand.
 import { Badge, Box, Button, Chip, FileButton, Group, Loader, Paper, Select, Stack, Text, TextInput } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
 import { getToken } from "../../auth/auth";
 import { t } from "../../i18n/i18n";
@@ -166,6 +167,66 @@ function NewPersonForm({ onAdd }: { onAdd: (f: { first: string; surname: string;
   );
 }
 
+const ACCEPTS = (f: File) => f.type.startsWith("image/") || f.type === "application/pdf";
+
+/** "Choose a scan or photo…" that also takes a dropped file. Its drag
+ * events stop here, so the app-wide drop handler (hooks/useMediaDrop.ts)
+ * neither shows its overlay over this box nor adds the file to the Media
+ * list a second time: the window's dragenter/dragleave count stays
+ * balanced because both are stopped for this box and everything inside. */
+function FileDropZone({ busy, onFile }: { busy: boolean; onFile: (file: File) => void }) {
+  const [over, setOver] = useState(false);
+  const isFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes("Files");
+  return (
+    <Paper
+      withBorder
+      p="md"
+      style={{
+        borderStyle: "dashed",
+        textAlign: "center",
+        borderColor: over ? "var(--mantine-primary-color-filled)" : undefined,
+        background: over ? "var(--mantine-primary-color-light)" : undefined,
+      }}
+      onDragEnter={(e) => {
+        if (!isFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setOver(true);
+      }}
+      onDragOver={(e) => {
+        if (!isFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = busy ? "none" : "copy";
+      }}
+      onDragLeave={(e) => {
+        if (!isFiles(e)) return;
+        e.stopPropagation();
+        // Leaving for one of this box's own children isn't leaving the box.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+      }}
+      onDrop={(e) => {
+        if (!isFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setOver(false);
+        if (busy) return;
+        const files = Array.from(e.dataTransfer.files);
+        const file = files.find(ACCEPTS);
+        if (file) onFile(file);
+        else if (files.length > 0) notifications.show({ color: "yellow", message: t("Drop a picture or a PDF here.") });
+      }}
+    >
+      <Stack gap={6} align="center">
+        <FileButton accept="image/*,application/pdf" onChange={(file) => file && onFile(file)}>
+          {(props) => <Button {...props} size="xs" loading={busy}>{t("Choose a scan or photo…")}</Button>}
+        </FileButton>
+        <Text size="xs" c="dimmed">{t("or drop it here")}</Text>
+      </Stack>
+    </Paper>
+  );
+}
+
 const Question = ({ children }: { children: string }) => <Text fz="lg" fw={500}>{children}</Text>;
 const Footer = ({ children }: { children: React.ReactNode }) => <Group gap="xs" mt="xs">{children}</Group>;
 const Note = ({ children }: { children: React.ReactNode }) => <Text size="xs" c="dimmed">{children}</Text>;
@@ -202,19 +263,14 @@ export function LeadGuide({ lead, records, home, actions }: {
       body = (
         <>
           <Question>{t("Start with the evidence itself.")}</Question>
-          <Paper withBorder p="md" style={{ borderStyle: "dashed", textAlign: "center" }}>
-            <FileButton accept="image/*,application/pdf" onChange={async (file) => {
-              if (!file) return;
-              setBusy(true);
-              try {
-                await actions.onFile(file);
-              } finally {
-                setBusy(false);
-              }
-            }}>
-              {(props) => <Button {...props} size="xs" loading={busy}>{t("Choose a scan or photo…")}</Button>}
-            </FileButton>
-          </Paper>
+          <FileDropZone busy={busy} onFile={async (file) => {
+            setBusy(true);
+            try {
+              await actions.onFile(file);
+            } finally {
+              setBusy(false);
+            }
+          }} />
           <Note>{t("The file goes into the tree's Media as soon as you choose it. Everything else waits for Save.")}</Note>
           <Note>{t("No digital copy yet? That's fine: you can still record what it says and add the scan later.")}</Note>
           <Footer><Button size="xs" variant="default" onClick={() => actions.onStep("what")}>{t("I don't have a copy")}</Button></Footer>
