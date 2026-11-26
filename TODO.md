@@ -257,14 +257,35 @@ runs in multi-tree mode like every deployment. Still open:
   Would let the Families list filter or count by a parent's events, notes
   or citations. The Columns dialog's refresh tracking (`expressionDependencies`)
   and Tab completion need to follow it too.
-- **Backlinks that test the referring record** — `any(bl._class ==
-  'Person' and bl.surname == 'Smith' for bl in backlinks)` is rejected:
-  a `backlinks` condition can only test `_class`. The referrer can be any
-  of the ten record types, so each field test has to be checked per class
-  (GOQL's ROADMAP "Reverse relationships"). The concrete payoff: Home's
-  Anniversaries card filters "Only living" in the browser, from each
-  event's participants, because GOQL can't ask "an event whose person has
-  no death"; with this it could run on the server.
+- **Events list: Main Participants and Age at the event** — columns users
+  asked for, now expressible in GOQL (GOQL `event_refs`/`referrer`, on
+  GOQL main since #31). Whose event it is:
+  `event_refs['Primary'].referrer.primary_name`; age at the event:
+  `(date.sortval - event_refs['Primary'].referrer.birth.date.sortval) // 365`.
+  Gramps' own Main Participants is "a Primary person, else a family with
+  the Family role"; this GOQL matched it on every event of two real
+  trees: `[r.referrer.handle for r in event_refs if (r.role.value ==
+  EventRoleType.PRIMARY and r.referrer.gender != None) or (r.role.value ==
+  EventRoleType.FAMILY and r.referrer.complete != None)][0]` (GOQL's
+  ROADMAP has the follow-up to spell that with `_class`). Still to decide
+  here: how to show a family (Gramps shows "Father and Mother"; GOQL
+  gives the record, so the column formats the parents' names), and with
+  several Primary people Gramps adds ", ..." while GOQL picks one. Needs
+  a server whose GOQL has `event_refs`; an older one answers the column
+  with an error. Wiki: the Events list's columns.
+- **Anniversaries "Only living" on the server** — Home's Anniversaries card
+  filters "Only living" in the browser, from each event's participants
+  (`upcomingAnniversaries.ts`), because GOQL couldn't ask about an event's
+  people. It can now (`event_refs` with `referrer`, and
+  `backlinks['Person']`, on GOQL main since #31/#33), e.g. a birth whose
+  person has no death: `any(r for r in event_refs['Primary'] if
+  r.referrer.gender != None and r.referrer.death.handle == None)`, a
+  marriage whose spouses both live: `any(r for r in event_refs['Family'] if
+  r.referrer.father.death.handle == None and r.referrer.mother.death.handle
+  == None)`, plus the Living-age rule as a cutoff passed in
+  (`r.referrer.birth.date.sortval > Env.BORN_AFTER`, since GOQL arithmetic
+  doesn't take `Date('today')` yet -- GOQL ROADMAP). Moving
+  it would make the card's counts exact (today "there may be more").
 
 ## Citations
 
