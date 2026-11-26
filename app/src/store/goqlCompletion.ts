@@ -56,6 +56,14 @@ export interface FieldNode {
   type_names?: string;
 }
 
+/** A collection whose entries are links rather than records (`child_refs`,
+ * `event_refs`): a loop variable over one has the entry's fields, plus
+ * `referrer`, the record holding the entry, of one of these namespaces. */
+export interface LinkVocabulary {
+  entry: FieldNode;
+  referrers: string[];
+}
+
 export interface Vocabulary {
   namespace: string;
   columns: string[];
@@ -64,6 +72,8 @@ export interface Vocabulary {
   fields: Record<string, FieldNode>;
   relationships: Record<string, string>;
   collections: Record<string, string | null>;
+  /** Vocabulary format 5 on. */
+  links?: Record<string, LinkVocabulary>;
   keywords: string[];
   functions: string[];
   operators: string[];
@@ -120,6 +130,9 @@ const AT_CURSOR_RE = new RegExp(`(?<![A-Za-z0-9_.\\])])(?:(${CHAIN})\\.)?(${NAME
 const SEGMENT_RE = new RegExp(`(${NAME})((?:${INDEX})*)`, "g");
 const INDEX_RE = new RegExp(INDEX, "g");
 const BINDING_RE = new RegExp(`\\bfor\\s+(${NAME})\\s+in\\s+(${CHAIN})`, "g");
+// A quoted type name ending the iterated chain: `for a in attribute_list['Age']`
+// loops over the list's entries of that type.
+const TYPE_INDEX_AT_END_RE = /\[(?:'[^'\\]*'|"[^"\\]*")\]$/;
 const PARTIAL_OPERATOR_RE = /[=!<>]+$/;
 // The path a value is being written for: `path ==` (any comparison) or
 // `path in [..., ` (a list of values, `not in` too).
@@ -342,7 +355,7 @@ function continuation(
     return hasType(detail, "array") ? "[" : "";
   }
   if (kind === "variable" && binding) {
-    if (binding.kind === "namespace" || binding.node.fields) return ".";
+    if (binding.kind !== "field" || binding.node.fields) return ".";
     return binding.node.items ? "[" : "";
   }
   return "";
@@ -402,8 +415,29 @@ function segments(chain: string): Segment[] {
 }
 
 // A walk's position: at a record (top level, or across a relationship), or
-// inside its JSON fields.
-type Context = { kind: "namespace"; namespace: string } | { kind: "field"; node: FieldNode };
+// inside its JSON fields; and for a loop variable over `child_refs`/
+// `event_refs`, at the entry (its fields, plus `referrer`), at `referrer`
+// (one of several record types), and at a path that exists on more than
+// one of those types (`referrer.gramps_id`).
+type Context =
+  | { kind: "namespace"; namespace: string }
+  | { kind: "field"; node: FieldNode }
+  | { kind: "link"; link: LinkVocabulary }
+  | { kind: "referrers"; namespaces: string[] }
+  | { kind: "any"; contexts: Context[] };
+
+/** The contexts that exist, as one: null if none does. */
+function either(contexts: (Context | null)[]): Context | null {
+  const found = contexts.filter((context): context is Context => context !== null);
+  if (found.length === 0) return null;
+  return found.length === 1 ? found[0] : { kind: "any", contexts: found };
+}
+
+/** The single-type contexts behind a `referrers`/`any` one. */
+function alternatives(context: Context): Context[] {
+  if (context.kind === "referrers") return context.namespaces.map((namespace): Context => ({ kind: "namespace", namespace }));
+  return context.kind === "any" ? context.contexts : [context];
+}
 
 type Vocabs = Record<string, Vocabulary>;
 
@@ -412,6 +446,14 @@ function has(obj: object, key: string): boolean {
 }
 
 function step(vocabs: Vocabs, context: Context, name: string): Context | null {
+  if (context.kind === "referrers" || context.kind === "any") {
+    return either(alternatives(context).map((alternative) => step(vocabs, alternative, name)));
+  }
+  if (context.kind === "link") {
+    if (name === "referrer") return { kind: "referrers", namespaces: context.link.referrers };
+    const entryFields = context.link.entry.fields ?? {};
+    return has(entryFields, name) ? { kind: "field", node: entryFields[name] } : null;
+  }
   if (context.kind === "namespace") {
     const vocab = vocabs[context.namespace];
     if (has(vocab.relationships, name)) return { kind: "namespace", namespace: vocab.relationships[name] };
@@ -445,6 +487,9 @@ function collectionContext(vocabs: Vocabs, namespace: string, name: string): Con
  * (`parent_families[0]`) steps to the record that entry links to, the way
  * a relationship does. */
 function stepIndexed(vocabs: Vocabs, context: Context, name: string, indexes: number): Context | null {
+  if (context.kind === "referrers" || context.kind === "any") {
+    return either(alternatives(context).map((alternative) => stepIndexed(vocabs, alternative, name, indexes)));
+  }
   if (context.kind === "namespace" && indexes > 0) {
     const collection = collectionContext(vocabs, context.namespace, name);
     if (collection) return index(collection, indexes - 1);
@@ -455,6 +500,9 @@ function stepIndexed(vocabs: Vocabs, context: Context, name: string, indexes: nu
 /** The collections an index can follow from a record (`families`,
  * `citations`, ...; not `backlinks` or `child_refs`). */
 function indexableCollections(vocabs: Vocabs, context: Context): Candidate[] {
+  if (context.kind === "referrers" || context.kind === "any") {
+    return alternatives(context).flatMap((alternative) => indexableCollections(vocabs, alternative));
+  }
   if (context.kind !== "namespace") return [];
   return Object.entries(vocabs[context.namespace].collections)
     .filter(([, target]) => target !== null)
@@ -485,6 +533,9 @@ function walk(
     context = bound ? index(bound, firstIndexes) : null;
   } else {
     if (iterating && rest.length === 0 && firstIndexes === 0) {
+      // `for r in event_refs`: `r` is an entry, with `referrer`.
+      const link = vocabs[root].links?.[first];
+      if (link) return { kind: "link", link };
       const collection = collectionContext(vocabs, root, first);
       if (collection !== undefined) return collection;
     }
@@ -539,7 +590,8 @@ export function resolveGoqlPath(
     ? pickedContext(GOQL_VOCABULARIES, namespace, pick.comprehension, pick.rest, bindingsIn(GOQL_VOCABULARIES, namespace, chain))
     : walk(GOQL_VOCABULARIES, namespace, segments(chain), new Map());
   if (!context) return null;
-  return context.kind === "namespace" ? { kind: "record", namespace: context.namespace } : context;
+  if (context.kind === "namespace") return { kind: "record", namespace: context.namespace };
+  return context.kind === "field" ? context : null;
 }
 
 /** Comprehension variables in `source` (`for e in events`) and what each
@@ -547,7 +599,10 @@ export function resolveGoqlPath(
 function bindingsIn(vocabs: Vocabs, root: string, source: string): Map<string, Context | null> {
   const bindings = new Map<string, Context | null>();
   for (const m of source.matchAll(BINDING_RE)) {
-    bindings.set(m[1], walk(vocabs, root, segments(m[2]), bindings, true));
+    // `for a in attribute_list['Age']` loops over the list's entries of that
+    // type, so `a` is an entry, as with `for a in attribute_list`.
+    const iterated = m[2].replace(TYPE_INDEX_AT_END_RE, "");
+    bindings.set(m[1], walk(vocabs, root, segments(iterated), bindings, true));
   }
   return bindings;
 }
@@ -594,6 +649,16 @@ function pickedContext(
 }
 
 function namesAt(vocabs: Vocabs, context: Context): Candidate[] {
+  if (context.kind === "link") {
+    return [
+      ["referrer", "relationship", context.link.referrers.join(" or ")],
+      ...Object.entries(context.link.entry.fields ?? {}).map(([name, node]): Candidate => [name, "field", node.type]),
+    ];
+  }
+  if (context.kind === "referrers" || context.kind === "any") {
+    // Each type's names; one both have is offered once (`results`).
+    return alternatives(context).flatMap((alternative) => namesAt(vocabs, alternative));
+  }
   if (context.kind === "field") {
     return Object.entries(context.node.fields ?? {}).map(([name, node]) => [name, "field", node.type]);
   }

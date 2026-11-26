@@ -512,7 +512,7 @@
      "type": "array"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -534,6 +534,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Citation",
    "operators": [
     "==",
@@ -783,6 +784,7 @@
    "collections": {
     "backlinks": null,
     "citations": "Citation",
+    "event_refs": null,
     "media": "Media",
     "notes": "Note",
     "tags": "Tag"
@@ -1319,7 +1321,7 @@
      "type_names": "EventType"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -1341,6 +1343,95 @@
     "for",
     "if"
    ],
+   "links": {
+    "event_refs": {
+     "entry": {
+      "fields": {
+       "attribute_list": {
+        "items": {
+         "fields": {
+          "citation_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "note_list": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "private": {
+           "type": "boolean"
+          },
+          "type": {
+           "fields": {
+            "string": {
+             "type": "string"
+            },
+            "value": {
+             "constants": {
+              "class": "AttributeType",
+              "prefix": ""
+             },
+             "type": "integer"
+            }
+           },
+           "type": "object",
+           "type_names": "AttributeType"
+          },
+          "value": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "ref": {
+        "type": "string"
+       },
+       "role": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "EventRoleType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object",
+        "type_names": "EventRoleType"
+       }
+      },
+      "type": "object"
+     },
+     "referrers": [
+      "Person",
+      "Family"
+     ]
+    }
+   },
    "namespace": "Event",
    "operators": [
     "==",
@@ -2317,7 +2408,7 @@
      "type_names": "FamilyRelType"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -2339,6 +2430,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Family",
    "operators": [
     "==",
@@ -3050,7 +3142,7 @@
      ]
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -3072,6 +3164,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Media",
    "operators": [
     "==",
@@ -3717,7 +3810,7 @@
      "type_names": "NoteType"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -3739,6 +3832,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Note",
    "operators": [
     "==",
@@ -5130,7 +5224,7 @@
      "type": "array"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -5152,6 +5246,68 @@
     "for",
     "if"
    ],
+   "links": {
+    "child_refs": {
+     "entry": {
+      "fields": {
+       "citation_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "frel": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "ChildRefType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object",
+        "type_names": "ChildRefType"
+       },
+       "mrel": {
+        "fields": {
+         "string": {
+          "type": "string"
+         },
+         "value": {
+          "constants": {
+           "class": "ChildRefType",
+           "prefix": ""
+          },
+          "type": "integer"
+         }
+        },
+        "type": "object",
+        "type_names": "ChildRefType"
+       },
+       "note_list": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "private": {
+        "type": "boolean"
+       },
+       "ref": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "referrers": [
+      "Family"
+     ]
+    }
+   },
    "namespace": "Person",
    "operators": [
     "==",
@@ -6118,7 +6274,7 @@
      "type": "array"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -6140,6 +6296,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Place",
    "operators": [
     "==",
@@ -6876,7 +7033,7 @@
      "type": "array"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -6898,6 +7055,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Repository",
    "operators": [
     "==",
@@ -7639,7 +7797,7 @@
      "type": "string"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -7661,6 +7819,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Source",
    "operators": [
     "==",
@@ -8231,7 +8390,7 @@
      "type": "integer"
     }
    },
-   "format_version": 4,
+   "format_version": 5,
    "functions": [
     "any",
     "count",
@@ -8253,6 +8412,7 @@
     "for",
     "if"
    ],
+   "links": {},
    "namespace": "Tag",
    "operators": [
     "==",
