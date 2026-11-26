@@ -36,7 +36,16 @@ interface CachedEvent {
   date: GrampsDate | null;
   type: number | null;
   place: string | null;
+  /** The place's name, when `place` may not be in the Places cache (an
+   * unsaved place on the Evidence Board). */
+  placeTitle?: string;
 }
+
+/** An event the caller holds itself, ahead of the Events cache -- the
+ * Evidence Board's records, which may have unsaved changes or not be
+ * saved at all. `undefined` for one it doesn't hold. */
+export type LocalEvent = CachedEvent;
+export type EventLookup = (handle: string) => LocalEvent | undefined;
 
 let eventLoadRequested = false;
 
@@ -62,15 +71,16 @@ function readEvent(handle: string): CachedEvent | null {
 /** The event the server's profile shows for `which`, read from the Events
  * cache -- `null` when that can't be determined locally (the caller keeps
  * the server's text), `"none"` when the object has no such event. */
-function resolveEvent(obj: ObjectWithEvents, which: Which): CachedEvent | "none" | null {
+function resolveEvent(obj: ObjectWithEvents, which: Which, lookup?: EventLookup): CachedEvent | "none" | null {
   const refs = obj.event_ref_list;
   // Not in the JSON at all (the caller fetched a subset of keys): nothing
   // to go on locally.
   if (!refs) return null;
   if (!refs.length) return "none";
 
+  const local = refs.map((ref) => (ref.ref && lookup ? lookup(ref.ref) : undefined));
   const store = getViewStore("event");
-  if (!store.getSnapshot().loadedCount) {
+  if (local.some((event, i) => !event && refs[i].ref) && !store.getSnapshot().loadedCount) {
     if (!eventLoadRequested) {
       eventLoadRequested = true;
       store.ensureLoaded().catch(() => {
@@ -82,7 +92,7 @@ function resolveEvent(obj: ObjectWithEvents, which: Which): CachedEvent | "none"
 
   // Every candidate has to be readable, or we can't know which one the
   // server picked -- bail out to its text rather than guess.
-  const events: (CachedEvent | null)[] = refs.map((ref) => (ref.ref ? readEvent(ref.ref) : null));
+  const events: (CachedEvent | null)[] = refs.map((ref, i) => local[i] ?? (ref.ref ? readEvent(ref.ref) : null));
   if (events.some((event, i) => !event && refs[i].ref)) return null;
 
   if (which === "marriage") {
@@ -119,13 +129,13 @@ export function lifeEventDate(obj: ObjectWithEvents | null | undefined, which: W
 }
 
 /** Same event's place, as the display settings say to title it. */
-export function lifeEventPlace(obj: ObjectWithEvents | null | undefined, which: Which): string {
+export function lifeEventPlace(obj: ObjectWithEvents | null | undefined, which: Which, lookup?: EventLookup): string {
   if (!obj) return "";
   const serverText = obj.profile?.[which]?.place ?? "";
-  const event = resolveEvent(obj, which);
+  const event = resolveEvent(obj, which, lookup);
   if (event === null) return serverText;
   if (event === "none" || !event.place) return "";
-  return displayPlaceTitle(event.place, event.date) ?? serverText;
+  return displayPlaceTitle(event.place, event.date) ?? (event.placeTitle || serverText);
 }
 
 /** The same event's year in the Gregorian calendar, as text ("" when
@@ -135,9 +145,9 @@ export function lifeEventPlace(obj: ObjectWithEvents | null | undefined, which: 
  * (a day number); a Gregorian one, or one with no sortval, reads the year
  * straight from dateval. When the events cache can't answer, the first
  * 3-4 digit number in the server's formatted date stands in. */
-export function lifeEventYear(obj: ObjectWithEvents | null | undefined, which: Which): string {
+export function lifeEventYear(obj: ObjectWithEvents | null | undefined, which: Which, lookup?: EventLookup): string {
   if (!obj) return "";
-  const event = resolveEvent(obj, which);
+  const event = resolveEvent(obj, which, lookup);
   if (event === null) return obj.profile?.[which]?.date?.match(/\b\d{3,4}\b/)?.[0] ?? "";
   if (event === "none" || !event.date) return "";
   const { dateval, calendar, sortval } = event.date;

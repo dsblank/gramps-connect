@@ -6,12 +6,16 @@
 import { dock, undock } from "./bottomDock";
 import { raiseWindow, removeWindow } from "./windowStack";
 import type { ObjectDetail } from "./objectDetail";
+import type { SearchTerms } from "./externalSearch";
 
 export const EXTERNAL_SEARCH_WINDOW_ID = "external-search";
 export const EXTERNAL_SEARCH_CHIP_WIDTH = 240;
 
 export interface ExternalSearchWindowState {
   detail: ObjectDetail;
+  /** Search terms worked out by the opener, when it knows more than
+   * `detail` alone tells (the Evidence Board's unsaved changes). */
+  terms?: SearchTerms;
   minimized: boolean;
   /** Bumped on every open, so the window starts the person's search terms
    * over even when it's the same person again. */
@@ -25,8 +29,8 @@ function notify(): void {
   for (const listener of listeners) listener();
 }
 
-export function openExternalSearchWindow(detail: ObjectDetail): void {
-  state = { detail, minimized: false, generation: (state?.generation ?? 0) + 1 };
+export function openExternalSearchWindow(detail: ObjectDetail, terms?: SearchTerms): void {
+  state = { detail, terms, minimized: false, generation: (state?.generation ?? 0) + 1 };
   undock(EXTERNAL_SEARCH_WINDOW_ID);
   raiseWindow(EXTERNAL_SEARCH_WINDOW_ID);
   notify();

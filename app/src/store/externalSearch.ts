@@ -30,7 +30,7 @@
 // The hidden-site list and custom engines are per browser (localStorage),
 // not per tree or shared, as in gramps-web.
 import type { ObjectDetail } from "./objectDetail";
-import { lifeEventPlace, lifeEventYear } from "./lifeEventDates";
+import { lifeEventPlace, lifeEventYear, type EventLookup } from "./lifeEventDates";
 import { STORAGE_KEYS } from "./storageKeys";
 
 /** gramps-web's three access levels, shown as a badge on each site's row. */
@@ -217,8 +217,9 @@ interface RawPersonName {
  * middle name is the given name's second word, as in gramps-web (Gramps
  * has no separate middle-name field). Years and the place come from the
  * same birth/death-or-fallback events the profile shows, the place being
- * the birth's, else the death's. */
-export function searchTermsFor(detail: ObjectDetail): SearchTerms {
+ * the birth's, else the death's. `lookup` supplies events the caller
+ * holds itself (the Evidence Board's), ahead of the Events cache. */
+export function searchTermsFor(detail: ObjectDetail, lookup?: EventLookup): SearchTerms {
   const name = (detail.primary_name ?? {}) as RawPersonName;
   const given = (name.first_name ?? "").trim();
   const surnames = name.surname_list ?? [];
@@ -228,9 +229,9 @@ export function searchTermsFor(detail: ObjectDetail): SearchTerms {
     name_given: given,
     name_middle: given.split(/\s+/)[1] ?? "",
     name_surname: surname,
-    place_name: lifeEventPlace(detail, "birth") || lifeEventPlace(detail, "death"),
-    birth_year: lifeEventYear(detail, "birth"),
-    death_year: lifeEventYear(detail, "death"),
+    place_name: lifeEventPlace(detail, "birth", lookup) || lifeEventPlace(detail, "death", lookup),
+    birth_year: lifeEventYear(detail, "birth", lookup),
+    death_year: lifeEventYear(detail, "death", lookup),
   };
 }
 

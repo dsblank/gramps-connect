@@ -23,6 +23,9 @@ import { TreeMark } from "./TreeMark";
 import { photosOf, type PhotoSubject } from "../../store/board/faces";
 import { useRelationshipPaths } from "../../store/relationshipPathsApi";
 import { openRelationshipWindow } from "../../store/relationshipWindow";
+import { openExternalSearchWindow } from "../../store/externalSearchWindow";
+import { boardSearchTerms } from "../../store/board/searchTerms";
+import type { ObjectDetail } from "../../store/objectDetail";
 import type { PathStep } from "../../store/relationshipPath";
 import { RelationshipBetween } from "../related/RelationshipBetween";
 
@@ -454,6 +457,17 @@ export function CardPanel(props: {
           <Anchor size="xs" href={formatHash({ viewKey: r._class.toLowerCase(), handle })}>{t(OPEN_IN[r._class])}</Anchor>
           {changedHere && <Text size="xs" c="dimmed">{t("Your unsaved changes on the board won't show there yet.")}</Text>}
         </Box>
+      )}
+      {r._class === "Person" && (
+        <Tooltip label={t("Search external services for matching records.")} openDelay={400} withArrow>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={() => openExternalSearchWindow(r as unknown as ObjectDetail, boardSearchTerms(handle, all))}
+          >
+            {t("External Search")}
+          </Button>
+        </Tooltip>
       )}
       {onViewPhoto && photoUrl && <SidebarPhoto url={photoUrl} onClick={onViewPhoto} />}
       {onViewPhoto && <Button size="xs" variant="light" onClick={onViewPhoto}>{readOnly ? t("View full size") : t("View full size and identify people")}</Button>}

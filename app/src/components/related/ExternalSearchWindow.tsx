@@ -91,7 +91,7 @@ export function ExternalSearchWindow() {
   const stack = useSyncExternalStore(subscribeWindowStack, getWindowStack);
   const offsets = dockOffsets(useSyncExternalStore(subscribeDock, getDock));
   if (!win) return null;
-  const name = personName(win.detail);
+  const name = personName(win.terms ?? searchTermsFor(win.detail));
   return (
     <FloatingWindow
       storageKey={STORAGE_KEYS.externalSearchWindowGeometry}
@@ -107,18 +107,17 @@ export function ExternalSearchWindow() {
       onClose={closeExternalSearchWindow}
     >
       {/* Keyed by opening, so each one starts from the person's own terms. */}
-      <ExternalSearchContent key={win.generation} detail={win.detail} />
+      <ExternalSearchContent key={win.generation} detail={win.detail} initialTerms={win.terms} />
     </FloatingWindow>
   );
 }
 
-function personName(detail: ObjectDetail): string {
-  const terms = searchTermsFor(detail);
+function personName(terms: SearchTerms): string {
   return [terms.name_given, terms.name_surname].filter(Boolean).join(" ");
 }
 
-function ExternalSearchContent({ detail }: { detail: ObjectDetail }) {
-  const [terms, setTerms] = useState<SearchTerms>(() => searchTermsFor(detail));
+function ExternalSearchContent({ detail, initialTerms }: { detail: ObjectDetail; initialTerms?: SearchTerms }) {
+  const [terms, setTerms] = useState<SearchTerms>(() => initialTerms ?? searchTermsFor(detail));
   const [editingTerms, setEditingTerms] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [prefs, setPrefs] = useState<ExternalSearchPrefs>(loadPrefs);
