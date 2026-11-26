@@ -20,7 +20,7 @@ const records: Records = { anna: person("anna", "Anna"), ruth: person("ruth", "R
 
 function actions(): LeadActions {
   return {
-    onFile: vi.fn(async () => {}), onWhat: vi.fn(), onWhere: vi.fn(), onPerson: vi.fn(), onRelate: vi.fn(), onEvent: vi.fn(),
+    onFile: vi.fn(async () => {}), onMedia: vi.fn(async () => {}), onWhat: vi.fn(), onWhere: vi.fn(), onPerson: vi.fn(), onRelate: vi.fn(), onEvent: vi.fn(),
     onRole: vi.fn(), onHome: vi.fn(), onSave: vi.fn(), onStep: vi.fn(), onAnother: vi.fn(), onClose: vi.fn(),
   };
 }

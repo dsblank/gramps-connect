@@ -44,6 +44,8 @@ export const NEW_LEAD: LeadState = { step: "file", media: null, title: "", sourc
 export interface LeadActions {
   /** Uploads the file (into the tree at once) and pins it. */
   onFile: (file: File) => Promise<void>;
+  /** A Media object already in the tree. */
+  onMedia: (handle: string) => Promise<void>;
   onWhat: (title: string) => void;
   onWhere: (repo: { handle: string } | { name: string }) => void;
   onPerson: (who: { handle: string } | { first: string; surname: string; gender: "F" | "M" | "U" }) => void;
@@ -88,7 +90,7 @@ async function loadRounds(start: Records, next: (r: Records) => string[]): Promi
 
 /** Search the tree for one kind of record, offering "New: <typed>" too. */
 function RecordSearch({ type, placeholder, exclude, onPick, newLabel }: {
-  type: "person" | "repository";
+  type: "person" | "repository" | "media";
   placeholder: string;
   exclude?: Set<string>;
   onPick: (pick: { handle: string; label: string } | { name: string }) => void;
@@ -267,6 +269,15 @@ export function LeadGuide({ lead, records, home, actions }: {
             setBusy(true);
             try {
               await actions.onFile(file);
+            } finally {
+              setBusy(false);
+            }
+          }} />
+          <RecordSearch type="media" placeholder={t("Or find one already in the tree's Media…")} onPick={async (p) => {
+            if (!("handle" in p)) return;
+            setBusy(true);
+            try {
+              await actions.onMedia(p.handle);
             } finally {
               setBusy(false);
             }

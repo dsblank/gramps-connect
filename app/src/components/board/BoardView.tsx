@@ -478,6 +478,13 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   const leadDoc = () => ({ media: lead?.media ?? null, citation: lead?.citation ?? null });
   const leadAnchor = () => lead?.citation ?? lead?.media ?? lead?.source ?? null;
 
+  /** Pins the guide's Media card and moves on to "What is it?". */
+  async function pickLeadMedia(media: string) {
+    const loaded = await loadIntoBase([{ cls: "Media", handle: media }]);
+    pinAround(null, [[media, -240, -120]], null, loaded);
+    setLead((l) => l && { ...l, media, step: "what" });
+  }
+
   const leadActions: LeadActions = {
     async onFile(f) {
       const [media] = await uploadMediaFiles([f]);
@@ -485,10 +492,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       uploaded.current.push(media);
       getViewStore(MEDIA_VIEW.key).requeryDebounced();
       notifications.show({ color: "green", message: t("Added to the tree's Media: {name}").replace("{name}", f.name) });
-      const loaded = await loadIntoBase([{ cls: "Media", handle: media }]);
-      pinAround(null, [[media, -240, -120]], null, loaded);
-      setLead((l) => l && { ...l, media, step: "what" });
+      await pickLeadMedia(media);
     },
+    onMedia: pickLeadMedia,
     onWhat(title) {
       let made = { source: "", citation: "" };
       const change = stage(`${t("New source")}: ${title}`, (b) => {
