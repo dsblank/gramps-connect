@@ -1186,6 +1186,49 @@
     },
     {
       "namespace": "Person",
+      "source": "parent_families[0].ch",
+      "expect": [
+        "change",
+        "child_ref_list",
+        "children["
+      ],
+      "kind": {
+        "children[": "collection"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "parent_families[0].children",
+      "expect": [
+        "children["
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "parent_families[0].children[",
+      "expect": [
+        "0"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "[f for f in parent_families][0].ch",
+      "contains": [
+        "children["
+      ],
+      "excludes": [
+        "children"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "len(parent_families[0].ch",
+      "expect": [
+        "child_ref_list"
+      ]
+    },
+    {
+      "namespace": "Person",
       "source": "parent_families[0].father.primary_name.first",
       "expect": [
         "first_name"
@@ -1195,11 +1238,11 @@
       "namespace": "Family",
       "source": "father.parent_fa",
       "expect": [
-        "parent_families",
+        "parent_families[",
         "parent_family_list"
       ],
       "kind": {
-        "parent_families": "collection",
+        "parent_families[": "collection",
         "parent_family_list": "field"
       }
     },

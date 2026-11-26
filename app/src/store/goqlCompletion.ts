@@ -461,6 +461,15 @@ function indexableCollections(vocabs: Vocabs, context: Context): Candidate[] {
     .map(([name, target]): Candidate => [name, "collection", target]);
 }
 
+/** `indexableCollections`, offered with their `[`: past a hop
+ * (`parent_families[0].children`) a collection is only valid indexed --
+ * `parent_families[0].children[0].gender`, never
+ * `len(parent_families[0].children)` -- so completing the bare name
+ * would invite something GOQL rejects. */
+function indexedSteps(vocabs: Vocabs, context: Context): Candidate[] {
+  return indexableCollections(vocabs, context).map(([name, kind, target]): Candidate => [name + "[", kind, target]);
+}
+
 function walk(
   vocabs: Vocabs,
   root: string,
@@ -640,7 +649,7 @@ export function completeFromVocabularies(
     const prefix = picked[2] ?? "";
     const bindings = bindingsIn(vocabs, namespace, source);
     const context = pickedContext(vocabs, namespace, before.slice(0, picked.index + 1), picked[1], bindings);
-    const candidates = context ? [...namesAt(vocabs, context), ...indexableCollections(vocabs, context)] : [];
+    const candidates = context ? [...namesAt(vocabs, context), ...indexedSteps(vocabs, context)] : [];
     return results(candidates, prefix, cursor - prefix.length, bindings, envList);
   }
   if (PICK_INDEX_RE.test(before) && comprehensionEnding(before.slice(0, -1)) !== null) {
@@ -769,7 +778,7 @@ export function completeFromVocabularies(
       candidates = context ? namesAt(vocabs, context) : [];
       if (context && ["operand", "value", "is_value", "number"].includes(role)) {
         // `father.families[0]...`: one entry of a collection, across a hop.
-        candidates = [...candidates, ...indexableCollections(vocabs, context)];
+        candidates = [...candidates, ...indexedSteps(vocabs, context)];
       }
       if (role === "iterable") {
         candidates = candidates.filter(([, kind, detail]) => kind === "relationship" || isArray(detail));
