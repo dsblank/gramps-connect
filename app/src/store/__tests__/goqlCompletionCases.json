@@ -1,5 +1,5 @@
 {
-  "_comment": "Completion cases shared by every implementation of completion.complete_from_vocabularies() (this package's own, and ports to other languages that load `python -m gramps_object_query_language.vocabulary` output). `cursor` defaults to the end of `source`; Suggestions depend on the grammar position before the word (start of a condition, after an operand, after a comparison). `expect` is the exact list of names, in order; `contains`/`excludes` check membership only; `kind` maps a name to its expected kind. A name typed in full that can go on is returned with its continuation (`date.`, `dateval[`). A Gramps type compared with a value gets `\"`, then its names inside the string (`type == \"Cen` -> `Census\"`), closing quote included unless it's already there.",
+  "_comment": "Completion cases shared by every implementation of completion.complete_from_vocabularies() (this package's own, and ports to other languages that load `python -m gramps_object_query_language.vocabulary` output). `cursor` defaults to the end of `source`; Suggestions depend on the grammar position before the word (start of a condition, after an operand, after a comparison). `expect` is the exact list of names, in order; `contains`/`excludes` check membership only; `kind` maps a name to its expected kind. A name typed in full that can go on is returned with its continuation (`date.`, `dateval[`). A Gramps type compared with a value gets `\"`, then its names inside the string (`type == \"Cen` -> `Census\"`), closing quote included unless it's already there. A loop variable is offered only where GOQL lets it be read (the innermost loop's, never outside its loop).",
   "cases": [
     {
       "namespace": "Person",
@@ -78,14 +78,15 @@
     },
     {
       "namespace": "Person",
-      "source": "any(x.surname == 'a' for x in primary_name.surname_list) and x.",
+      "source": "any(x.surname == 'a' and x. for x in primary_name.surname_list)",
       "expect": [
         "connector",
         "origintype",
         "prefix",
         "primary",
         "surname"
-      ]
+      ],
+      "cursor": 27
     },
     {
       "namespace": "Person",
@@ -95,7 +96,8 @@
     },
     {
       "namespace": "Person",
-      "source": "any(e.date.sortval > 0 for e in events) and e",
+      "source": "any(e.date.sortval > 0 and e for e in events)",
+      "cursor": 28,
       "contains": [
         "e.",
         "events"
@@ -103,6 +105,16 @@
       "kind": {
         "e.": "variable"
       }
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.date.sortval > 0 for e in events) and e",
+      "contains": [
+        "events"
+      ],
+      "excludes": [
+        "e."
+      ]
     },
     {
       "namespace": "Family",
@@ -477,6 +489,7 @@
         "media",
         "notes",
         "parent_families",
+        "siblings",
         "tags"
       ]
     },
@@ -561,12 +574,12 @@
       "source": "any(e.date.sortval > 0 for e in ",
       "contains": [
         "events",
-        "event_ref_list"
+        "event_ref_list",
+        "["
       ],
       "excludes": [
         "gender",
-        "any",
-        "["
+        "any"
       ]
     },
     {
@@ -792,8 +805,16 @@
     },
     {
       "namespace": "Person",
-      "source": "any(s.surname == 'a' for s in primary_name.surname_list) and s",
+      "source": "any(s.surname == 'a' and s for s in primary_name.surname_list)",
+      "cursor": 26,
       "contains": [
+        "s."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(s.surname == 'a' for s in primary_name.surname_list) and s",
+      "excludes": [
         "s."
       ]
     },
@@ -1725,6 +1746,254 @@
       "cursor": 18,
       "expect": [
         "Primary"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c.ge for f in parent_families for c in f.children)",
+      "cursor": 8,
+      "expect": [
+        "gender"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(any(c.ge for c in f.children) for f in parent_families)",
+      "cursor": 12,
+      "expect": [
+        "gender"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(any(f.gr for c in f.children) for f in parent_families)",
+      "cursor": 12,
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c.gender == 1 for f in parent_families for c in ",
+      "expect": [
+        "f"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c.gender == 1 for f in parent_families for c in f.chi",
+      "expect": [
+        "child_ref_list",
+        "children"
+      ],
+      "kind": {
+        "children": "collection"
+      }
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c.gender == 1 for f in parent_families for c in f.",
+      "excludes": [
+        "child_refs",
+        "gramps_id"
+      ],
+      "contains": [
+        "attribute_list",
+        "events",
+        "children",
+        "father"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c.gender == 1 for f in parent_families if f.gr",
+      "expect": [
+        "gramps_id"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(c.gender == 1 for f in parent_families for c in f.children if f",
+      "excludes": [
+        "f."
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(e.date.sortval > 0 for f in families for k in f.children for e in k.ev",
+      "expect": [
+        "event_ref_list",
+        "events"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "len([c.ha for f in parent_families for c in f.children]) > 1",
+      "cursor": 9,
+      "expect": [
+        "handle"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(len(f.chi) > 1 for f in parent_families)",
+      "cursor": 13,
+      "expect": [
+        "child_ref_list",
+        "children"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.gi for s in [c for c in children if c.gender == Person.MALE])",
+      "cursor": 8,
+      "expect": [
+        "given_name"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.given_name == 'R' for s in [c for c in children] if s.gi",
+      "expect": [
+        "given_name"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.given_name == 'R' for s in [c.father for c in children] if s.gi",
+      "expect": []
+    },
+    {
+      "namespace": "Person",
+      "source": "any(s.surname == 'a' for s in prim",
+      "expect": [
+        "primary_name"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(a.value == 'a' for a in father.att",
+      "expect": [
+        "attribute_list"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(a.value == 'a' for a in father.bi",
+      "expect": [
+        "birth"
+      ]
+    },
+    {
+      "namespace": "Note",
+      "source": "backlinks[",
+      "expect": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Note",
+      "source": "backlinks[\"Pe",
+      "expect": [
+        "Person\"]"
+      ],
+      "kind": {
+        "Person\"]": "type_name"
+      }
+    },
+    {
+      "namespace": "Note",
+      "source": "any(p.gender == 1 for p in backlinks['Pe",
+      "expect": [
+        "Person']"
+      ]
+    },
+    {
+      "namespace": "Note",
+      "source": "len(backlinks['Pe']) > 1",
+      "cursor": 17,
+      "expect": [
+        "Person"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.given_name == 'R' for s in [",
+      "contains": [
+        "children",
+        "any"
+      ],
+      "excludes": [
+        "\"",
+        "None"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.given_name == 'R' for s in [c for c in children if c.gender == Person.MALE] if s.gender in [Person.MALE] and s.given_name in [",
+      "contains": [
+        "\""
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.surname == 'a' for s in father.",
+      "contains": [
+        "primary_name",
+        "attribute_list",
+        "birth"
+      ],
+      "excludes": [
+        "gender",
+        "gramps_id"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.surname == 'a' for s in father.primary_name.",
+      "contains": [
+        "surname_list",
+        "citation_list"
+      ],
+      "excludes": [
+        "first_name",
+        "call"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.su for s in father.primary_name.surname_list)",
+      "cursor": 8,
+      "expect": [
+        "surname"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.su for c in children for s in c.primary_name.surname_list)",
+      "cursor": 8,
+      "expect": [
+        "surname"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(any(s.su for s in c.primary_name.surname_list) for c in children)",
+      "cursor": 12,
+      "expect": [
+        "surname"
+      ]
+    },
+    {
+      "namespace": "Person",
+      "source": "any(s.surname == 'a' for f in parent_families for s in f.father.prim",
+      "expect": [
+        "primary_name"
+      ]
+    },
+    {
+      "namespace": "Family",
+      "source": "any(s.surname == 'a' for s in children[0].primary_name.surname_list if s.su",
+      "expect": [
+        "surname"
       ]
     }
   ]

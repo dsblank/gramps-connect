@@ -29,7 +29,18 @@
 // - `ClassName.`: that class's constants; `Env.`: the caller's env names
 // - any other path: walked through relationships (`birth.`), JSON fields
 //   (`primary_name.surname_list[0].`) and comprehension variables (`e.` in
-//   `any(... for e in events)`)
+//   `any(... for e in events)`; `c.` in `any(... for f in parent_families
+//   for c in f.children)`; `s.` in `any(... for s in [c for c in children
+//   if ...])`). Only the loop variable GOQL lets that spot read is offered:
+//   the last `for`'s in the element, the `for` before it in an `if`, the
+//   one just before in a later `for`'s list, and none outside every loop
+//   or from an outer loop inside an inner one
+// - a loop's list (`for x in`): collections, lists, `[` for a list
+//   comprehension, then on along a path to a list
+//   (`father.primary_name.surname_list`, `f.children`); after another
+//   `for`, only the variable just before it
+// - `backlinks[`: `"`, then the kinds of record (`backlinks["Pe` ->
+//   `Person"]`)
 // - a Gramps type compared with a value (`type ==`, `type in [`): `"`, and
 //   inside that string the type's names, matched ignoring case
 //   (`type == "cen` -> `Census"`)
@@ -129,11 +140,13 @@ const CHAIN = `${SEGMENT}(?:\\.${SEGMENT})*`;
 const AT_CURSOR_RE = new RegExp(`(?<![A-Za-z0-9_.\\])])(?:(${CHAIN})\\.)?(${NAME})?$`);
 const SEGMENT_RE = new RegExp(`(${NAME})((?:${INDEX})*)`, "g");
 const INDEX_RE = new RegExp(INDEX, "g");
-const BINDING_RE = new RegExp(`\\bfor\\s+(${NAME})\\s+in\\s+(${CHAIN})`, "g");
-// A quoted type name ending the iterated chain: `for a in attribute_list['Age']`
-// loops over the list's entries of that type.
+const CHAIN_FULL_RE = new RegExp(`^(?:${CHAIN})$`);
 // `backlinks['Person']` starting a path: the Person records pointing here.
 const TYPED_BACKLINKS_RE = /^backlinks\[(?:'([A-Za-z]+)'|"([A-Za-z]+)")\]/;
+// `backlinks[` (not after a `.`) just before a string: a kind of record.
+const BACKLINKS_KIND_RE = /(?<![A-Za-z0-9_.\])])backlinks\[$/;
+// A quoted type name ending the iterated chain: `for a in attribute_list['Age']`
+// loops over the list's entries of that type.
 const TYPE_INDEX_AT_END_RE = /\[(?:'[^'\\]*'|"[^"\\]*")\]$/;
 const PARTIAL_OPERATOR_RE = /[=!<>]+$/;
 // The path a value is being written for: `path ==` (any comparison) or
@@ -248,9 +261,11 @@ function openFrames(toks: Token[]): Frame[] {
       const fn = previous && previous[0] === "name" && !NON_OPERAND_WORDS.has(previous[1]) ? previous[1] : null;
       frames.push({ bracket: "(", fn, values: false, subscript: false, argument: 0 });
     } else if (text === "[") {
-      // `path[` indexes a list; `in [` starts a list of values; any other
-      // `[` starts a comprehension (`len([... for ...])`).
-      frames.push({ bracket: "[", fn: null, values: isWord(previous, "in"), subscript: endsOperand(previous), argument: 0 });
+      // `path[` indexes a list; `in [` starts a list of values, except in
+      // `for x in [`; any other `[` starts a comprehension
+      // (`len([... for ...])`, `for x in [... for ...]`).
+      const values = isWord(previous, "in") && !(i >= 3 && isWord(toks[i - 3], "for"));
+      frames.push({ bracket: "[", fn: null, values, subscript: endsOperand(previous), argument: 0 });
     } else if ((text === ")" || text === "]") && frames.length) {
       frames.pop();
     } else if (text === "," && frames.length) {
@@ -395,9 +410,12 @@ function typeNameCompletions(
   opened: number,
 ): Completion[] {
   const before = source.slice(0, cursor);
+  if (BACKLINKS_KIND_RE.test(before.slice(0, opened)) && has(vocabs[namespace].collections, "backlinks")) {
+    return recordKindCompletions(vocabs, source, cursor, opened);
+  }
   const want = expected(before.slice(0, opened))[0];
   if (want !== "value" && want !== "literal") return [];
-  const bindings = bindingsIn(vocabs, namespace, source);
+  const [bindings] = bindingsAt(vocabs, namespace, source, opened);
   const className = comparedField(vocabs, namespace, before.slice(0, opened), bindings)?.type_names;
   if (!className) return [];
   const quote = source[opened];
@@ -407,6 +425,19 @@ function typeNameCompletions(
     .filter((name) => name.toLowerCase().startsWith(typed))
     .map((name): Completion => ({ name: name + closing, kind: "type_name", detail: className, start: opened + 1 }))
     .sort((a, b) => compareNames(a.name, b.name));
+}
+
+/** Inside `backlinks["`: the kinds of record (`backlinks["Pe` ->
+ * `Person"]`), closing the string and the bracket unless already there. */
+function recordKindCompletions(vocabs: Vocabs, source: string, cursor: number, opened: number): Completion[] {
+  const quote = source[opened];
+  const after = source.slice(cursor);
+  const closing = after.startsWith(quote) ? "" : quote + (after.startsWith("]") ? "" : "]");
+  const typed = source.slice(opened + 1, cursor).toLowerCase();
+  return Object.keys(vocabs)
+    .sort()
+    .filter((name) => name.toLowerCase().startsWith(typed))
+    .map((name): Completion => ({ name: name + closing, kind: "type_name", detail: "record", start: opened + 1 }));
 }
 
 type Segment = [name: string, indexes: number];
@@ -533,6 +564,15 @@ function walk(
   if (bindings.has(first)) {
     const bound = bindings.get(first) ?? null;
     context = bound ? index(bound, firstIndexes) : null;
+    if (iterating && context && context.kind === "namespace" && rest.length === 1) {
+      const [name, indexes] = rest[0];
+      const owner = vocabs[context.namespace];
+      if (indexes === 0 && has(owner.collections, name) && !has(owner.links ?? {}, name)) {
+        // `for c in f.children`: a collection off the loop variable.
+        const target = owner.collections[name];
+        return target === null ? null : { kind: "namespace", namespace: target };
+      }
+    }
   } else {
     if (iterating && rest.length === 0 && firstIndexes === 0) {
       // `for r in event_refs`: `r` is an entry, with `referrer`.
@@ -574,7 +614,7 @@ export function splitGoqlPick(text: string): { comprehension: string; index: num
       if (depth === 0 && position !== comprehension.length - 1) return null;
     }
   }
-  if (comprehensionEnding(comprehension) === null) return null;
+  if (comprehensionStart(comprehension) === null) return null;
   return { comprehension, index: Number(m[1]), rest: m[2] };
 }
 
@@ -589,7 +629,7 @@ export function resolveGoqlPath(
   if (!GOQL_VOCABULARIES[namespace]) return null;
   const pick = splitGoqlPick(chain);
   const context = pick
-    ? pickedContext(GOQL_VOCABULARIES, namespace, pick.comprehension, pick.rest, bindingsIn(GOQL_VOCABULARIES, namespace, chain))
+    ? pickedContext(GOQL_VOCABULARIES, namespace, pick.comprehension, pick.comprehension, pick.rest)[0]
     : walk(GOQL_VOCABULARIES, namespace, segments(chain), new Map());
   if (!context) return null;
   if (context.kind === "namespace") return { kind: "record", namespace: context.namespace };
@@ -623,30 +663,196 @@ function typedBacklinksWalk(
   return { typed: true, context };
 }
 
-/** Comprehension variables in `source` (`for e in events`) and what each
- * iterates over, in source order so a later one can use an earlier one. */
-function bindingsIn(vocabs: Vocabs, root: string, source: string): Map<string, Context | null> {
-  const bindings = new Map<string, Context | null>();
-  for (const m of source.matchAll(BINDING_RE)) {
-    // `for a in attribute_list['Age']` loops over the list's entries of that
-    // type, so `a` is an entry, as with `for a in attribute_list`.
-    const typed = typedBacklinksWalk(vocabs, m[2], true);
-    if (typed.typed) {
-      bindings.set(m[1], typed.context);
-      continue;
-    }
-    const iterated = m[2].replace(TYPE_INDEX_AT_END_RE, "");
-    bindings.set(m[1], walk(vocabs, root, segments(iterated), bindings, true));
+/** One `for name in list` clause of a comprehension: where it starts, where
+ * its list is written (`iterStart` is null until `in` is), and the `if`
+ * conditions that belong to it. */
+interface Loop {
+  comprehension: Comprehension;
+  index: number;
+  name: string | null;
+  start: number;
+  iterStart: number | null;
+  iterEnd: number;
+  conditions: [start: number, end: number][];
+}
+
+/** A `(`/`[` with a `for` directly inside it: `any(E for ...)`,
+ * `[E for ...]`. `firstFor` is where its element `E` ends. */
+interface Comprehension {
+  open: number;
+  close: number;
+  firstFor: number;
+  loops: Loop[];
+}
+
+type PositionedToken = [kind: string, text: string, start: number, end: number];
+
+/** Every comprehension in `source`, an unclosed one running to the end. */
+function comprehensionsIn(source: string): Comprehension[] {
+  const toks: PositionedToken[] = [];
+  for (const m of source.matchAll(TOKEN_RE)) {
+    const kind = Object.entries(m.groups ?? {}).find(([, v]) => v !== undefined)?.[0];
+    if (kind) toks.push([kind, m[0], m.index, m.index + m[0].length]);
   }
-  return bindings;
+  const stack: [open: number, inside: number[]][] = [];
+  const frames: [open: number, close: number, inside: number[]][] = [];
+  toks.forEach(([kind, text, start], i) => {
+    if (kind === "other" && (text === "(" || text === "[")) {
+      if (stack.length) stack[stack.length - 1][1].push(i);
+      stack.push([start, []]);
+    } else if (kind === "other" && (text === ")" || text === "]") && stack.length) {
+      const [open, inside] = stack.pop()!;
+      frames.push([open, start, inside]);
+      if (stack.length) stack[stack.length - 1][1].push(i);
+    } else if (stack.length) {
+      stack[stack.length - 1][1].push(i);
+    }
+  });
+  while (stack.length) {
+    const [open, inside] = stack.pop()!;
+    frames.push([open, source.length, inside]);
+  }
+  const found: Comprehension[] = [];
+  for (const [open, close, inside] of frames) {
+    const direct = inside.map((i) => toks[i]);
+    const isKeyword = ([kind, text]: PositionedToken, words: string[]) => kind === "name" && words.includes(text);
+    const firstFor = direct.find((token) => isKeyword(token, ["for"]));
+    if (!firstFor) continue;
+    const comprehension: Comprehension = { open, close, firstFor: firstFor[2], loops: [] };
+    let loop: Loop | null = null;
+    // Each `for`/`if` ends the part before it: the element, a list, a condition.
+    const boundaries = [...direct.filter((token) => isKeyword(token, ["for", "if"])).map((token) => token[2]), close];
+    direct.forEach((token, position) => {
+      const [, text, start, end] = token;
+      if (!isKeyword(token, ["for", "if"])) return;
+      const following = boundaries.find((boundary) => boundary > start)!;
+      if (text === "for") {
+        const nameToken = direct[position + 1];
+        const inToken = direct[position + 2];
+        loop = {
+          comprehension,
+          index: comprehension.loops.length,
+          name: nameToken && nameToken[0] === "name" ? nameToken[1] : null,
+          start,
+          iterStart: null,
+          iterEnd: 0,
+          conditions: [],
+        };
+        comprehension.loops.push(loop);
+        if (inToken && inToken[0] === "name" && inToken[1] === "in") {
+          loop.iterStart = inToken[3];
+          loop.iterEnd = following;
+        }
+      } else if (loop) {
+        loop.conditions.push([end, following]);
+      }
+    });
+    found.push(comprehension);
+  }
+  return found;
+}
+
+function innermost(comprehensions: Comprehension[], position: number): Comprehension | null {
+  let found: Comprehension | null = null;
+  for (const comprehension of comprehensions) {
+    if (comprehension.open < position && position <= comprehension.close && (!found || comprehension.open > found.open)) {
+      found = comprehension;
+    }
+  }
+  return found;
+}
+
+/** The one loop whose variable GOQL lets the text at `position` use, and
+ * whether `position` is in the list of a `for` after the first.
+ *
+ * In `any(E for f in A if p for c in f.B if q)`, `E` and `q` read `c`, `p`
+ * reads `f`, and `f.B` reads `f` (the list of a later `for` goes over the
+ * loop variable just before it). The first `for`'s list `A` is read where
+ * the comprehension is -- the enclosing loop's variable, in an inner loop.
+ * An outer loop's variable is never usable inside an inner loop's element
+ * or conditions, and none is outside every loop. */
+function visibleLoop(comprehensions: Comprehension[], position: number): [Loop | null, boolean] {
+  for (;;) {
+    const comprehension = innermost(comprehensions, position);
+    if (!comprehension) return [null, false];
+    if (position <= comprehension.firstFor) return [comprehension.loops[comprehension.loops.length - 1], false];
+    const before = comprehension.loops.filter((loop) => loop.start < position);
+    const loop = before[before.length - 1];
+    if (loop.iterStart !== null && loop.iterStart <= position && position <= loop.iterEnd) {
+      if (loop.index === 0) {
+        position = comprehension.open;
+        continue;
+      }
+      return [comprehension.loops[loop.index - 1], true];
+    }
+    if (loop.conditions.some(([start, end]) => start <= position && position <= end)) return [loop, false];
+    return [null, false];
+  }
+}
+
+/** What `loop`'s variable is an element of, from the list it goes over: a
+ * collection (`events`), a list field (`attribute_list`, or
+ * `attribute_list['Age']`, its entries of that type), a list off the
+ * variable visible there (`f.children`), `backlinks['Person']`, or a list
+ * comprehension collecting its own variable (`[c for c in children if
+ * ...]`, the same as that variable). null for one that can't be followed
+ * (`backlinks`, a typo). */
+function loopContext(
+  vocabs: Vocabs,
+  root: string,
+  source: string,
+  comprehensions: Comprehension[],
+  loop: Loop,
+  resolving: number[] = [],
+): Context | null {
+  if (loop.iterStart === null || resolving.includes(loop.start)) return null;
+  resolving = [...resolving, loop.start];
+  const raw = source.slice(loop.iterStart, loop.iterEnd);
+  const text = raw.trim();
+  if (!text) return null;
+  if (text.startsWith("[")) {
+    const opened = loop.iterStart + raw.length - raw.trimStart().length;
+    const inner = comprehensions.find((c) => c.open === opened);
+    if (!inner || source.slice(inner.open + 1, inner.firstFor).trim() !== inner.loops[inner.loops.length - 1].name) {
+      return null;
+    }
+    return loopContext(vocabs, root, source, comprehensions, inner.loops[inner.loops.length - 1], resolving);
+  }
+  const [visible] = visibleLoop(comprehensions, loop.iterStart);
+  const bindings = new Map<string, Context | null>();
+  if (visible && visible.name !== null) {
+    bindings.set(visible.name, loopContext(vocabs, root, source, comprehensions, visible, resolving));
+  }
+  const typed = typedBacklinksWalk(vocabs, text, true);
+  if (typed.typed) return typed.context;
+  const iterated = text.replace(TYPE_INDEX_AT_END_RE, "");
+  if (!CHAIN_FULL_RE.test(iterated)) return null;
+  return walk(vocabs, root, segments(iterated), bindings, true);
+}
+
+/** The comprehension variable usable at `position` (see `visibleLoop`) and
+ * what it iterates over -- null for one whose list can't be followed
+ * (`backlinks`), still a variable but with nothing to offer after its dot
+ * -- and whether `position` is the list of a `for` after the first, where
+ * only that variable can start the list. */
+function bindingsAt(
+  vocabs: Vocabs,
+  root: string,
+  source: string,
+  position: number,
+): [Map<string, Context | null>, boolean] {
+  const comprehensions = comprehensionsIn(source);
+  const [loop, later] = visibleLoop(comprehensions, position);
+  const bindings = new Map<string, Context | null>();
+  if (loop && loop.name !== null) bindings.set(loop.name, loopContext(vocabs, root, source, comprehensions, loop));
+  return [bindings, later];
 }
 
 type Candidate = [name: string, kind: CompletionKind, detail: Completion["detail"]];
 
-/** What a list comprehension ending at `text`'s final `]` collects (`a.value`
- * in `[a.value for a in attribute_list if ...]`), or null if that `]`
- * doesn't close one. */
-function comprehensionEnding(text: string): string | null {
+/** Where the list comprehension ending at `text`'s final `]` opens (the
+ * offset of its `[`), or null if that `]` doesn't close one. */
+function comprehensionStart(text: string): number | null {
   let depth = 0;
   for (let position = text.length - 1; position >= 0; position--) {
     const char = text[position];
@@ -654,32 +860,94 @@ function comprehensionEnding(text: string): string | null {
       depth += 1;
     } else if (char === "[") {
       depth -= 1;
-      if (depth === 0) {
-        const m = COMPREHENSION_RE.exec(text.slice(position + 1, -1));
-        return m ? m[1] : null;
-      }
+      if (depth === 0) return COMPREHENSION_RE.test(text.slice(position + 1, -1)) ? position : null;
     }
   }
   return null;
 }
 
 /** Where `[x.f for x in rel if ...][n]<rest>` leads: what the comprehension
- * collects (`text` ends at its `]`), walked on by `rest` (`.mother`). */
+ * collects (`text` ends at its `]`), walked on by `rest` (`.mother`) -- and
+ * the bindings it was read with. */
 function pickedContext(
   vocabs: Vocabs,
   namespace: string,
+  source: string,
   text: string,
   rest: string,
-  bindings: Map<string, Context | null>,
-): Context | null {
-  const collected = comprehensionEnding(text);
-  if (collected === null) return null;
+): [Context | null, Map<string, Context | null>] {
+  const opened = comprehensionStart(text);
+  if (opened === null) return [null, new Map()];
+  const collected = COMPREHENSION_RE.exec(text.slice(opened + 1, -1))![1];
+  const [bindings] = bindingsAt(vocabs, namespace, source, opened + 1);
   let context = walk(vocabs, namespace, segments(collected), bindings);
   for (const [name, indexes] of segments(rest)) {
-    if (!context) return null;
+    if (!context) return [null, bindings];
     context = stepIndexed(vocabs, context, name, indexes);
   }
-  return context;
+  return [context, bindings];
+}
+
+/** Whether `text` ends with `in` -- a loop's list comes next. */
+function endsWithIn(text: string): boolean {
+  const toks = tokens(text);
+  return toks.length > 0 && isWord(toks[toks.length - 1], "in");
+}
+
+/** Whether a JSON object field has a list somewhere inside it
+ * (`primary_name` has `surname_list`). */
+function holdsLists(node: FieldNode | undefined): boolean {
+  return !!node && Object.values(node.fields ?? {}).some((field) => isArray(field.type) || holdsLists(field));
+}
+
+/** The JSON object fields at `context` that hold a list somewhere inside
+ * (`primary_name` -> `surname_list`). */
+function listHolders(vocabs: Vocabs, context: Context): string[] {
+  if (context.kind === "referrers" || context.kind === "any") {
+    return alternatives(context).flatMap((alternative) => listHolders(vocabs, alternative));
+  }
+  const fields =
+    context.kind === "namespace"
+      ? vocabs[context.namespace].fields
+      : context.kind === "link"
+        ? (context.link.entry.fields ?? {})
+        : (context.node.fields ?? {});
+  return Object.entries(fields)
+    .filter(([, node]) => holdsLists(node))
+    .map(([name]) => name);
+}
+
+/** Of the names after `segs.` (which lead to `context`), those that lead
+ * toward a list: lists, relationships, objects holding lists
+ * (`father.primary_name.surname_list`), and a loop variable's collections
+ * (`f.children`). A `for` after the first goes over a list of the loop
+ * variable just before it. */
+function listSteps(
+  vocabs: Vocabs,
+  context: Context | null,
+  candidates: Candidate[],
+  segs: Segment[],
+  bindings: Map<string, Context | null>,
+  laterLoop: boolean,
+): Candidate[] {
+  const [first, firstIndexes] = segs[0];
+  const variable = bindings.has(first) && firstIndexes === 0;
+  if (laterLoop && !variable) return [];
+  const binding = variable ? (bindings.get(first) ?? null) : null;
+  let collections: Candidate[] = [];
+  if (variable && segs.length === 1 && binding && binding.kind === "namespace") {
+    const owner = vocabs[binding.namespace];
+    collections = Object.entries(owner.collections)
+      .filter(([name]) => !has(owner.links ?? {}, name))
+      .map(([name, target]): Candidate => [name, "collection", target]);
+  }
+  const holders = new Set(context ? listHolders(vocabs, context) : []);
+  return [
+    ...candidates.filter(
+      ([name, kind, detail]) => kind === "relationship" || isArray(detail) || (kind === "field" && holders.has(name)),
+    ),
+    ...collections,
+  ];
 }
 
 function namesAt(vocabs: Vocabs, context: Context): Candidate[] {
@@ -743,15 +1011,14 @@ export function completeFromVocabularies(
       .map((name) => ({ name: name === typed ? `${name} ` : name, kind: "operator", detail: null, start }));
   }
   const picked = PICKED_RE.exec(before);
-  if (picked && comprehensionEnding(before.slice(0, picked.index + 1)) !== null) {
+  if (picked && comprehensionStart(before.slice(0, picked.index + 1)) !== null) {
     // `[a for a in attribute_list if ...][0].`: the entry's own names.
     const prefix = picked[2] ?? "";
-    const bindings = bindingsIn(vocabs, namespace, source);
-    const context = pickedContext(vocabs, namespace, before.slice(0, picked.index + 1), picked[1], bindings);
+    const [context, bindings] = pickedContext(vocabs, namespace, source, before.slice(0, picked.index + 1), picked[1]);
     const candidates = context ? [...namesAt(vocabs, context), ...indexedSteps(vocabs, context)] : [];
     return results(candidates, prefix, cursor - prefix.length, bindings, envList);
   }
-  if (PICK_INDEX_RE.test(before) && comprehensionEnding(before.slice(0, -1)) !== null) {
+  if (PICK_INDEX_RE.test(before) && comprehensionStart(before.slice(0, -1)) !== null) {
     // `[a for a in attribute_list if ...][`: which matching entry.
     return [{ name: "0", kind: "index", detail: "first item", start: cursor }];
   }
@@ -760,7 +1027,13 @@ export function completeFromVocabularies(
   const chain = match[1];
   const prefix = match[2] ?? "";
   const start = cursor - prefix.length;
-  const bindings = bindingsIn(vocabs, namespace, source);
+  // The loop variable usable where the path begins (`c` in `any(c.` ...).
+  const [bindings, laterLoop] = bindingsAt(
+    vocabs,
+    namespace,
+    source,
+    chain !== undefined ? start - chain.length - 1 : start,
+  );
 
   let candidates: Candidate[];
   if (chain === undefined) {
@@ -820,9 +1093,26 @@ export function completeFromVocabularies(
     } else if (want === "collection") {
       candidates = collections;
     } else if (want === "iterable") {
-      candidates = [...paths.filter(([, kind, detail]) => kind === "relationship" || kind === "variable" || isArray(detail)), ...collections];
+      candidates = [
+        ...paths.filter(
+          ([name, kind, detail]) =>
+            kind === "relationship" ||
+            kind === "variable" ||
+            isArray(detail) ||
+            // `primary_name`, toward `primary_name.surname_list`.
+            (kind === "field" && holdsLists(vocab.fields[name])),
+        ),
+        ...collections,
+      ];
       const opened = before.slice(0, start).trimEnd();
-      if (opened.endsWith("distinct(")) {
+      if (laterLoop) {
+        // `for c in` after another `for`: a list of the loop variable just
+        // before it (`f.children`).
+        candidates = [...bindings.keys()].map((name): Candidate => [name, "variable", null]);
+      } else if (endsWithIn(opened)) {
+        // A loop can also go over a list comprehension.
+        candidates.push(listOpen);
+      } else if (opened.endsWith("distinct(")) {
         // distinct(...) only takes a list of fields: [f.father for ...].
         candidates = [listOpen];
       } else if (opened.endsWith("len(")) {
@@ -838,6 +1128,9 @@ export function completeFromVocabularies(
         const context = walk(vocabs, namespace, listed, bindings);
         if (context && context.kind === "field" && context.node.items) {
           candidates = [["0", "index", "first item"]];
+        } else if (listed.length === 1 && listed[0][0] === "backlinks" && listed[0][1] === 0 && has(vocab.collections, "backlinks")) {
+          // `backlinks['Person']`: a kind of record, named in a string.
+          candidates = [['"', "punctuation", "text"]];
         } else if (listed[listed.length - 1][1] === 0) {
           // `parent_families[`: a collection's first entry.
           const owner: Context | null =
@@ -881,7 +1174,7 @@ export function completeFromVocabularies(
         candidates = [...candidates, ...indexedSteps(vocabs, context)];
       }
       if (role === "iterable") {
-        candidates = candidates.filter(([, kind, detail]) => kind === "relationship" || isArray(detail));
+        candidates = listSteps(vocabs, context, candidates, segs, bindings, laterLoop);
       } else if (!["operand", "value", "is_value", "path", "number"].includes(role)) {
         candidates = [];
       }

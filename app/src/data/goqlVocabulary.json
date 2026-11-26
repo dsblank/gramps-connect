@@ -1,5 +1,5 @@
 {
- "goql_version": "0.5.21",
+ "goql_version": "0.5.23",
  "vocabularies": {
   "Citation": {
    "collections": {
@@ -4087,6 +4087,7 @@
     "media": "Media",
     "notes": "Note",
     "parent_families": "Family",
+    "siblings": "Person",
     "tags": "Tag"
    },
    "column_types": {
