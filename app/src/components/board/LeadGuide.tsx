@@ -13,6 +13,9 @@ import { loadRecords, type GrampsClass, type Records } from "../../store/board/r
 import { titleOf } from "../../store/board/view";
 import { parseDisplayDate, formatDisplayDate } from "../../store/placeIndex";
 import { fetchSearch } from "../../store/searchApi";
+import { MEDIA_VIEW } from "../../store/views";
+import { RecordPicker } from "../RecordPicker";
+import { pickerResultLabel } from "../RefPickerField";
 import { summaryLine } from "../related/summary";
 import { EventPlacePicker } from "./BoardPanels";
 import { TreeMark } from "./TreeMark";
@@ -90,7 +93,7 @@ async function loadRounds(start: Records, next: (r: Records) => string[]): Promi
 
 /** Search the tree for one kind of record, offering "New: <typed>" too. */
 function RecordSearch({ type, placeholder, exclude, onPick, newLabel }: {
-  type: "person" | "repository" | "media";
+  type: "person" | "repository";
   placeholder: string;
   exclude?: Set<string>;
   onPick: (pick: { handle: string; label: string } | { name: string }) => void;
@@ -273,15 +276,22 @@ export function LeadGuide({ lead, records, home, actions }: {
               setBusy(false);
             }
           }} />
-          <RecordSearch type="media" placeholder={t("Or find one already in the tree's Media…")} onPick={async (p) => {
-            if (!("handle" in p)) return;
-            setBusy(true);
-            try {
-              await actions.onMedia(p.handle);
-            } finally {
-              setBusy(false);
-            }
-          }} />
+          {/* The Media list's own search, like a media list's "Select existing…". */}
+          <RecordPicker
+            view={MEDIA_VIEW}
+            searchField="gramps_id"
+            buildExpr={MEDIA_VIEW.simpleSearch?.buildExpr}
+            renderLabel={(item) => pickerResultLabel("media", item)}
+            placeholder={t("Or find one already in the tree's Media…")}
+            onPick={async (item) => {
+              setBusy(true);
+              try {
+                await actions.onMedia(item.handle);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
           <Note>{t("The file goes into the tree's Media as soon as you choose it. Everything else waits for Save.")}</Note>
           <Note>{t("No digital copy yet? That's fine: you can still record what it says and add the scan later.")}</Note>
           <Footer><Button size="xs" variant="default" onClick={() => actions.onStep("what")}>{t("I don't have a copy")}</Button></Footer>
