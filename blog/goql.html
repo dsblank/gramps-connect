@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GOQL: one language for your tree&#x27;s columns, searches and filters · Gramps Connect</title>
+<meta name="description" content="A complete guide to GOQL, the Gramps Object Query Language, for genealogists who have never programmed. The same few building blocks define the columns of every list in Gramps Connect, sort, search and filter them, color charts and fill in citation templates, from a birth place to a count of grandchildren.">
+<meta property="og:site_name" content="Gramps Connect">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GOQL: one language for your tree&#x27;s columns, searches and filters">
+<meta property="og:description" content="A complete guide to GOQL, the Gramps Object Query Language, for genealogists who have never programmed. The same few building blocks define the columns of every list in Gramps Connect, sort, search and filter them, color charts and fill in citation templates, from a birth place to a count of grandchildren.">
+<meta property="og:url" content="https://dsblank.github.io/gramps-connect/blog/goql.html">
+<meta property="og:image" content="https://dsblank.github.io/gramps-connect/blog/img/goql-add-column.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://dsblank.github.io/gramps-connect/blog/goql.html">
+<link rel="icon" href="../app/public/favicon-32.png">
+<link rel="alternate" type="application/atom+xml" title="Gramps Connect blog" href="feed.xml">
+<style>
+  :root {
+    --bg: #ffffff; --bg-alt: #f5f6f8; --fg: #1f2328; --muted: #59636e;
+    --border: #d8dee4; --accent: #2f6f4f; --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16191d; --bg-alt: #1e2228; --fg: #e6e8eb; --muted: #9aa4af;
+      --border: #333a42; --accent: #5fb38a; --accent-fg: #0d1a13;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+  nav { display: flex; align-items: center; gap: 16px; padding: 20px 0;
+        border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  nav .home { display: flex; align-items: center; gap: 8px; font-weight: 700;
+              color: var(--fg); text-decoration: none; margin-right: auto; }
+  nav .home img { width: 28px; height: 28px; }
+  nav a { text-decoration: none; }
+  h1 { font-size: 2rem; line-height: 1.25; margin: 40px 0 8px; }
+  .meta { color: var(--muted); font-size: 0.95rem; margin: 0 0 32px; }
+  .post-list { list-style: none; padding: 0; margin: 0 0 48px; }
+  .post-list li { padding: 24px 0; border-bottom: 1px solid var(--border);
+                  display: flex; gap: 20px; align-items: flex-start; }
+  .post-list .text { flex: 1; min-width: 0; }
+  .post-list .thumb { flex: none; width: 168px; aspect-ratio: 4 / 3;
+                      border: 1px solid var(--border); border-radius: 8px;
+                      overflow: hidden; background: var(--bg-alt); }
+  .post-list .thumb img { display: block; width: 100%; height: 100%;
+                          object-fit: cover; object-position: top left; }
+  @media (max-width: 560px) {
+    .post-list li { flex-direction: column-reverse; gap: 12px; }
+    .post-list .thumb { width: 100%; aspect-ratio: 2 / 1; }
+  }
+  .post-list h2 { font-size: 1.35rem; margin: 0 0 4px; }
+  .post-list h2 a { color: var(--fg); text-decoration: none; }
+  .post-list h2 a:hover { color: var(--accent); }
+  .post-list p { margin: 6px 0 0; }
+  .post-list .meta { margin: 0; }
+  article { margin-bottom: 48px; }
+  article h2 { font-size: 1.4rem; margin: 36px 0 8px; }
+  article h3 { font-size: 1.15rem; margin: 28px 0 8px; }
+  article img { max-width: 100%; height: auto; border: 1px solid var(--border);
+                border-radius: 8px; }
+  article figure { margin: 24px 0; }
+  article figure img { display: block; }
+  article figcaption { margin-top: 6px; color: var(--muted); font-size: 0.92rem;
+                       text-align: center; }
+  article pre { background: var(--bg-alt); border: 1px solid var(--border);
+                border-radius: 6px; padding: 12px 16px; overflow-x: auto; }
+  article code { font-size: 0.92em; }
+  article blockquote { margin: 16px 0; padding: 0 16px; color: var(--muted);
+                       border-left: 3px solid var(--border); }
+  .back { margin: 0 0 48px; }
+  footer { padding: 32px 0 48px; border-top: 1px solid var(--border);
+           color: var(--muted); font-size: 0.9rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <a class="home" href="../"><img src="../app/src/assets/icons/gramps-connect-logo.svg" alt="">Gramps Connect</a>
+  <a href="./">Blog</a>
+  <a href="../tour/">Tour</a>
+  <a href="https://github.com/dsblank/gramps-connect/wiki">Documentation</a>
+  <a href="feed.xml">Feed</a>
+</nav>
+<article>
+<h1>GOQL: one language for your tree&#x27;s columns, searches and filters</h1>
+<p class="meta"><time datetime="2026-11-26">November 26, 2026</time> · Doug Blank</p>
+<p>A family tree holds far more than any list can show at once. Gramps
+Connect&rsquo;s lists start with a few columns (a person&rsquo;s name, birth and
+death), but you might want to see each person&rsquo;s age at death, their
+occupation, how many places they lived in or how many grandchildren they
+had. And you might want to narrow a list down to just the people born in
+a certain county, or the families where the mother died before the
+father.</p>
+<p>Both are done with <strong>GOQL</strong>, short for <strong>Gramps Object Query Language</strong>.
+GOQL is a small language for pointing at any piece of information in
+your tree, written in a line of text, and it&rsquo;s used in two ways:</p>
+<ul>
+<li><strong>To describe a value</strong>: <code>birth.place.title</code> is the place where each
+  person was born, and <code>len(children)</code> is how many children each family
+  has. Values make <strong>columns</strong>, and columns can be <strong>sorted</strong>. Values
+  also fill in <strong>citation templates</strong>: <code>`source.title`</code> in a
+  template is replaced by the cited source&rsquo;s title.</li>
+<li><strong>To describe a condition</strong>: <code>birth.place.title == 'Boston'</code> is true
+  for the people born in Boston. Conditions <strong>search</strong> a list, make up
+  <strong>filters</strong> and <strong>custom rules</strong>, and <strong>color the people on charts</strong>
+  that they match.</li>
+</ul>
+<p>A condition is just values compared with each other, so everything you
+learn for one works in the other. This post explains where GOQL came
+from and how it works, then goes from simple values and conditions to
+some of the newest and most powerful forms. You don&rsquo;t need any
+programming experience to follow it.</p>
+<h2>Why a language?</h2>
+<p>Gramps&rsquo; desktop app has a fixed set of columns for each list, and a long
+but fixed set of <em>filter rules</em>: &ldquo;People with the given name&hellip;&rdquo;,
+&ldquo;Families with a child born after&hellip;&rdquo;. Each rule does one thing. When you
+want a column or a rule that&rsquo;s slightly different, there isn&rsquo;t one, and
+someone has to write it.</p>
+<p>GOQL takes another approach. Instead of a column or a rule for every
+need, it gives you a handful of building blocks (fields, links between
+records, comparisons, &ldquo;and&rdquo;, &ldquo;or&rdquo;, &ldquo;any of&rdquo;, &ldquo;how many&rdquo;) that you
+combine to describe things nobody thought of in advance.</p>
+<h3>Records are structured data</h3>
+<p>The idea starts with how Gramps stores your tree. Each record (a person,
+a family, an event, a place, a source, a citation, a note, a media item,
+a repository or a tag) is a bundle of named fields. Gramps keeps that
+bundle in a standard text format called JSON. Simplified a lot, a person
+looks something like this:</p>
+<pre><code>{
+  &quot;gramps_id&quot;: &quot;I0044&quot;,
+  &quot;gender&quot;: 0,
+  &quot;primary_name&quot;: {
+    &quot;first_name&quot;: &quot;Anna&quot;,
+    &quot;surname_list&quot;: [ { &quot;surname&quot;: &quot;Smith&quot; } ],
+    &quot;nick&quot;: &quot;Annie&quot;
+  },
+  &quot;attribute_list&quot;: [ { &quot;type&quot;: &quot;Hair color&quot;, &quot;value&quot;: &quot;Red&quot; } ],
+  &quot;event_ref_list&quot;: [ ... ],
+  &quot;parent_family_list&quot;: [ ... ]
+}
+</code></pre>
+<p>Some fields hold a value (<code>gramps_id</code>). Some hold a group of fields
+(<code>primary_name</code> has a <code>first_name</code> and a list of surnames). Some hold a
+list (<code>attribute_list</code>). And some point to <em>other</em> records: the entries
+in <code>event_ref_list</code> lead to this person&rsquo;s events, and
+<code>parent_family_list</code> leads to the families she&rsquo;s a child in.</p>
+<p>GOQL names any of these by following the dots from the outside in:
+<code>primary_name.first_name</code> is &ldquo;Anna&rdquo;, and <code>primary_name.nick</code> is &ldquo;Annie&rdquo;.
+That&rsquo;s called a <em>path</em>. The names are Gramps&rsquo; own, so if you&rsquo;ve ever
+looked at a Gramps export or the Gramps developer documentation, they&rsquo;ll
+look familiar. If you haven&rsquo;t, don&rsquo;t worry: Tab completion (below)
+suggests them as you type.</p>
+<p>A few fields that people use all the time get short names of their own:
+<code>surname</code> and <code>given_name</code> on a person, <code>title</code> on a place. These are
+also the fastest to search and sort by, since the database keeps a
+separate index of them.</p>
+<h3>It looks like Python, but it isn&rsquo;t run as Python</h3>
+<p>GOQL is written in the style of Python, the programming language Gramps
+itself is written in. That might sound off-putting, but the parts GOQL
+borrows are the parts that read like English: <code>and</code>, <code>or</code>, <code>not</code>, <code>in</code>,
+&ldquo;any of these&rdquo;, &ldquo;how many of these&rdquo;.</p>
+<p>What you write is never run as a program. Gramps Connect sends it to the
+Gramps Web API server, which reads it, checks it, and translates it into
+SQL, the language databases speak. The database itself then works out
+the values and checks the conditions, right next to your data, and only
+the results come back to your browser. Each step of a path becomes a
+step in that SQL: a dot reaches into the stored record, a hop to another
+record looks that record up, and &ldquo;how many children&rdquo; becomes a count.</p>
+<p>That&rsquo;s what makes GOQL fast enough for large trees, and it works the
+same whether the server keeps your tree in SQLite (the desktop app) or
+in PostgreSQL (a shared server). It&rsquo;s also safe: since nothing is run as
+a program, GOQL can only ever read your tree, and anything that isn&rsquo;t
+GOQL is turned away with an error.</p>
+<p>That error tries to be helpful. Every path is checked against Gramps&rsquo;
+own description of its records, so a misspelled field such as
+<code>primary_name.frist_name</code> is caught before anything runs, with a message
+listing the fields that <em>would</em> work.</p>
+<h2>Where you write GOQL</h2>
+<h3>Columns</h3>
+<p>Open a list&rsquo;s Columns dialog with the gear at the end of its title row.
+Each built-in column shows, dimmed, the GOQL value it reads: the People
+list&rsquo;s Birth column is <code>birth.date</code>, and the Families list&rsquo;s Father
+column is <code>father.primary_name</code>. <strong>Add column</strong> gives you three boxes: a
+GOQL value, a title, and an optional &ldquo;Then sort by&rdquo;.</p>
+<figure><img alt="The Columns dialog for People: the built-in columns with their GOQL dimmed beside each name, and a new row with the value (death.date.sortval - birth.date.sortval) // 365 and the title Age at death" src="img/goql-add-column.jpg" /><figcaption>Every built-in column shows its GOQL value. The last row adds an &ldquo;Age at death&rdquo; column.</figcaption></figure>
+<p>Anything that gives one value per record can be a column. Dates and names
+are shown the way the tree is set to show them, and types (an event&rsquo;s
+type, say) show their name. Click any column&rsquo;s header to sort the list
+by it. &ldquo;Then sort by&rdquo; takes a second GOQL value that orders the records
+within each group: a <code>birth.place.title</code> column with <code>birth.date</code> as its
+&ldquo;then sort by&rdquo; lists everyone born in each place together, oldest first.</p>
+<p>Columns you add are saved in the tree and offered to everyone on it, so
+a good column only has to be written once. Saving checks the value
+against the server first, so a typo shows up right there, not as a
+broken list.</p>
+<h3>Searching a list</h3>
+<p>Tick the checkbox next to any list&rsquo;s search box (&ldquo;Use Gramps Object
+Query Language&rdquo;) and the box takes a GOQL condition instead of plain
+words. The list narrows to the records it&rsquo;s true for. The circled <strong>i</strong>
+beside the box opens a reference for that list, and you rarely need it:
+press <strong>Tab</strong> as you type and the box suggests the fields, words and
+values that fit at that point, so <code>birth.</code> + Tab lists everything an
+event has. (There&rsquo;s more on Tab in &ldquo;Let Tab do the typing&rdquo;, below.)</p>
+<figure><img alt="The People list's search box in GOQL mode, with birth. typed and Tab pressed: a list of the birth event's fields, each with what kind of value it holds" src="img/goql-tab-completion.jpg" /><figcaption>Typing <code>birth.</code> and pressing Tab lists what a birth event has.</figcaption></figure>
+<h3>Filters and custom rules</h3>
+<p>The <strong>Filters</strong> button next to each list&rsquo;s title opens a dialog of
+ready-made rules (&ldquo;Females&rdquo;, &ldquo;People without sources&rdquo;, &ldquo;Birth date
+between&rdquo;) that you combine with AND, OR and NOT without writing anything.
+Underneath, every rule is a GOQL condition, and the dialog shows the
+combined GOQL (read-only) below the Filter Builder. It&rsquo;s a good way to
+learn: build a filter by clicking, then read the GOQL it made.</p>
+<figure><img alt="The Filter Builder with the built-in Research gaps filter: three rules joined by OR, one with NOT ticked, and the GOQL they make shown underneath" src="img/goql-filter-builder.jpg" /><figcaption>The built-in &ldquo;Research gaps&rdquo; filter, and the GOQL its three rules make.</figcaption></figure>
+<p>When no rule fits, <strong>Custom Rules</strong> lets you write one in GOQL, give it a
+name, and save it in the tree. From then on it appears among the other
+rules, for everyone, to use alone or combine. A custom rule can even
+have its own values to fill in. Add a parameter to the rule (a number or
+a piece of text), give it a name such as <code>count</code>, and write that name in
+braces where the value goes:</p>
+<pre><code>len([e for e in events if e.type == 'Census']) &gt;= {count}
+</code></pre>
+<p>Picking that rule shows a &ldquo;count&rdquo; box, just like a built-in rule that
+asks for a date.</p>
+<p><img alt="The Custom rules editor: a rule named Census records, at least, with the GOQL above and an Integer parameter named count" src="img/goql-custom-rule.jpg" />
+<em>A custom rule with a <code>count</code> parameter. Create only becomes available once the GOQL checks out.</em> (The forms in it are explained further down.)</p>
+<h3>Charts</h3>
+<p>The fan, tree and Generations charts can color the people a filter
+matches, in blue, with everyone else in grey. <strong>Color → Filter</strong> lists
+the tree&rsquo;s saved filters, and its last choice, <strong>GOQL…</strong>, takes a
+condition typed straight into the chart, such as
+<code>birth.date.sortval &gt; 0 and birth.date.sortval &lt; Date('1850')</code> for
+everyone born before 1850. The chart only checks the people it&rsquo;s
+showing, so this stays quick on a large tree.</p>
+<h3>Citation templates</h3>
+<p>Gramps Connect writes each citation out as a formatted reference, from a
+<em>citation template</em>: a line for the source and a line for the citation,
+with the parts to fill in between backticks. Each part is a GOQL value.
+A simple template might be:</p>
+<pre><code>`author`, *`title`*[ (`repositories[0].name`)]
+`page`[, `date`]
+</code></pre>
+<p>On the source line the values belong to the Source, so <code>`title`</code> is
+its title and <code>`repositories[0].name`</code> is the name of the first
+repository holding it. On the citation line they belong to the
+Citation: <code>`page`</code> is its Volume/Page, and <code>`source.title`</code>
+follows the link to the source. Any value that works as a column works
+here, including the shorthand for attributes by type, such as
+<code>`attribute_list['Film'].value`</code> for a source&rsquo;s &ldquo;Film&rdquo; attribute or
+<code>`attribute_list['URL'].value`</code> for a citation&rsquo;s web address. A part
+in square brackets is left out when a value in it is empty, so a source
+with no repository doesn&rsquo;t leave behind empty parentheses.</p>
+<h3>Gramplets</h3>
+<p>Gramplets are small programs, written in Python, that run inside Gramps
+Connect. When they fetch records, they use GOQL for both halves: a
+condition for which records, and values for what to fetch and how to
+sort it:</p>
+<pre><code>people(where=&quot;birth.place.title == 'Boston'&quot;, what=[&quot;primary_name&quot;, &quot;birth.date&quot;], order=[&quot;birth.date.sortval&quot;])
+</code></pre>
+<p>Anything you&rsquo;ve tried out in a column or the search box can be pasted
+straight into one, and the Gramplet editor completes GOQL with Tab
+inside those quotes. If you&rsquo;d rather not write a Gramplet at all, the
+<strong>GOQL Query</strong> Gramplet that comes with Gramps Connect takes a
+condition and a list of values to show, and lays out the matching
+records as a table.</p>
+<h2>Simple examples</h2>
+<p>Each example below says which list it&rsquo;s written in, since a value or
+condition is always about one kind of record: in the People list,
+<code>surname</code> means each person&rsquo;s surname.</p>
+<h3>Values: fields and links</h3>
+<p>The simplest value is a field, like <code>gramps_id</code>, <code>surname</code> or
+<code>primary_name.nick</code>. The most useful trick is that a path doesn&rsquo;t have
+to stay inside one record: <code>birth</code> leads from a person to their birth
+event, <code>place</code> leads from an event to its place, and <code>enclosed_by</code> leads
+from a place to the place it&rsquo;s in. From the Families list, <code>father</code> and
+<code>mother</code> lead to the parents. Some values to try as columns:</p>
+<table>
+<thead>
+<tr>
+<th>In the&hellip;</th>
+<th>Value</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>People list</td>
+<td><code>primary_name.nick</code></td>
+<td>each person&rsquo;s nickname</td>
+</tr>
+<tr>
+<td>People list</td>
+<td><code>birth.place.title</code></td>
+<td>where they were born</td>
+</tr>
+<tr>
+<td>People list</td>
+<td><code>death.place.enclosed_by.title</code></td>
+<td>the place enclosing where they died (a county, say)</td>
+</tr>
+<tr>
+<td>Families list</td>
+<td><code>father.birth.date</code></td>
+<td>the father&rsquo;s birth date</td>
+</tr>
+<tr>
+<td>Families list</td>
+<td><code>father.birth.place.title</code></td>
+<td>where the father was born: three hops, family to father to birth event to place</td>
+</tr>
+<tr>
+<td>Events list</td>
+<td><code>place.title</code></td>
+<td>where the event happened</td>
+</tr>
+</tbody>
+</table>
+<h3>Conditions: comparing values</h3>
+<p>A condition compares values with these symbols:</p>
+<table>
+<thead>
+<tr>
+<th>Write</th>
+<th>To mean</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>==</code> and <code>!=</code></td>
+<td>is, is not</td>
+</tr>
+<tr>
+<td><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></td>
+<td>before/after, less/more</td>
+</tr>
+<tr>
+<td><code>and</code>, <code>or</code>, <code>not</code></td>
+<td>both, either, the opposite</td>
+</tr>
+<tr>
+<td><code>in [ ... ]</code></td>
+<td>is one of these</td>
+</tr>
+<tr>
+<td><code>'text' in field</code></td>
+<td>the field contains this text</td>
+</tr>
+<tr>
+<td><code>like(field, 'Jo%')</code></td>
+<td>a pattern, where <code>%</code> means &ldquo;anything&rdquo;</td>
+</tr>
+<tr>
+<td><code>regex(field, '...')</code></td>
+<td>a regular expression, if you know them</td>
+</tr>
+</tbody>
+</table>
+<p>Text goes in quotes; numbers don&rsquo;t. In the People list:</p>
+<pre><code>surname == 'Smith' and gender == Person.FEMALE
+surname in ['Smith', 'Smyth', 'Smythe']
+'ann' in given_name
+like(given_name, 'Jo%')
+regex(surname, '^Mc')
+</code></pre>
+<p>These match every woman named Smith; any of three spellings; a given
+name containing &ldquo;ann&rdquo; (Joanne, Hannah, Susanna); every given name
+starting with &ldquo;Jo&rdquo;; and surnames starting with &ldquo;Mc&rdquo;.</p>
+<p>Both sides of a comparison can be values from the tree, including values
+reached through links:</p>
+<pre><code>birth.place.title != None and birth.place.title == death.place.title
+death.place.enclosed_by.title == 'Ireland'
+</code></pre>
+<p>The first matches people who died where they were born, and the second
+people who died in a place inside Ireland. In the Families list,
+<code>father.birth.place.enclosed_by.title == 'Cook County'</code> goes four steps,
+from family to father to his birth event to its place to the county
+it&rsquo;s in.</p>
+<h3>Dates</h3>
+<p>A date written as <code>Date('...')</code> takes any date Gramps understands. As a
+column, <code>birth.date</code> shows the date the way your tree displays dates.
+To compare dates, use each date&rsquo;s <code>sortval</code>, its position on the
+calendar, which compares like a number:</p>
+<pre><code>birth.date.sortval &gt; 0 and birth.date.sortval &lt; Date('1850')
+birth.date.sortval &gt; Date('today')
+birth.date.modifier == Date.MOD_ABOUT
+</code></pre>
+<p>The first matches everyone born before 1850, and the second matches
+birth dates in the future, which are always typing mistakes. <code>sortval</code>
+ignores &ldquo;about&rdquo;, &ldquo;before&rdquo; and &ldquo;after&rdquo;, so &ldquo;before 1850&rdquo; sorts the same as
+plain 1850; when that matters, test the date&rsquo;s <code>modifier</code>, as in the
+third line. (Why the <code>&gt; 0</code> in the first line? See the next section.)</p>
+<h3>When nothing is recorded</h3>
+<p>Trees have gaps, and GOQL is careful to tell you so: a value that isn&rsquo;t
+recorded is empty, not a guess. As a column, it&rsquo;s a blank cell. In a
+condition, it takes a little thought, because &ldquo;nothing&rdquo; is still a value
+that can be compared:</p>
+<ul>
+<li>A date that isn&rsquo;t recorded has a <code>sortval</code> of 0, which is &ldquo;before&rdquo;
+  every real date. Without the <code>birth.date.sortval &gt; 0</code> above, people
+  with undated births would match &ldquo;born before 1850&rdquo;. To find the undated
+  ones on purpose, write <code>birth.date.sortval == 0</code>.</li>
+<li>A missing linked record or field is <code>None</code>, meaning &ldquo;nothing
+  recorded&rdquo;. Two missing places are equal to each other, so without the
+  <code>birth.place.title != None</code> above, everyone with neither a birth nor a
+  death place would match &ldquo;died where they were born&rdquo;.</li>
+<li>Text that&rsquo;s present but empty is <code>''</code>. In the Families list,
+  <code>father.surname != '' and father.surname == mother.surname</code> finds
+  couples who share a surname, and leaves out couples where neither
+  surname is filled in.</li>
+</ul>
+<p>So when a condition compares two values, or asks for something &ldquo;before&rdquo;
+a date, think about the records where one side is missing. The same goes
+for the mother&rsquo;s death in the Families list:</p>
+<pre><code>mother.death.date.sortval &gt; 0 and mother.death.date.sortval &lt; father.death.date.sortval
+</code></pre>
+<p>Arithmetic (below) handles this for you: a calculation with a missing
+value in it gives no value at all.</p>
+<h3>Types by name</h3>
+<p>Gramps stores an event&rsquo;s type, a family&rsquo;s relationship type and many
+others as a number behind the scenes. As a column, a type shows its
+name. In a condition, you write the name you see in Gramps. In the
+Events list:</p>
+<pre><code>type == 'Census'
+type in ['Burial', 'Cremation']
+type == 'Tax list'
+</code></pre>
+<p>The last one is a <em>custom</em> type, one a researcher typed in themselves.
+Custom types work exactly like Gramps&rsquo; own, and capital letters don&rsquo;t
+matter. A type can be compared on a linked record too: from the People
+list, <code>birth.type == 'Baptism'</code> matches people whose birth event is
+recorded as a baptism.</p>
+<p>A few other fields compare with named values: <code>gender == Person.MALE</code>,
+or, in the Citations list, <code>confidence &gt;= Citation.CONF_HIGH</code>.</p>
+<h3>Calculating values</h3>
+<p>Numbers can be added, subtracted, multiplied and divided. <code>//</code> divides
+and drops the fraction, which turns a count of days into whole years. So
+this value is each person&rsquo;s age at death, a good column to add to the
+People list:</p>
+<pre><code>(death.date.sortval - birth.date.sortval) // 365
+</code></pre>
+<p>People without a dated birth and death get a blank cell rather than a
+nonsense number. Compare it to make a condition:
+<code>(death.date.sortval - birth.date.sortval) // 365 &gt;= 100</code> matches
+everyone who lived to 100. In the Families list,
+<code>mother.birth.date.dateval[2] &gt; father.birth.date.dateval[2] + 10</code>
+matches mothers more than ten years younger than the father
+(<code>dateval[2]</code> is a date&rsquo;s year).</p>
+<h2>Complex examples</h2>
+<p>The simple examples follow one link at a time: one birth, one father,
+one place. But much of a tree comes in lists: a family has any number of
+children, a person has many events. This is where GOQL gets its real
+power.</p>
+<h3>Words for related records</h3>
+<p>GOQL knows a set of words for the records connected to each kind of
+record:</p>
+<table>
+<thead>
+<tr>
+<th>On a&hellip;</th>
+<th>Word</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>person</td>
+<td><code>parent_families</code></td>
+<td>the families they&rsquo;re a child in</td>
+</tr>
+<tr>
+<td>person</td>
+<td><code>families</code></td>
+<td>the families they&rsquo;re a parent in</td>
+</tr>
+<tr>
+<td>person</td>
+<td><code>siblings</code></td>
+<td>their brothers and sisters, each once</td>
+</tr>
+<tr>
+<td>person</td>
+<td><code>events</code></td>
+<td>all their events, not just birth and death</td>
+</tr>
+<tr>
+<td>person</td>
+<td><code>associations</code></td>
+<td>people linked to them by an association</td>
+</tr>
+<tr>
+<td>person</td>
+<td><code>child_refs</code></td>
+<td>their link to each parent family, with its relationship (birth, adopted, &hellip;)</td>
+</tr>
+<tr>
+<td>family</td>
+<td><code>children</code></td>
+<td>the family&rsquo;s children</td>
+</tr>
+<tr>
+<td>family</td>
+<td><code>events</code></td>
+<td>marriage, divorce and other family events</td>
+</tr>
+<tr>
+<td>event</td>
+<td><code>event_refs</code></td>
+<td>the people and families the event belongs to, with their roles</td>
+</tr>
+<tr>
+<td>place</td>
+<td><code>enclosing_places</code></td>
+<td>the places it&rsquo;s inside of</td>
+</tr>
+<tr>
+<td>source</td>
+<td><code>repositories</code></td>
+<td>where the source is kept</td>
+</tr>
+<tr>
+<td>most records</td>
+<td><code>notes</code>, <code>citations</code>, <code>media</code>, <code>tags</code></td>
+<td>what&rsquo;s attached to them</td>
+</tr>
+<tr>
+<td>every record</td>
+<td><code>backlinks</code></td>
+<td>every record that points <em>to</em> this one</td>
+</tr>
+</tbody>
+</table>
+<h3>How many, which one, any of them</h3>
+<p>A list holds many records, but a column shows one value. There are two
+ways to get one value out of a list, and one way to make a condition of
+it.</p>
+<p><strong>How many?</strong> <code>len(...)</code> counts, and a count is a value, so it can be a
+column:</p>
+<pre><code>len(children)
+len(siblings)
+len([e for e in events if e.type == 'Census'])
+</code></pre>
+<p>How many children a family has, how many brothers and sisters a person
+has, and how many census events a person has. The last line shows how to
+count only <em>some</em> of a list: put the list in square brackets with an
+<code>if</code> and a condition. Read it as &ldquo;the list of every <code>e</code> among the
+events, if <code>e</code>&rsquo;s type is Census&rdquo;. The <code>e</code> is just a short name for &ldquo;each
+event in turn&rdquo;. You can call it anything, as long as you use the same
+name before and after <code>for</code>.</p>
+<p>Compare a count, and it&rsquo;s a condition: <code>len(siblings) == 0</code> matches only
+children, and <code>len(children) &gt; 8</code> large families.</p>
+<p><strong>Which one?</strong> A number in square brackets picks an entry, counting from
+0. <code>parent_families[0]</code> is a person&rsquo;s first parent family, which Gramps
+treats as their main parents, so in the People list these are each
+person&rsquo;s father and paternal grandfather:</p>
+<pre><code>parent_families[0].father.primary_name
+parent_families[0].father.parent_families[0].father.primary_name
+</code></pre>
+<p>You can also pick the first entry that matches a condition, by putting
+the <code>[0]</code> after a bracketed list with an <code>if</code>. This value is the mother
+in a person&rsquo;s first parent family where the father is a Smith:</p>
+<pre><code>[f for f in parent_families if f.father.surname == 'Smith'][0].mother.primary_name
+</code></pre>
+<p><strong>Is there any?</strong> <code>any(...)</code> is a condition: it&rsquo;s true when at least one
+entry matches. In the Families list, this matches families with at least
+one daughter:</p>
+<pre><code>any(c.gender == Person.FEMALE for c in children)
+</code></pre>
+<p>Read it aloud as &ldquo;is there any <code>c</code>, among the children, whose gender is
+female?&rdquo; Put <code>not</code> in front for the opposite. In the People list:</p>
+<pre><code>not any(e.type == 'Census' for e in events)
+not any(c for c in citations)
+</code></pre>
+<p>The first matches people with no census event. The second leaves out
+the condition entirely, which just asks &ldquo;is there anything there at
+all?&rdquo;: people with no citations.</p>
+<h3>Picking entries by name</h3>
+<p>Some lists are naturally sorted by type: a person&rsquo;s attributes, their
+web links, an event&rsquo;s participants. For these, put the type&rsquo;s name in
+the square brackets instead of a number. In the People list, this value
+is each person&rsquo;s occupation, a useful column:</p>
+<pre><code>attribute_list['Occupation'].value
+</code></pre>
+<p>With <code>len(...)</code> or <code>any(...)</code>, the bracket means <em>all</em> entries of that
+type:</p>
+<pre><code>len(attribute_list['Occupation']) &gt; 1
+any(a.value == 'Miller' for a in attribute_list['Occupation'])
+urls['Web Home'].path != None
+</code></pre>
+<p>These match people with more than one occupation, people who were a
+miller at some point, and people with a home page. The same works for
+attribute types you made up yourself (<code>attribute_list['Hair color']</code>).</p>
+<p>The same brackets pick people by their role in an event. In the Events
+list, <code>event_refs</code> is everyone the event belongs to, and <code>referrer</code> is
+the person (or family) on each link. This value is each event&rsquo;s main
+person, which Gramps calls the Main Participant:</p>
+<pre><code>event_refs['Primary'].referrer.primary_name
+</code></pre>
+<p>And this value is the main person&rsquo;s age at the time of the event:</p>
+<pre><code>(date.sortval - event_refs['Primary'].referrer.birth.date.sortval) // 365
+</code></pre>
+<p>As conditions, <code>len(event_refs['Witness']) &gt; 2</code> matches events with
+more than two witnesses, <code>any(r.referrer.surname == 'Smith' for r in
+event_refs['Witness'])</code> events a Smith witnessed, and <code>type == 'Death'
+and (date.sortval - event_refs['Primary'].referrer.birth.date.sortval)
+// 365 &gt; 90</code> deaths at over 90.</p>
+<h3>Looking backwards: <code>backlinks</code></h3>
+<p>Every word so far reaches <em>outward</em> from a record. <code>backlinks</code> reaches
+the other way: everything that points to this record. In the Places
+list, <code>len(backlinks['Event'])</code> is how many events happened at each
+place, a column that, sorted, shows your busiest places first.</p>
+<p>Name a kind of record in brackets, as there, and <code>backlinks</code> becomes
+those records themselves, with all their fields. Without brackets it
+covers every kind. As conditions:</p>
+<pre><code>not any(b for b in backlinks)
+any(p.surname == 'Smith' for p in backlinks['Person'])
+</code></pre>
+<p>In the Notes list, the first matches notes nothing refers to, often
+left behind after a merge or a delete, and the second notes attached to
+a Smith. In the Sources list, <code>not any(backlinks['Citation'])</code> matches
+sources nobody has cited yet.</p>
+<p><code>child_refs</code> is a similar link, from a child to each parent family, and
+it carries the relationship to each parent. In the People list, this
+matches everyone adopted by their father or mother:</p>
+<pre><code>any(c.frel == 'Adopted' or c.mrel == 'Adopted' for c in child_refs)
+</code></pre>
+<h3>Counting different values: <code>distinct</code></h3>
+<p><code>distinct([...])</code> counts each different value once. In the People list:</p>
+<pre><code>len(distinct([e.place for e in events]))
+len(distinct([f.father for f in parent_families]))
+</code></pre>
+<p>The first is how many different places a person&rsquo;s events happened in.
+The second is how many different fathers a person has recorded; more
+than one is a sign of an adoption, a step-family, or a duplicate person
+who should be merged. Comparing the two kinds of count matches the same
+father recorded in two of a person&rsquo;s parent families, which is almost
+always a duplicate family:</p>
+<pre><code>len([f.father for f in parent_families]) &gt; len(distinct([f.father for f in parent_families]))
+</code></pre>
+<h3>Lists within lists</h3>
+<p>A <code>for</code> can be followed by another <code>for</code> that goes one step further.
+Each <code>for</code> goes through something belonging to the one before it, and
+you can go as deep as you like. Four steps down, through a person&rsquo;s
+families, their children, the children&rsquo;s families and <em>their</em> children,
+this value is how many grandchildren a person has:</p>
+<pre><code>len(distinct([gc.handle for f in families for c in f.children for g in c.families for gc in g.children]))
+</code></pre>
+<p>Read it as &ldquo;for each family <code>f</code>, each child <code>c</code> in it, each family <code>g</code>
+of that child, and each child <code>gc</code> in <em>that</em> family, count the different
+<code>gc</code>s&rdquo;. (<code>distinct</code> on each grandchild&rsquo;s <code>handle</code>, its unique internal
+ID, makes sure a grandchild reached two ways counts once.) Add it as a
+column titled &ldquo;Grandchildren&rdquo; and sort by it.</p>
+<p>The same works in <code>any(...)</code>. In the People list, this matches people
+with a sister, or who are one:</p>
+<pre><code>any(c.gender == Person.FEMALE for f in parent_families for c in f.children)
+</code></pre>
+<p>A condition about a list can also sit inside a condition about another
+list. In the Families list, this matches families where any child has
+any military service event:</p>
+<pre><code>any(any(e.type == 'Military Service' for e in c.events) for c in children)
+</code></pre>
+<p>And a <code>for</code> can go through a bracketed list with an <code>if</code> of its own,
+which narrows it first:</p>
+<pre><code>any(c.given_name == 'Ann' for c in [x for x in children if x.gender == Person.FEMALE])
+</code></pre>
+<h3>Using a column&rsquo;s name</h3>
+<p>Long values are best written once. Every column of a list can be used in
+a search or a custom rule by putting its title in backticks (<code>`</code>):
+the built-in columns (<code>`Father`</code>, <code>`Birth`</code>, <code>`Gramps ID`</code>),
+the columns shared with the tree even if your list doesn&rsquo;t show them,
+and columns kept in your browser. With the &ldquo;Grandchildren&rdquo; column from
+above and an &ldquo;Age at death&rdquo; column holding the age calculation, these
+are conditions:</p>
+<pre><code>`Grandchildren` &gt; 20
+`Grandchildren` &gt; 20 and `Age at death` &gt;= 90
+</code></pre>
+<p>A column&rsquo;s name works anywhere a value would, so it combines with
+everything else in this post. In the Families list,
+<code>'Fred' in `Father`</code> matches fathers named Fred.</p>
+<p>The name is replaced by the column&rsquo;s GOQL just before the search runs,
+so if someone later improves the column, every search that uses its
+name improves too. A column that&rsquo;s a plain path can be read further:
+<code>`Birth`.sortval</code> is <code>birth.date.sortval</code>. Upper and lower case
+don&rsquo;t matter, and a name that matches no column stops the search and
+says which one. (A column&rsquo;s own GOQL can&rsquo;t name another column, so
+titles and column values can&rsquo;t contain a backtick.)</p>
+<p>Custom rules stay linked to the columns they name. Save
+<code>`Age at death` &gt;= 100</code> as a rule called &ldquo;Centenarians&rdquo;, and it
+follows any later fix to the column, and keeps working if the column is
+renamed. Since rules are shared with everyone on the tree, they can name
+built-in columns and columns saved in the tree, but not a column kept
+only in your own browser.</p>
+<h2>Let Tab do the typing</h2>
+<p>You don&rsquo;t need to remember any of the field names in this post. Press
+<strong>Tab</strong> in any box that takes GOQL and it suggests what can come next,
+right where your cursor is:</p>
+<ul>
+<li>at the start, or after <code>and</code>, <code>or</code>, <code>not</code> or <code>(</code>: fields, words like
+  <code>children</code> and <code>siblings</code>, and functions like <code>any</code> and <code>len</code>;</li>
+<li>after a dot: what that thing has, so <code>birth.</code> offers an event&rsquo;s fields,
+  and <code>c.</code> inside <code>any(... for c in children)</code> offers a person&rsquo;s;</li>
+<li>after a field: what can follow it, such as <code>==</code>, <code>&lt;</code>, <code>in</code> or <code>and</code>;</li>
+<li>after <code>==</code>: values that fit. <code>gender ==</code> offers <code>Person.MALE</code> and
+  the other genders, <code>type == '</code> lists the type names (<code>type == 'cen</code> +
+  Tab becomes <code>type == 'Census'</code>), and <code>backlinks['</code> lists the kinds of
+  record;</li>
+<li>after a backtick: the list&rsquo;s column names (in a citation template,
+  the backticks hold the value itself, so Tab offers the source&rsquo;s or
+  citation&rsquo;s fields there).</li>
+</ul>
+<p>If one suggestion fits, Tab fills it in. If several do, Tab fills in
+what they share and lists them; use the arrow keys and Tab or Enter to
+pick one. Each suggestion says what it is: a field&rsquo;s kind, where a link
+leads (<code>→ Event</code>), or what a list holds (<code>[Event]</code>). Tab completion
+works everywhere you type GOQL: the search box, the Add column and Then
+sort by boxes, the Custom Rules editor, a chart&rsquo;s GOQL… box, the
+citation template editor, and the GOQL inside a Gramplet&rsquo;s code. (In the
+search box, Shift+Tab moves out of the box.)</p>
+<h2>What GOQL can&rsquo;t do</h2>
+<p>GOQL is a small set of building blocks, not a programming language, and
+anything it doesn&rsquo;t recognize is turned away with an error rather than
+guessed at. A few things that look reasonable aren&rsquo;t possible yet. From
+the Families list, you can&rsquo;t go through a list that belongs to a linked
+record: <code>any(n for n in father.notes)</code> is refused, though one entry of
+such a list works (<code>father.parent_families[0].father.surname</code>). And
+there&rsquo;s no <code>all(...)</code> yet. For &ldquo;all the children are Smiths&rdquo;, write &ldquo;no
+child isn&rsquo;t a Smith&rdquo;:
+<code>len(children) &gt; 0 and not any(not (c.surname == 'Smith') for c in children)</code>.
+(The <code>len(children) &gt; 0</code> leaves out families with no children at all,
+which have no child who isn&rsquo;t a Smith either.)</p>
+<h2>Learning more</h2>
+<p>The circled <strong>i</strong> next to each search box lists the fields and words
+that list offers. The <a href="https://github.com/dsblank/gramps-connect/wiki/GOQL">GOQL page</a>
+and <a href="https://github.com/dsblank/gramps-connect/wiki/Search-and-Filters">Search and Filters</a>
+in the Gramps Connect wiki cover GOQL as it&rsquo;s used in the app, and the
+<a href="https://github.com/dsblank/gramps-object-query-language/blob/main/docs/where_expr.md">complete reference</a>
+in the gramps-object-query-language project covers everything else.</p>
+<p>Start with one column you&rsquo;ve always wanted to see, add it to a list, and
+press Tab when you get stuck.</p>
+</article>
+<p class="back"><a href="./">&larr; All posts</a></p>
+<footer>
+  <!-- Generated by scripts/build-blog.py from blog/posts/; edit the .md, not this file. -->
+  Gramps Connect is free software under the AGPL-3.0-or-later licence.
+</footer>
+</div>
+</body>
+</html>
