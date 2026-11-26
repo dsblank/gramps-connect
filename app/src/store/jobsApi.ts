@@ -227,10 +227,14 @@ export async function getOrCreateTagHandle(token: string, name: string): Promise
  * read properly, since the Output detail panel shows attributes as-is. */
 export const FILE_NAME_ATTRIBUTE = "File name";
 
-/** Sets `desc`, appends `tagHandle` to `tag_list`, and (when given) records
- * `fileName` as the FILE_NAME_ATTRIBUTE attribute and appends `noteHandle`
+/** Sets `desc`, adds `tagHandle` to `tag_list`, and (when given) records
+ * `fileName` as the FILE_NAME_ATTRIBUTE attribute and adds `noteHandle`
  * to `note_list` (an export report, see createJobReportNote), on an
- * existing Media object. Generic object PUT is a full replace (base.py's
+ * existing Media object. Safe to call again on an already-tagged object
+ * (the Custom Rule / Saved Filter save paths do, to keep `desc` in step
+ * with the name): each of the three is added only if missing, and a tag
+ * listed more than once -- left by earlier versions that always
+ * appended -- collapses to one, so the next save repairs it. Generic object PUT is a full replace (base.py's
  * _parse_object/update_object take a whole object, not a partial patch),
  * so this fetches the current object first rather than sending just the
  * changed fields. */
@@ -248,15 +252,16 @@ export async function tagAndDescribeMedia(
   if (!getRes.ok) throw new Error(await parseErrorMessage(getRes));
   const obj = await getRes.json();
   obj.desc = desc;
-  obj.tag_list = [...(((obj.tag_list as string[]) ?? [])), tagHandle];
+  obj.tag_list = [...new Set([...((obj.tag_list as string[]) ?? []), tagHandle])];
   if (fileName) {
-    obj.attribute_list = [
-      ...((obj.attribute_list as unknown[]) ?? []),
-      { _class: "Attribute", type: FILE_NAME_ATTRIBUTE, value: fileName },
-    ];
+    const attributes = (obj.attribute_list as { type?: unknown; value?: unknown }[]) ?? [];
+    const hasFileName = attributes.some((a) => a.type === FILE_NAME_ATTRIBUTE && a.value === fileName);
+    if (!hasFileName) {
+      obj.attribute_list = [...attributes, { _class: "Attribute", type: FILE_NAME_ATTRIBUTE, value: fileName }];
+    }
   }
   if (noteHandle) {
-    obj.note_list = [...(((obj.note_list as string[]) ?? [])), noteHandle];
+    obj.note_list = [...new Set([...((obj.note_list as string[]) ?? []), noteHandle])];
   }
   const putRes = await apiFetch(`${API_BASE}/api/media/${encodeURIComponent(handle)}`, {
     method: "PUT",
