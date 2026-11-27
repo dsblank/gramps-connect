@@ -82,4 +82,8 @@ export interface BoardSkin {
   stickyBox(text: string): CardBox;
   /** Drawn inside the note's swinging group, origin at its top middle. */
   renderSticky(text: string, box: CardBox, opts: { selected: boolean; placeholder: string }): ReactNode;
+  /** A line from a sticky note to a card it's about (`d` runs from the
+   * note's top to the card's pin), or one being drawn. Board only: it must
+   * look nothing like yarn, which is a connection in the tree. */
+  renderStickyLink(d: string, opts: { highlighted: boolean }): ReactNode;
 }

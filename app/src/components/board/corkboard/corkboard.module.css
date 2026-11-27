@@ -119,6 +119,11 @@
 .stickyText { font: 700 18px var(--font-hand); fill: var(--sticky-ink); }
 .stickyPlaceholder { font: 700 18px var(--font-hand); fill: var(--sticky-ink); opacity: 0.45; }
 .tape { fill: var(--tape); }
+/* A sticky note's line to a card it's about: a pencilled dash, nothing
+   like yarn (which is a connection in the tree). */
+.stickyLink { fill: none; stroke: var(--pencil); stroke-width: 2.2; stroke-dasharray: 7 6; stroke-linecap: round; opacity: 0.85; }
+.stickyLinkOn { stroke: var(--hand-ink); stroke-width: 3; opacity: 1; }
+.stickyLinkHit { fill: none; stroke: transparent; stroke-width: 14; }
 
 .pinShadow { fill: rgba(0, 0, 0, 0.38); }
 .pinGlint { fill: #fff; opacity: 0.75; }

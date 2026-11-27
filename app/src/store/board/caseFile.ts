@@ -45,6 +45,10 @@ export interface CaseSticky {
   text: string;
   x: number;
   y: number;
+  /** The cards (record handles) this note is about, drawn as pencil lines
+   * from the note to each. Board only, like the note itself. Missing in
+   * case files and drafts from before notes could be linked. */
+  about?: string[];
 }
 
 export interface CaseFile {
@@ -123,7 +127,8 @@ export function parseCaseFile(text: string): CaseFile {
   for (const s of Array.isArray(data.stickies) ? data.stickies : []) {
     if (!s || typeof s !== "object") continue;
     const sticky = s as Record<string, unknown>;
-    stickies.push({ id: str(sticky.id) || createHandle(), text: str(sticky.text), x: num(sticky.x), y: num(sticky.y) });
+    const about = Array.isArray(sticky.about) ? sticky.about.filter((h): h is string => typeof h === "string" && !!h) : [];
+    stickies.push({ id: str(sticky.id) || createHandle(), text: str(sticky.text), x: num(sticky.x), y: num(sticky.y), ...(about.length ? { about: [...new Set(about)] } : {}) });
   }
   return {
     version: CASE_FILE_VERSION,

@@ -361,6 +361,15 @@ export const corkboardSkin: BoardSkin = {
     );
   },
 
+  renderStickyLink(d, { highlighted }) {
+    return (
+      <>
+        <path className={css.stickyLinkHit} d={d} />
+        <path className={highlighted ? `${css.stickyLink} ${css.stickyLinkOn}` : css.stickyLink} d={d} />
+      </>
+    );
+  },
+
   key: "corkboard",
   className: css.root,
 

@@ -771,8 +771,15 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
     return result.removed;
   }
 
+  /** `f` without card `handle`, and no sticky note still about it. */
+  const withoutCard = (f: CaseFile, handle: string): CaseFile => ({
+    ...f,
+    cards: f.cards.filter((c) => c.handle !== handle),
+    stickies: f.stickies.map((n) => (n.about?.includes(handle) ? { ...n, about: n.about.filter((h) => h !== handle) } : n)),
+  });
+
   function takeOff(handle: string) {
-    setFile((f) => f && { ...f, cards: f.cards.filter((c) => c.handle !== handle) });
+    setFile((f) => f && withoutCard(f, handle));
     setSelection(null);
     notifications.show({ message: t("Unpinned. Nothing in the tree changed.") });
   }
@@ -783,7 +790,7 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
       const removed = takeBackChange(creator.id);
       notifications.show({ message: removed.length > 1 ? t("Discarded {n} loose ends").replace("{n}", String(removed.length)) : t("Discarded the draft") });
     }
-    setFile((f) => f && { ...f, cards: f.cards.filter((c) => c.handle !== handle) });
+    setFile((f) => f && withoutCard(f, handle));
     setSelection(null);
   }
 
@@ -1187,6 +1194,8 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
             setMenu(null);
           }}
           stickies={file.stickies}
+          onStickyLink={(id, card) =>
+            setFile((f) => f && { ...f, stickies: f.stickies.map((n) => (n.id === id && !n.about?.includes(card) ? { ...n, about: [...(n.about ?? []), card] } : n)) })}
           onMove={(h, to) =>
             setFile((f) => f && (h.startsWith("sticky:")
               ? { ...f, stickies: f.stickies.map((n) => (stickyKey(n.id) === h ? { ...n, x: to.x, y: to.y } : n)) }
@@ -1294,7 +1303,10 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
           <StickyPanel
             key={selectedSticky.id}
             text={selectedSticky.text}
+            about={selectedSticky.about ?? []}
+            cards={cards.map((c) => ({ value: c.handle, label: c.title }))}
             onText={(text) => setFile((f) => f && { ...f, stickies: f.stickies.map((n) => (n.id === selectedSticky.id ? { ...n, text } : n)) })}
+            onAbout={(about) => setFile((f) => f && { ...f, stickies: f.stickies.map((n) => (n.id === selectedSticky.id ? { ...n, about } : n)) })}
             onRemove={() => {
               setFile((f) => f && { ...f, stickies: f.stickies.filter((n) => n.id !== selectedSticky.id) });
               setSelection(null);

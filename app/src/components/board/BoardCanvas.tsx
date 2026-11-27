@@ -52,8 +52,12 @@ interface Props {
   /** Map pictures for place cards, by handle. */
   mapUrls?: Record<string, string | null>;
   /** Sticky notes (hunches): dragged like cards, moved through onMove with
-   * their stickyKey(), never tied with yarn. */
+   * their stickyKey(), never tied with yarn. A pencilled line runs from a
+   * note to each card it's about. */
   stickies?: CaseSticky[];
+  /** A line drawn from sticky note `sticky`'s tape and let go over card
+   * `card`: the note is about that card. */
+  onStickyLink?: (sticky: string, card: string) => void;
   selection: BoardSelection;
   /** `additive`: Ctrl/Cmd was held (adds a second person). */
   onSelect: (selection: BoardSelection, additive?: boolean) => void;
@@ -69,7 +73,7 @@ interface Props {
 const reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 export function BoardCanvas(props: Props) {
-  const { skin, cards, positions: cardPositions, yarn, newYarn, cutYarn = [], photoUrls, mapUrls = {}, stickies = [], selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
+  const { skin, cards, positions: cardPositions, yarn, newYarn, cutYarn = [], photoUrls, mapUrls = {}, stickies = [], onStickyLink, selection, onSelect, onMove, onCycleSize, onPull, canvasRef } = props;
   const positions = useMemo(
     () => ({ ...cardPositions, ...Object.fromEntries(stickies.map((n) => [stickyKey(n.id), { x: n.x, y: n.y }])) }),
     [cardPositions, stickies],
@@ -82,6 +86,8 @@ export function BoardCanvas(props: Props) {
   const physics = useMemo(() => new BoardPhysics(reduceMotion), []);
   useEffect(() => () => physics.stop(), [physics]);
   const [dragging, setDragging] = useState<string | null>(null);
+  /** A line being drawn: yarn from a card's pin, or from a sticky note's
+   * tape (`from` is then its stickyKey()). */
   const [pull, setPull] = useState<{ from: string; to: Point } | null>(null);
 
   const boxes = useMemo(
@@ -288,6 +294,37 @@ export function BoardCanvas(props: Props) {
     window.addEventListener("pointerup", up);
   };
 
+  /** Drawing a line from sticky note `id`'s tape to the card it's about. */
+  const onTapeDown = (e: ReactPointerEvent, id: string) => {
+    const key = stickyKey(id);
+    if (e.button !== 0 || !onStickyLink) {
+      onCardDown(e, key, { kind: "sticky", id });
+      return;
+    }
+    e.stopPropagation();
+    e.preventDefault();
+    const start = toBoard(e.clientX, e.clientY);
+    setPull({ from: key, to: start });
+    const move = (ev: PointerEvent) => setPull({ from: key, to: toBoard(ev.clientX, ev.clientY) });
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setPull(null);
+      const end = toBoard(ev.clientX, ev.clientY);
+      if (Math.hypot(end.x - start.x, end.y - start.y) < 8) {
+        onSelect({ kind: "sticky", id });
+        return;
+      }
+      const target = cardAt(end, key);
+      if (!target) return;
+      physics.kickCard(key, jiggle(40));
+      physics.kickCard(target, jiggle(40));
+      onStickyLink(id, target);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   // --- drawing -----------------------------------------------------------------
   const showTags = view.k >= 0.5;
   const pairCount: Record<string, number> = {};
@@ -394,14 +431,49 @@ export function BoardCanvas(props: Props) {
         <g ref={(el) => physics.attachCard(key, el)} transform={swingTransform(physics.card(key))}>
           {skin.renderSticky(n.text, box, { selected: selection?.kind === "sticky" && selection.id === n.id, placeholder: t("A hunch…") })}
         </g>
+        {onStickyLink && (
+          // The tape: drag from it to a card to say what the note is about.
+          <rect x={-30} y={-22} width={60} height={24} fill="transparent" style={{ cursor: "crosshair" }} onPointerDown={(e) => onTapeDown(e, n.id)}>
+            <title>{t("Drag from here to a card this note is about")}</title>
+          </rect>
+        )}
       </g>
     );
   };
 
+  // A sticky note's lines start at its tape: a slight bow, so they read as
+  // drawn by hand rather than ruled.
+  const stickyLinkPath = (a: Point, b: Point) => {
+    const mx = (a.x + b.x) / 2 + (b.y - a.y) * 0.06;
+    const my = (a.y + b.y) / 2 - (b.x - a.x) * 0.06;
+    return `M${a.x.toFixed(1)} ${a.y.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+  };
+  const stickyLinkEls = stickies.flatMap((n) =>
+    (n.about ?? []).map((h) => {
+      const B = positions[h];
+      if (!B || isStickyKey(h)) return null;
+      const highlighted = (selection?.kind === "sticky" && selection.id === n.id) || (selection?.kind === "card" && selection.id === h) || (selection?.kind === "pair" && selection.ids.includes(h));
+      return (
+        <g
+          key={`about-${n.id}-${h}`}
+          data-nozoom
+          style={{ cursor: "pointer" }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onSelect({ kind: "sticky", id: n.id })}
+        >
+          {skin.renderStickyLink(stickyLinkPath({ x: n.x, y: n.y - 10 }, B), { highlighted })}
+        </g>
+      );
+    }),
+  );
+
   const still = cards.filter((c) => c.handle !== dragging);
   const lifted = cards.find((c) => c.handle === dragging);
   let pullEl = null;
-  if (pull && positions[pull.from]) {
+  if (pull && isStickyKey(pull.from) && positions[pull.from]) {
+    const p = positions[pull.from];
+    pullEl = skin.renderStickyLink(stickyLinkPath({ x: p.x, y: p.y - 10 }, pull.to), { highlighted: true });
+  } else if (pull && positions[pull.from]) {
     const p = positions[pull.from];
     const len = Math.hypot(pull.to.x - p.x, pull.to.y - p.y);
     pullEl = skin.renderPull(yarnPath({ x1: p.x, y1: p.y, x2: pull.to.x, y2: pull.to.y, ox: 0, oy: 0, sag: Math.min(60, 4 + len * 0.08) }).d);
@@ -421,6 +493,7 @@ export function BoardCanvas(props: Props) {
       <g transform={view.toString()}>
         {still.map(cardEl)}
         {lifted && cardEl(lifted)}
+        {stickyLinkEls}
         {stickies.filter((n) => stickyKey(n.id) !== dragging).map(stickyEl)}
         <g>{yarnEls}{cutEls}</g>
         {still.map(pinEl)}

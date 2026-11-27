@@ -69,6 +69,16 @@ describe("the case-file format", () => {
     expect(file).toMatchObject({ question: "", stickies: [], startedBy: "" });
   });
 
+  it("keeps which cards a sticky note is about, dropping junk and repeats", () => {
+    const file = parseCaseFile(
+      JSON.stringify({ version: 1, stickies: [{ id: "s1", text: "Signatures?", about: ["m1", "m2", "m1", 7, ""] }, { id: "s2", text: "Loose" }] }),
+    );
+    expect(file.stickies[0].about).toEqual(["m1", "m2"]);
+    expect(file.stickies[1].about).toBeUndefined();
+    const linked = { ...caseWith([["john", "Person", 1000]]), stickies: [{ id: "s1", text: "Him?", x: 0, y: 0, about: ["john"] }] };
+    expect(parseCaseFile(serializeCaseFile(linked))).toEqual(linked);
+  });
+
   it("refuses text that isn't a case file", () => {
     expect(() => parseCaseFile("not json")).toThrow(CaseFileFormatError);
     expect(() => parseCaseFile("[1,2]")).toThrow(CaseFileFormatError);

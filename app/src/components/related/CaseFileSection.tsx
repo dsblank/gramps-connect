@@ -113,6 +113,14 @@ export function CaseFileSection({ detail, onNavigate }: { detail: ObjectDetail; 
           {file.stickies.map((s) => (
             <Paper key={s.id} p="xs" withBorder style={{ background: "var(--mantine-color-yellow-light)", whiteSpace: "pre-wrap" }}>
               <Text size="sm">{s.text || t("(empty)")}</Text>
+              {(() => {
+                const about = (s.about ?? []).map((h) => file.cards.find((c) => c.handle === h)).filter((c): c is CaseCard => !!c);
+                return about.length > 0 && (
+                  <Text size="xs" c="dimmed" mt={4}>
+                    {t("About")}: {about.map((c) => c.label || c.gramps_id || t("an unsaved record")).join(", ")}
+                  </Text>
+                );
+              })()}
             </Paper>
           ))}
         </SectionShell>

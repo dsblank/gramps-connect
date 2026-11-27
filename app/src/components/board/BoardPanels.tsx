@@ -2,7 +2,7 @@
 // dropped, the card and yarn panels on the right, Case notes, the Save
 // dialog and the Add menu. All of them only report what the user chose;
 // BoardView stages it as a loose end.
-import { ActionIcon, Anchor, Badge, Box, Menu, Tooltip, UnstyledButton, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Anchor, Badge, Box, Menu, Tooltip, UnstyledButton, Button, Checkbox, CloseButton, Divider, Group, Loader, Modal, MultiSelect, Paper, ScrollArea, SegmentedControl, Select, Stack, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { parseCoords } from "../../store/visualData";
 import { formatHash } from "../../hash";
@@ -752,8 +752,19 @@ export function RelationPanel({ from, to, records, revision, unsaved, onPinPath,
   );
 }
 
-/** A sticky note: a hunch, kept with the case and never in the tree. */
-export function StickyPanel({ text, onText, onRemove, onClose }: { text: string; onText: (text: string) => void; onRemove: () => void; onClose: () => void }) {
+/** A sticky note: a hunch, kept with the case and never in the tree, and
+ * the cards on the board it's about. */
+export function StickyPanel({ text, about, cards, onText, onAbout, onRemove, onClose }: {
+  text: string;
+  /** Handles of the cards it's about. */
+  about: string[];
+  /** The cards on the board, to pick from. */
+  cards: { value: string; label: string }[];
+  onText: (text: string) => void;
+  onAbout: (about: string[]) => void;
+  onRemove: () => void;
+  onClose: () => void;
+}) {
   return (
     <PanelFrame eyebrow={t("Sticky note")} title={t("A hunch")} sub={t("On this board only. Saved with the case, never in the tree.")} onClose={onClose}>
       <Textarea
@@ -766,6 +777,20 @@ export function StickyPanel({ text, onText, onRemove, onClose }: { text: string;
         placeholder={t("e.g. Could the “Mary” in the 1880 census be Ruth's mother?")}
         onChange={(e) => onText(e.currentTarget.value)}
       />
+      {cards.length > 0 && (
+        <MultiSelect
+          size="xs"
+          label={t("About")}
+          description={t("Or drag from the tape at the top of the note to a card.")}
+          placeholder={about.length ? undefined : t("Pick cards on the board")}
+          searchable
+          clearable
+          value={about.filter((h) => cards.some((c) => c.value === h))}
+          data={cards}
+          // Keeps cards this list can't show (ones you can't see).
+          onChange={(v) => onAbout([...about.filter((h) => !cards.some((c) => c.value === h)), ...v])}
+        />
+      )}
       <Group>
         <Button size="xs" color="red" variant="light" onClick={onRemove}>{t("Throw it away")}</Button>
       </Group>
