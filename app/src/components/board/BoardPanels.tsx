@@ -531,7 +531,17 @@ export function CardPanel(props: {
               <Text size="sm" style={{ flex: 1, minWidth: 0 }} truncate>
                 {all[l.handle] ? titleOf(l.handle, all) : t(CLASS_LABEL[l.cls])}
               </Text>
-              <Text size="xs" c="dimmed">{t(l.how)}</Text>
+              {l.rels ? (
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  title={[l.rels[0] && `${t("Father")}: ${t(l.rels[0])}`, l.rels[1] && `${t("Mother")}: ${t(l.rels[1])}`].filter(Boolean).join(", ")}
+                >
+                  {l.rels.filter(Boolean).map((x) => t(x)).join("/")}
+                </Text>
+              ) : (
+                <Text size="xs" c="dimmed">{t(l.how)}</Text>
+              )}
               {onBoard.has(l.handle) ? (
                 <Button size="compact-xs" variant="subtle" onClick={() => onShow(l.handle)}>{t("Show")}</Button>
               ) : (

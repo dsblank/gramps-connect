@@ -390,12 +390,17 @@ export interface Lead {
   cls: GrampsRecord["_class"];
   /** How it's linked, in English, e.g. "parents' family", "event", "evidence". */
   how: string;
+  /** A family's child who isn't a birth child of both parents: how they're
+   * related to the father and to the mother, as Gramps type names (e.g.
+   * ["Birth", "Stepchild"]); a missing parent's side is "". Shown instead
+   * of "child". */
+  rels?: [string, string];
 }
 
 export function leadsOf(record: GrampsRecord): Lead[] {
   const out: Lead[] = [];
-  const add = (handle: unknown, cls: GrampsRecord["_class"], how: string) => {
-    if (typeof handle === "string" && handle && !out.some((l) => l.handle === handle)) out.push({ handle, cls, how });
+  const add = (handle: unknown, cls: GrampsRecord["_class"], how: string, rels?: [string, string]) => {
+    if (typeof handle === "string" && handle && !out.some((l) => l.handle === handle)) out.push({ handle, cls, how, ...(rels && { rels }) });
   };
   switch (record._class) {
     case "Person":
@@ -406,7 +411,11 @@ export function leadsOf(record: GrampsRecord): Lead[] {
     case "Family":
       add(record.father_handle, "Person", "father");
       add(record.mother_handle, "Person", "mother");
-      for (const c of refs(record.child_ref_list)) add(c.ref, "Person", "child");
+      for (const c of refs(record.child_ref_list)) {
+        const rel = (parent: unknown, r: unknown) => (parent ? typeName(r, "ChildRefType") || "Birth" : "");
+        const rels: [string, string] = [rel(record.father_handle, (c as { frel?: unknown }).frel), rel(record.mother_handle, (c as { mrel?: unknown }).mrel)];
+        add(c.ref, "Person", "child", rels.every((x) => x === "" || x === "Birth") ? undefined : rels);
+      }
       for (const e of refs(record.event_ref_list)) add(e.ref, "Event", "event");
       break;
     case "Event":

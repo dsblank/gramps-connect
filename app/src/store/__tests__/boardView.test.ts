@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { addEventRef, addMediaRef, addRepoRef, cite, linkParentChild, linkPartners, newCitation, newEvent, newPerson, newPlace, newRepository, newSource, setEventPlace } from "../board/links";
 import { blank, type GrampsRecord, type Records } from "../board/records";
-import { associationsOf, deriveYarn, detailsOf, evidenceOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf, whatsMissing } from "../board/view";
+import { associationsOf, deriveYarn, detailsOf, evidenceOf, isUndatedPhoto, isUnproven, leadsOf, subtitleOf, titleOf, unprovenEventsOf, whatsMissing } from "../board/view";
 
 /** The Miller case: John & Ruth's family with child Anna, their wedding (cited from
  * a source kept at a court) at Springfield, Anna's birth, and a photo of Ruth. */
@@ -160,5 +160,26 @@ describe("associationsOf", () => {
     });
     expect(associationsOf(p)).toEqual([{ handle: "P2", rel: "Godfather" }, { handle: "P3", rel: "" }]);
     expect(associationsOf(blank<GrampsRecord>("Family", { handle: "F1" }))).toEqual([]);
+  });
+});
+
+describe("leadsOf", () => {
+  it("labels a family's child by relationship only when it isn't birth to both parents", () => {
+    const rel = (value: number, string = "") => ({ _class: "ChildRefType", value, string });
+    const f = blank<GrampsRecord>("Family", {
+      handle: "F1",
+      father_handle: "D",
+      mother_handle: "M",
+      child_ref_list: [
+        blank("ChildRef", { ref: "C1" }),
+        blank("ChildRef", { ref: "C2", frel: rel(1), mrel: rel(3) }),
+        blank("ChildRef", { ref: "C3", frel: rel(2), mrel: rel(2) }),
+        blank("ChildRef", { ref: "C4", frel: rel(7, "Guardian"), mrel: rel(1) }),
+      ],
+    });
+    const kids = leadsOf(f).filter((l) => l.how === "child");
+    expect(kids.map((l) => l.rels)).toEqual([undefined, ["Birth", "Stepchild"], ["Adopted", "Adopted"], ["Guardian", "Birth"]]);
+    const single = blank<GrampsRecord>("Family", { handle: "F2", mother_handle: "M", child_ref_list: [blank("ChildRef", { ref: "C1", frel: rel(0), mrel: rel(1) })] });
+    expect(leadsOf(single).find((l) => l.how === "child")?.rels).toBeUndefined();
   });
 });
