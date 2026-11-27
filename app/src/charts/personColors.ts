@@ -4,7 +4,7 @@
 // or values that appear, and a chart just asks colorFor(person) without
 // knowing which scheme is active. Gramps feature request #11364.
 import type { TreePersonRaw } from "../store/treeData";
-import { gtkColorToCss } from "../components/related/color";
+import { gtkColorToCss, readableTextOn } from "../components/related/color";
 import { t } from "../i18n/i18n";
 
 /** Fill for a person the scheme has nothing to say about (no tag, no value
@@ -267,15 +267,6 @@ export function threeStopGradient(stops: readonly [string, string, string], f: n
   return gradientColor(stops, f);
 }
 
-function luminance(hex: string): number {
-  const lin = (c: number) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  const [r, g, b] = hexToRgb(hex);
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-}
-
 /** Near-black or near-white text, whichever contrasts more with `fill`.
  * Tag colors are whatever the tree's editors picked, so a chart can't
  * assume its usual text color stays readable on them. Dates use the same
@@ -283,10 +274,7 @@ function luminance(hex: string): number {
  * a see-through gray on a mid-toned wedge made the years hard to read
  * (issue #63). */
 export function textColorOn(fill: string): { name: string; date: string } {
-  const l = luminance(fill);
-  // Contrast against black (#0b0b0b ~ 0.0037) vs white (#ffffff = 1).
-  const dark = (l + 0.05) / (0.0037 + 0.05) >= (1.05) / (l + 0.05);
-  return dark
+  return readableTextOn(fill) !== "#ffffff"
     ? { name: "#0b0b0b", date: "#1f1f1f" }
     : { name: "#ffffff", date: "#f5f5f5" };
 }

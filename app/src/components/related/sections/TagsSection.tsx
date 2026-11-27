@@ -6,7 +6,7 @@ import { TAG_VIEW } from "../../../store/views";
 import { AttachControl } from "../AttachControl";
 import { CircleGlyphButton } from "../../CircleGlyphButton";
 import { SectionShell, zipHandles } from "./shared";
-import { gtkColorToCss } from "../color";
+import { gtkColorToCss, readableTextOn } from "../color";
 import { orderTagHandles } from "../../../store/tagOrder";
 import type { SectionProps } from "../types";
 import { t } from "../../../i18n/i18n";
@@ -46,31 +46,37 @@ export function TagsSection({ view, detail, onNavigate, onRefetch }: SectionProp
       label={t("Tags")}
       action={
         <>
-          {rows.map(({ handle, target }) => (
-            <Badge
-              key={handle}
-              size="md"
-              variant="filled"
-              color={gtkColorToCss(target?.color) || "gray"}
-              style={{ cursor: "pointer" }}
-              onClick={() => onNavigate("tag", handle)}
-              rightSection={
-                canAttach ? (
-                  <CircleGlyphButton
-                    glyph="−"
-                    label={t("Remove tag")}
-                    size={14}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemove(handle, target?.name ?? handle);
-                    }}
-                  />
-                ) : undefined
-              }
-            >
-              {target?.name ?? handle}
-            </Badge>
-          ))}
+          {rows.map(({ handle, target }) => {
+            const css = gtkColorToCss(target?.color);
+            return (
+              <Badge
+                key={handle}
+                size="md"
+                variant="filled"
+                color={css || "gray"}
+                // Filled badges always draw white text; a light tag color
+                // needs black instead.
+                c={readableTextOn(css)}
+                style={{ cursor: "pointer" }}
+                onClick={() => onNavigate("tag", handle)}
+                rightSection={
+                  canAttach ? (
+                    <CircleGlyphButton
+                      glyph="−"
+                      label={t("Remove tag")}
+                      size={14}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemove(handle, target?.name ?? handle);
+                      }}
+                    />
+                  ) : undefined
+                }
+              >
+                {target?.name ?? handle}
+              </Badge>
+            );
+          })}
           {canAttach && (
             <AttachControl
               targetView={view}
