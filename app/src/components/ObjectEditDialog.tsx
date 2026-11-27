@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTagOrder } from "../hooks/useTagOrder";
 import {
-  Alert, Anchor, Button, Collapse, ColorInput, Group, Loader, Modal, NumberInput, Stack, Switch, Text, TextInput,
+  Alert, Anchor, Button, Collapse, ColorInput, Group, Loader, Modal, Select, Stack, Switch, Text, TextInput,
 } from "@mantine/core";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { getToken } from "../auth/auth";
 import { fetchPage, type QueryItem } from "../store/api";
-import { CITATION_VIEW, MEDIA_VIEW, NOTE_VIEW, PLACE_VIEW, SOURCE_VIEW, TAG_VIEW } from "../store/views";
+import { CITATION_VIEW, CONFIDENCE_LABELS, MEDIA_VIEW, NOTE_VIEW, PLACE_VIEW, SOURCE_VIEW, TAG_VIEW } from "../store/views";
 import { DRAFT_TYPE_LABELS, type DraftEntry, type DraftType } from "../store/draftStack";
 import { DateInput } from "./DateInput";
 import { TagOrderField } from "./TagOrderField";
@@ -35,7 +35,10 @@ import { t } from "../i18n/i18n";
 type FieldSpec =
   | { kind: "text"; key: string; label: string; placeholder?: string }
   | { kind: "grampsType"; key: string; label: string; typeKind: GrampsTypeKind }
-  | { kind: "number"; key: string; label: string; min?: number; max?: number }
+  // A number stored as one of a fixed set of named levels, e.g. a
+  // Citation's confidence. `fallback` is shown when the record has none
+  // (Gramps' own default for a new object).
+  | { kind: "level"; key: string; label: string; levels: readonly string[]; fallback: number }
   | { kind: "switch"; key: string; label: string }
   | { kind: "color"; key: string; label: string }
   // Tag.priority as a position in the list of all tags (TagOrderField).
@@ -214,7 +217,8 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
     details: [
       { kind: "text", key: "page", label: "Page" },
       { kind: "date", key: "date", label: "Date" },
-      { kind: "number", key: "confidence", label: "Confidence", min: 0, max: 4 },
+      // Gramps' CONF_VERY_LOW..CONF_VERY_HIGH (0-4); new citations start at Normal.
+      { kind: "level", key: "confidence", label: "Confidence", levels: CONFIDENCE_LABELS, fallback: 2 },
       { kind: "switch", key: "private", label: "Private" },
       { kind: "attributeList", key: "attribute_list", label: "Attributes", owner: "citation" },
       // No CITATIONS_FIELD -- a citation doesn't cite another citation.
@@ -508,18 +512,19 @@ export function ObjectEditDialog({
             onChange={(v) => onChange({ [f.key]: v })}
           />
         );
-      case "number":
+      case "level": {
+        const current = draft.data[f.key];
         return (
-          <NumberInput
+          <Select
             key={f.key}
             label={t(f.label)}
-            min={f.min}
-            max={f.max}
-            allowDecimal={false}
-            value={(draft.data[f.key] as number | undefined) ?? ""}
-            onChange={(v) => onChange({ [f.key]: Number(v) || 0 })}
+            data={f.levels.map((name, i) => ({ value: String(i), label: t(name) }))}
+            value={String(typeof current === "number" ? current : f.fallback)}
+            allowDeselect={false}
+            onChange={(v) => { if (v != null) onChange({ [f.key]: Number(v) }); }}
           />
         );
+      }
       case "switch":
         return (
           <Switch

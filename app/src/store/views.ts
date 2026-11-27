@@ -692,7 +692,7 @@ export const SOURCE_VIEW: ViewConfig = {
 
 // Citation.confidence: CONF_VERY_LOW=0 .. CONF_VERY_HIGH=4, per
 // gramps/gen/lib/citation.py.
-const CONFIDENCE_LABELS = ["Very Low", "Low", "Normal", "High", "Very High"];
+export const CONFIDENCE_LABELS = ["Very Low", "Low", "Normal", "High", "Very High"] as const;
 // Exported: reused by related/detailFieldDefinitions.ts to show a Citation's own
 // confidence in its detail panel, not just this table column.
 export function displayConfidence(value: unknown): string {
