@@ -27,6 +27,30 @@ function transTypeColor(transType: number): string {
   return "blue";
 }
 
+/** The record's last-changed time from before its logged history begins, or
+ * null when the log already reaches back to its creation (oldest entry is
+ * an add) or isn't fully loaded yet. Imports are batch transactions, which
+ * Gramps doesn't write to the change log at all, so an imported record has
+ * no "Added" entry; its `change` field still holds the date from the
+ * imported file (Gramps XML keeps each record's own `change` attribute) or,
+ * failing that, the import time. With no log entries the record's current
+ * `change` is that date; otherwise the current value is the latest edit's,
+ * so the oldest logged update's before-copy carries the earlier one. */
+export function preHistoryChange(
+  changes: ObjectChange[],
+  count: number,
+  currentChange: unknown
+): number | null {
+  if (changes.length < count) return null;
+  let value: unknown = currentChange;
+  if (changes.length > 0) {
+    const oldest = changes[changes.length - 1];
+    if (oldest.trans_type !== 1) return null;
+    value = oldest.old_data?.change;
+  }
+  return typeof value === "number" && value > 0 ? value : null;
+}
+
 const DIFF_VALUE_OPTIONS: DiffValueOptions = {
   formatDate: (date) => formatDisplayDate(date as unknown as GrampsDate),
   translate: t,
@@ -66,6 +90,10 @@ export function HistoryButton({ view, detail }: { view: ViewConfig; detail: Obje
   useSyncExternalStore(subscribeUserDirectory, getUserDirectoryVersion);
 
   if (!objClass) return null;
+
+  // Only meaningful once a load has finished -- before that, changes/count
+  // are the reset [] / 0 and would read as "no history".
+  const earlier = loading || error ? null : preHistoryChange(changes, count, detail.change);
 
   async function loadPage(nextPage: number) {
     setLoading(true);
@@ -110,7 +138,7 @@ export function HistoryButton({ view, detail }: { view: ViewConfig; detail: Obje
               {error}
             </Text>
           )}
-          {changes.length === 0 && !loading && !error && (
+          {changes.length === 0 && !loading && !error && !earlier && (
             <Text size="sm" c="dimmed">
               {t("No changes recorded yet.")}
             </Text>
@@ -162,6 +190,24 @@ export function HistoryButton({ view, detail }: { view: ViewConfig; detail: Obje
                   </UnstyledButton>
                 );
               })}
+              {earlier && (
+                // Not a logged change: no user, no diff to open, so a plain
+                // row rather than an UnstyledButton, with a neutral avatar.
+                <Group gap="sm" wrap="nowrap" p="xs">
+                  <Avatar radius="xl" size="sm" color="gray" variant="light">
+                    {"…"}
+                  </Avatar>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="sm">{t("Last changed before Gramps Connect history began")}</Text>
+                    <Text size="xs" c="dimmed" title={formatChangeTitle(earlier)}>
+                      {formatChangeTitle(earlier)} ({formatChange(earlier)})
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {t("From imported data, or the time it was imported if the file had no date.")}
+                    </Text>
+                  </div>
+                </Group>
+              )}
             </Stack>
           </ScrollArea.Autosize>
           <Group justify="space-between" wrap="nowrap">
