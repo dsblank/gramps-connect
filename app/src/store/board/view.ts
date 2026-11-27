@@ -226,6 +226,29 @@ export function unprovenEventsOf(record: GrampsRecord | undefined, records: Reco
   return out;
 }
 
+/** What supports a record: its own citations and, for a person or family,
+ * those on the events it is the main subject of (a family is usually proven
+ * by citing its marriage, not the Family itself). `complete` is false when
+ * some of those events aren't loaded, so "nothing" can't be claimed. */
+export function evidenceOf(record: GrampsRecord | undefined, records: Records): { own: string[]; onEvents: string[]; complete: boolean } {
+  if (!record) return { own: [], onEvents: [], complete: true };
+  const own = [...new Set(handles(record.citation_list))];
+  const onEvents: string[] = [];
+  let complete = true;
+  if (record._class === "Person" || record._class === "Family") {
+    for (const e of refs(record.event_ref_list)) {
+      if (!["", "Primary", "Family"].includes(typeName(e.role, "EventRoleType"))) continue;
+      const event = records[e.ref];
+      if (!event) {
+        complete = false;
+        continue;
+      }
+      for (const c of handles(event.citation_list)) if (!own.includes(c) && !onEvents.includes(c)) onEvents.push(c);
+    }
+  }
+  return { own, onEvents, complete };
+}
+
 const BIRTHS = ["Birth", "Baptism", "Christening"];
 const DEATHS = ["Death", "Burial", "Cremation"];
 const MARRIAGES = ["Marriage", "Alternate Marriage", "Marriage Banns", "Marriage License", "Marriage Contract", "Marriage Settlement"];

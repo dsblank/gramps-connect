@@ -11,7 +11,7 @@ import { t } from "../../i18n/i18n";
 import type { Change } from "../../store/board/changes";
 import type { CardSize, CaseFile } from "../../store/board/caseFile";
 import { GENDER, type GrampsClass, type GrampsRecord, type Records } from "../../store/board/records";
-import { associationsOf, leadsOf, shortDate, titleOf, typeName, unprovenEventsOf, whatsMissing, type Yarn } from "../../store/board/view";
+import { associationsOf, evidenceOf, leadsOf, shortDate, titleOf, typeName, unprovenEventsOf, whatsMissing, type Yarn } from "../../store/board/view";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { DateInput } from "../DateInput";
 import shapes from "../../data/grampsRecordShapes.json";
@@ -420,7 +420,7 @@ export function CardPanel(props: {
       fields = <CommitField readOnly={readOnly} label={t("Text")} multiline value={String((r.text as { string?: string } | undefined)?.string ?? "")} onCommit={(v) => onEdit({ kind: "noteText", text: v })} />;
       break;
   }
-  const citations = Array.isArray(r.citation_list) ? (r.citation_list as string[]) : [];
+  const evidence = evidenceOf(r, all);
   return (
     <PanelFrame eyebrow={t("Case file")} title={titleOf(handle, records)} sub={`${t(CLASS_LABEL[r._class])} · ${r.gramps_id || t("draft, not saved yet")}`} onClose={onClose}>
       <Group gap="xs" wrap="nowrap">
@@ -502,8 +502,18 @@ export function CardPanel(props: {
       {["Person", "Family", "Event"].includes(r._class) && (
         <Box>
           <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Evidence")}</Text>
-          {citations.length ? (
-            <Text size="sm">{citations.length === 1 ? t("1 citation") : t("{n} citations").replace("{n}", String(citations.length))}</Text>
+          {evidence.own.length + evidence.onEvents.length ? (
+            <Text size="sm">
+              {evidence.own.length + evidence.onEvents.length === 1 ? t("1 citation") : t("{n} citations").replace("{n}", String(evidence.own.length + evidence.onEvents.length))}
+              {evidence.onEvents.length > 0 && (
+                <Text span size="xs" c="dimmed">
+                  {" "}
+                  ({evidence.own.length ? t("{n} on its events").replace("{n}", String(evidence.onEvents.length)) : t("on its events")})
+                </Text>
+              )}
+            </Text>
+          ) : !evidence.complete ? (
+            <Text size="sm" c="dimmed">{t("No citations on it, or on the events of it you can see.")}</Text>
           ) : (
             <Paper withBorder p="xs" style={{ borderColor: "var(--mantine-color-red-7)" }}>
               <Text size="sm" fw={700} c="red.7" tt="uppercase">{t("Unproven")}</Text>

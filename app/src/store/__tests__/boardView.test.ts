@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { addEventRef, addMediaRef, addRepoRef, cite, linkParentChild, linkPartners, newCitation, newEvent, newPerson, newPlace, newRepository, newSource, setEventPlace } from "../board/links";
 import { blank, type GrampsRecord, type Records } from "../board/records";
-import { associationsOf, deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf, whatsMissing } from "../board/view";
+import { associationsOf, deriveYarn, detailsOf, evidenceOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf, whatsMissing } from "../board/view";
 
 /** The Miller case: John & Ruth's family with child Anna, their wedding (cited from
  * a source kept at a court) at Springfield, Anna's birth, and a photo of Ruth. */
@@ -72,6 +72,16 @@ describe("card titles", () => {
     const { [m.birth]: _notLoaded, ...withoutBirth } = m.records;
     expect(unprovenEventsOf(m.records[m.anna], withoutBirth)).toEqual([]);
     expect(unprovenEventsOf(m.records[m.birth], m.records)).toEqual([]);
+  });
+
+  it("counts a family's or person's evidence on its own events too", () => {
+    const m = miller();
+    // The family itself has no citation, but its marriage is cited (#73).
+    expect(evidenceOf(m.records[m.fam], m.records)).toEqual({ own: [], onEvents: [m.cit], complete: true });
+    expect(evidenceOf(m.records[m.anna], m.records)).toEqual({ own: [], onEvents: [], complete: true });
+    expect(evidenceOf(m.records[m.wed], m.records)).toEqual({ own: [m.cit], onEvents: [], complete: true });
+    const { [m.wed]: _notLoaded, ...withoutWed } = m.records;
+    expect(evidenceOf(m.records[m.fam], withoutWed)).toEqual({ own: [], onEvents: [], complete: false });
   });
 });
 
