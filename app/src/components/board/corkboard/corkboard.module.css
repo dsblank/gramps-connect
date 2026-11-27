@@ -24,6 +24,7 @@
   --type-muted: #5f5446;
   --hand-ink: #1f3f86;
   --pencil: #67645e;
+  --sticky-line: #3a3632;
   --stamp: #c3261d;
   --marker: #d8291d;
   --tag: #f5ebd2;
@@ -121,7 +122,7 @@
 .tape { fill: var(--tape); }
 /* A sticky note's line to a card it's about: a pencilled dash, nothing
    like yarn (which is a connection in the tree). */
-.stickyLink { fill: none; stroke: var(--pencil); stroke-width: 2.2; stroke-dasharray: 7 6; stroke-linecap: round; opacity: 0.85; }
+.stickyLink { fill: none; stroke: var(--sticky-line); stroke-width: 2.4; stroke-dasharray: 7 6; stroke-linecap: round; }
 .stickyLinkOn { stroke: var(--hand-ink); stroke-width: 3; opacity: 1; }
 .stickyLinkHit { fill: none; stroke: transparent; stroke-width: 14; }
 
