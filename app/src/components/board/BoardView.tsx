@@ -24,7 +24,7 @@ import { makeMainPhoto, newEvent, newNote, newPerson, newPlace, newRepository, n
 import { makeDate } from "@gramps-connect/gramps-date";
 import { GRAMPS_CLASSES, loadRecords, type GrampsClass, type Records } from "../../store/board/records";
 import { saveBoard, undoSave } from "../../store/board/save";
-import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, unprovenEventsOf, whatsMissing, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
+import { associationsOf, deriveYarn, detailsOf, isUndatedPhoto, isUnproven, leadsOf, unprovenEventsOf, whatsMissing, subtitleOf, titleOf, type Yarn } from "../../store/board/view";
 import { mediaThumbnailUrl } from "../../store/mediaCrop";
 import { TransactionConflictError } from "../../store/transactionsApi";
 import { CASE_FILE_VIEW, MEDIA_VIEW } from "../../store/views";
@@ -816,7 +816,9 @@ export function BoardView({ caseKey, onCaseSaved }: { caseKey: string; onCaseSav
   // Leads' names: load the records a selected card points at (not pinned up).
   useEffect(() => {
     if (selection?.kind !== "card" || !working[selection.id]) return;
-    const leads = leadsOf(working[selection.id]).filter((l) => !working[l.handle] && !peek[l.handle]);
+    const sel = working[selection.id];
+    const leads = [...leadsOf(sel), ...associationsOf(sel).map((a) => ({ handle: a.handle, cls: "Person" as const }))]
+      .filter((l) => !working[l.handle] && !peek[l.handle]);
     if (!leads.length) return;
     let cancelled = false;
     (async () => {

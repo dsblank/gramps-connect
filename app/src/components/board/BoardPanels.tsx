@@ -11,7 +11,7 @@ import { t } from "../../i18n/i18n";
 import type { Change } from "../../store/board/changes";
 import type { CardSize, CaseFile } from "../../store/board/caseFile";
 import { GENDER, type GrampsClass, type GrampsRecord, type Records } from "../../store/board/records";
-import { leadsOf, shortDate, titleOf, typeName, unprovenEventsOf, whatsMissing, type Yarn } from "../../store/board/view";
+import { associationsOf, leadsOf, shortDate, titleOf, typeName, unprovenEventsOf, whatsMissing, type Yarn } from "../../store/board/view";
 import type { GrampsDate } from "@gramps-connect/gramps-date";
 import { DateInput } from "../DateInput";
 import shapes from "../../data/grampsRecordShapes.json";
@@ -324,6 +324,7 @@ export function CardPanel(props: {
   if (!r) return null;
   const all = { ...peek, ...records };
   const leads = leadsOf(r);
+  const associations = associationsOf(r);
   const unproven = unprovenEventsOf(r, all);
   const missing = whatsMissing(r, all);
   const name = r.primary_name as { first_name?: string; surname_list?: { surname?: string }[] } | undefined;
@@ -530,6 +531,29 @@ export function CardPanel(props: {
           ))}
         </Stack>
       </Box>
+      {associations.length > 0 && (
+        <Box>
+          <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("Associations")} ({associations.length})</Text>
+          <Stack gap={2}>
+            {associations.map((a) => (
+              <Group key={`${a.handle}|${a.rel}`} gap="xs" wrap="nowrap">
+                <Text size="sm" style={{ flex: 1, minWidth: 0 }} truncate>
+                  {all[a.handle] ? titleOf(a.handle, all) : t("Person")}
+                </Text>
+                {a.rel && <Text size="xs" c="dimmed" truncate maw="40%">{a.rel}</Text>}
+                {onBoard.has(a.handle) ? (
+                  <Button size="compact-xs" variant="subtle" onClick={() => onShow(a.handle)}>{t("Show")}</Button>
+                ) : (
+                  <Button size="compact-xs" variant="light" onClick={() => onPinUp("Person", a.handle)}>{t("Pin")}</Button>
+                )}
+              </Group>
+            ))}
+          </Stack>
+          {associations.filter((a) => !onBoard.has(a.handle)).length > 1 && (
+            <Button size="xs" variant="light" mt={6} onClick={() => onPinUpMany([...new Set(associations.filter((a) => !onBoard.has(a.handle)).map((a) => a.handle))].map((h) => ({ cls: "Person" as const, handle: h })))}>{t("Pin them all")}</Button>
+          )}
+        </Box>
+      )}
       {missing.length > 0 && (
         <Box>
           <Text size="xs" fw={600} c="dimmed" tt="uppercase">{t("What's next?")}</Text>

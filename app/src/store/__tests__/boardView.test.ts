@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyChanges, ChangeBuilder } from "../board/changes";
 import { addEventRef, addMediaRef, addRepoRef, cite, linkParentChild, linkPartners, newCitation, newEvent, newPerson, newPlace, newRepository, newSource, setEventPlace } from "../board/links";
 import { blank, type GrampsRecord, type Records } from "../board/records";
-import { deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf, whatsMissing } from "../board/view";
+import { associationsOf, deriveYarn, detailsOf, isUndatedPhoto, isUnproven, subtitleOf, titleOf, unprovenEventsOf, whatsMissing } from "../board/view";
 
 /** The Miller case: John & Ruth's family with child Anna, their wedding (cited from
  * a source kept at a court) at Springfield, Anna's birth, and a photo of Ruth. */
@@ -121,5 +121,21 @@ describe("what's next", () => {
     const records = applyChanges(start, [b.change("x")]);
     const fam = Object.values(records).find((r) => r._class === "Family")!;
     expect(whatsMissing(fam, records)).toEqual(["other partner", "marriage"]);
+  });
+});
+
+describe("associationsOf", () => {
+  it("lists a person's associations with their relationship, skipping duplicates and self", () => {
+    const p = blank<GrampsRecord>("Person", {
+      handle: "P1",
+      person_ref_list: [
+        blank("PersonRef", { ref: "P2", rel: " Godfather " }),
+        blank("PersonRef", { ref: "P2", rel: "Godfather" }),
+        blank("PersonRef", { ref: "P3", rel: "" }),
+        blank("PersonRef", { ref: "P1", rel: "Self" }),
+      ],
+    });
+    expect(associationsOf(p)).toEqual([{ handle: "P2", rel: "Godfather" }, { handle: "P3", rel: "" }]);
+    expect(associationsOf(blank<GrampsRecord>("Family", { handle: "F1" }))).toEqual([]);
   });
 });

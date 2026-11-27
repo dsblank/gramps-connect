@@ -393,3 +393,22 @@ export function leadsOf(record: GrampsRecord): Lead[] {
   for (const n of handles(record.note_list)) add(n, "Note", "note");
   return out;
 }
+
+/** A person's associations (Gramps' person_ref_list): other people tied to
+ * them by a described relationship, e.g. "Godfather", "Witness", "Neighbor". */
+export interface Association {
+  handle: string;
+  /** The relationship as typed in the tree (free text, may be empty). */
+  rel: string;
+}
+
+export function associationsOf(record: GrampsRecord): Association[] {
+  if (record._class !== "Person") return [];
+  const out: Association[] = [];
+  for (const p of refs(record.person_ref_list)) {
+    const raw = (p as { rel?: unknown }).rel;
+    const rel = typeof raw === "string" ? raw.trim() : "";
+    if (p.ref !== record.handle && !out.some((a) => a.handle === p.ref && a.rel === rel)) out.push({ handle: p.ref, rel });
+  }
+  return out;
+}
