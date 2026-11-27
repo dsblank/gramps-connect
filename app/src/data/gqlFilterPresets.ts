@@ -87,12 +87,10 @@ export interface GqlFilterParam {
   /** "integer" gets a numeric input, validated as a plain (optionally
    * negative) whole number before being spliced in raw -- see
    * goqlFilterCombiner.ts's INTEGER_RE. "string" gets a plain text
-   * input, sanitized (quotes/backslashes stripped, same convention
-   * simpleSearch.ts/personSearch.ts already use for user-typed search
-   * text) before being spliced into a `'...'` string literal -- this is
-   * plain string interpolation into `where_expr` text, not a
-   * parameterized query, so an unescaped value could otherwise break out
-   * of the literal. */
+   * input, escaped (goqlText.ts's goqlTextValue()) before being spliced
+   * into a string literal -- this is plain string interpolation into
+   * `where_expr` text, not a parameterized query, so an unescaped quote
+   * could otherwise end the literal early. */
   type: "integer" | "string";
 }
 
@@ -102,7 +100,7 @@ export interface GqlFilterParam {
  * fillParams() renders each:
  *
  * - "regex": a regular expression, spliced into a `'...'` literal with
- *   quotes stripped and backslashes doubled (so `\d` survives). The expr
+ *   quotes escaped and backslashes doubled (so `\d` survives). The expr
  *   adds `(?i)` itself, matching gramps-core's case-insensitive regex
  *   rules.
  * - "datetime": "YYYY[-MM[-DD[ hh[:mm[:ss]]]]]" in the browser's local

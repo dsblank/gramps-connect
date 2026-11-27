@@ -11,6 +11,7 @@
 
 import type { GqlFilterNamespace, GqlFilterPreset, GqlPresetParam } from "../data/gqlFilterPresets";
 import { ColumnRefError, expandColumnRefs } from "./goqlColumnRefs";
+import { goqlTextValue } from "./goqlText";
 import { viewForNamespace } from "./views";
 
 export interface FilterPresetNode {
@@ -47,27 +48,6 @@ export class FilterCombineError extends Error {}
  * value itself must be shown to be inert before it's spliced in). */
 const INTEGER_RE = /^-?\d+$/;
 
-/** Strips quotes/backslashes from a `type: "string"` param's raw value
- * before it's spliced into a `'...'` string literal -- same convention
- * simpleSearch.ts's buildSimpleSearchExpr()/personSearch.ts's
- * buildPersonSearchExpr() already use for user-typed search text, applied
- * here for the same reason: this is plain string interpolation, not a
- * parameterized query, so a raw `'` or `\` in the value could otherwise
- * break out of the literal and inject arbitrary GOQL. Stripping (not
- * escaping) matches those two call sites exactly, rather than introducing
- * a second convention for the same problem. */
-function sanitizeTextParam(raw: string): string {
-  return raw.replace(/['\\]/g, "");
-}
-
-/** A "regex" param's value inside a `'...'` literal: quotes stripped (as
- * for text), backslashes doubled so the pattern's own escapes (`\d`)
- * survive the literal. A doubled backslash can't end the literal, and no
- * quote is left that could. */
-function escapeRegexParam(raw: string): string {
-  return raw.replace(/'/g, "").replace(/\\/g, "\\\\");
-}
-
 const DATETIME_RE = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2})(?:\s+(\d{1,2})(?::(\d{2})(?::(\d{2}))?)?)?)?)?$/;
 
 /** gramps-core's ChangedSinceBase.time_str_to_sec(): a date, optionally
@@ -87,7 +67,7 @@ export function datetimeParamToSeconds(raw: string): number | null {
  * name, which GOQL (0.5.20+) resolves to the standard type's value, or to
  * the class's Custom value plus the name -- GrampsType's own equality. */
 function grampsTypeCondition(param: Extract<GqlPresetParam, { type: "gramps-type" }>, raw: string): string {
-  return `(${param.field} == '${sanitizeTextParam(raw.trim())}')`;
+  return `(${param.field} == '${goqlTextValue(raw.trim())}')`;
 }
 
 function fillParam(preset: GqlFilterPreset, param: GqlPresetParam, raw: string): string {
@@ -96,20 +76,21 @@ function fillParam(preset: GqlFilterPreset, param: GqlPresetParam, raw: string):
     case "integer":
       if (!INTEGER_RE.test(raw)) throw bad(`must be a whole number (e.g. 1968), got "${raw}"`);
       return raw;
-    case "string": {
-      const safe = sanitizeTextParam(raw);
-      if (safe === "") throw bad("can't be made up of only quotes/backslashes");
-      return safe;
-    }
+    case "string":
+      // Escaped, not dropped, so "O'Neil" still matches O'Neil: a raw quote
+      // would otherwise end the string literal early, or add GOQL of its own.
+      if (raw === "") throw bad("needs a value");
+      return goqlTextValue(raw);
     case "regex": {
       try {
         new RegExp(raw);
       } catch {
         throw bad(`isn't a valid regular expression: "${raw}"`);
       }
-      const safe = escapeRegexParam(raw);
-      if (safe === "") throw bad("can't be made up of only quotes");
-      return safe;
+      // Backslashes doubled, so the pattern's own escapes (`\d`) survive
+      // the string literal.
+      if (raw === "") throw bad("needs a value");
+      return goqlTextValue(raw);
     }
     case "datetime": {
       const seconds = datetimeParamToSeconds(raw);
@@ -120,7 +101,7 @@ function fillParam(preset: GqlFilterPreset, param: GqlPresetParam, raw: string):
       if (!param.options.some((o) => o.value === raw)) throw bad(`must be one of the listed choices, got "${raw}"`);
       return raw;
     case "gramps-type":
-      if (sanitizeTextParam(raw).trim() === "") throw bad("needs a type");
+      if (raw.trim() === "") throw bad("needs a type");
       return grampsTypeCondition(param, raw);
   }
 }

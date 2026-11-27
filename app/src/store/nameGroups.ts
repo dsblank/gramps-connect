@@ -30,6 +30,7 @@ import { getToken } from "../auth/auth";
 import { parseErrorMessage } from "./api";
 import { apiFetch } from "./apiFetch";
 import { subscribeTreeChange } from "./treeChangeBus";
+import { goqlLikeTerm } from "./goqlText";
 
 /** More names than this with their own Group as (a full page -- the
  * server's limit is 1000): give up on the handle list and search the path
@@ -201,7 +202,7 @@ export function groupSearchClauses(word: string): string[] {
   const surnames = [...mappings].filter(([, group]) => group.toLowerCase().includes(needle)).map(([surname]) => surname);
   if (surnames.length) clauses.push(`surname in ${JSON.stringify(surnames)}`);
   if (groupAsOverflow) {
-    clauses.push(`like(primary_name.group_as, '%${word}%')`);
+    clauses.push(`like(primary_name.group_as, '%${goqlLikeTerm(word)}%')`);
   } else {
     const handles = [...groupAs].filter(([, group]) => group.toLowerCase().includes(needle)).map(([handle]) => handle);
     if (handles.length) clauses.push(`handle in ${JSON.stringify(handles)}`);

@@ -17,11 +17,11 @@ export interface ListSearchResult {
   totalCount: number | null;
 }
 
-/** The list's own where_expr for `term` ('\\' and quotes stripped, as the
- * list does), or null for "everything". `buildExpr` overrides the list's
- * default, e.g. a picker that adds its own clauses. */
+/** The list's own where_expr for `term` (the builders escape it), or null
+ * for "everything". `buildExpr` overrides the list's default, e.g. a picker
+ * that adds its own clauses. */
 export function listSearchExpr(view: ViewConfig, term: string, buildExpr?: (term: string) => string | null): string | null {
-  const clean = term.trim().replace(/['\\]/g, "");
+  const clean = term.trim();
   const build = buildExpr ?? view.simpleSearch?.buildExpr;
   return build ? build(clean) : null;
 }

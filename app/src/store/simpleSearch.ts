@@ -1,3 +1,5 @@
+import { goqlLikeTerm } from "./goqlText";
+
 /** Builds a FilterBar "plain text" search-mode where_expr: an OR of
  * `like(field, 'query%')` across the given field paths (a path can cross a
  * relationship, e.g. "father.surname" -- see gramps-object-query-language's
@@ -49,9 +51,10 @@
  * it keeps its own builder in personSearch.ts. */
 export function buildSimpleSearchExpr(fields: string[]): (query: string) => string | null {
   return (query: string) => {
-    const trimmed = query.replace(/['\\]/g, "").trim();
+    const trimmed = query.replace(/\\/g, "").trim();
     if (trimmed.length < 2) return null;
-    return fields.map((field) => `like(${field}, '%${trimmed}%')`).join(" or ");
+    const term = goqlLikeTerm(trimmed);
+    return fields.map((field) => `like(${field}, '%${term}%')`).join(" or ");
   };
 }
 
@@ -62,13 +65,13 @@ export function buildSimpleSearchExpr(fields: string[]): (query: string) => stri
  * pushed past the result cap by alphabetically earlier places that only
  * contain it. Works on any builder's output (buildSimpleSearchExpr,
  * buildPersonSearchExpr, a picker's own wrapper adding extra clauses)
- * since they all emit that same like() literal shape, and their terms are
- * already stripped of quotes. Null when there's no contains-match to
- * rewrite. */
+ * since they all emit that same like() literal shape, their terms escaped
+ * by goqlLikeTerm() (so a `\'` inside one is part of the term). Null when
+ * there's no contains-match to rewrite. */
 export function prefixSearchExpr(expr: string | null): string | null {
   if (!expr) return null;
   let found = false;
-  const out = expr.replace(/'%([^'%]+)%'/g, (_m, term: string) => {
+  const out = expr.replace(/'%((?:[^'%\\]|\\.)+)%'/g, (_m, term: string) => {
     found = true;
     return `'${term}%'`;
   });

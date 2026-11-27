@@ -7,6 +7,7 @@ import type { ViewConfig } from "../store/views";
 import { CircleGlyphButton } from "./CircleGlyphButton";
 import { withGrampsId } from "./related/summary";
 import { t } from "../i18n/i18n";
+import { goqlLikeTerm } from "../store/goqlText";
 
 // Capped rather than raised when a search is too broad: a picker that can
 // return hundreds of matches needs a narrower query, not a longer dropdown.
@@ -99,7 +100,7 @@ export function RecordPicker({
   const [selectedHandle, setSelectedHandle] = useState<string | null>(null);
 
   useEffect(() => {
-    const term = query.trim().replace(/['\\]/g, "");
+    const term = query.trim();
     // A caller-supplied buildExpr is asked even for an empty term (unlike
     // the plain flat-field fallback below, which only ever runs once
     // something's typed) -- ComparisonsSection's image-only picker needs its
@@ -111,7 +112,7 @@ export function RecordPicker({
     // a picker finds what the list's search box would; searchField only for
     // a view without one.
     const build = buildExpr ?? view.simpleSearch?.buildExpr;
-    const whereExpr = build ? build(term) : term.length === 0 ? null : `like(${searchField}, '%${term}%')`;
+    const whereExpr = build ? build(term) : term.length === 0 ? null : `like(${searchField}, '%${goqlLikeTerm(term)}%')`;
     let cancelled = false;
     setLoading(true);
     // A fresh search invalidates whatever was highlighted from the

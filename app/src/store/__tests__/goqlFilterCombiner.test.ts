@@ -55,14 +55,14 @@ describe("combineFilters", () => {
     );
   });
 
-  it("strips quotes/backslashes from a date param instead of letting it break out of the string literal", () => {
+  it("escapes quotes in a date param instead of letting it break out of the string literal", () => {
     const node: FilterNode = {
       kind: "preset",
       preset: preset("birth-year-between"),
       values: { startDate: "1900'); DROP", endDate: "1950" },
     };
     expect(combineFilters(node).whereExpr).toBe(
-      "(Date('1900); DROP') <= birth.date.sortval <= Date('1950'))",
+      "(Date('1900\\'); DROP') <= birth.date.sortval <= Date('1950'))",
     );
   });
 
@@ -80,23 +80,26 @@ describe("combineFilters", () => {
     expect(combineFilters(node).whereExpr).toBe("(any(t.name == 'ToDo' for t in tags))");
   });
 
-  it("strips quotes/backslashes from a text param instead of letting them break out of the string literal", () => {
+  it("escapes quotes/backslashes in a text param instead of letting them break out of the string literal", () => {
     const node: FilterNode = {
       kind: "preset",
       preset: preset("has-tag"),
       values: { tagName: "x') or (1==1) or exists(tags, name == 'x" },
     };
-    // Every `'` (and any `\`) is stripped, not escaped -- same convention
-    // simpleSearch.ts/personSearch.ts already use for user-typed search
-    // text -- so the value can never close the surrounding '...' literal
-    // early, regardless of what it contains.
+    // Every quote is backslash-escaped, so the value can never close the
+    // surrounding '...' literal early, regardless of what it contains.
     expect(combineFilters(node).whereExpr).toBe(
-      "(any(t.name == 'x) or (1==1) or exists(tags, name == x' for t in tags))",
+      "(any(t.name == 'x\\') or (1==1) or exists(tags, name == \\'x' for t in tags))",
     );
   });
 
-  it("rejects a text param made up of only quotes/backslashes", () => {
-    const node: FilterNode = { kind: "preset", preset: preset("has-tag"), values: { tagName: "''" } };
+  it("keeps an apostrophe in a text param, so O'Neil matches O'Neil", () => {
+    const node: FilterNode = { kind: "preset", preset: preset("has-tag"), values: { tagName: "O'Neil" } };
+    expect(combineFilters(node).whereExpr).toBe("(any(t.name == 'O\\'Neil' for t in tags))");
+  });
+
+  it("rejects an empty text param", () => {
+    const node: FilterNode = { kind: "preset", preset: preset("has-tag"), values: { tagName: "" } };
     expect(() => combineFilters(node)).toThrow(FilterCombineError);
   });
 

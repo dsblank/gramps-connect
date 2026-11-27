@@ -18,9 +18,10 @@ describe("buildSimpleSearchExpr", () => {
     expect(build("Smith")).toBe("like(father.surname, '%Smith%')");
   });
 
-  it("strips quotes and backslashes rather than escaping them", () => {
+  it("escapes quotes, so O'Brien is still found, and drops backslashes", () => {
     const build = buildSimpleSearchExpr(["name"]);
-    expect(build("O'Brien\\")).toBe("like(name, '%OBrien%')");
+    expect(build("O'Brien\\")).toBe("like(name, '%O\\'Brien%')");
+    expect(build('say "hi"')).toBe("like(name, '%say \\\"hi\\\"%')");
   });
 
   // F8 (discussion #4) made this prefix-only for an index-backed scan;
@@ -37,6 +38,10 @@ describe("buildSimpleSearchExpr", () => {
 });
 
 describe("prefixSearchExpr", () => {
+  it("rewrites a term holding an escaped quote", () => {
+    expect(prefixSearchExpr("like(surname, '%O\\'Neil%')")).toBe("like(surname, 'O\\'Neil%')");
+  });
+
   it("rewrites every contains-match to a prefix match", () => {
     const full = buildSimpleSearchExpr(["gramps_id", "title", "name.value"])("USA");
     expect(prefixSearchExpr(full)).toBe(

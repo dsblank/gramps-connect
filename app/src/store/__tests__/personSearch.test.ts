@@ -31,9 +31,9 @@ describe("buildPersonSearchExpr", () => {
     );
   });
 
-  it("strips quotes and backslashes rather than escaping them", () => {
+  it("escapes quotes, so O'Brien is still found, and drops backslashes", () => {
     expect(buildPersonSearchExpr("O'Brien\\")).toBe(
-      "(like(given_name, '%OBrien%') or like(surname, '%OBrien%') or like(gramps_id, '%OBrien%'))"
+      "(like(given_name, '%O\\'Brien%') or like(surname, '%O\\'Brien%') or like(gramps_id, '%O\\'Brien%'))"
     );
   });
 

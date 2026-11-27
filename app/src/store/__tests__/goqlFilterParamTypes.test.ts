@@ -16,8 +16,8 @@ describe("built-in param types", () => {
     expect(render("event-type", { eventType: "Birth" })).toBe("((type == 'Birth'))");
   });
 
-  it("renders an unknown type name as a custom type, quotes stripped", () => {
-    expect(render("event-type", { eventType: "LV'G" })).toBe("((type == 'LVG'))");
+  it("renders an unknown type name as a custom type, quotes escaped", () => {
+    expect(render("event-type", { eventType: "LV'G" })).toBe("((type == 'LV\\'G'))");
   });
 
   it("renders a type condition on a comprehension variable", () => {
@@ -38,8 +38,8 @@ describe("built-in param types", () => {
     );
   });
 
-  it("doubles backslashes in a regex and strips quotes", () => {
-    expect(render("event-id-matches", { pattern: "^e\\d{3}'1$" })).toBe("(regex(gramps_id, '(?i)^e\\\\d{3}1$'))");
+  it("doubles backslashes in a regex and escapes quotes", () => {
+    expect(render("event-id-matches", { pattern: "^e\\d{3}'1$" })).toBe("(regex(gramps_id, '(?i)^e\\\\d{3}\\'1$'))");
   });
 
   it("rejects an invalid regex", () => {
