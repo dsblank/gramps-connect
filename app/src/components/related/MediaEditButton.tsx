@@ -7,11 +7,13 @@ import { getViewStore } from "../../store/registry";
 import type { ObjectDetail } from "../../store/objectDetail";
 import { MEDIA_VIEW } from "../../store/views";
 import { DateInput } from "../DateInput";
+import { AttributeListField, type Attribute } from "../EmbeddedListFields";
 import { t } from "../../i18n/i18n";
 
 /** Top-right button on a RelatedPanel's Media view (same header slot as
  * MediaKmlEditButton/MediaGrampletEditButton) editing the handful of plain
- * scalar fields every Media object has -- description, date, private --
+ * fields every Media object has -- path, description, date, private,
+ * attributes --
  * regardless of mime. EditButton.tsx excludes "media" from the generic Edit
  * button entirely (a Media object wraps an uploaded file rather than a
  * blank form -- draftStack.ts's EDITABLE_TYPES comment), and
@@ -22,10 +24,13 @@ import { t } from "../../i18n/i18n";
  * itself rather than going through draftStack -- a Media object here is
  * always an edit of something that already exists, never a "new" draft, so
  * none of draftStack's stacked-dialog machinery (nested references,
- * Modal.Stack layering, saveAll batching) actually applies. path/mime/
- * checksum/attribute_list/citation_list/note_list/tag_list stay untouched
- * -- those are either server-derived from the upload or already editable
- * via RelatedPanel's own sections (AttributesSection/NotesSection/etc). */
+ * Modal.Stack layering, saveAll batching) actually applies. mime/checksum/
+ * citation_list/note_list/tag_list stay untouched -- those are either
+ * server-derived from the upload or already editable via RelatedPanel's
+ * own sections (NotesSection/etc). attribute_list is edited here because
+ * AttributesSection is read-only (and hidden when empty). path is editable
+ * as in Gramps desktop's media editor: it only changes which file the
+ * record points at, it never moves or renames the file itself. */
 export function MediaEditButton({ detail, onSaved }: { detail: ObjectDetail; onSaved: () => void }) {
   const [opened, setOpened] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -73,7 +78,7 @@ export function MediaEditButton({ detail, onSaved }: { detail: ObjectDetail; onS
       <Button variant="default" size="xs" onClick={open} aria-label={t("Edit this media")}>
         {t("Edit")}
       </Button>
-      <Modal opened={opened} onClose={() => setOpened(false)} title={t("Edit media")} size="md">
+      <Modal opened={opened} onClose={() => setOpened(false)} title={t("Edit media")} size="lg">
         {status === "loading" && (
           <Group justify="center" py="md">
             <Loader size="sm" />
@@ -89,6 +94,15 @@ export function MediaEditButton({ detail, onSaved }: { detail: ObjectDetail; onS
         )}
         {status === "ready" && (
           <Stack gap="md">
+            <TextInput
+              label={t("Path")}
+              description={t("Where the file is stored, relative to the media folder. Changing this points the item at a different file; it doesn't move or rename the file.")}
+              value={(data.path as string | undefined) ?? ""}
+              onChange={(e) => {
+                const path = e.currentTarget.value;
+                setData((prev) => ({ ...prev, path }));
+              }}
+            />
             <TextInput
               label={t("Description")}
               value={(data.desc as string | undefined) ?? ""}
@@ -113,6 +127,11 @@ export function MediaEditButton({ detail, onSaved }: { detail: ObjectDetail; onS
                 const checked = e.currentTarget.checked;
                 setData((prev) => ({ ...prev, private: checked }));
               }}
+            />
+            <AttributeListField
+              owner="media"
+              items={(data.attribute_list as Attribute[] | undefined) ?? []}
+              onChange={(attribute_list) => setData((prev) => ({ ...prev, attribute_list }))}
             />
             {error && (
               <Alert color="red" title={t("Could not save")}>
