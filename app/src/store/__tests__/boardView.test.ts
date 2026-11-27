@@ -31,10 +31,23 @@ function miller() {
 }
 
 describe("card titles", () => {
+  it("never gives one partner the other's surname", () => {
+    const start: Records = {};
+    const b = new ChangeBuilder(start);
+    const a = newPerson(b, { first: "John", surname: "Miller", gender: "M" });
+    const c = newPerson(b, { first: "Ruth", surname: "Miller", gender: "F" });
+    const d = newPerson(b, { first: "Mary Ann", surname: "", gender: "F" });
+    const same = linkPartners(b, a, c);
+    const none = linkPartners(b, a, d);
+    const records = applyChanges(start, [b.change("x")]);
+    expect(titleOf(same, records)).toBe("John & Ruth Miller");
+    expect(titleOf(none, records)).toBe("John Miller & Mary Ann");
+  });
+
   it("names each kind of record the way the board shows it", () => {
     const m = miller();
     expect(titleOf(m.john, m.records)).toBe("John Miller");
-    expect(titleOf(m.fam, m.records)).toBe("John & Ruth Miller");
+    expect(titleOf(m.fam, m.records)).toBe("John Miller & Ruth Carter");
     expect(titleOf(m.wed, m.records)).toBe("Marriage of John & Ruth");
     expect(subtitleOf(m.wed, m.records)).toBe("1933-06-14 · Springfield, Ohio");
     expect(titleOf(m.birth, m.records)).toBe("Birth of Anna");

@@ -81,11 +81,15 @@ export function deriveYarn(records: Records, onBoard: Set<string>): Yarn[] {
 
 // --- titles -------------------------------------------------------------------
 
+function surnameOf(p: GrampsRecord | undefined): string {
+  const name = p?.primary_name as { surname_list?: { surname?: string; primary?: boolean }[] } | undefined;
+  return ((name?.surname_list ?? []).find((s) => s.primary)?.surname ?? name?.surname_list?.[0]?.surname ?? "").trim();
+}
+
 function personName(p: GrampsRecord | undefined): string {
   if (!p) return "";
-  const name = p.primary_name as { first_name?: string; surname_list?: { surname?: string; primary?: boolean }[] } | undefined;
-  const surname = (name?.surname_list ?? []).find((s) => s.primary)?.surname ?? name?.surname_list?.[0]?.surname ?? "";
-  return [name?.first_name, surname].filter(Boolean).join(" ");
+  const first = (p.primary_name as { first_name?: string } | undefined)?.first_name;
+  return [first, surnameOf(p)].filter(Boolean).join(" ");
 }
 
 function firstName(p: GrampsRecord | undefined): string {
@@ -121,8 +125,12 @@ function familyName(f: GrampsRecord, records: Records): string {
   const father = records[f.father_handle as string];
   const mother = records[f.mother_handle as string];
   if (father && mother) {
-    const surname = personName(father).split(" ").slice(1).join(" ") || personName(mother).split(" ").slice(1).join(" ");
-    return `${firstName(father)} & ${firstName(mother)}${surname ? ` ${surname}` : ""}`;
+    // Each partner keeps their own recorded surname: never give one
+    // partner the other's. Only when both recorded the same surname is it
+    // shared, as in "John & Ruth Miller".
+    const surname = surnameOf(father);
+    if (surname && surname === surnameOf(mother)) return `${firstName(father)} & ${firstName(mother)} ${surname}`;
+    return `${personName(father) || "Unnamed person"} & ${personName(mother) || "Unnamed person"}`;
   }
   if (father || mother) return `${personName(father ?? mother)}'s family`;
   return "Family";
