@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ActionIcon, Alert, Anchor, Box, Checkbox, Group, Image, Loader, Modal, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import { getToken } from "../auth/auth";
+import { getToken, isGuest } from "../auth/auth";
 import { useDisplaySettings } from "../store/displaySettings";
 import type { QueryItem } from "../store/api";
 import { formatHash } from "../hash";
@@ -54,6 +54,7 @@ function navigateAway(type: string, handle: string): void {
  * a table a user filters or sorts, so there's no cache worth keeping. */
 export function HomeView() {
   useDocumentTitle("Home — Gramps Connect");
+  const guest = isGuest();
   const [stage, setStage] = useState<Stage>("loading");
   const [error, setError] = useState("");
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -76,7 +77,9 @@ export function HomeView() {
       ] = await Promise.all([
         fetchHomeCounts(token),
         fetchRecentlyChanged(token, RECENT_LIMIT),
-        fetchRecentTopics(token, TOPIC_LIMIT),
+        // Guests can't take part in discussions (see Sidebar.tsx), so
+        // their Home has no Discussions card to fill.
+        guest ? Promise.resolve([]) : fetchRecentTopics(token, TOPIC_LIMIT),
         fetchLatestStories(token, STORY_LIMIT),
         fetchLatestBlogPosts(token, BLOG_LIMIT),
         homeHandle ? fetchHomePerson(token, homeHandle) : Promise.resolve(null),
@@ -163,7 +166,7 @@ export function HomeView() {
           </Stack>
 
           <Stack gap="lg">
-            <Panel title={t("Discussions")}>
+            {!guest && <Panel title={t("Discussions")}>
               {topics.length === 0 ? (
                 <Text c="dimmed">{t("No discussions yet.")}</Text>
               ) : (
@@ -193,7 +196,7 @@ export function HomeView() {
               >
                 {t("See all discussions")}
               </Anchor>
-            </Panel>
+            </Panel>}
 
             <Panel title={t("Change Log")}>
               {recent.length === 0 ? (

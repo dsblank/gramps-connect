@@ -1,6 +1,6 @@
 import { Fragment, lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import { Badge, Box, Button, Divider, Group, Indicator, Loader, Menu, Text } from "@mantine/core";
-import { getToken, hasPermissions } from "../auth/auth";
+import { getToken, hasPermissions, isGuest } from "../auth/auth";
 import { addDesktopTranslations, getI18nSnapshot, subscribe as subscribeI18n, t } from "../i18n/i18n";
 import { ImportDialog } from "./ImportDialog";
 import { ImportMediaDialog } from "./ImportMediaDialog";
@@ -492,8 +492,9 @@ export function MenuBar({ draftStack, onTreeRenamed }: MenuBarProps) {
             { label: "Graphs, home person", onClick: goToHomePersonGraphs },
             // The rail's non-Gramps-type lists, which are ordinary table
             // views (store/views.ts) -- labels taken from there so the menu
-            // and the rail can't drift apart.
-            ...[GENERATED_VIEW, TOPICS_VIEW, STORY_VIEW, BLOG_VIEW].map((view, i) => ({
+            // and the rail can't drift apart. Discussions is left out for
+            // Guests, matching the rail (Sidebar.tsx).
+            ...[GENERATED_VIEW, ...(isGuest() ? [] : [TOPICS_VIEW]), STORY_VIEW, BLOG_VIEW].map((view, i) => ({
               label: view.label,
               onClick: () => goTo(view.key),
               separatorBefore: i === 0,

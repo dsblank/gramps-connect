@@ -425,7 +425,7 @@ export const PERSON_VIEW: ViewConfig = {
 
 export const FAMILY_VIEW: ViewConfig = {
   key: "family",
-  label: "Family",
+  label: "Families",
   icon: iconFamily,
   endpoint: "/api/families/query/",
   // Father/Mother names are read through the linked people.
