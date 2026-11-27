@@ -248,7 +248,9 @@ describe("layoutColumns", () => {
   });
 
   it("orders and hides by the layout, keeping indexes into view.columns", () => {
-    setColumnLayout("person", { custom: [], order: ["change", "gramps_id"], hidden: ["death_date"] });
+    setColumnLayout("person", {
+      custom: [], order: ["change", "gramps_id"], hidden: ["death_date"], shown: ["change", "gramps_id"],
+    });
     const shown = layoutColumns(PERSON_VIEW);
     expect(shown.slice(0, 2).map(({ column }) => column.key)).toEqual(["change", "gramps_id"]);
     expect(shown.some(({ column }) => column.key === "death_date")).toBe(false);
@@ -261,6 +263,15 @@ describe("layoutColumns", () => {
     expect(layoutColumns(PERSON_VIEW)).toHaveLength(1);
     setColumnLayout("person", null);
     expect(layoutColumns(PERSON_VIEW).some(({ column }) => column.key === "surname")).toBe(false);
+  });
+
+  it("leaves Gramps ID and Last changed off until ticked", () => {
+    const keys = () => layoutColumns(PERSON_VIEW).map(({ column }) => column.key);
+    expect(keys()).not.toContain("gramps_id");
+    expect(keys()).not.toContain("change");
+    setColumnLayout("person", { custom: [], order: [], hidden: [], shown: ["gramps_id"] });
+    expect(keys()).toContain("gramps_id");
+    expect(keys()).not.toContain("change");
   });
 });
 

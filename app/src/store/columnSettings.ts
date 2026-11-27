@@ -69,6 +69,9 @@ export interface ColumnLayout {
   order: string[];
   /** Column keys not shown. */
   hidden: string[];
+  /** Columns that are off by default (ColumnConfig.defaultHidden) which
+   * this list shows. */
+  shown?: string[];
 }
 
 type LayoutsByTree = Record<string, Record<string, ColumnLayout>>;
@@ -122,8 +125,16 @@ function currentLayout(viewKey: string): ColumnLayout {
 
 export function isDefaultLayout(layout: ColumnLayout): boolean {
   return (
-    (layout.shared ?? []).length === 0 && layout.custom.length === 0 && layout.order.length === 0 && layout.hidden.length === 0
+    (layout.shared ?? []).length === 0 && layout.custom.length === 0 && layout.order.length === 0 &&
+    layout.hidden.length === 0 && (layout.shown ?? []).length === 0
   );
+}
+
+/** Whether `layout` hides `column`: hidden by the user, or off by default
+ * and not ticked. */
+export function isHiddenInLayout(layout: ColumnLayout, column: Pick<ColumnConfig, "key" | "defaultHidden">): boolean {
+  if (layout.hidden.includes(column.key)) return true;
+  return !!column.defaultHidden && !(layout.shown ?? []).includes(column.key);
 }
 
 // --- tree columns -----------------------------------------------------------
@@ -631,8 +642,7 @@ export function layoutColumns(view: ViewConfig): { column: ColumnConfig; index: 
     .map((entry, i) => ({ entry, rank: position.get(entry.column.key) ?? layout.order.length + i }))
     .sort((a, b) => a.rank - b.rank)
     .map(({ entry }) => entry);
-  const hidden = new Set(layout.hidden);
-  const shown = ordered.filter(({ column }) => !hidden.has(column.key));
+  const shown = ordered.filter(({ column }) => !isHiddenInLayout(layout, column));
   return shown.length > 0 ? shown : ordered.slice(0, 1);
 }
 

@@ -533,12 +533,6 @@ export function FamilyEditDialog({
   return (
     <Modal opened={opened} onClose={onCancel} title={title} size="lg" stackId={draft.handle}>
       <Stack gap="lg">
-        <TextInput
-          label={t("Gramps ID")}
-          placeholder={t("auto-assigned")}
-          value={(draft.data.gramps_id as string | undefined) ?? ""}
-          onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
-        />
         <RefSlot {...slotProps("father_handle", "Father")} />
         <RefSlot {...slotProps("mother_handle", "Mother")} />
 
@@ -679,6 +673,14 @@ export function FamilyEditDialog({
               onOpenEditDraft={(h) => openEditListItem("event", EVENT_EDIT_FIELD_PREFIX, h)}
               onReopenDraft={onShowDraft}
               onCancelDraft={onCloseDraft}
+            />
+
+            {/* Last: auto-assigned, and most people never change it. */}
+            <TextInput
+              label={t("Gramps ID")}
+              placeholder={t("auto-assigned")}
+              value={(draft.data.gramps_id as string | undefined) ?? ""}
+              onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
             />
           </Stack>
         </Collapse>

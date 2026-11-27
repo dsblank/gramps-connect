@@ -110,7 +110,8 @@ type FieldSpec =
 // fix_object_dict turns any string into a valid custom-or-known type
 // server-side (same pattern already used for Family's relationship type),
 // and sourcing each type's full enum is extra scope for later.
-// Prepended to every type's `quick` fields below -- never set client-side
+// Last in every type's `details` below (auto-assigned, and most people
+// never change it, so it shouldn't be the first thing a new user meets) -- never set client-side
 // for a "new" draft (draftStack.ts's defaultDataFor never touches it), so it
 // starts blank and the key stays absent from the create POST unless the
 // user types one in, letting gramps-web-api's own add_object auto-assign
@@ -146,7 +147,6 @@ const MEDIA_FIELD: FieldSpec = { kind: "mediaList", key: "media_list", label: "M
 const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: FieldSpec[] }>> = {
   event: {
     quick: [
-      GRAMPS_ID_FIELD,
       { kind: "grampsType", key: "type", label: "Type", typeKind: "event_types" },
       { kind: "text", key: "description", label: "Description" },
     ],
@@ -156,10 +156,11 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "switch", key: "private", label: "Private" },
       { kind: "attributeList", key: "attribute_list", label: "Attributes", owner: "event" },
       CITATIONS_FIELD, NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
+      GRAMPS_ID_FIELD,
     ],
   },
   place: {
-    quick: [GRAMPS_ID_FIELD, { kind: "placeName", label: "Name" }],
+    quick: [{ kind: "placeName", label: "Name" }],
     details: [
       { kind: "wikidataLookup" },
       { kind: "grampsType", key: "place_type", label: "Type", typeKind: "place_types" },
@@ -172,11 +173,11 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "placeLocations" },
       { kind: "urlList", key: "urls", label: "Web links" },
       CITATIONS_FIELD, NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
+      GRAMPS_ID_FIELD,
     ],
   },
   source: {
     quick: [
-      GRAMPS_ID_FIELD,
       { kind: "text", key: "title", label: "Title" },
       { kind: "text", key: "author", label: "Author" },
     ],
@@ -189,11 +190,11 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       // (see components/related/config.ts's own comment on why: citations
       // point *at* a source, not the other way around).
       NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
+      GRAMPS_ID_FIELD,
     ],
   },
   repository: {
     quick: [
-      GRAMPS_ID_FIELD,
       { kind: "text", key: "name", label: "Name" },
       { kind: "grampsType", key: "type", label: "Type", typeKind: "repository_types" },
     ],
@@ -204,11 +205,11 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       // Repository carries neither citations nor media in Gramps' own
       // schema -- just these two.
       NOTES_FIELD, TAGS_FIELD,
+      GRAMPS_ID_FIELD,
     ],
   },
   citation: {
     quick: [
-      GRAMPS_ID_FIELD,
       {
         kind: "reference", key: "source_handle", label: "Source", refView: SOURCE_VIEW, refField: "title",
         required: true, nestedType: "source",
@@ -223,10 +224,11 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       { kind: "attributeList", key: "attribute_list", label: "Attributes", owner: "citation" },
       // No CITATIONS_FIELD -- a citation doesn't cite another citation.
       NOTES_FIELD, MEDIA_FIELD, TAGS_FIELD,
+      GRAMPS_ID_FIELD,
     ],
   },
   note: {
-    quick: [GRAMPS_ID_FIELD, { kind: "styledText", key: "text", label: "Text" }],
+    quick: [{ kind: "styledText", key: "text", label: "Text" }],
     details: [
       { kind: "grampsType", key: "type", label: "Type", typeKind: "note_types" },
       { kind: "noteFormat" },
@@ -234,6 +236,7 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
       // A Note only ever carries tag_list -- no citation_list/note_list/
       // media_list of its own.
       TAGS_FIELD,
+      GRAMPS_ID_FIELD,
     ],
   },
   tag: {
@@ -250,10 +253,11 @@ const FIELD_SPECS: Partial<Record<DraftType, { quick: FieldSpec[]; details: Fiel
   // of hand-edited JSON. No citation_list/media_list/note_list fields: a
   // story note doesn't reference those the way a person or event would.
   story: {
-    quick: [GRAMPS_ID_FIELD, { kind: "storyEditor", key: "text", label: "Story" }],
+    quick: [{ kind: "storyEditor", key: "text", label: "Story" }],
     details: [
       { kind: "switch", key: "private", label: "Private" },
       TAGS_FIELD,
+      GRAMPS_ID_FIELD,
     ],
   },
 };

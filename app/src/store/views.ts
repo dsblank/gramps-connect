@@ -73,6 +73,11 @@ export interface ColumnConfig {
    * foreign key, but "a5af0eb667015e355db" is noise in a table that
    * already shows the place's title next to it. */
   hidden?: boolean;
+  /** Off until someone ticks it in the list's Columns dialog (which then
+   * records it in ColumnLayout.shown): a column most people don't need,
+   * such as the auto-assigned Gramps ID, which the detail pane shows
+   * anyway. */
+  defaultHidden?: boolean;
   /** What clicking this column's header sorts by, most significant key
    * first, when that isn't worked out from `select` (columnSort.ts: a flat
    * column by itself, a date by its sortval, a name by its parts, a single
@@ -374,7 +379,7 @@ export const PERSON_VIEW: ViewConfig = {
     buildExpr: buildPersonSearchExpr,
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     // In the tree's name format, and sorted by it: its name parts in the
     // order it writes them (nameSortKeys()), as desktop's People view sorts
     // by the formatted name -- "Given" sorts by given name, then surname.
@@ -394,7 +399,7 @@ export const PERSON_VIEW: ViewConfig = {
       key: "death_date", label: "Death", select: { json_path: ["death", "date"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
     // Hidden, for the Map/Timeline's subject scoping (store/visualScope.ts).
     // Person.event_ref_list isn't a flat secondary column and isn't a
     // registered relationship either, so it resolves as a plain json_path --
@@ -438,7 +443,7 @@ export const FAMILY_VIEW: ViewConfig = {
     ]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     {
       key: "father_name", label: "Father", select: { json_path: ["father", "primary_name"] }, sqlType: "TEXT",
       // Sorts in the tree's name format, like People's Name (columnSort.ts).
@@ -448,7 +453,7 @@ export const FAMILY_VIEW: ViewConfig = {
       key: "mother_name", label: "Mother", select: { json_path: ["mother", "primary_name"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: displayName,
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
     // Hidden, for subject scoping -- same reasoning as Person's above.
     {
       key: "event_refs", label: "Event handles", select: { json_path: ["event_ref_list"] },
@@ -528,7 +533,7 @@ export const EVENT_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "description", "place.title", "place.name.value"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     {
       key: "event_type", label: "Type", select: { json_path: ["type"] }, sqlType: "TEXT",
       toSql: toSqlJson, toDisplay: formatEventType,
@@ -563,7 +568,7 @@ export const EVENT_VIEW: ViewConfig = {
     // it's here so MapView's time filter can match events to places by key
     // rather than by comparing display titles.
     { key: "place", label: "Place handle", select: "place", sqlType: "TEXT", hidden: true },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
   ],
 };
 
@@ -588,7 +593,7 @@ export const PLACE_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "title", "name.value"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     {
       key: "title", label: "Title", select: "title", sqlType: "TEXT", sortBy: "name.value",
       // The stored title, not the automatic one: it's what this view's
@@ -598,7 +603,7 @@ export const PLACE_VIEW: ViewConfig = {
     },
     { key: "lat", label: "Lat", select: "lat", sqlType: "TEXT" },
     { key: "long", label: "Long", select: "long", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
     // Hidden: title's own fallback source -- see placeTitleOrName. Selected
     // as the whole PlaceName object (like father_name/mother_name above
     // select the whole primary_name) since a scalar-only path isn't needed
@@ -664,9 +669,9 @@ export const REPOSITORY_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "name"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     { key: "name", label: "Name", select: "name", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
   ],
 };
 
@@ -683,10 +688,10 @@ export const SOURCE_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "title", "author"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     { key: "title", label: "Title", select: "title", sqlType: "TEXT" },
     { key: "author", label: "Author", select: "author", sqlType: "TEXT" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
   ],
 };
 
@@ -717,7 +722,7 @@ export const CITATION_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "page", "source.title"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     {
       key: "source_title", label: "Source", select: { json_path: ["source", "title"] }, sqlType: "TEXT", thenBy: "page",
     },
@@ -727,7 +732,7 @@ export const CITATION_VIEW: ViewConfig = {
       toSql: toSqlJson, toDisplay: formatGrampsDateJson,
     },
     { key: "confidence", label: "Confidence", select: "confidence", sqlType: "INTEGER", toDisplay: displayConfidence },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
   ],
 };
 
@@ -795,7 +800,7 @@ export const MEDIA_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "desc", "path"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     { key: "desc", label: "Description", select: "desc", sqlType: "TEXT" },
     { key: "path", label: "Path", select: "path", sqlType: "TEXT" },
     // Hidden: kept as the raw MIME type -- visualData.ts's readColumns(["handle",
@@ -840,7 +845,7 @@ export const MEDIA_VIEW: ViewConfig = {
       key: "category", label: "Type", select: { json_path: ["mime"] }, sqlType: "TEXT",
       toSql: mediaCategory, sortBy: null,
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
   ],
 };
 
@@ -1145,7 +1150,7 @@ export const TOPIC_MESSAGES_VIEW: ViewConfig = {
   // ViewConfig requires it.
   wherePlaceholder: "",
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     {
       key: "text", label: "Message", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
       toSql: styledTextToSql,
@@ -1180,7 +1185,7 @@ export const NOTE_VIEW: ViewConfig = {
     buildExpr: buildSimpleSearchExpr(["gramps_id", "text.string"]),
   },
   columns: [
-    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT" },
+    { key: "gramps_id", label: "Gramps ID", select: "gramps_id", sqlType: "TEXT", defaultHidden: true },
     {
       // Note.text is a StyledText struct (formatting spans + the plain
       // string); .string is the plain text. Notes can run long, so this
@@ -1200,7 +1205,7 @@ export const NOTE_VIEW: ViewConfig = {
       key: "text", label: "Text", select: { json_path: ["text", "string"] }, sqlType: "TEXT",
       toSql: styledTextToSql, toDisplay: (v) => storyTitle(v),
     },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
   ],
 };
 
@@ -1266,7 +1271,7 @@ export const TAG_VIEW: ViewConfig = {
       toDisplay: colorSwatch, toTitle: (v) => (v == null ? "" : String(v)),
     },
     { key: "priority", label: "Order priority", select: "priority", sqlType: "INTEGER" },
-    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle },
+    { key: "change", label: "Last changed", select: "change", sqlType: "INTEGER", toDisplay: formatChange, toTitle: formatChangeTitle, defaultHidden: true },
   ],
 };
 

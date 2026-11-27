@@ -12,7 +12,7 @@ import { getToken, hasPermissions } from "../auth/auth";
 import { testGoqlSelect } from "../store/api";
 import {
   brokenMessage, builtinColumns, clearBroken, columnExpression, expressionDependencies, getColumnLayout,
-  customSortKeys, getTreeColumns, layoutChangesCache, listCustomColumns, newCustomColumnId, setColumnLayout,
+  customSortKeys, getTreeColumns, isHiddenInLayout, layoutChangesCache, listCustomColumns, newCustomColumnId, setColumnLayout,
   setTreeColumns, structuredValueError, useColumnSettingsVersion,
   type ColumnLayout, type CustomColumn, type TreeColumn,
 } from "../store/columnSettings";
@@ -28,6 +28,8 @@ interface Row {
   key: string;
   /** A built-in column's label; null for a custom column. */
   builtinLabel: string | null;
+  /** A built-in column that's off by default (ColumnConfig.defaultHidden). */
+  defaultHidden: boolean;
   /** A custom column shared with the tree (else only in this browser, or
    * new). */
   tree: boolean;
@@ -49,14 +51,14 @@ function shownBuiltins(view: ViewConfig) {
 
 function defaultRows(view: ViewConfig): Row[] {
   return shownBuiltins(view).map((c) => ({
-    key: c.key, builtinLabel: c.label, tree: false, expr: columnExpression(c), title: "", thenBy: "", visible: true, error: null,
-    thenByError: null,
+    key: c.key, builtinLabel: c.label, defaultHidden: !!c.defaultHidden, tree: false, expr: columnExpression(c), title: "",
+    thenBy: "", visible: !c.defaultHidden, error: null, thenByError: null,
   }));
 }
 
 function customRow(namespace: string, viewKey: string, c: CustomColumn, tree: boolean): Row {
   return {
-    key: c.id, builtinLabel: null, tree, expr: c.expr, title: c.title ?? "", thenBy: c.thenBy ?? "", visible: true,
+    key: c.id, builtinLabel: null, defaultHidden: false, tree, expr: c.expr, title: c.title ?? "", thenBy: c.thenBy ?? "", visible: true,
     error: structuredValueError(namespace, c.expr) ?? brokenMessage(viewKey, c.id) ?? null, thenByError: null,
   };
 }
@@ -77,12 +79,11 @@ function sameDefinition(a: CustomColumn, b: CustomColumn): boolean {
 
 function rowsFromLayout(view: ViewConfig, layout: ColumnLayout): Row[] {
   const namespace = goqlNamespaceForEndpoint(view.endpoint) ?? "";
-  const hidden = new Set(layout.hidden);
   const treeIds = new Set(getTreeColumns(view.key).map((c) => c.id));
   const rows: Row[] = [
     ...defaultRows(view),
     ...listCustomColumns(view.key, layout).map((c) => customRow(namespace, view.key, c, treeIds.has(c.id))),
-  ].map((row) => ({ ...row, visible: !hidden.has(row.key) }));
+  ].map((row) => ({ ...row, visible: !isHiddenInLayout(layout, { key: row.key, defaultHidden: row.defaultHidden }) }));
   const position = new Map(layout.order.map((key, i) => [key, i]));
   return rows
     .map((row, i) => ({ row, rank: position.get(row.key) ?? layout.order.length + i }))
@@ -94,11 +95,14 @@ function layoutFromRows(view: ViewConfig, rows: Row[]): ColumnLayout | null {
   const shared = rows.filter((r) => r.builtinLabel === null && r.tree).map((r) => r.key);
   const custom = rows.filter((r) => r.builtinLabel === null && !r.tree).map(rowColumn);
   const order = rows.map((r) => r.key);
-  const hidden = rows.filter((r) => !r.visible).map((r) => r.key);
+  const hidden = rows.filter((r) => !r.visible && !r.defaultHidden).map((r) => r.key);
+  const shown = rows.filter((r) => r.visible && r.defaultHidden).map((r) => r.key);
   const defaultOrder = shownBuiltins(view).map((c) => c.key);
-  const isDefault =
-    shared.length === 0 && custom.length === 0 && hidden.length === 0 && order.join("\n") === defaultOrder.join("\n");
-  return isDefault ? null : { ...(shared.length > 0 ? { shared } : {}), custom, order, hidden };
+  const isDefault = shared.length === 0 && custom.length === 0 && hidden.length === 0 && shown.length === 0 &&
+    order.join("\n") === defaultOrder.join("\n");
+  return isDefault
+    ? null
+    : { ...(shared.length > 0 ? { shared } : {}), custom, order, hidden, ...(shown.length > 0 ? { shown } : {}) };
 }
 
 /** Why the custom columns' names can't be used in filters (`Father`):
@@ -192,7 +196,7 @@ function ColumnSettingsBody({ view, onClose }: { view: ViewConfig; onClose: () =
     setRows((prev) => [
       ...prev,
       {
-        key: newCustomColumnId(), builtinLabel: null, tree: false, expr: "", title: "", thenBy: "", visible: true, error: null,
+        key: newCustomColumnId(), builtinLabel: null, defaultHidden: false, tree: false, expr: "", title: "", thenBy: "", visible: true, error: null,
         thenByError: null,
       },
     ]);

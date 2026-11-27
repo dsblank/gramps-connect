@@ -687,12 +687,6 @@ export function PersonEditDialog({
     modalBody = (
       <Stack gap="md">
         <TextInput
-          label={t("Gramps ID")}
-          placeholder={t("auto-assigned")}
-          value={(draft.data.gramps_id as string | undefined) ?? ""}
-          onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
-        />
-        <TextInput
           label={t("Given name")}
           value={givenName}
           onChange={(e) => patchName("first_name", e.currentTarget.value)}
@@ -884,6 +878,14 @@ export function PersonEditDialog({
               onOpenEditDraft={(h) => openEditListItem("event", EVENT_EDIT_FIELD_PREFIX, h)}
               onReopenDraft={onShowDraft}
               onCancelDraft={onCloseDraft}
+            />
+
+            {/* Last: auto-assigned, and most people never change it. */}
+            <TextInput
+              label={t("Gramps ID")}
+              placeholder={t("auto-assigned")}
+              value={(draft.data.gramps_id as string | undefined) ?? ""}
+              onChange={(e) => onChange({ gramps_id: e.currentTarget.value })}
             />
           </Stack>
         </Collapse>
