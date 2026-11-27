@@ -195,7 +195,8 @@ export function HistoryButton({ view, detail }: { view: ViewConfig; detail: Obje
                 // row rather than an UnstyledButton, with a neutral avatar.
                 <Group gap="sm" wrap="nowrap" p="xs">
                   <Avatar radius="xl" size="sm" color="gray" variant="light">
-                    {/* An arrow into a tray: "came in from imported data". */}
+                    {/* An arrow up out of a tray -- the usual "upload" symbol,
+                        since imported data is uploaded to the tree. */}
                     <svg
                       width="14"
                       height="14"
@@ -207,8 +208,8 @@ export function HistoryButton({ view, detail }: { view: ViewConfig; detail: Obje
                       strokeLinejoin="round"
                       aria-hidden="true"
                     >
-                      <path d="M12 3v12" />
-                      <path d="M7 10l5 5 5-5" />
+                      <path d="M12 15V3" />
+                      <path d="M7 8l5-5 5 5" />
                       <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
                     </svg>
                   </Avatar>
